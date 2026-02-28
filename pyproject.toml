@@ -1,0 +1,15 @@
+[project]
+name = "pids-jre-simulator"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "keyboard>=0.13.5",
+    "numpy>=2.4.2",
+    "pygame>=2.6.1",
+    "pyloudnorm>=0.2.0",
+    "pywin32>=311",
+    "scipy>=1.17.1",
+    "soundfile>=0.13.1",
+]

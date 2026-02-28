@@ -1,0 +1,224 @@
+{
+    "route": "山手線",
+    "color": [116,193,30],
+    "diagram": "1275A",
+    "type": "内回り",
+    "dest": "品川・東京",
+    "stops": [
+        {
+            "name": "大崎",
+            "pa": [],
+            "sta": ["JY24_OSK"],
+            "sta_cut": 10
+        },
+        {
+            "name": "品川",
+            "pa": ["1"],
+            "sta": ["JY25_SGW"],
+            "sta_cut": 11,
+            "time": 3
+        },
+        {
+            "name": "田町",
+            "pa": ["3"],
+            "sta": ["JY27"],
+            "sta_cut": 11,
+            "dest": "東京・上野",
+            "time": 3
+        },
+        {
+            "name": "浜松町",
+            "pa": ["4"],
+            "sta": ["JY28_HMC"],
+            "sta_cut": 11,
+            "time": 3
+        },
+        {
+            "name": "新橋",
+            "pa": ["5"],
+            "sta": ["JY29_SMB"],
+            "sta_cut": 16,
+            "time": 2
+        },
+        {
+            "name": "有楽町",
+            "pa": ["6"],
+            "sta": ["JY30"],
+            "sta_cut": 8,
+            "time": 2
+        },
+        {
+            "name": "東京",
+            "pa": ["7"],
+            "sta": ["JY01_TYO"],
+            "sta_cut": 7,
+            "time": 2
+        },
+        {
+            "name": "神田",
+            "pa": ["8"],
+            "sta": ["JY02_KND"],
+            "sta_cut": 11,
+            "dest": "上野・池袋",
+            "time": 2
+        },
+        {
+            "name": "秋葉原",
+            "pa": ["9"],
+            "sta": ["JY03_AKB"],
+            "sta_cut": 9,
+            "time": 2
+        },
+        {
+            "name": "御徒町",
+            "pa": ["10"],
+            "sta": ["JY04"],
+            "sta_cut": 11,
+            "time": 2
+        },
+        {
+            "name": "上野",
+            "pa": ["11"],
+            "sta": ["JY05_UEN"],
+            "sta_cut": 13,
+            "time": 2
+        },
+        {
+            "name": "鶯谷",
+            "pa": ["12"],
+            "sta": ["JY06"],
+            "sta_cut": 11,
+            "dest": "池袋・新宿",
+            "time": 2
+        },
+        {
+            "name": "日暮里",
+            "pa": ["13"],
+            "sta": ["JY07_NPR"],
+            "sta_cut": 11,
+            "time": 2
+        },
+        {
+            "name": "西日暮里",
+            "pa": ["14"],
+            "sta": ["JY08"],
+            "sta_cut": 11,
+            "time": 2
+        },
+        {
+            "name": "田端",
+            "pa": ["15"],
+            "sta": ["JY09"],
+            "sta_cut": 11,
+            "time": 2
+        },
+        {
+            "name": "駒込",
+            "pa": ["16"],
+            "sta": ["JY10"],
+            "sta_cut": 17,
+            "time": 2
+        },
+        {
+            "name": "巣鴨",
+            "pa": ["17"],
+            "sta": ["JY11"],
+            "sta_cut": 11,
+            "time": 2
+        },
+        {
+            "name": "大塚",
+            "pa": ["18"],
+            "sta": ["JY12"],
+            "sta_cut": 11,
+            "time": 2
+        },
+        {
+            "name": "池袋",
+            "pa": ["19"],
+            "sta": ["JY13_IKB"],
+            "sta_cut": 9,
+            "time": 3
+        },
+        {
+            "name": "目白",
+            "pa": ["20"],
+            "sta": ["JY14"],
+            "sta_cut": 11,
+            "dest": "新宿・渋谷",
+            "time": 2
+        },
+        {
+            "name": "高田馬場",
+            "pa": ["21"],
+            "sta": ["JY15"],
+            "sta_cut": 17,
+            "time": 2
+        },
+        {
+            "name": "新大久保",
+            "pa": ["22"],
+            "sta": ["JY16"],
+            "sta_cut": 8,
+            "time": 2
+        },
+        {
+            "name": "新宿",
+            "pa": ["23"],
+            "sta": ["JY17_SJK"],
+            "sta_cut": 8,
+            "time": 2
+        },
+        {
+            "name": "代々木",
+            "pa": ["24"],
+            "sta": ["JY18"],
+            "sta_cut": 11,
+            "dest": "渋谷・品川",
+            "time": 2
+        },
+        {
+            "name": "原宿",
+            "pa": ["25"],
+            "sta": ["JY19"],
+            "sta_cut": 11,
+            "time": 2
+        },
+        {
+            "name": "渋谷",
+            "pa": ["26"],
+            "sta": ["JY20_SBY"],
+            "sta_cut": 13,
+            "time": 2
+        },
+        {
+            "name": "恵比寿",
+            "pa": ["27"],
+            "sta": ["JY21_EBS"],
+            "sta_cut": 11,
+            "dest": "品川・東京",
+            "time": 3
+        },
+        {
+            "name": "目黒",
+            "pa": ["28"],
+            "sta": ["JY22"],
+            "sta_cut": 10,
+            "time": 3
+        },
+        {
+            "name": "五反田",
+            "pa": ["29"],
+            "sta": ["JY23"],
+            "sta_cut": 9,
+            "time": 2
+        },
+        {
+            "name": "大崎",
+            "pa": ["30"],
+            "sta": ["JY24_OSK"],
+            "sta_cut": 10,
+            "time": 2
+        }
+    ]
+}

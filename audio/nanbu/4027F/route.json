@@ -1,0 +1,178 @@
+{
+    "route": "南武線",
+    "color": [255, 212, 0],
+    "diagram": "4027F",
+    "type": "快速",
+    "type_color": [206, 0, 0],
+    "dest": "立川",
+    "stops": [
+        {
+            "name": "川崎",
+            "pa": [],
+            "sta": ["Kawasaki"],
+            "sta_cut": 16,
+            "time": 0
+        },
+        {
+            "name": "尻手",
+            "pa": [],
+            "sta": ["Shitte"],
+            "sta_cut": 8
+        },
+        {
+            "name": "矢向",
+            "pa": [],
+            "sta": ["Yako"],
+            "sta_cut": 10
+        },
+        {
+            "name": "鹿島田",
+            "pa": ["1","2"],
+            "sta": ["Kashimada"],
+            "sta_cut": 10,
+            "time": 5
+        },
+        {
+            "name": "平間",
+            "pa": [],
+            "sta": ["Hirama"],
+            "sta_cut": 9
+        },
+        {
+            "name": "向河原",
+            "pa": [],
+            "sta": ["Mukaigawara"],
+            "sta_cut": 10
+        },
+        {
+            "name": "武蔵小杉",
+            "pa": ["3","4"],
+            "sta": ["Musashi-Kosugi"],
+            "sta_cut": 15,
+            "time": 4
+        },
+        {
+            "name": "武蔵中原",
+            "pa": ["5","6"],
+            "sta": ["Musashi-Nakahara"],
+            "sta_cut": 15,
+            "time": 3
+        },
+        {
+            "name": "武蔵新城",
+            "pa": ["7", "8"],
+            "sta": ["Musashi-Shinjo"],
+            "sta_cut": 9,
+            "time": 2
+        },
+        {
+            "name": "武蔵溝ノ口",
+            "pa": ["9", "10"],
+            "sta": ["Musashi-Mizonokuchi"],
+            "sta_cut": 8,
+            "time": 3
+        },
+        {
+            "name": "津田山",
+            "pa": [],
+            "sta": ["Tsudayama"],
+            "sta_cut": 11
+        },
+        {
+            "name": "久地",
+            "pa": [],
+            "sta": ["Kuji"],
+            "sta_cut": 10
+        },
+        {
+            "name": "宿河原",
+            "pa": [],
+            "sta": ["Shukugawara"],
+            "sta_cut": 15
+        },
+        {
+            "name": "登戸",
+            "pa": ["11","12"],
+            "sta": ["Noborito"],
+            "sta_cut": 15,
+            "time": 5
+        },
+        {
+            "name": "中野島",
+            "pa": [],
+            "sta": ["Nakanoshima"],
+            "sta_cut": 10
+        },
+        {
+            "name": "稲田堤",
+            "pa": ["13","14"],
+            "sta": ["Inadazutsumi"],
+            "sta_cut": 11,
+            "time": 4
+        },
+        {
+            "name": "矢野口",
+            "pa": [],
+            "sta": ["Yanokuchi"],
+            "sta_cut": 15
+        },
+        {
+            "name": "稲城長沼",
+            "pa": ["15","16"],
+            "sta": ["Inaginaganuma"],
+            "sta_cut": 12,
+            "time": 4
+        },
+        {
+            "name": "南多摩",
+            "pa": [],
+            "sta": ["Minamitama"],
+            "sta_cut": 12
+        },
+        {
+            "name": "府中本町",
+            "pa": ["17","18"],
+            "sta": ["Fuchu-Honmachi"],
+            "sta_cut": 11,
+            "time": 4
+        },
+        {
+            "name": "分倍河原",
+            "pa": ["19"],
+            "sta": ["Bubaigawara"],
+            "sta_cut": 12,
+            "time": 2
+        },
+        {
+            "name": "西府",
+            "pa": [],
+            "sta": ["Nishifu"],
+            "sta_cut": 12
+        },
+        {
+            "name": "谷保",
+            "pa": [],
+            "sta": ["Yaho"],
+            "sta_cut": 12
+        },
+        {
+            "name": "矢川",
+            "pa": [],
+            "sta": ["Yagawa_Nishi-Kunitachi"],
+            "sta_cut": 12
+        },
+        {
+            "name": "西国立",
+            "pa": [],
+            "sta": ["Yagawa_Nishi-Kunitachi"],
+            "sta_cut": 12
+        },
+        {
+            "name": "立川",
+            "pa": ["20","21"],
+            "sta": [""],
+            "sta_cut": 0,
+            "time": 7
+        }
+    ]
+}

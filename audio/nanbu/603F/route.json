@@ -1,0 +1,188 @@
+{
+    "route": "南武線",
+    "color": [255, 212, 0],
+    "diagram": "603F",
+    "type": "各駅停車",
+    "type_color": [206, 0, 0],
+    "dest": "立川",
+    "stops": [
+        {
+            "name": "川崎",
+            "pa": [],
+            "sta": ["Kawasaki"],
+            "sta_cut": 16,
+            "time": 0
+        },
+        {
+            "name": "尻手",
+            "pa": ["1"],
+            "sta": ["Shitte"],
+            "sta_cut": 8
+        },
+        {
+            "name": "矢向",
+            "pa": ["2"],
+            "sta": ["Yako"],
+            "sta_cut": 10
+        },
+        {
+            "name": "鹿島田",
+            "pa": ["3","4"],
+            "sta": ["Kashimada"],
+            "sta_cut": 10
+        },
+        {
+            "name": "平間",
+            "pa": ["5"],
+            "sta": ["Hirama"],
+            "sta_cut": 9,
+            "skip": 1
+        },
+        {
+            "name": "向河原",
+            "pa": ["6","7"],
+            "sta": ["Mukaigawara"],
+            "sta_cut": 10,
+            "skip": 1
+        },
+        {
+            "name": "武蔵小杉",
+            "pa": ["8"],
+            "sta": ["Musashi-Kosugi"],
+            "sta_cut": 15,
+            "time": 4
+        },
+        {
+            "name": "武蔵中原",
+            "pa": ["9","10"],
+            "sta": ["Musashi-Nakahara"],
+            "sta_cut": 15,
+            "time": 3
+        },
+        {
+            "name": "武蔵新城",
+            "pa": ["11", "12"],
+            "sta": ["Musashi-Shinjo"],
+            "sta_cut": 9,
+            "time": 2
+        },
+        {
+            "name": "武蔵溝ノ口",
+            "pa": ["13", "14"],
+            "sta": ["Musashi-Mizonokuchi"],
+            "sta_cut": 8,
+            "time": 3
+        },
+        {
+            "name": "津田山",
+            "pa": ["15"],
+            "sta": ["Tsudayama"],
+            "sta_cut": 11,
+            "skip": 1
+        },
+        {
+            "name": "久地",
+            "pa": ["16"],
+            "sta": ["Kuji"],
+            "sta_cut": 10,
+            "skip": 1
+        },
+        {
+            "name": "宿河原",
+            "pa": ["17"],
+            "sta": ["Shukugawara"],
+            "sta_cut": 15,
+            "skip": 1
+        },
+        {
+            "name": "登戸",
+            "pa": ["18"],
+            "sta": ["Noborito"],
+            "sta_cut": 15,
+            "time": 5
+        },
+        {
+            "name": "中野島",
+            "pa": ["19","20"],
+            "sta": ["Nakanoshima"],
+            "sta_cut": 10,
+            "skip": 1
+        },
+        {
+            "name": "稲田堤",
+            "pa": ["21","22"],
+            "sta": ["Inadazutsumi"],
+            "sta_cut": 11,
+            "time": 4
+        },
+        {
+            "name": "矢野口",
+            "pa": ["23","24"],
+            "sta": ["Yanokuchi"],
+            "sta_cut": 15,
+            "skip": 1
+        },
+        {
+            "name": "稲城長沼",
+            "pa": ["25","26"],
+            "sta": ["Inaginaganuma"],
+            "sta_cut": 12,
+            "time": 4
+        },
+        {
+            "name": "南多摩",
+            "pa": ["27","28"],
+            "sta": ["Minamitama"],
+            "sta_cut": 12,
+            "skip": 1
+        },
+        {
+            "name": "府中本町",
+            "pa": ["29","30"],
+            "sta": ["Fuchu-Honmachi"],
+            "sta_cut": 11,
+            "time": 4
+        },
+        {
+            "name": "分倍河原",
+            "pa": ["31"],
+            "sta": ["Bubaigawara"],
+            "sta_cut": 12,
+            "time": 2
+        },
+        {
+            "name": "西府",
+            "pa": ["32","33"],
+            "sta": ["Nishifu"],
+            "sta_cut": 12,
+            "skip": 1
+        },
+        {
+            "name": "谷保",
+            "pa": ["34","35"],
+            "sta": ["Yaho"],
+            "sta_cut": 12,
+            "skip": 1
+        },
+        {
+            "name": "矢川",
+            "pa": ["36","37"],
+            "sta": ["Yagawa_Nishi-Kunitachi"],
+            "sta_cut": 12,
+            "skip": 1
+        },
+        {
+            "name": "西国立",
+            "pa": ["38","39"],
+            "sta": ["Yagawa_Nishi-Kunitachi"],
+            "sta_cut": 12,
+            "skip": 1
+        },
+        {
+            "name": "立川",
+            "pa": ["40","41"],
+            "sta": [""],
+            "sta_cut": 0
+        }
+    ]
+}
