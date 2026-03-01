@@ -1,320 +1,556 @@
 {
     "route": "京浜東北・根岸線",
-    "color": [29, 174, 209],
+    "color": [
+        29,
+        174,
+        209
+    ],
     "type": "各駅停車",
     "dest": "磯子",
+    "dest_furigana": "いそご",
     "stops": [
         {
             "name": "大宮",
             "pa": [],
-            "sta": ["JK47_OMY"],
+            "sta": [
+                "JK47_OMY"
+            ],
             "sta_cut": 12,
-            "time": 0
+            "time": 0,
+            "sta_code": "JK47"
         },
         {
             "name": "さいたま 新都心",
-            "pa": ["1"],
-            "sta": ["JK46"],
+            "pa": [
+                "1"
+            ],
+            "sta": [
+                "JK46"
+            ],
             "sta_cut": 9,
-            "time": 3
+            "time": 3,
+            "sta_code": "JK46"
         },
         {
             "name": "与野",
-            "pa": ["2"],
-            "sta": ["JK45"],
+            "pa": [
+                "2"
+            ],
+            "sta": [
+                "JK45"
+            ],
             "sta_cut": 8,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK45"
         },
         {
             "name": "北浦和",
-            "pa": ["3"],
-            "sta": ["JK44"],
+            "pa": [
+                "3"
+            ],
+            "sta": [
+                "JK44"
+            ],
             "sta_cut": 9,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK44"
         },
         {
             "name": "浦和",
-            "pa": ["4"],
-            "sta": ["JK43_URW"],
+            "pa": [
+                "4"
+            ],
+            "sta": [
+                "JK43_URW"
+            ],
             "sta_cut": 17,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK43"
         },
         {
             "name": "南浦和",
-            "pa": ["5"],
-            "sta": ["JK42"],
+            "pa": [
+                "5"
+            ],
+            "sta": [
+                "JK42"
+            ],
             "sta_cut": 11,
-            "time": 3
+            "time": 3,
+            "sta_code": "JK42"
         },
         {
             "name": "蕨",
-            "pa": ["6", "7"],
-            "sta": ["JK41"],
+            "pa": [
+                "6",
+                "7"
+            ],
+            "sta": [
+                "JK41"
+            ],
             "sta_cut": 11,
-            "time": 4
+            "time": 4,
+            "sta_code": "JK41"
         },
         {
             "name": "西川口",
-            "pa": ["8", "9"],
-            "sta": ["JK40"],
+            "pa": [
+                "8",
+                "9"
+            ],
+            "sta": [
+                "JK40"
+            ],
             "sta_cut": 10,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK40"
         },
         {
             "name": "川口",
-            "pa": ["10", "11"],
-            "sta": ["JK39"],
+            "pa": [
+                "10",
+                "11"
+            ],
+            "sta": [
+                "JK39"
+            ],
             "sta_cut": 11,
-            "time": 3
+            "time": 3,
+            "sta_code": "JK39"
         },
         {
             "name": "赤羽",
-            "pa": ["12", "13"],
-            "sta": ["JK38_ABN"],
+            "pa": [
+                "12",
+                "13"
+            ],
+            "sta": [
+                "JK38_ABN"
+            ],
             "sta_cut": 10,
-            "time": 3
+            "time": 3,
+            "sta_code": "JK38"
         },
         {
             "name": "東十条",
-            "pa": ["14"],
-            "sta": ["JK37"],
+            "pa": [
+                "14"
+            ],
+            "sta": [
+                "JK37"
+            ],
             "sta_cut": 10,
-            "time": 3
+            "time": 3,
+            "sta_code": "JK37"
         },
         {
             "name": "王子",
-            "pa": ["15"],
-            "sta": ["JK36"],
+            "pa": [
+                "15"
+            ],
+            "sta": [
+                "JK36"
+            ],
             "sta_cut": 10,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK36"
         },
         {
             "name": "上中里",
-            "pa": ["16"],
-            "sta": ["JK35"],
+            "pa": [
+                "16"
+            ],
+            "sta": [
+                "JK35"
+            ],
             "sta_cut": 10,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK35"
         },
         {
             "name": "田端",
-            "pa": ["17"],
-            "sta": ["JK34"],
+            "pa": [
+                "17"
+            ],
+            "sta": [
+                "JK34"
+            ],
             "sta_cut": 6,
-            "time": 3
+            "time": 3,
+            "sta_code": "JK34"
         },
         {
             "name": "西日暮里",
-            "pa": ["18"],
-            "sta": ["JK33"],
+            "pa": [
+                "18"
+            ],
+            "sta": [
+                "JK33"
+            ],
             "sta_cut": 9,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK33"
         },
         {
             "name": "日暮里",
-            "pa": ["19"],
-            "sta": ["JK32_NPR"],
+            "pa": [
+                "19"
+            ],
+            "sta": [
+                "JK32_NPR"
+            ],
             "sta_cut": 11,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK32"
         },
         {
             "name": "鶯谷",
-            "pa": ["20"],
-            "sta": ["JK31"],
+            "pa": [
+                "20"
+            ],
+            "sta": [
+                "JK31"
+            ],
             "sta_cut": 9,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK31"
         },
         {
             "name": "上野",
-            "pa": ["21"],
-            "sta": ["JK30_UEN"],
+            "pa": [
+                "21"
+            ],
+            "sta": [
+                "JK30_UEN"
+            ],
             "sta_cut": 5,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK30"
         },
         {
             "name": "御徒町",
-            "pa": ["23"],
-            "sta": ["JK29"],
+            "pa": [
+                "23"
+            ],
+            "sta": [
+                "JK29"
+            ],
             "sta_cut": 9,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK29"
         },
         {
             "name": "秋葉原",
-            "pa": ["24"],
-            "sta": ["JK28_AKB"],
+            "pa": [
+                "24"
+            ],
+            "sta": [
+                "JK28_AKB"
+            ],
             "sta_cut": 8,
-            "time": 3
+            "time": 3,
+            "sta_code": "JK28"
         },
         {
             "name": "神田",
-            "pa": ["25"],
-            "sta": ["JK27_KND"],
+            "pa": [
+                "25"
+            ],
+            "sta": [
+                "JK27_KND"
+            ],
             "sta_cut": 9,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK27"
         },
         {
             "name": "東京",
-            "pa": ["26"],
-            "sta": ["JK26_TYO"],
+            "pa": [
+                "26"
+            ],
+            "sta": [
+                "JK26_TYO"
+            ],
             "sta_cut": 9,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK26"
         },
         {
             "name": "有楽町",
-            "pa": ["27"],
-            "sta": ["JK25"],
+            "pa": [
+                "27"
+            ],
+            "sta": [
+                "JK25"
+            ],
             "sta_cut": 8,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK25"
         },
         {
             "name": "新橋",
-            "pa": ["28"],
-            "sta": ["JK24_SMB"],
+            "pa": [
+                "28"
+            ],
+            "sta": [
+                "JK24_SMB"
+            ],
             "sta_cut": 9,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK24"
         },
         {
             "name": "浜松町",
-            "pa": ["29"],
-            "sta": ["JK23_HMC"],
+            "pa": [
+                "29"
+            ],
+            "sta": [
+                "JK23_HMC"
+            ],
             "sta_cut": 9,
-            "time": 4
+            "time": 4,
+            "sta_code": "JK23"
         },
         {
             "name": "田町",
-            "pa": ["31"],
-            "sta": ["JK22"],
+            "pa": [
+                "31"
+            ],
+            "sta": [
+                "JK22"
+            ],
             "sta_cut": 9,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK22"
         },
         {
             "name": "品川",
-            "pa": ["32"],
-            "sta": ["JK20_SGW"],
+            "pa": [
+                "32"
+            ],
+            "sta": [
+                "JK20_SGW"
+            ],
             "sta_cut": 6,
-            "time": 3
+            "time": 3,
+            "sta_code": "JK20"
         },
         {
             "name": "大井町",
-            "pa": ["33","34"],
-            "sta": ["JK19"],
+            "pa": [
+                "33",
+                "34"
+            ],
+            "sta": [
+                "JK19"
+            ],
             "sta_cut": 11,
-            "time": 4
+            "time": 4,
+            "sta_code": "JK19"
         },
         {
             "name": "大森",
-            "pa": ["35","36"],
-            "sta": ["JK18"],
+            "pa": [
+                "35",
+                "36"
+            ],
+            "sta": [
+                "JK18"
+            ],
             "sta_cut": 9,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK18"
         },
         {
             "name": "蒲田",
-            "pa": ["37","38"],
-            "sta": ["JK17"],
+            "pa": [
+                "37",
+                "38"
+            ],
+            "sta": [
+                "JK17"
+            ],
             "sta_cut": 11,
-            "time": 4
+            "time": 4,
+            "sta_code": "JK17"
         },
         {
             "name": "川崎",
-            "pa": ["39","40"],
-            "sta": ["JK16_KWS"],
+            "pa": [
+                "39",
+                "40"
+            ],
+            "sta": [
+                "JK16_KWS"
+            ],
             "sta_cut": 10,
-            "time": 5
+            "time": 5,
+            "sta_code": "JK16"
         },
         {
             "name": "鶴見",
-            "pa": ["41","42"],
-            "sta": ["JK15"],
+            "pa": [
+                "41",
+                "42"
+            ],
+            "sta": [
+                "JK15"
+            ],
             "sta_cut": 19,
-            "time": 4
+            "time": 4,
+            "sta_code": "JK15"
         },
         {
             "name": "新子安",
-            "pa": ["43","44"],
-            "sta": ["JK14"],
+            "pa": [
+                "43",
+                "44"
+            ],
+            "sta": [
+                "JK14"
+            ],
             "sta_cut": 13,
-            "time": 3
+            "time": 3,
+            "sta_code": "JK14"
         },
         {
             "name": "東神奈川",
-            "pa": ["45", "46"],
-            "sta": ["JK13"],
+            "pa": [
+                "45",
+                "46"
+            ],
+            "sta": [
+                "JK13"
+            ],
             "sta_cut": 14,
-            "time": 3
+            "time": 3,
+            "sta_code": "JK13"
         },
         {
             "name": "横浜",
-            "pa": ["47"],
-            "sta": ["JK12_YHM"],
+            "pa": [
+                "47"
+            ],
+            "sta": [
+                "JK12_YHM"
+            ],
             "sta_cut": 19,
-            "time": 4
+            "time": 4,
+            "sta_code": "JK12"
         },
         {
             "name": "桜木町",
-            "pa": ["48"],
-            "sta": ["JK11"],
+            "pa": [
+                "48"
+            ],
+            "sta": [
+                "JK11"
+            ],
             "sta_cut": 10,
-            "time": 3
+            "time": 3,
+            "sta_code": "JK11"
         },
         {
             "name": "関内",
-            "pa": ["49"],
-            "sta": ["JK10"],
+            "pa": [
+                "49"
+            ],
+            "sta": [
+                "JK10"
+            ],
             "sta_cut": 14,
-            "time": 3
+            "time": 3,
+            "sta_code": "JK10"
         },
         {
             "name": "石川町",
-            "pa": ["50"],
-            "sta": ["JK09"],
+            "pa": [
+                "50"
+            ],
+            "sta": [
+                "JK09"
+            ],
             "sta_cut": 20,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK09"
         },
         {
             "name": "山手",
-            "pa": ["51"],
-            "sta": ["JK08"],
+            "pa": [
+                "51"
+            ],
+            "sta": [
+                "JK08"
+            ],
             "sta_cut": 20,
-            "time": 2
+            "time": 2,
+            "sta_code": "JK08"
         },
         {
             "name": "根岸",
-            "pa": ["52", "53"],
-            "sta": ["JK07"],
+            "pa": [
+                "52",
+                "53"
+            ],
+            "sta": [
+                "JK07"
+            ],
             "sta_cut": 7,
-            "time": 3
+            "time": 3,
+            "sta_code": "JK07"
         },
         {
             "name": "磯子",
-            "pa": ["54", "55"],
-            "sta": ["JK06"],
+            "pa": [
+                "54",
+                "55"
+            ],
+            "sta": [
+                "JK06"
+            ],
             "sta_cut": 10,
-            "time": 3
+            "time": 3,
+            "sta_code": "JK06"
         },
         {
             "name": "新杉田",
             "pa": [],
-            "sta": ["JK05"]
+            "sta": [
+                "JK05"
+            ],
+            "sta_code": "JK05"
         },
         {
             "name": "洋光台",
             "pa": [],
-            "sta": ["JK04"]
+            "sta": [
+                "JK04"
+            ],
+            "sta_code": "JK04"
         },
         {
             "name": "港南台",
             "pa": [],
-            "sta": ["JK03"]
+            "sta": [
+                "JK03"
+            ],
+            "sta_code": "JK03"
         },
         {
             "name": "本郷台",
             "pa": [],
-            "sta": ["JK02"]
+            "sta": [
+                "JK02"
+            ],
+            "sta_code": "JK02"
         },
         {
             "name": "大船",
             "pa": [],
-            "sta": ["JK01_OFN"]
+            "sta": [
+                "JK01_OFN"
+            ],
+            "sta_code": "JK01"
         }
     ]
 }
