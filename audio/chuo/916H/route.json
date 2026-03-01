@@ -1,200 +1,330 @@
 {
     "route": "中央線快速電車",
-    "color": [233, 91, 31],
-    "contrast_color": [0, 92, 0],
+    "color": [
+        233,
+        91,
+        31
+    ],
+    "contrast_color": [
+        0,
+        92,
+        0
+    ],
     "type": "中央特快",
-    "type_color": [45, 0, 255],
+    "type_color": [
+        45,
+        0,
+        255
+    ],
     "dest": "東京",
+    "dest_furigana": "とうきょう",
     "stops": [
         {
             "name": "高尾",
             "pa": [],
-            "sta": ["JC24"],
+            "sta": [
+                "JC24"
+            ],
             "sta_cut": 9,
-            "time": 0
+            "time": 0,
+            "sta_code": "JC24"
         },
         {
             "name": "西八王子",
-            "pa": ["2", "3"],
-            "sta": ["JC23"],
+            "pa": [
+                "2",
+                "3"
+            ],
+            "sta": [
+                "JC23"
+            ],
             "sta_cut": 12,
-            "time": 3
+            "time": 3,
+            "sta_code": "JC23"
         },
         {
             "name": "八王子",
-            "pa": ["4","5"],
-            "sta": ["JC22"],
+            "pa": [
+                "4",
+                "5"
+            ],
+            "sta": [
+                "JC22"
+            ],
             "sta_cut": 8,
-            "time": 3
+            "time": 3,
+            "sta_code": "JC22"
         },
         {
             "name": "豊田",
-            "pa": ["6","7"],
-            "sta": ["JC21"],
+            "pa": [
+                "6",
+                "7"
+            ],
+            "sta": [
+                "JC21"
+            ],
             "sta_cut": 21,
-            "time": 5
+            "time": 5,
+            "sta_code": "JC21"
         },
         {
             "name": "日野",
-            "pa": ["8","9"],
-            "sta": ["JC20"],
+            "pa": [
+                "8",
+                "9"
+            ],
+            "sta": [
+                "JC20"
+            ],
             "sta_cut": 9,
-            "time": 2
+            "time": 2,
+            "sta_code": "JC20"
         },
         {
             "name": "立川",
-            "pa": ["10","11"],
-            "sta": ["JC19"],
+            "pa": [
+                "10",
+                "11"
+            ],
+            "sta": [
+                "JC19"
+            ],
             "sta_cut": 22,
-            "time": 4
+            "time": 4,
+            "sta_code": "JC19"
         },
         {
             "name": "国立",
             "pa": [],
-            "sta": ["11"],
-            "sta_cut": 11
+            "sta": [
+                "11"
+            ],
+            "sta_cut": 11,
+            "sta_code": "JC18"
         },
         {
             "name": "西国分寺",
             "pa": [],
-            "sta": ["13"],
-            "sta_cut": 6
+            "sta": [
+                "13"
+            ],
+            "sta_cut": 6,
+            "sta_code": "JC17"
         },
         {
             "name": "国分寺",
-            "pa": ["12", "13"],
-            "sta": ["JC16"],
+            "pa": [
+                "12",
+                "13"
+            ],
+            "sta": [
+                "JC16"
+            ],
             "sta_cut": 6,
-            "time": 5
+            "time": 5,
+            "sta_code": "JC16"
         },
         {
             "name": "武蔵小金井",
             "pa": [],
-            "sta": ["16"],
-            "sta_cut": 6
+            "sta": [
+                "16"
+            ],
+            "sta_cut": 6,
+            "sta_code": "JC15"
         },
         {
             "name": "東小金井",
             "pa": [],
-            "sta": ["18"],
-            "sta_cut": 12
+            "sta": [
+                "18"
+            ],
+            "sta_cut": 12,
+            "sta_code": "JC14"
         },
         {
             "name": "武蔵境",
             "pa": [],
-            "sta": ["20"],
-            "sta_cut": 8
+            "sta": [
+                "20"
+            ],
+            "sta_cut": 8,
+            "sta_code": "JC13"
         },
         {
             "name": "三鷹",
-            "pa": ["14", "15"],
-            "sta": ["JC12"],
+            "pa": [
+                "14",
+                "15"
+            ],
+            "sta": [
+                "JC12"
+            ],
             "sta_cut": 10,
-            "time": 7
+            "time": 7,
+            "sta_code": "JC12"
         },
         {
             "name": "吉祥寺",
             "pa": [],
-            "sta": ["23"],
-            "sta_cut": 11
+            "sta": [
+                "23"
+            ],
+            "sta_cut": 11,
+            "sta_code": "JC11"
         },
         {
             "name": "西荻窪",
             "pa": [],
-            "sta": ["24"],
-            "sta_cut": 15
+            "sta": [
+                "24"
+            ],
+            "sta_cut": 15,
+            "sta_code": "JC10"
         },
         {
             "name": "荻窪",
             "pa": [],
-            "sta": ["25"],
-            "sta_cut": 9
+            "sta": [
+                "25"
+            ],
+            "sta_cut": 9,
+            "sta_code": "JC09"
         },
         {
             "name": "阿佐ヶ谷",
             "pa": [],
-            "sta": ["26"],
-            "sta_cut": 18
+            "sta": [
+                "26"
+            ],
+            "sta_cut": 18,
+            "sta_code": "JC08"
         },
         {
             "name": "高円寺",
             "pa": [],
-            "sta": ["27"],
-            "sta_cut": 14
+            "sta": [
+                "27"
+            ],
+            "sta_cut": 14,
+            "sta_code": "JC07"
         },
         {
             "name": "中野",
-            "pa": ["16", "17"],
-            "sta": ["JC06"],
+            "pa": [
+                "16",
+                "17"
+            ],
+            "sta": [
+                "JC06"
+            ],
             "sta_cut": 10,
-            "time": 2
+            "time": 2,
+            "sta_code": "JC06"
         },
         {
             "name": "東中野",
-            "pa": []
+            "pa": [],
+            "sta_code": null
         },
         {
             "name": "大久保",
-            "pa": []
+            "pa": [],
+            "sta_code": null
         },
         {
             "name": "新宿",
-            "pa": ["18","19"],
-            "sta": ["JC05_SJK"],
+            "pa": [
+                "18",
+                "19"
+            ],
+            "sta": [
+                "JC05_SJK"
+            ],
             "sta_cut": 23,
-            "time": 4
+            "time": 4,
+            "sta_code": "JC05"
         },
         {
             "name": "代々木",
-            "pa": []
+            "pa": [],
+            "sta_code": null
         },
         {
             "name": "千駄ヶ谷",
-            "pa": []
+            "pa": [],
+            "sta_code": null
         },
         {
             "name": "信濃町",
-            "pa": []
+            "pa": [],
+            "sta_code": null
         },
         {
             "name": "四ツ谷",
-            "pa": ["20","21"],
-            "sta": ["JC04"],
+            "pa": [
+                "20",
+                "21"
+            ],
+            "sta": [
+                "JC04"
+            ],
             "sta_cut": 14,
-            "time": 4
+            "time": 4,
+            "sta_code": "JC04"
         },
         {
             "name": "市ヶ谷",
-            "pa": []
+            "pa": [],
+            "sta_code": null
         },
         {
             "name": "飯田橋",
-            "pa": []
+            "pa": [],
+            "sta_code": null
         },
         {
             "name": "水道橋",
-            "pa": []
+            "pa": [],
+            "sta_code": null
         },
         {
             "name": "御茶ノ水",
-            "pa": ["22","23"],
-            "sta": ["JC03"],
+            "pa": [
+                "22",
+                "23"
+            ],
+            "sta": [
+                "JC03"
+            ],
             "sta_cut": 10,
-            "time": 5
+            "time": 5,
+            "sta_code": "JC03"
         },
         {
             "name": "神田",
-            "pa": ["24"],
-            "sta": ["JC02"],
+            "pa": [
+                "24"
+            ],
+            "sta": [
+                "JC02"
+            ],
             "sta_cut": 12,
-            "time": 3
+            "time": 3,
+            "sta_code": "JC02"
         },
         {
             "name": "東京",
-            "pa": ["25"],
-            "sta": ["JC01"],
+            "pa": [
+                "25"
+            ],
+            "sta": [
+                "JC01"
+            ],
             "sta_cut": 0,
-            "time": 1
+            "time": 1,
+            "sta_code": "JC01"
         }
     ]
 }

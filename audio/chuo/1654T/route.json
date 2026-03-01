@@ -4,11 +4,13 @@
     "contrast_color": [0, 92, 0],
     "type": "快速",
     "dest": "東京",
+    "dest_furigana": "とうきょう",
     "stops": [
         {
             "name": "高尾",
             "pa": [],
             "sta": ["JC24"],
+            "sta_code": "JC24",
             "sta_cut": 9,
             "time": 0
         },
@@ -16,6 +18,7 @@
             "name": "西八王子",
             "pa": ["1","2"],
             "sta": ["JC23"],
+            "sta_code": "JC23",
             "sta_cut": 12,
             "time": 3
         },
@@ -23,6 +26,7 @@
             "name": "八王子",
             "pa": ["3","4"],
             "sta": ["JC22"],
+            "sta_code": "JC22",
             "sta_cut": 8,
             "time": 3
         },
@@ -30,6 +34,7 @@
             "name": "豊田",
             "pa": ["5","6"],
             "sta": ["JC21"],
+            "sta_code": "JC21",
             "sta_cut": 21,
             "time": 5
         },
@@ -37,6 +42,7 @@
             "name": "日野",
             "pa": ["7","8"],
             "sta": ["JC20"],
+            "sta_code": "JC20",
             "sta_cut": 9,
             "time": 2
         },
@@ -44,6 +50,7 @@
             "name": "立川",
             "pa": ["9","10"],
             "sta": ["JC19"],
+            "sta_code": "JC19",
             "sta_cut": 22,
             "time": 4
         },
@@ -51,6 +58,7 @@
             "name": "国立",
             "pa": ["11", "12"],
             "sta": ["JC18"],
+            "sta_code": "JC18",
             "sta_cut": 11,
             "time": 3
         },
@@ -58,6 +66,7 @@
             "name": "西国分寺",
             "pa": ["13"],
             "sta": ["JC17"],
+            "sta_code": "JC17",
             "sta_cut": 6,
             "time": 3
         },
@@ -65,6 +74,7 @@
             "name": "国分寺",
             "pa": ["14"],
             "sta": ["JC16"],
+            "sta_code": "JC16",
             "sta_cut": 6,
             "time": 2
         },
@@ -72,6 +82,7 @@
             "name": "武蔵小金井",
             "pa": ["15"],
             "sta": ["JC15"],
+            "sta_code": "JC15",
             "sta_cut": 6,
             "time": 2
         },
@@ -79,6 +90,7 @@
             "name": "東小金井",
             "pa": ["16"],
             "sta": ["JC14"],
+            "sta_code": "JC14",
             "sta_cut": 12,
             "time": 3
         },
@@ -86,6 +98,7 @@
             "name": "武蔵境",
             "pa": ["17"],
             "sta": ["JC13"],
+            "sta_code": "JC13",
             "sta_cut": 8,
             "time": 2
         },
@@ -93,6 +106,7 @@
             "name": "三鷹",
             "pa": ["18"],
             "sta": ["JC12"],
+            "sta_code": "JC12",
             "sta_cut": 10,
             "time": 3
         },
@@ -100,6 +114,7 @@
             "name": "吉祥寺",
             "pa": ["19"],
             "sta": ["JC11"],
+            "sta_code": "JC11",
             "sta_cut": 11,
             "time": 2
         },
@@ -107,6 +122,7 @@
             "name": "西荻窪",
             "pa": ["20"],
             "sta": ["JC10"],
+            "sta_code": "JC10",
             "sta_cut": 15,
             "time": 2
         },
@@ -114,6 +130,7 @@
             "name": "荻窪",
             "pa": ["21"],
             "sta": ["JC09"],
+            "sta_code": "JC09",
             "sta_cut": 9,
             "time": 3
         },
@@ -121,6 +138,7 @@
             "name": "阿佐ヶ谷",
             "pa": ["22"],
             "sta": ["JC08"],
+            "sta_code": "JC08",
             "sta_cut": 18,
             "time": 2
         },
@@ -128,6 +146,7 @@
             "name": "高円寺",
             "pa": ["23"],
             "sta": ["JC07"],
+            "sta_code": "JC07",
             "sta_cut": 14,
             "time": 2
         },
@@ -135,59 +154,79 @@
             "name": "中野",
             "pa": ["24"],
             "sta": ["JC06"],
+            "sta_code": "JC06",
             "sta_cut": 10,
             "time": 2
         },
         {
             "name": "東中野",
-            "pa": []
+            "pa": [],
+            "sta": [],
+            "sta_code": null
         },
         {
             "name": "大久保",
-            "pa": []
+            "pa": [],
+            "sta": [],
+            "sta_code": null
         },
         {
             "name": "新宿",
             "pa": ["26","27"],
             "sta": ["JC05_SJK"],
+            "sta_code": "JC05",
             "sta_cut": 23,
             "time": 4
         },
         {
             "name": "代々木",
-            "pa": []
+            "pa": [],
+            "sta": [],
+            "sta_code": null
         },
         {
             "name": "千駄ヶ谷",
-            "pa": []
+            "pa": [],
+            "sta": [],
+            "sta_code": null
         },
         {
             "name": "信濃町",
-            "pa": []
+            "pa": [],
+            "sta": [],
+            "sta_code": null
         },
         {
             "name": "四ツ谷",
             "pa": ["29","30"],
             "sta": ["JC04"],
+            "sta_code": "JC04",
             "sta_cut": 14,
             "time": 4
         },
         {
             "name": "市ヶ谷",
-            "pa": []
+            "pa": [],
+            "sta": [],
+            "sta_code": null
         },
         {
             "name": "飯田橋",
-            "pa": []
+            "pa": [],
+            "sta": [],
+            "sta_code": null
         },
         {
             "name": "水道橋",
-            "pa": []
+            "pa": [],
+            "sta": [],
+            "sta_code": null
         },
         {
             "name": "御茶ノ水",
             "pa": ["31","32"],
             "sta": ["JC03"],
+            "sta_code": "JC03",
             "sta_cut": 10,
             "time": 5
         },
@@ -195,6 +234,7 @@
             "name": "神田",
             "pa": ["33"],
             "sta": ["JC02"],
+            "sta_code": "JC02",
             "sta_cut": 12,
             "time": 3
         },
@@ -202,6 +242,7 @@
             "name": "東京",
             "pa": ["34"],
             "sta": [""],
+            "sta_code": "JC01",
             "sta_cut": 0,
             "time": 1
         }

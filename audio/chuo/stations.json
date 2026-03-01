@@ -1,0 +1,122 @@
+{
+    "JC01": {
+        "name": "東京",
+        "furigana": "とうきょう",
+        "english": "Tokyo"
+    },
+    "JC02": {
+        "name": "神田",
+        "furigana": "かんだ",
+        "english": "Kanda"
+    },
+    "JC03": {
+        "name": "御茶ノ水",
+        "furigana": "おちゃのみず",
+        "english": "Ochanomizu"
+    },
+    "JC04": {
+        "name": "四ツ谷",
+        "furigana": "よつや",
+        "english": "Yotsuya"
+    },
+    "JC05": {
+        "name": "新宿",
+        "furigana": "しんじゅく",
+        "english": "Shinjuku"
+    },
+    "JC06": {
+        "name": "中野",
+        "furigana": "なかの",
+        "english": "Nakano"
+    },
+    "JC07": {
+        "name": "高円寺",
+        "furigana": "こうえんじ",
+        "english": "Koenji"
+    },
+    "JC08": {
+        "name": "阿佐ヶ谷",
+        "furigana": "あさがや",
+        "english": "Asagaya"
+    },
+    "JC09": {
+        "name": "荻窪",
+        "furigana": "おぎくぼ",
+        "english": "Ogikubo"
+    },
+    "JC10": {
+        "name": "西荻窪",
+        "furigana": "にしおぎくぼ",
+        "english": "Nishi-Ogikubo"
+    },
+    "JC11": {
+        "name": "吉祥寺",
+        "furigana": "きちじょうじ",
+        "english": "Kichijoji"
+    },
+    "JC12": {
+        "name": "三鷹",
+        "furigana": "みたか",
+        "english": "Mitaka"
+    },
+    "JC13": {
+        "name": "武蔵境",
+        "furigana": "むさしさかい",
+        "english": "Musashi-Sakai"
+    },
+    "JC14": {
+        "name": "東小金井",
+        "furigana": "ひがしこがねい",
+        "english": "Higashi-Koganei"
+    },
+    "JC15": {
+        "name": "武蔵小金井",
+        "furigana": "むさしこがねい",
+        "english": "Musashi-Koganei"
+    },
+    "JC16": {
+        "name": "国分寺",
+        "furigana": "こくぶんじ",
+        "english": "Kokubunji"
+    },
+    "JC17": {
+        "name": "西国分寺",
+        "furigana": "にしこくぶんじ",
+        "english": "Nishi-Kokubunji"
+    },
+    "JC18": {
+        "name": "国立",
+        "furigana": "くにたち",
+        "english": "Kunitachi"
+    },
+    "JC19": {
+        "name": "立川",
+        "furigana": "たちかわ",
+        "english": "Tachikawa"
+    },
+    "JC20": {
+        "name": "日野",
+        "furigana": "ひの",
+        "english": "Hino"
+    },
+    "JC21": {
+        "name": "豊田",
+        "furigana": "とよだ",
+        "english": "Toyoda"
+    },
+    "JC22": {
+        "name": "八王子",
+        "furigana": "はちおうじ",
+        "english": "Hachioji"
+    },
+    "JC23": {
+        "name": "西八王子",
+        "furigana": "にしはちおうじ",
+        "english": "Nishi-Hachioji"
+    },
+    "JC24": {
+        "name": "高尾",
+        "furigana": "たかお",
+        "english": "Takao"
+    }
+}
