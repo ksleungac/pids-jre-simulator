@@ -4,9 +4,9 @@
 
 **Japanese Train PA (Public Address) Simulator** - A pygame-based application that simulates train station announcements and arrival melodies with visual LCD display.
 
-**Current Date:** 2026-02-28
+**Current Date:** 2026-03-01
 
-**Last Refactor:** Fresh refactor completed with modular architecture and new setup screen feature.
+**Last Update:** Added Furigana Cycling feature with stations.json database support.
 
 ---
 
@@ -85,6 +85,14 @@ pids_jre_simulator/
 - Variable color schemes per route (color, contrast_color, type_color)
 - Stations with no PA announcements (skipped automatically)
 
+### 6. Furigana Cycling (NEW)
+**Upper LCD cycles between kanji and furigana every 4 seconds:**
+- **Destination** (left side): Cycles if `dest_furigana` is provided in route.json
+- **Prefix** (center): "次は" cycles to "つぎは" (other prefixes stay as-is)
+- **Station name** (right side): Cycles if furigana data available in stations.json
+- **Synchronized cycling**: All elements switch together every 4 seconds
+- **Graceful fallback**: Routes without stations.json show kanji only (no cycling)
+
 ---
 
 ## Module Responsibilities
@@ -95,6 +103,7 @@ pids_jre_simulator/
 - Font configurations (shingopr6nmedium, shingopr6nheavy, helveticaneueroman)
 - Colors: DARK_BG, WHITE_BG, PASSED_COLOR, CURRENT_COLOR, INACTIVE_COLOR
 - Timing: FRAME_RATE=15, KEY_REPEAT_DELAY=200, AUDIO_FADE_MS=800
+- **`STATION_DISPLAY_INTERVAL=4`** - Seconds between kanji/furigana cycling
 
 ### `utils.py`
 - `draw_text()` - Text with optional scaling
@@ -119,12 +128,19 @@ pids_jre_simulator/
 
 ### `display.py`
 - `UpperDisplay` - Train info, station name, clock, hint square
+  - **`_update_display_mode()`** - Toggles display_mode every 4 seconds (kanji/furigana)
+  - **`_draw_destination()`** - Draws destination with furigana cycling
+  - **`_draw_prefix()`** - Draws prefix with cycling for "次は" → "つぎは"
+  - **`_draw_station_name()`** - Draws station name with furigana cycling
+  - `draw_clock()` - Updates display mode and redraws cycling elements
 - `LowerDisplay` - Route map, markers, times, pointer
-- Both receive route_data and app_state via dependency injection
+- Both receive route_data, app_state, **and stops** (merged data) via dependency injection
 
 ### `app.py`
 - `AppState` - curr_stop, cnt_pa, cnt_sta, curr_stop_disp, skip, frame_mode
 - `PASimulator` - Main application class
+- **`_load_station_db()`** - Loads stations.json from line directory (parent of work_dir or work_dir itself)
+- **`_merge_station_data()`** - Merges furigana/english into stops via sta_code or name-based lookup
 - `_load_route_data()`, `_init_pygame()`, `run()`, `_handle_input()`
 - `_next_pa()` - Advance PA (blocked while playing)
 - `_next_sta()` - Play STA (jumps to sta_cut if playing)
@@ -147,6 +163,7 @@ pids_jre_simulator/
 6. **Character Spacing**: Station names use even character spacing (draw_text_given_width)
 7. **Route Scrolling**: Setup screen scrolls and shows scrollbar indicator
 8. **Temp File Cleanup**: Uses system temp dir, auto-deleted on exit
+9. **Furigana Cycling**: Upper LCD cycles kanji/furigana every 4 seconds (destination, prefix, station name)
 
 ---
 
@@ -205,3 +222,13 @@ python main.py
 3. **Character spacing is critical** - use draw_text_given_width for station names
 4. **Playback behavior is specific** - review _next_pa() and _next_sta() logic carefully
 5. **User tests thoroughly** - verify changes work before presenting
+6. **Furigana cycling is synchronized** - all upper LCD elements (destination, prefix, station name) switch together every 4 seconds
+7. **stations.json is line-specific** - one file per line (e.g., `audio/chuo/stations.json`), not shared across lines
+8. **Name-based fallback lookup** - use `name_駅名` keys for stations without official JR codes (e.g., 蘇我 on Keiyo Line)
+
+---
+
+## Data Format Specification
+
+For detailed JSON data format specifications (route.json, stations.json field definitions, conventions), see **[DATA_FORMAT.md](DATA_FORMAT.md)**.
+
