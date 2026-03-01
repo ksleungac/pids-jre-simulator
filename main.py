@@ -21,12 +21,22 @@ def main():
     pygame.init()
     pygame.mixer.init()
 
+    # Get the directory where the executable is located (for PyInstaller)
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        BASE_DIR = os.path.dirname(sys.executable)
+    else:
+        # Running as script
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
     # Create screen for setup
     screen = pygame.display.set_mode((730, 420))
     pygame.display.set_caption('PA Simulator - Route Selection')
 
-    # Run setup screen to select route
+    # Run setup screen to select route (scan from exe directory)
     setup = SetupScreen(screen)
+    audio_dir = os.path.join(BASE_DIR, "audio")
+    setup.scan_routes(audio_dir)
     config = setup.run()
 
     if config is None:

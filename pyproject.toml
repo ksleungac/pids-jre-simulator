@@ -13,3 +13,8 @@ dependencies = [
     "scipy>=1.17.1",
     "soundfile>=0.13.1",
 ]
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.19.0",
+]
