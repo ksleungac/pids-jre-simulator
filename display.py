@@ -13,7 +13,7 @@ from constants import (
     FONT_CLOCK_NAME, FONT_CLOCK_SIZE, FONT_TIME_NAME, FONT_TIME_SIZE,
     FONT_STOPS_SMALL_SIZE, FONT_STOPS_MINUTE_SIZE,
     FONT_TYPE_SIZE, FONT_TYPE_BOLD_SIZE, FONT_DEST_SIZE, FONT_PREFIX_SIZE, FONT_STATION_SIZE,
-    STOPS_BAR_HEIGHT, STOPS_WIDTH, STOPS_PER_LINE
+    STOPS_BAR_HEIGHT, STOPS_WIDTH, STOPS_PER_LINE, STATION_DISPLAY_INTERVAL
 )
 from utils import draw_text, draw_text_given_width, draw_aapolygon, arrow_points, draw_stops_text
 
@@ -21,22 +21,25 @@ from utils import draw_text, draw_text_given_width, draw_aapolygon, arrow_points
 class UpperDisplay:
     """Handles the upper portion of the LCD (train info, current station)."""
 
-    def __init__(self, screen: pygame.Surface, route_data: Dict, app_state: Any):
+    def __init__(self, screen: pygame.Surface, route_data: Dict, app_state: Any, stops: List[Dict]):
         """Initialize the upper display.
 
         Args:
             screen: Pygame surface to draw on
             route_data: Route configuration dictionary
             app_state: Application state object
+            stops: List of stop dictionaries (with merged station data)
         """
         self.screen = screen
         self.route_data = route_data
         self.state = app_state
+        self.stops = stops
 
         # Extract route data with defaults
         self.route_name = route_data.get('route', 'Unknown')
         self.train_type = route_data.get('type', '')
         self.dest = route_data.get('dest', '')
+        self.dest_furigana = route_data.get('dest_furigana', '')
         self.color = route_data.get('color', [255, 255, 255])
         self.type_color = route_data.get('type_color', [0, 0, 0])
 
@@ -55,7 +58,12 @@ class UpperDisplay:
         self.font_prefix = pygame.font.SysFont(FONT_STOPS_NAME, FONT_PREFIX_SIZE)
         self.font_station = pygame.font.SysFont(FONT_STOPS_NAME, FONT_STATION_SIZE)
         self.font_clock = pygame.font.SysFont(FONT_CLOCK_NAME, FONT_CLOCK_SIZE)
-        self.font_small = pygame.font.SysFont(FONT_STOPS_NAME, 18)
+        self.font_suffix = pygame.font.SysFont(FONT_STOPS_NAME, 18)
+
+        # Unified display cycling (kanji <-> furigana for all elements together)
+        self.display_mode = 0  # 0 = kanji, 1 = furigana
+        self.last_switch_time = time.time()
+        self.prefix_text = "ただいま"  # Default, updated in draw_current_station
 
     def draw_init(self) -> None:
         """Draw initial state (train type, destination banner)."""
@@ -70,45 +78,99 @@ class UpperDisplay:
         else:
             draw_text_given_width(15, 7, box_w, self.font_type_bold, self.train_type, self.type_color, self.screen)
 
-        # Destination
-        draw_text_given_width(15, 50, box_w, self.font_dest, self.dest, self.white_bg, self.screen)
-
-        # "ゆき" or "方面" suffix
-        suffix = "方面" if self.route_name == "山手線" else "ゆき"
-        suffix_img = self.font_small.render(suffix, True, self.white_bg)
-        suffix_x = int(S_WIDTH * 0.25) - suffix_img.get_width() - 10
-        suffix_y = self.h - suffix_img.get_height() - 5
-        self.screen.blit(suffix_img, (suffix_x, suffix_y))
-
         # Color band
         pygame.draw.rect(self.screen, self.color, pygame.Rect(int(S_WIDTH * 0.25), 0, 30, self.h - 7))
 
-        # Prefix ("ただいま")
-        prefix_x = int(S_WIDTH * 0.25) + 40
-        pygame.draw.rect(self.screen, self.dark_bg, pygame.Rect(prefix_x, 5, 130, 30))
-        prefix_img = self.font_prefix.render("ただいま", True, self.white_bg)
-        self.screen.blit(prefix_img, (prefix_x, 5))
+        # Destination with cycling (draw AFTER color band so suffix isn't covered)
+        self._draw_destination()
+
+        # Prefix ("ただいま") - set initial state
+        self.prefix_text = "ただいま"
+        self._draw_prefix()
 
         # Station name
         self._draw_station_name()
 
         # Hint square (indicates multiple PA announcements)
         # Positioned at bottom right of upper section, aligned with bottom edge
-        stops = self.route_data.get('stops', [])
-        if stops and len(stops[self.state.curr_stop].get('pa', [])) > 1:
+        if self.stops and len(self.stops[self.state.curr_stop].get('pa', [])) > 1:
             pygame.draw.rect(self.screen, (247, 225, 158), pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20))
         else:
             pygame.draw.rect(self.screen, self.dark_bg, pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20))
 
         pygame.display.flip()
 
+    def _update_display_mode(self) -> None:
+        """Update display mode (kanji/furigana) based on timer.
+
+        Switches all elements between kanji and furigana every STATION_DISPLAY_INTERVAL seconds.
+        Only cycles if furigana data is available for current station.
+        """
+        current_time = time.time()
+
+        # Check if furigana is available for current station
+        if self.state.curr_stop < len(self.stops):
+            has_furigana = 'furigana' in self.stops[self.state.curr_stop]
+        else:
+            has_furigana = False
+
+        # Only cycle if furigana data exists
+        if has_furigana:
+            if current_time - self.last_switch_time >= STATION_DISPLAY_INTERVAL:
+                self.display_mode = 1 - self.display_mode  # Toggle 0 <-> 1
+                self.last_switch_time = current_time
+
+    def _draw_destination(self) -> None:
+        """Draw the destination with cycling between kanji and furigana."""
+        # Select display text based on mode
+        if self.display_mode == 1 and self.dest_furigana:
+            dest_text = self.dest_furigana
+        else:
+            dest_text = self.dest
+
+        # Clear destination area first (fill with dark background)
+        box_w = 150
+        pygame.draw.rect(self.screen, self.dark_bg, pygame.Rect(15, 50, box_w, 35))
+
+        # Draw destination text
+        draw_text_given_width(15, 50, box_w, self.font_dest, dest_text, self.white_bg, self.screen)
+
+        # Draw "ゆき" or "方面" suffix (render directly, no smoothscale)
+        suffix = "方面" if self.route_name == "山手線" else "ゆき"
+        t_w, t_h = self.font_suffix.size(suffix)
+        suffix_x = int(S_WIDTH * 0.25) - t_w - 10
+        suffix_y = self.h - t_h - 5
+        suffix_img = self.font_suffix.render(suffix, True, self.white_bg, self.dark_bg)
+        self.screen.blit(suffix_img, (suffix_x, suffix_y))
+
+    def _draw_prefix(self) -> None:
+        """Draw the prefix with cycling for '次は' -> 'つぎは'."""
+        prefix_x = int(S_WIDTH * 0.25) + 40
+        pygame.draw.rect(self.screen, self.dark_bg, pygame.Rect(prefix_x, 5, 130, 30))
+
+        # Select display text based on unified display mode (only "次は" has furigana)
+        if self.display_mode == 1 and self.prefix_text == "次は":
+            prefix_render = "つぎは"
+        else:
+            prefix_render = self.prefix_text
+
+        prefix_img = self.font_prefix.render(prefix_render, True, self.white_bg)
+        self.screen.blit(prefix_img, (prefix_x, 5))
+
     def _draw_station_name(self) -> None:
-        """Draw the current station name with even character spacing."""
-        stops = self.route_data.get('stops', [])
-        if not stops or self.state.curr_stop >= len(stops):
+        """Draw the current station name with even character spacing.
+
+        Displays either kanji or furigana based on unified display_mode.
+        """
+        if not self.stops or self.state.curr_stop >= len(self.stops):
             return
 
-        name = stops[self.state.curr_stop].get('name', '').replace(' ', '')
+        # Get station name based on display mode
+        if self.display_mode == 1 and 'furigana' in self.stops[self.state.curr_stop]:
+            name = self.stops[self.state.curr_stop].get('furigana', '').replace(' ', '')
+        else:
+            name = self.stops[self.state.curr_stop].get('name', '').replace(' ', '')
+
         if not name:
             return
 
@@ -128,26 +190,26 @@ class UpperDisplay:
 
     def draw_current_station(self) -> None:
         """Update current station name and prefix (次は/まもなく)."""
-        # Draw prefix
-        prefix_x = int(S_WIDTH * 0.25) + 40
-        pygame.draw.rect(self.screen, self.dark_bg, pygame.Rect(prefix_x, 5, 130, 30))
-
+        # Update prefix text based on PA count
         if self.state.cnt_pa == 0:
-            prefix_text = "次は"
+            self.prefix_text = "次は"
         elif self.state.cnt_pa == 1:
-            prefix_text = "まもなく"
+            self.prefix_text = "まもなく"
         else:
-            prefix_text = "ただいま"
+            self.prefix_text = "ただいま"
 
-        prefix_img = self.font_prefix.render(prefix_text, True, self.white_bg)
-        self.screen.blit(prefix_img, (prefix_x, 5))
+        # Reset prefix display mode when prefix changes
+        self.prefix_display_mode = 0
+        self.last_prefix_switch = time.time()
+
+        # Draw prefix (with cycling for "次は")
+        self._draw_prefix()
 
         # Update station name
         self._draw_station_name()
 
         # Draw hint square (indicates multiple PA announcements)
-        stops = self.route_data.get('stops', [])
-        if stops and len(stops[self.state.curr_stop].get('pa', [])) > 1:
+        if self.stops and len(self.stops[self.state.curr_stop].get('pa', [])) > 1:
             pygame.draw.rect(self.screen, (247, 225, 158), pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20))
         else:
             pygame.draw.rect(self.screen, self.dark_bg, pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20))
@@ -160,6 +222,9 @@ class UpperDisplay:
         Args:
             timestamp: Unix timestamp
         """
+        # Update display mode (kanji/furigana cycling)
+        self._update_display_mode()
+
         curr_time = time.strftime('%H:%M', time.localtime(timestamp))
 
         clock_x = S_WIDTH - 160
@@ -167,10 +232,14 @@ class UpperDisplay:
         clock_img = self.font_clock.render(curr_time, True, self.white_bg)
         self.screen.blit(clock_img, (clock_x, 0))
 
+        # Redraw prefix, destination and station name (in case mode switched)
+        self._draw_prefix()
+        self._draw_destination()
+        self._draw_station_name()
+
         # Redraw hint square to ensure it persists
         # Positioned at bottom right of upper section, aligned with bottom edge
-        stops = self.route_data.get('stops', [])
-        if stops and len(stops[self.state.curr_stop].get('pa', [])) > 1:
+        if self.stops and len(self.stops[self.state.curr_stop].get('pa', [])) > 1:
             pygame.draw.rect(self.screen, (247, 225, 158), pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20))
         else:
             pygame.draw.rect(self.screen, self.dark_bg, pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20))
@@ -181,18 +250,19 @@ class UpperDisplay:
 class LowerDisplay:
     """Handles the lower portion of the LCD (route map, station markers)."""
 
-    def __init__(self, screen: pygame.Surface, route_data: Dict, app_state: Any):
+    def __init__(self, screen: pygame.Surface, route_data: Dict, app_state: Any, stops: List[Dict]):
         """Initialize the lower display.
 
         Args:
             screen: Pygame surface to draw on
             route_data: Route configuration dictionary
             app_state: Application state object
+            stops: List of stop dictionaries (with merged station data)
         """
         self.screen = screen
         self.route_data = route_data
         self.state = app_state
-        self.stops = route_data.get('stops', [])
+        self.stops = stops
         self.dest = route_data.get('dest', '')
         self.color = route_data.get('color', [255, 255, 255])
         self.contrast_color = route_data.get('contrast_color', [224, 54, 37])

@@ -49,25 +49,91 @@ class PASimulator:
 
         # Initialize components
         self.audio = AudioPlayer(work_dir, self.stops)
-        self.upper = UpperDisplay(self.screen, self.route_data, self.state)
-        self.lower = LowerDisplay(self.screen, self.route_data, self.state)
+        self.upper = UpperDisplay(self.screen, self.route_data, self.state, self.stops)
+        self.lower = LowerDisplay(self.screen, self.route_data, self.state, self.stops)
 
         self.running = True
 
     def _load_route_data(self) -> None:
-        """Load route.json configuration."""
+        """Load route.json configuration and merge with stations.json data."""
         if self.route_data is None:
             json_path = os.path.join(self.work_dir, 'route.json')
             with open(json_path, encoding='utf-8') as f:
                 self.route_data = json.load(f)
 
-        self.stops = self.route_data.get('stops', [])
+        # Load stations.json if available (provides furigana, english names, etc.)
+        self.station_db = self._load_station_db()
+
+        # Merge station database into stops
+        self.stops = self._merge_station_data()
         self.route_name = self.route_data.get('route', 'Unknown')
         self.train_type = self.route_data.get('type', '')
         self.dest = self.route_data.get('dest', '')
         self.color = self.route_data.get('color', [255, 255, 255])
         self.contrast_color = self.route_data.get('contrast_color', [224, 54, 37])
         self.type_color = self.route_data.get('type_color', [0, 0, 0])
+
+    def _load_station_db(self) -> Dict:
+        """Load stations.json database from the route's line directory.
+
+        Searches for stations.json in:
+        1. work_dir itself (e.g., audio/keiyo/stations.json)
+        2. Parent directory of work_dir (e.g., audio/chuo/stations.json when work_dir is audio/chuo/1654T/)
+
+        Returns empty dict if not found.
+        """
+        # First check work_dir itself (for routes like keiyo where route.json is in the line folder)
+        station_db_path = os.path.join(self.work_dir.rstrip(os.sep), 'stations.json')
+        if os.path.exists(station_db_path):
+            with open(station_db_path, encoding='utf-8') as f:
+                return json.load(f)
+
+        # Then check parent directory (for routes like chuo/1654T where route.json is in a subfolder)
+        line_dir = os.path.dirname(self.work_dir.rstrip(os.sep))
+        station_db_path = os.path.join(line_dir, 'stations.json')
+        if os.path.exists(station_db_path):
+            with open(station_db_path, encoding='utf-8') as f:
+                return json.load(f)
+
+        return {}
+
+    def _merge_station_data(self) -> list:
+        """Merge station database info into stops based on sta_code or station name.
+
+        Adds furigana and english fields from station_db to each stop.
+        Lookup priority:
+        1. sta_code (e.g., "JC01", "JK47")
+        2. name-based key (e.g., "name_蘇我") for stations without official codes
+        """
+        stops = self.route_data.get('stops', [])
+        merged = []
+
+        for stop in stops:
+            stop_copy = stop.copy()
+            sta_code = stop.get('sta_code')
+            station_name = stop.get('name', '')
+
+            station_info = None
+
+            # Try sta_code lookup first
+            if sta_code and sta_code in self.station_db:
+                station_info = self.station_db[sta_code]
+            # Fallback to name-based lookup
+            elif station_name:
+                name_key = f"name_{station_name}"
+                if name_key in self.station_db:
+                    station_info = self.station_db[name_key]
+
+            # Merge station info if found
+            if station_info:
+                if 'furigana' not in stop_copy and 'furigana' in station_info:
+                    stop_copy['furigana'] = station_info['furigana']
+                if 'english' not in stop_copy and 'english' in station_info:
+                    stop_copy['english'] = station_info['english']
+
+            merged.append(stop_copy)
+
+        return merged
 
     def _init_pygame(self) -> None:
         """Initialize pygame display."""

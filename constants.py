@@ -53,6 +53,7 @@ FRAME_RATE = 15
 KEY_REPEAT_DELAY = 200
 AUDIO_FADE_MS = 800
 TARGET_LOUDNESS = -15.0
+STATION_DISPLAY_INTERVAL = 4  # Seconds between kanji/furigana cycling
 
 # Audio
 TEMP_AUDIO_FILE = './temp_audio.mp3'

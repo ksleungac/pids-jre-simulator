@@ -33,7 +33,9 @@ def draw_text(
     if bg is None:
         img = font.render(text, True, color).convert_alpha()
         txt_w, txt_h = img.get_size()
-        img = pygame.transform.smoothscale(img, (int(txt_w * h_ratio), int(txt_h * v_ratio)))
+        # Only apply smoothscale if scaling is actually needed
+        if h_ratio != 1.0 or v_ratio != 1.0:
+            img = pygame.transform.smoothscale(img, (int(txt_w * h_ratio), int(txt_h * v_ratio)))
     else:
         img = font.render(text, True, color, bg)
 
