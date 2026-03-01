@@ -1,0 +1,107 @@
+{
+    "JT01": {
+        "name": "東京",
+        "furigana": "とうきょう",
+        "english": "Tokyo"
+    },
+    "JT02": {
+        "name": "新橋",
+        "furigana": "しんばし",
+        "english": "Shimbashi"
+    },
+    "JT03": {
+        "name": "品川",
+        "furigana": "しながわ",
+        "english": "Shinagawa"
+    },
+    "JT04": {
+        "name": "川崎",
+        "furigana": "かわさき",
+        "english": "Kawasaki"
+    },
+    "JT05": {
+        "name": "横浜",
+        "furigana": "よこはま",
+        "english": "Yokohama"
+    },
+    "JT06": {
+        "name": "戸塚",
+        "furigana": "とつか",
+        "english": "Totsuka"
+    },
+    "JT07": {
+        "name": "大船",
+        "furigana": "おおふな",
+        "english": "Ofuna"
+    },
+    "JT08": {
+        "name": "藤沢",
+        "furigana": "ふじさわ",
+        "english": "Fujisawa"
+    },
+    "JT09": {
+        "name": "辻堂",
+        "furigana": "つじどう",
+        "english": "Tsujido"
+    },
+    "JT10": {
+        "name": "茅ヶ崎",
+        "furigana": "ちがさき",
+        "english": "Chigasaki"
+    },
+    "JT11": {
+        "name": "平塚",
+        "furigana": "ひらつか",
+        "english": "Hiratsuka"
+    },
+    "JT12": {
+        "name": "大磯",
+        "furigana": "おおいそ",
+        "english": "Oiso"
+    },
+    "JT13": {
+        "name": "二宮",
+        "furigana": "にのみや",
+        "english": "Ninomiya"
+    },
+    "JT14": {
+        "name": "国府津",
+        "furigana": "こうづ",
+        "english": "Kozu"
+    },
+    "JT15": {
+        "name": "鴨宮",
+        "furigana": "かものみや",
+        "english": "Kamonomiya"
+    },
+    "JT16": {
+        "name": "小田原",
+        "furigana": "おだわら",
+        "english": "Odawara"
+    },
+    "JT17": {
+        "name": "早川",
+        "furigana": "はやかわ",
+        "english": "Hayakawa"
+    },
+    "JT18": {
+        "name": "根府川",
+        "furigana": "ねぶかわ",
+        "english": "Nebukawa"
+    },
+    "JT19": {
+        "name": "真鶴",
+        "furigana": "まなづる",
+        "english": "Manazuru"
+    },
+    "JT20": {
+        "name": "湯河原",
+        "furigana": "ゆがわら",
+        "english": "Yugawara"
+    },
+    "JT21": {
+        "name": "熱海",
+        "furigana": "あたみ",
+        "english": "Atami"
+    }
+}
