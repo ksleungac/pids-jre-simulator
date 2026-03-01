@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(uv run:*)"
+      "Bash(uv run:*)",
+      "WebSearch",
+      "WebFetch(domain:ja.wikipedia.org)",
+      "WebFetch(domain:www.jreast.co.jp)",
+      "WebFetch(domain:w.atwiki.jp)",
+      "WebFetch(domain:google.com)",
+      "WebFetch(domain:en.wikipedia.org)",
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
-  }
+  },
+  "skipWebFetchPreflight": true
 }

@@ -61,6 +61,33 @@ Each stop in the `stops` array:
 | `["1"]` | Single PA track |
 | `["1", "2"]` | Multiple PA tracks (user cycles with Page Down) |
 
+**PA Track Numbering Convention:**
+
+- PA tracks are numbered sequentially across the route (1, 2, 3, ...)
+- Track numbers correspond to `audio/[line]/[diagram]/pa/[number].mp3` files
+- General pattern (varies by route):
+  - Track 1 at a station = "Next station is [Station]" (played after departing previous station)
+  - Track 2 at a station = "Arriving at [Station]" (played when approaching)
+  - Subsequent tracks = departure announcements, connecting trains, safety messages, etc.
+- First station may have `["1"]` for pre-departure announcement (played while stopped at platform)
+
+**Important:** The `pa` array defines which tracks belong to which station. When modifying route data:
+- Only add/remove/reassign PA tracks at the specific station being edited
+- Do NOT renumber subsequent stations' PA tracks
+- Example: If moving track 1 from Station B to Station A, only change those two stations; leave Station C's tracks unchanged even if numbering becomes non-sequential
+
+```json
+// Before (track 1 incorrectly at Shinbashi):
+"東京": { "pa": [] }
+"新橋": { "pa": ["1", "2"] }
+"品川": { "pa": ["3", "4"] }
+
+// After (track 1 moved to Tokyo):
+"東京": { "pa": ["1"] }      // Only this station changed
+"新橋": { "pa": ["2"] }      // Only this station changed
+"品川": { "pa": ["3", "4"] } // Unchanged - do NOT renumber to ["2", "3"]
+```
+
 #### `sta` Array (STA Melodies)
 
 | Value | Meaning |
@@ -250,6 +277,7 @@ Use this checklist when adding or modifying route data to ensure consistency.
 - [ ] **stations.json keys** match sta_code values (simple format)
 - [ ] **Name-based keys** (`name_駅名`) used for stations without official codes
 - [ ] **No duplicate keys** in JSON files (especially `dest_furigana`)
+- [ ] **PA tracks** are assigned to correct stations (do not renumber subsequent stations when modifying)
 
 ### Automated Validation Script
 
