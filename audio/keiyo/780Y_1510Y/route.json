@@ -17,7 +17,6 @@
     ],
     "type": "普通",
     "dest": "東京",
-    "dest_furigana": "とうきょう",
     "stops": [
         {
             "name": "蘇我",
@@ -235,6 +234,5 @@
             "time": 2,
             "sta_code": "JE01"
         }
-    ],
-    "dest_furigana": "とうきょう"
+    ]
 }

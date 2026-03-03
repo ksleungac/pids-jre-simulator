@@ -7,7 +7,6 @@
     ],
     "type": "各駅停車",
     "dest": "磯子",
-    "dest_furigana": "いそご",
     "stops": [
         {
             "name": "大宮",

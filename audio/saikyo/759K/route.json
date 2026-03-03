@@ -3,7 +3,6 @@
     "color": [46, 139, 87],
     "type": "各駅停車",
     "dest": "大宮",
-    "dest_furigana": "おおみや",
     "stops": [
         {
             "name": "大崎",

@@ -4,7 +4,6 @@
     "contrast_color": [0, 92, 0],
     "type": "快速",
     "dest": "東京",
-    "dest_furigana": "とうきょう",
     "stops": [
         {
             "name": "高尾",
