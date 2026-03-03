@@ -55,6 +55,15 @@ AUDIO_FADE_MS = 800
 TARGET_LOUDNESS = -15.0
 STATION_DISPLAY_INTERVAL = 4  # Seconds between kanji/furigana cycling
 
+# Time scale for countdown: 1 second of real time = this many minutes of travel time
+# Higher value = faster countdown (for testing)
+# Quick reference:
+#   TIME_SCALE = 1    → 1 real sec = 1 travel min (5 min journey = 5 real secs) [FAST]
+#   TIME_SCALE = 5    → 1 real sec = 5 travel min (5 min journey = 1 real sec)
+#   TIME_SCALE = 10   → 1 real sec = 10 travel min (10 min journey = 1 real sec)
+#   TIME_SCALE = 60   → 60 real secs = 1 travel min (real-time, 5 min journey = 5 mins)
+TIME_SCALE = 60  # Real-time countdown
+
 # Audio
 TEMP_AUDIO_FILE = './temp_audio.mp3'
 

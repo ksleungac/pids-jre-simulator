@@ -26,6 +26,8 @@ class AppState:
         self.curr_stop_disp = 0
         self.skip = 0
         self.frame_mode = 1
+        self.departure_time = 0.0  # Timestamp when train departed for current segment
+        self.is_last_pa = False  # Whether current PA is the last one before arriving
 
 
 class PASimulator:
@@ -155,8 +157,11 @@ class PASimulator:
             self.clock.tick(FRAME_RATE)
             timestamp = time.time()
 
-            # Draw clock
+            # Draw clock (this also updates upper display)
             self.upper.draw_clock(timestamp)
+
+            # Update lower display with current time for real-time countdown
+            self.lower.show_stops(current_time=timestamp)
 
             # Handle input
             self._handle_input()
@@ -199,7 +204,11 @@ class PASimulator:
             if self.state.curr_stop < len(self.stops) - 1:
                 self.state.curr_stop += 1
                 self.state.cnt_pa = 0
+                self.state.is_last_pa = False
                 self.lower.increment_current_stop_display()
+
+                # Set departure time when starting to travel to next station
+                self.state.departure_time = time.time()
 
                 # Skip stations with no PA
                 while (self.state.curr_stop < len(self.stops) and
@@ -215,7 +224,9 @@ class PASimulator:
                 # Loop back to start for circular routes
                 self.state.curr_stop = 0
                 self.state.cnt_pa = 0
+                self.state.is_last_pa = False
                 self.state.curr_stop_disp = 0
+                self.state.departure_time = time.time()
             else:
                 # End of route
                 self.state.cnt_pa = max(0, len(pa_tracks) - 1)
@@ -224,14 +235,14 @@ class PASimulator:
             self.state.cnt_sta = 0
             self.audio.play_pa(self.state.curr_stop, self.state.cnt_pa)
             self.upper.draw_current_station()
-            self.lower.show_stops()
         else:
             # Next PA within current stop
             self.state.cnt_pa += 1
+            # Check if this is now the last PA (approaching station)
+            self.state.is_last_pa = self.state.cnt_pa >= len(pa_tracks) - 1
             self.lower.increment_current_stop_display()
             self.audio.play_pa(self.state.curr_stop, self.state.cnt_pa)
             self.upper.draw_current_station()
-            self.lower.show_stops()
 
     def _next_sta(self) -> None:
         """Play next station melody.

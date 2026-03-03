@@ -154,6 +154,13 @@ Each stop in the `stops` array:
 }
 ```
 
+**Note:** The `time` field represents the scheduled travel time in minutes. The lower LCD displays this value with real-time countdown:
+- Countdown starts when train departs (first PA of segment)
+- Display shows `time - elapsed_minutes` (floor division, only decrements when full minute passes)
+- Minimum display value is "1" (never shows 0)
+- On last PA of current station, display forces to "1" (arriving now)
+- Configurable via `TIME_SCALE` constant (60 = real-time, lower = faster)
+
 ### Field Details
 
 #### `pa` Array (PA Announcements)

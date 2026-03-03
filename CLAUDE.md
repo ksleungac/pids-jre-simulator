@@ -7,6 +7,7 @@
 **Current Date:** 2026-03-03
 
 **Last Update:**
+- Real-time countdown for travel times on lower LCD (TIME_SCALE constant controls speed)
 - Centralized translations.json for all furigana/english lookups
 - Destination furigana now loaded from translations.json (removed from route.json)
 
@@ -75,7 +76,7 @@ pids_jre_simulator/
 - Station markers with proper spacing
 - Progress indicator (pointer triangle)
 - Passed/current/future station states
-- Travel time accumulation
+- Travel time with real-time countdown (see Real-Time Countdown System below)
 - "分" markers at line breaks and destination
 
 ### 4. Controls
@@ -97,6 +98,23 @@ pids_jre_simulator/
 - **Synchronized cycling**: All elements switch together every 4 seconds
 - **Graceful fallback**: Routes without translation data show kanji only (no cycling)
 
+### 7. Real-Time Countdown System (Updated 2026-03-04)
+**Lower LCD travel times count down in real-time as the train travels:**
+- **Countdown start**: When train departs (first PA of new segment, `curr_stop` increments)
+- **Display formula**: `max(1, time - floor(elapsed_minutes))`
+- **Full minute rule**: Time only decrements after full minute has elapsed (e.g., "3" shows for entire first minute)
+- **Last PA behavior**: When on last PA of station, display forces to "1" (arriving now)
+- **TIME_SCALE constant**: Controls countdown speed
+  - `TIME_SCALE = 60` → Real-time (60 real seconds = 1 travel minute)
+  - `TIME_SCALE = 5` → Fast (5 real seconds = 1 travel minute, for testing)
+  - Lower value = faster countdown
+
+**Implementation:**
+- `AppState.departure_time`: Timestamp when train departed for current segment
+- `AppState.is_last_pa`: Flag set when on last PA before arriving
+- `draw_times()`: Calculates elapsed time and applies countdown logic
+- Main loop calls `show_stops(current_time=timestamp)` every frame for smooth updates
+
 ---
 
 ## Module Responsibilities
@@ -108,6 +126,7 @@ pids_jre_simulator/
 - Colors: DARK_BG, WHITE_BG, PASSED_COLOR, CURRENT_COLOR, INACTIVE_COLOR
 - Timing: FRAME_RATE=15, KEY_REPEAT_DELAY=200, AUDIO_FADE_MS=800
 - **`STATION_DISPLAY_INTERVAL=4`** - Seconds between kanji/furigana cycling
+- **`TIME_SCALE=60`** - Real-time countdown speed (60 real secs = 1 travel minute)
 
 ### `utils.py`
 - `draw_text()` - Text with optional scaling
@@ -141,7 +160,7 @@ pids_jre_simulator/
 - Both receive route_data, app_state, **and stops** (merged data) via dependency injection
 
 ### `app.py`
-- `AppState` - curr_stop, cnt_pa, cnt_sta, curr_stop_disp, skip, frame_mode
+- `AppState` - curr_stop, cnt_pa, cnt_sta, curr_stop_disp, skip, frame_mode, **departure_time**, **is_last_pa**
 - `PASimulator` - Main application class
 - **`_load_station_db()`** - Loads `data/translations.json` from project root (central translation database)
 - **`_merge_station_data()`** - Merges furigana/english into stops by looking up station name in translations.json
@@ -169,6 +188,9 @@ pids_jre_simulator/
 7. **Route Scrolling**: Setup screen scrolls and shows scrollbar indicator
 8. **Temp File Cleanup**: Uses system temp dir, auto-deleted on exit
 9. **Furigana Cycling**: Upper LCD cycles kanji/furigana every 4 seconds (destination, prefix, station name)
+10. **Real-Time Countdown**: Lower LCD travel times count down in real-time from departure
+11. **Last PA Forces Time to 1**: When on last PA before arriving, display shows "1" (arriving now)
+12. **Full Minute Rule**: Time only decrements after full minute elapsed (e.g., "3" → "2" after 1 min)
 
 ---
 
@@ -233,6 +255,9 @@ python main.py
 9. **dest_furigana auto-lookup** - `dest` value in route.json is used to lookup furigana from translations.json
 10. **Line-specific stations.json** - `audio/[line]/stations.json` keeps keys only (empty values) for future line-specific data
 11. **Windows console encoding** - set `PYTHONUTF8=1` when running Python scripts that output Japanese characters
+12. **TIME_SCALE constant** - Controls real-time countdown speed (60=real-time, lower=faster testing)
+13. **Countdown timing** - Time decrements only after full minute elapsed (floor division)
+14. **departure_time tracking** - Set in AppState when curr_stop increments (train departs)
 
 ---
 

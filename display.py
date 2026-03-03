@@ -450,16 +450,31 @@ class LowerDisplay:
                 pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, radius, PASSED_COLOR)
                 pygame.gfxdraw.aacircle(self.screen, center_x, center_y, radius, PASSED_COLOR)
 
-    def draw_times(self, f_stops: List[Dict], dest_idx: int) -> None:
+    def draw_times(self, f_stops: List[Dict], dest_idx: int, current_time: float = 0.0) -> None:
         """Draw travel times between stations.
 
         Args:
             f_stops: List of displayed stops
             dest_idx: Index of destination station
+            current_time: Current timestamp for real-time countdown calculation
         """
+        from constants import TIME_SCALE
+
         x = self.x
         y = self.y
         cumulative_time = 0
+
+        # Calculate elapsed time since departure (in minutes based on TIME_SCALE)
+        elapsed_minutes = 0
+        if current_time > 0 and self.state.departure_time > 0:
+            elapsed_seconds = current_time - self.state.departure_time
+            elapsed_minutes = elapsed_seconds / TIME_SCALE
+
+        # Get is_last_pa from state
+        is_last_pa = self.state.is_last_pa
+
+        # Track if we've processed the first station ahead
+        is_first_station = True
 
         for i, stop in enumerate(f_stops):
             if i == 0 and self.state.curr_stop_disp == 0:
@@ -474,8 +489,23 @@ class LowerDisplay:
 
                 # Add travel time
                 if 'time' in stop:
-                    cumulative_time += stop['time']
-                    time_str = str(cumulative_time)
+                    if is_first_station:
+                        # First station ahead - apply countdown or last PA logic
+                        if is_last_pa:
+                            # On last PA ("arriving now"), show 1 minute
+                            cumulative_time = 1
+                        else:
+                            # Countdown based on elapsed time, but only decrement when full minute passes
+                            # Use floor to ensure we show full time until that minute elapsed
+                            elapsed_full_minutes = int(elapsed_minutes)
+                            remaining_time = max(1, stop['time'] - elapsed_full_minutes)
+                            cumulative_time = remaining_time
+                        is_first_station = False
+                    else:
+                        # Subsequent stations - add full time to cumulative
+                        cumulative_time += stop['time']
+
+                    time_str = str(int(cumulative_time))
                     time_x = int(x + ptr + (self.stops_w - t_w * len(time_str)) / 2)
                     time_y = int(l_y + (self.bar_height - t_h) / 2)
                     time_img = self.font_time.render(time_str, True, DARK_BG)
@@ -501,8 +531,12 @@ class LowerDisplay:
                     minute_img = self.font_minute.render("分", True, WHITE_BG)
                     self.screen.blit(minute_img, (int(x + ptr + self.stops_w * 0.85), minute_y))
 
-    def show_stops(self) -> None:
-        """Draw station list, markers, pointer, and travel times."""
+    def show_stops(self, current_time: float = 0.0) -> None:
+        """Draw station list, markers, pointer, and travel times.
+
+        Args:
+            current_time: Current timestamp for real-time countdown calculation
+        """
         f_stops = self._get_stops_list_disp()
         x = self.x
         y = self.y
@@ -535,7 +569,7 @@ class LowerDisplay:
         # Draw markers, pointer, and times
         self.draw_marks(f_stops, dest_idx)
         self.draw_ptr(f_stops, dest_idx)
-        self.draw_times(f_stops, dest_idx)
+        self.draw_times(f_stops, dest_idx, current_time)
 
         pygame.display.flip()
 
