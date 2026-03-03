@@ -1,232 +1,48 @@
 {
-    "JK47": {
-        "name": "大宮",
-        "furigana": "おおみや",
-        "english": "Omiya"
-    },
-    "JK46": {
-        "name": "さいたま新都心",
-        "furigana": "さいたましんとしん",
-        "english": "Saitama-Shintoshin"
-    },
-    "JK45": {
-        "name": "与野",
-        "furigana": "よの",
-        "english": "Yono"
-    },
-    "JK44": {
-        "name": "北浦和",
-        "furigana": "きたうらわ",
-        "english": "Kita-Urawa"
-    },
-    "JK43": {
-        "name": "浦和",
-        "furigana": "うらわ",
-        "english": "Urawa"
-    },
-    "JK42": {
-        "name": "南浦和",
-        "furigana": "みなみうらわ",
-        "english": "Minami-Urawa"
-    },
-    "JK41": {
-        "name": "蕨",
-        "furigana": "わらび",
-        "english": "Warabi"
-    },
-    "JK40": {
-        "name": "西川口",
-        "furigana": "にしかわぐち",
-        "english": "Nishi-Kawaguchi"
-    },
-    "JK39": {
-        "name": "川口",
-        "furigana": "かわぐち",
-        "english": "Kawaguchi"
-    },
-    "JK38": {
-        "name": "赤羽",
-        "furigana": "あかばね",
-        "english": "Akabane"
-    },
-    "JK37": {
-        "name": "東十条",
-        "furigana": "ひがしじゅうじょう",
-        "english": "Higashi-Jujo"
-    },
-    "JK36": {
-        "name": "王子",
-        "furigana": "おうじ",
-        "english": "Oji"
-    },
-    "JK35": {
-        "name": "上中里",
-        "furigana": "かみなかざと",
-        "english": "Kami-Nakazato"
-    },
-    "JK34": {
-        "name": "田端",
-        "furigana": "たばた",
-        "english": "Tabata"
-    },
-    "JK33": {
-        "name": "西日暮里",
-        "furigana": "にしにっぽり",
-        "english": "Nishi-Nippori"
-    },
-    "JK32": {
-        "name": "日暮里",
-        "furigana": "にっぽり",
-        "english": "Nippori"
-    },
-    "JK31": {
-        "name": "鶯谷",
-        "furigana": "うぐいすだに",
-        "english": "Uguisudani"
-    },
-    "JK30": {
-        "name": "上野",
-        "furigana": "うえの",
-        "english": "Ueno"
-    },
-    "JK29": {
-        "name": "御徒町",
-        "furigana": "おかちまち",
-        "english": "Okachimachi"
-    },
-    "JK28": {
-        "name": "秋葉原",
-        "furigana": "あきはばら",
-        "english": "Akihabara"
-    },
-    "JK27": {
-        "name": "神田",
-        "furigana": "かんだ",
-        "english": "Kanda"
-    },
-    "JK26": {
-        "name": "東京",
-        "furigana": "とうきょう",
-        "english": "Tokyo"
-    },
-    "JK25": {
-        "name": "有楽町",
-        "furigana": "ゆうらくちょう",
-        "english": "Yurakucho"
-    },
-    "JK24": {
-        "name": "新橋",
-        "furigana": "しんばし",
-        "english": "Shimbashi"
-    },
-    "JK23": {
-        "name": "浜松町",
-        "furigana": "はままつちょう",
-        "english": "Hamamatsucho"
-    },
-    "JK22": {
-        "name": "田町",
-        "furigana": "たまち",
-        "english": "Tamachi"
-    },
-    "JK20": {
-        "name": "品川",
-        "furigana": "しながわ",
-        "english": "Shinagawa"
-    },
-    "JK19": {
-        "name": "大井町",
-        "furigana": "おおいまち",
-        "english": "Oimachi"
-    },
-    "JK18": {
-        "name": "大森",
-        "furigana": "おおもり",
-        "english": "Omori"
-    },
-    "JK17": {
-        "name": "蒲田",
-        "furigana": "かまた",
-        "english": "Kamata"
-    },
-    "JK16": {
-        "name": "川崎",
-        "furigana": "かわさき",
-        "english": "Kawasaki"
-    },
-    "JK15": {
-        "name": "鶴見",
-        "furigana": "つるみ",
-        "english": "Tsurumi"
-    },
-    "JK14": {
-        "name": "新子安",
-        "furigana": "しんこやす",
-        "english": "Shin-Koyasu"
-    },
-    "JK13": {
-        "name": "東神奈川",
-        "furigana": "ひがしかながわ",
-        "english": "Higashi-Kanagawa"
-    },
-    "JK12": {
-        "name": "横浜",
-        "furigana": "よこはま",
-        "english": "Yokohama"
-    },
-    "JK11": {
-        "name": "桜木町",
-        "furigana": "さくらぎちょう",
-        "english": "Sakuragicho"
-    },
-    "JK10": {
-        "name": "関内",
-        "furigana": "かんない",
-        "english": "Kannai"
-    },
-    "JK09": {
-        "name": "石川町",
-        "furigana": "いしかわちょう",
-        "english": "Ishikawacho"
-    },
-    "JK08": {
-        "name": "山手",
-        "furigana": "やまて",
-        "english": "Yamate"
-    },
-    "JK07": {
-        "name": "根岸",
-        "furigana": "ねぎし",
-        "english": "Negishi"
-    },
-    "JK06": {
-        "name": "磯子",
-        "furigana": "いそご",
-        "english": "Isogo"
-    },
-    "JK05": {
-        "name": "新杉田",
-        "furigana": "しんすぎた",
-        "english": "Shin-Sugita"
-    },
-    "JK04": {
-        "name": "洋光台",
-        "furigana": "ようこうだい",
-        "english": "Yokodai"
-    },
-    "JK03": {
-        "name": "港南台",
-        "furigana": "こうなんだい",
-        "english": "Konandai"
-    },
-    "JK02": {
-        "name": "本郷台",
-        "furigana": "ほんごうだい",
-        "english": "Hongo-dai"
-    },
-    "JK01": {
-        "name": "大船",
-        "furigana": "おおふな",
-        "english": "Ofuna"
-    }
+    "JK47": {},
+    "JK46": {},
+    "JK45": {},
+    "JK44": {},
+    "JK43": {},
+    "JK42": {},
+    "JK41": {},
+    "JK40": {},
+    "JK39": {},
+    "JK38": {},
+    "JK37": {},
+    "JK36": {},
+    "JK35": {},
+    "JK34": {},
+    "JK33": {},
+    "JK32": {},
+    "JK31": {},
+    "JK30": {},
+    "JK29": {},
+    "JK28": {},
+    "JK27": {},
+    "JK26": {},
+    "JK25": {},
+    "JK24": {},
+    "JK23": {},
+    "JK22": {},
+    "JK20": {},
+    "JK19": {},
+    "JK18": {},
+    "JK17": {},
+    "JK16": {},
+    "JK15": {},
+    "JK14": {},
+    "JK13": {},
+    "JK12": {},
+    "JK11": {},
+    "JK10": {},
+    "JK09": {},
+    "JK08": {},
+    "JK07": {},
+    "JK06": {},
+    "JK05": {},
+    "JK04": {},
+    "JK03": {},
+    "JK02": {},
+    "JK01": {}
 }

@@ -69,67 +69,62 @@ class PASimulator:
         self.route_name = self.route_data.get('route', 'Unknown')
         self.train_type = self.route_data.get('type', '')
         self.dest = self.route_data.get('dest', '')
+
+        # Lookup destination furigana from translations (fallback to route.json if present)
+        self.dest_furigana = self.route_data.get('dest_furigana', '')
+        if not self.dest_furigana and self.dest and self.dest in self.station_db:
+            self.dest_furigana = self.station_db[self.dest].get('furigana', '')
+
+        # Add dest_furigana to route_data so UpperDisplay can access it
+        self.route_data['dest_furigana'] = self.dest_furigana
+
         self.color = self.route_data.get('color', [255, 255, 255])
         self.contrast_color = self.route_data.get('contrast_color', [224, 54, 37])
         self.type_color = self.route_data.get('type_color', [0, 0, 0])
 
     def _load_station_db(self) -> Dict:
-        """Load stations.json database from the route's line directory.
+        """Load central translations.json from data/ directory.
 
-        Searches for stations.json in:
-        1. work_dir itself (e.g., audio/keiyo/stations.json)
-        2. Parent directory of work_dir (e.g., audio/chuo/stations.json when work_dir is audio/chuo/1654T/)
+        Loads from project root: data/translations.json
+        This file contains furigana/english translations keyed by Japanese station name.
 
         Returns empty dict if not found.
         """
-        # First check work_dir itself (for routes like keiyo where route.json is in the line folder)
-        station_db_path = os.path.join(self.work_dir.rstrip(os.sep), 'stations.json')
-        if os.path.exists(station_db_path):
-            with open(station_db_path, encoding='utf-8') as f:
-                return json.load(f)
+        # Get project root by going up from work_dir (e.g., audio/chuo/1654T -> project root)
+        project_root = os.path.dirname(os.path.dirname(self.work_dir.rstrip(os.sep)))
 
-        # Then check parent directory (for routes like chuo/1654T where route.json is in a subfolder)
-        line_dir = os.path.dirname(self.work_dir.rstrip(os.sep))
-        station_db_path = os.path.join(line_dir, 'stations.json')
-        if os.path.exists(station_db_path):
-            with open(station_db_path, encoding='utf-8') as f:
+        # Handle case where work_dir is directly under audio/ (e.g., audio/keiyo)
+        if os.path.basename(project_root) == 'audio':
+            project_root = os.path.dirname(project_root)
+
+        translations_path = os.path.join(project_root, 'data', 'translations.json')
+
+        if os.path.exists(translations_path):
+            with open(translations_path, encoding='utf-8') as f:
                 return json.load(f)
 
         return {}
 
     def _merge_station_data(self) -> list:
-        """Merge station database info into stops based on sta_code or station name.
+        """Merge translation data into stops from central translations.json.
 
-        Adds furigana and english fields from station_db to each stop.
-        Lookup priority:
-        1. sta_code (e.g., "JC01", "JK47")
-        2. name-based key (e.g., "name_蘇我") for stations without official codes
+        Lookup is by station name (Japanese kanji/kana).
+        Adds furigana and english fields to each stop.
         """
         stops = self.route_data.get('stops', [])
         merged = []
 
         for stop in stops:
             stop_copy = stop.copy()
-            sta_code = stop.get('sta_code')
             station_name = stop.get('name', '')
 
-            station_info = None
-
-            # Try sta_code lookup first
-            if sta_code and sta_code in self.station_db:
-                station_info = self.station_db[sta_code]
-            # Fallback to name-based lookup
-            elif station_name:
-                name_key = f"name_{station_name}"
-                if name_key in self.station_db:
-                    station_info = self.station_db[name_key]
-
-            # Merge station info if found
-            if station_info:
-                if 'furigana' not in stop_copy and 'furigana' in station_info:
-                    stop_copy['furigana'] = station_info['furigana']
-                if 'english' not in stop_copy and 'english' in station_info:
-                    stop_copy['english'] = station_info['english']
+            # Lookup by station name in central translations
+            if station_name and station_name in self.station_db:
+                translation = self.station_db[station_name]
+                if 'furigana' not in stop_copy and 'furigana' in translation:
+                    stop_copy['furigana'] = translation['furigana']
+                if 'english' not in stop_copy and 'english' in translation:
+                    stop_copy['english'] = translation['english']
 
             merged.append(stop_copy)
 

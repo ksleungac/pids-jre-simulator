@@ -9,12 +9,116 @@ This document defines the JSON data formats used by the PA Simulator for route c
 ## File Structure
 
 ```
-audio/
-├── [line]/                    # Line name (e.g., chuo, keihin, saikyo)
-│   ├── stations.json          # Station database (furigana, english names)
-│   └── [diagram]/             # Train diagram folder (e.g., 1349F, 759K)
-│       └── route.json         # Route configuration
+project_root/
+├── data/
+│   └── translations.json        # Central translation database (furigana, english)
+└── audio/
+    ├── [line]/                  # Line name (e.g., chuo, keihin, saikyo)
+    │   ├── stations.json        # Line-specific station data (interchange, facilities, etc.)
+    │   └── [diagram]/           # Train diagram folder (e.g., 1349F, 759K)
+    │       └── route.json       # Route configuration
 ```
+
+---
+
+## translations.json Format (Central Translation Database)
+
+**Location:** `data/translations.json` (project root)
+
+### Purpose
+
+Centralized translation lookup for **any Japanese text** used in the simulator:
+- Station names (for furigana/english cycling display)
+- UI text (prefixes, suffixes)
+- Any other Japanese text needing translation
+
+### Structure
+
+```json
+{
+    "東京": {
+        "furigana": "とうきょう",
+        "english": "Tokyo"
+    },
+    "新宿": {
+        "furigana": "しんじゅく",
+        "english": "Shinjuku"
+    },
+    "次は": {
+        "furigana": "つぎは",
+        "english": "Next"
+    },
+    "ゆき": {
+        "furigana": "ゆき",
+        "english": "Bound"
+    }
+}
+```
+
+### Key Format
+
+| Pattern | Use Case | Example |
+|---------|----------|---------|
+| `[Japanese text]` | Any Japanese text needing translation | `東京`, `新宿`, `次は` |
+
+**Important:** Keys are the **raw Japanese text** (kanji/kana), not station codes.
+
+### Lookup Rules (in app.py)
+
+1. **Direct lookup by Japanese text** (e.g., `"東京"` → `translations.json["東京"]`)
+2. No fallback needed - station name is always available from route.json
+
+### Value Fields
+
+| Field | Description |
+|-------|-------------|
+| `furigana` | Hiragana reading for the text |
+| `english` | English translation/romanization |
+
+### Benefits of Centralized Design
+
+- **No duplication**: Station like 東京 appear once, even though used by multiple lines
+- **Separation of concerns**: Translations separate from line-specific data
+- **Easy maintenance**: Update translation in one place
+- **Extensible**: Can add any Japanese text, not just station names
+- **Destination furigana**: `dest` in route.json is automatically looked up in translations.json (no `dest_furigana` field needed)
+
+---
+
+## stations.json Format (Line-Specific Data)
+
+**Location:** `audio/[line]/stations.json`
+
+### Purpose
+
+Line-specific station data that is **not** related to translations:
+- Interchange lines
+- Station facilities (elevators, escalators)
+- Exit information
+- Future line-specific features
+
+### Structure
+
+```json
+{
+    "JC01": {},
+    "JC02": {},
+    "name_蘇我": {}
+}
+```
+
+**Note:** Currently keys are placeholders for future line-specific data. Translation data has been moved to `data/translations.json`.
+
+### Key Format
+
+| Pattern | Use Case | Example |
+|---------|----------|---------|
+| `[Prefix][Number]` | Stations with official JR codes | `JC01`, `JK47`, `JA08` |
+| `name_駅名` | Stations without official codes | `name_蘇我`, `name_日進` |
+
+**Important:** These keys are for **line-specific data organization**, not translation lookup.
+
+---
 
 ---
 
@@ -31,8 +135,7 @@ audio/
     "contrast_color": [R, G, B],   // Contrast color for pointers/highlights
     "type_color": [R, G, B],       // Color for train type text (optional, default: black)
     "type": "列車種別",             // Train type (e.g., 快速，普通，各駅停車)
-    "dest": "終点",                 // Final destination (kanji)
-    "dest_furigana": "とうきょう"   // Furigana for destination (optional, for cycling)
+    "dest": "終点"                  // Final destination (kanji) - furigana loaded from data/translations.json
 }
 ```
 
@@ -102,12 +205,13 @@ Each stop in the `stops` array:
 
 | Value | Meaning |
 |-------|---------|
-| `"JC01"` | Official JR East station code (used for stations.json lookup) |
+| `"JC01"` | Official JR East station code (used for line-specific data lookup) |
 | `null` | Station has no official code (e.g., Kawagoe Line stations) |
 
 **Format:** `[Line Prefix][Number]` (e.g., `JC01`, `JK47`, `JA08`)
 - Line prefixes: JC (Chuo), JK (Keihin-Tohoku), JA (Saikyo), JE (Keiyo), JY (Yamanote)
 - No 3-letter suffixes in `sta_code` (those go in `sta` field only)
+- **Note:** `sta_code` is now used for line-specific data lookup in `audio/[line]/stations.json`, not for translations
 
 #### `sta_cut` Field
 
@@ -118,37 +222,31 @@ Each stop in the `stops` array:
 
 ---
 
-## stations.json Format
+## stations.json Format (Line-Specific Data)
 
 **Location:** `audio/[line]/stations.json`
 
 ### Purpose
 
-Provides furigana and English names for stations to enable:
-- Kanji/furigana cycling display (every 4 seconds)
-- Lookup by `sta_code` from route.json
+Line-specific station data that is **not** related to translations:
+- Interchange lines
+- Station facilities (elevators, escalators)
+- Exit information
+- Future line-specific features
+
+**Note:** Translation data (furigana, english) has been moved to `data/translations.json`.
 
 ### Structure
 
 ```json
 {
-    "JC01": {
-        "name": "東京",
-        "furigana": "とうきょう",
-        "english": "Tokyo"
-    },
-    "JC02": {
-        "name": "神田",
-        "furigana": "かんだ",
-        "english": "Kanda"
-    },
-    "name_蘇我": {
-        "name": "蘇我",
-        "furigana": "そが",
-        "english": "Soga"
-    }
+    "JC01": {},
+    "JC02": {},
+    "name_蘇我": {}
 }
 ```
+
+**Note:** Currently keys are placeholders for future line-specific data. Values are empty objects `{}`.
 
 ### Key Format
 
@@ -157,107 +255,43 @@ Provides furigana and English names for stations to enable:
 | `[Prefix][Number]` | Stations with official JR codes | `JC01`, `JK47`, `JA08` |
 | `name_駅名` | Stations without official codes | `name_蘇我`, `name_日進` |
 
-**Important:** Keys must match the `sta_code` values in route.json (simple format, no 3-letter suffixes).
-
-### Lookup Rules (in app.py)
-
-1. **Primary:** Lookup by `sta_code` (e.g., `"JA08"` → `stations.json["JA08"]`)
-2. **Fallback:** Lookup by `name_駅名` key for stations with `sta_code: null`
-
-### Value Fields
-
-| Field | Description |
-|-------|-------------|
-| `name` | Station name in kanji (must match route.json `name` for fallback) |
-| `furigana` | Hiragana reading for the station |
-| `english` | Romanized station name |
+**Important:** These keys are for **line-specific data organization**, not translation lookup.
 
 ---
 
-## Supported Lines (as of 2026-03-01)
+## Supported Lines (as of 2026-03-03)
 
-| Line | stations.json Location | Code Prefix |
-|------|----------------------|-------------|
-| Chuo Main (中央線) | `audio/chuo/stations.json` | JC |
-| Keihin-Tohoku (京浜東北) | `audio/keihin/stations.json` | JK |
-| Keiyo (京葉線) | `audio/keiyo/stations.json` | JE |
-| Saikyo (埼京線) | `audio/saikyo/stations.json` | JA |
-| Tokaido (東海道線) | `audio/tokaido/stations.json` | JT |
+All lines share the central `data/translations.json` for translations. Line-specific `stations.json` files are placeholders for future line-specific data.
 
----
-
-## Example: Complete Station Entry
-
-### route.json entry
-```json
-{
-    "name": "大宮",
-    "pa": ["21"],
-    "sta": ["JA26_OMY", "JA26_OMY_1"],
-    "sta_code": "JA26",
-    "sta_cut": 10,
-    "time": 3
-}
-```
-
-### stations.json entry
-```json
-{
-    "JA26": {
-        "name": "大宮",
-        "furigana": "おおみや",
-        "english": "Omiya"
-    }
-}
-```
-
-**Note:** The `sta` field uses `JA26_OMY` (with suffix for audio file), but `sta_code` uses `JA26` (simple format) for lookup.
-
----
-
-## Example: Station Without Official Code
-
-### route.json entry (Kawagoe Line stations)
-```json
-{
-    "name": "日進",
-    "pa": ["22", "23"],
-    "sta": ["20"],
-    "sta_code": null,
-    "sta_cut": 10,
-    "time": 3
-}
-```
-
-### stations.json entry
-```json
-{
-    "name_日進": {
-        "name": "日進",
-        "furigana": "にっしん",
-        "english": "Nisshin"
-    }
-}
-```
+| Line | Code Prefix | stations.json Location |
+|------|-------------|------------------------|
+| Chuo Main (中央線) | JC | `audio/chuo/stations.json` |
+| Keihin-Tohoku (京浜東北) | JK | `audio/keihin/stations.json` |
+| Keiyo (京葉線) | JE | `audio/keiyo/stations.json` |
+| Saikyo (埼京線) | JA | `audio/saikyo/stations.json` |
+| Tokaido (東海道線) | JT | `audio/tokaido/stations.json` |
 
 ---
 
 ## Data Conventions
 
-1. **sta vs sta_code separation:**
-   - `sta`: Audio filename (can have suffixes like `_OSK`, `_SBY`)
-   - `sta_code`: Lookup key for stations.json (simple `JA08` format)
+1. **Separation of translations and line-specific data:**
+   - `data/translations.json`: Central furigana/english translations (keyed by Japanese text)
+   - `audio/[line]/stations.json`: Line-specific data (keyed by sta_code or name_)
 
-2. **Empty values:**
+2. **Translation lookup:**
+   - By station name: `"東京"` → `translations.json["東京"]`
+
+3. **Empty values:**
    - No PA: `"pa": []`
    - No STA: `"sta": []` or `"sta": [""]`
    - No code: `"sta_code": null`
 
-3. **Travel time:**
+4. **Travel time:**
    - First station: `"time": 0`
    - Other stations: minutes to next station
 
-4. **Circular routes:**
+5. **Circular routes:**
    - First and last station have the same name
    - Handled automatically by the simulator
 
@@ -269,15 +303,16 @@ Use this checklist when adding or modifying route data to ensure consistency.
 
 ### Manual Checklist
 
-- [ ] **stations.json exists** for the line (`audio/[line]/stations.json`)
+- [ ] **data/translations.json exists** and contains translations for all station names
 - [ ] **dest_furigana** is present in route.json (exactly once, at route level)
 - [ ] **sta_code** is present in every stop (value or `null`)
 - [ ] **sta_code format** is simple (e.g., `JC05`, not `JC05_SJK`)
 - [ ] **sta field** can have suffixes for audio files (e.g., `JC05_SJK`, `TYO`)
-- [ ] **stations.json keys** match sta_code values (simple format)
+- [ ] **stations.json keys** match sta_code values (for line-specific data)
 - [ ] **Name-based keys** (`name_駅名`) used for stations without official codes
 - [ ] **No duplicate keys** in JSON files (especially `dest_furigana`)
 - [ ] **PA tracks** are assigned to correct stations (do not renumber subsequent stations when modifying)
+- [ ] **Station names in route.json** have entries in `data/translations.json`
 
 ### Automated Validation Script
 
@@ -297,13 +332,23 @@ lines = [
     ('tokaido', 'JT'),
 ]
 
+# Load central translations
+translations_file = 'data/translations.json'
+if os.path.exists(translations_file):
+    with open(translations_file, encoding='utf-8') as f:
+        translations = json.load(f)
+    print(f'Central translations.json: OK ({len(translations)} entries)')
+else:
+    print('ERROR: data/translations.json missing!')
+    translations = {}
+
 # Pattern to detect if sta_code has a suffix (wrong!)
 suffix_pattern = re.compile(r'_[A-Z]{2,}$')  # e.g., _OSK, _SBY, _TYO
 
 def validate_line(line_name, prefix):
-    print(f'=== {line_name.upper()} Line ===')
+    print(f'\n=== {line_name.upper()} Line ===')
 
-    # Load stations.json
+    # Load line-specific stations.json
     stations_file = f'audio/{line_name}/stations.json'
     if not os.path.exists(stations_file):
         print(f'  ERROR: stations.json missing!')
@@ -359,12 +404,9 @@ def validate_route(route_file, stations_db):
         if sta_code and suffix_pattern.search(sta_code):
             issues.append(f'Stop {i} ({name}): sta_code="{sta_code}" should not have suffix')
 
-        # Check sta_code lookup exists in stations.json
-        if sta_code and sta_code not in stations_db:
-            # Check name-based fallback
-            name_key = f'name_{name}'
-            if name_key not in stations_db:
-                issues.append(f'Stop {i} ({name}): sta_code="{sta_code}" not found in stations.json')
+        # Check translation exists for station name
+        if name and name not in translations:
+            issues.append(f'Stop {i} ({name}): No translation in data/translations.json')
 
     if issues:
         print(f'  {diag_name}: ISSUES FOUND')
@@ -374,18 +416,19 @@ def validate_route(route_file, stations_db):
         print(f'  {diag_name}: OK ({len(data.get("stops", []))} stops)')
 
 # Run validation
-print('=== PA Simulator Data Validation ===\n')
+print('\n=== PA Simulator Data Validation ===')
 for line_name, prefix in lines:
     validate_line(line_name, prefix)
-    print()
 
-print('Validation complete.')
+print('\nValidation complete.')
 ```
 
 ### Expected Output (All Passing)
 
 ```
 === PA Simulator Data Validation ===
+
+Central translations.json: OK (120 entries)
 
 === CHUO Line ===
   stations.json: OK (24 entries)
@@ -422,3 +465,37 @@ Validation complete.
 | Missing sta_code | Stop has no `sta_code` field | Add `"sta_code": "JC05"` or `null` |
 | stations.json key mismatch | sta_code is `JA08`, key is `JA08_OSK` | Change key to `JA08` |
 | stations.json missing | No `audio/[line]/stations.json` | Create file with all stations |
+
+---
+
+## Windows Console Encoding Note
+
+When running validation scripts or Python commands that print Japanese characters on Windows, you may encounter encoding errors:
+
+```
+UnicodeEncodeError: 'charmap' codec can't encode characters
+```
+
+**Solution:** Set the `PYTHONUTF8` environment variable before running Python:
+
+```bash
+# Command Prompt
+set PYTHONUTF8=1
+python validate.py
+
+# PowerShell
+$env:PYTHONUTF8=1
+python validate.py
+
+# Git Bash
+PYTHONUTF8=1 python validate.py
+```
+
+Alternatively, add this to the top of your Python script:
+
+```python
+import sys
+sys.stdout.reconfigure(encoding='utf-8')  # Python 3.7+
+```
+
+**Note:** File I/O in this project already uses `encoding='utf-8'` explicitly, so the issue only affects console output.

@@ -1,87 +1,19 @@
 {
-    "JE01": {
-        "name": "東京",
-        "furigana": "とうきょう",
-        "english": "Tokyo"
-    },
-    "JE02": {
-        "name": "八丁堀",
-        "furigana": "はっちょうぼり",
-        "english": "Hatchobori"
-    },
-    "JE03": {
-        "name": "越中島",
-        "furigana": "えっちゅうじま",
-        "english": "Etchujima"
-    },
-    "JE04": {
-        "name": "潮見",
-        "furigana": "しおみ",
-        "english": "Shiomi"
-    },
-    "JE05": {
-        "name": "新木場",
-        "furigana": "しんきば",
-        "english": "Shin-Kiba"
-    },
-    "JE06": {
-        "name": "葛西臨海公園",
-        "furigana": "かさいりんかいこうえん",
-        "english": "Kasai-Rinkai-Koen"
-    },
-    "JE07": {
-        "name": "舞浜",
-        "furigana": "まいはま",
-        "english": "Maihama"
-    },
-    "JE08": {
-        "name": "新浦安",
-        "furigana": "しんうらやす",
-        "english": "Shin-Urayasu"
-    },
-    "JE09": {
-        "name": "市川塩浜",
-        "furigana": "いちかわしおはま",
-        "english": "Ichikawa-Shiohama"
-    },
-    "JE10": {
-        "name": "二俣新町",
-        "furigana": "ふたまたしんまち",
-        "english": "Futamata-Shinmachi"
-    },
-    "JE11": {
-        "name": "南船橋",
-        "furigana": "みなみふなばし",
-        "english": "Minami-Funabashi"
-    },
-    "JE12": {
-        "name": "新習志野",
-        "furigana": "しんならしの",
-        "english": "Shin-Narashino"
-    },
-    "JE14": {
-        "name": "海浜幕張",
-        "furigana": "かいひんまくはり",
-        "english": "Kaihin-Makuhari"
-    },
-    "JE15": {
-        "name": "検見川浜",
-        "furigana": "けみがわはま",
-        "english": "Kemigawa-Hama"
-    },
-    "JE16": {
-        "name": "稲毛海岸",
-        "furigana": "いなげかいがん",
-        "english": "Inage-Kaigan"
-    },
-    "JE17": {
-        "name": "千葉みなと",
-        "furigana": "ちばみなと",
-        "english": "Chiba-Minato"
-    },
-    "name_蘇我": {
-        "name": "蘇我",
-        "furigana": "そが",
-        "english": "Soga"
-    }
+    "JE01": {},
+    "JE02": {},
+    "JE03": {},
+    "JE04": {},
+    "JE05": {},
+    "JE06": {},
+    "JE07": {},
+    "JE08": {},
+    "JE09": {},
+    "JE10": {},
+    "JE11": {},
+    "JE12": {},
+    "JE14": {},
+    "JE15": {},
+    "JE16": {},
+    "JE17": {},
+    "name_蘇我": {}
 }

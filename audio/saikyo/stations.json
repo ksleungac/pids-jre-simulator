@@ -1,122 +1,26 @@
 {
-    "JA08": {
-        "name": "大崎",
-        "furigana": "おおさき",
-        "english": "Osaki"
-    },
-    "JA09": {
-        "name": "恵比寿",
-        "furigana": "えびす",
-        "english": "Ebisu"
-    },
-    "JA10": {
-        "name": "渋谷",
-        "furigana": "しぶや",
-        "english": "Shibuya"
-    },
-    "JA11": {
-        "name": "新宿",
-        "furigana": "しんじゅく",
-        "english": "Shinjuku"
-    },
-    "JA12": {
-        "name": "池袋",
-        "furigana": "いけぶくろ",
-        "english": "Ikebukuro"
-    },
-    "JA13": {
-        "name": "板橋",
-        "furigana": "いたばし",
-        "english": "Itabashi"
-    },
-    "JA14": {
-        "name": "十条",
-        "furigana": "じゅうじょう",
-        "english": "Jujo"
-    },
-    "JA15": {
-        "name": "赤羽",
-        "furigana": "あかばね",
-        "english": "Akabane"
-    },
-    "JA16": {
-        "name": "北赤羽",
-        "furigana": "きたあかばね",
-        "english": "Kita-Akabane"
-    },
-    "JA17": {
-        "name": "浮間舟渡",
-        "furigana": "うきまふなと",
-        "english": "Ukima-Funato"
-    },
-    "JA18": {
-        "name": "戸田公園",
-        "furigana": "とだこうえん",
-        "english": "Toda-Koen"
-    },
-    "JA19": {
-        "name": "戸田",
-        "furigana": "とだ",
-        "english": "Toda"
-    },
-    "JA20": {
-        "name": "北戸田",
-        "furigana": "きたとだ",
-        "english": "Kita-Toda"
-    },
-    "JA21": {
-        "name": "武蔵浦和",
-        "furigana": "むさしうらわ",
-        "english": "Musashi-Urawa"
-    },
-    "JA22": {
-        "name": "中浦和",
-        "furigana": "なかうらわ",
-        "english": "Naka-Urawa"
-    },
-    "JA23": {
-        "name": "南与野",
-        "furigana": "みなみよの",
-        "english": "Minami-Yono"
-    },
-    "JA24": {
-        "name": "与野本町",
-        "furigana": "よの本まち",
-        "english": "Yono-Honcho"
-    },
-    "JA25": {
-        "name": "北与野",
-        "furigana": "きたよの",
-        "english": "Kita-Yono"
-    },
-    "JA26": {
-        "name": "大宮",
-        "furigana": "おおみや",
-        "english": "Omiya"
-    },
-    "name_日進": {
-        "name": "日進",
-        "furigana": "にっしん",
-        "english": "Nisshin"
-    },
-    "name_西大宮": {
-        "name": "西大宮",
-        "furigana": "にしおおみや",
-        "english": "Nishi-Omiya"
-    },
-    "name_指扇": {
-        "name": "指扇",
-        "furigana": "さしおうぎ",
-        "english": "Sashi-Ogi"
-    },
-    "name_南古谷": {
-        "name": "南古谷",
-        "furigana": "みなみふるや",
-        "english": "Minami-Furuya"
-    },
-    "name_川越": {
-        "name": "川越",
-        "furigana": "かわごえ",
-        "english": "Kawagoe"
-    }
+    "JA08": {},
+    "JA09": {},
+    "JA10": {},
+    "JA11": {},
+    "JA12": {},
+    "JA13": {},
+    "JA14": {},
+    "JA15": {},
+    "JA16": {},
+    "JA17": {},
+    "JA18": {},
+    "JA19": {},
+    "JA20": {},
+    "JA21": {},
+    "JA22": {},
+    "JA23": {},
+    "JA24": {},
+    "JA25": {},
+    "JA26": {},
+    "name_日進": {},
+    "name_西大宮": {},
+    "name_指扇": {},
+    "name_南古谷": {},
+    "name_川越": {}
 }

@@ -4,9 +4,11 @@
 
 **Japanese Train PA (Public Address) Simulator** - A pygame-based application that simulates train station announcements and arrival melodies with visual LCD display.
 
-**Current Date:** 2026-03-01
+**Current Date:** 2026-03-03
 
-**Last Update:** Added Furigana Cycling feature with stations.json database support.
+**Last Update:**
+- Centralized translations.json for all furigana/english lookups
+- Destination furigana now loaded from translations.json (removed from route.json)
 
 ---
 
@@ -20,9 +22,11 @@ pids_jre_simulator/
 ├── display.py           # UpperDisplay and LowerDisplay classes
 ├── constants.py         # All constants (screen, colors, fonts, timing)
 ├── utils.py             # Drawing utilities (draw_text, draw_text_given_width, etc.)
-├── setup.py             # Route selection setup screen (NEW FEATURE)
+├── setup.py             # Route selection setup screen
 ├── old_version.py       # User's original backup (keep for reference)
 ├── pyproject.toml       # Project configuration (uses uv)
+├── data/
+│   └── translations.json  # Central translation database (furigana, english)
 └── audio/               # Audio files organized by route
     ├── yamanote/
     ├── nanbu/4027F/
@@ -85,13 +89,13 @@ pids_jre_simulator/
 - Variable color schemes per route (color, contrast_color, type_color)
 - Stations with no PA announcements (skipped automatically)
 
-### 6. Furigana Cycling (NEW)
+### 6. Furigana Cycling (Updated 2026-03-03)
 **Upper LCD cycles between kanji and furigana every 4 seconds:**
-- **Destination** (left side): Cycles if `dest_furigana` is provided in route.json
+- **Destination** (left side): `dest_furigana` loaded from `data/translations.json` using `dest` key
 - **Prefix** (center): "次は" cycles to "つぎは" (other prefixes stay as-is)
-- **Station name** (right side): Cycles if furigana data available in stations.json
+- **Station name** (right side): Cycles if furigana data available in `translations.json`
 - **Synchronized cycling**: All elements switch together every 4 seconds
-- **Graceful fallback**: Routes without stations.json show kanji only (no cycling)
+- **Graceful fallback**: Routes without translation data show kanji only (no cycling)
 
 ---
 
@@ -139,9 +143,10 @@ pids_jre_simulator/
 ### `app.py`
 - `AppState` - curr_stop, cnt_pa, cnt_sta, curr_stop_disp, skip, frame_mode
 - `PASimulator` - Main application class
-- **`_load_station_db()`** - Loads stations.json from line directory (parent of work_dir or work_dir itself)
-- **`_merge_station_data()`** - Merges furigana/english into stops via sta_code or name-based lookup
-- `_load_route_data()`, `_init_pygame()`, `run()`, `_handle_input()`
+- **`_load_station_db()`** - Loads `data/translations.json` from project root (central translation database)
+- **`_merge_station_data()`** - Merges furigana/english into stops by looking up station name in translations.json
+- **`_load_route_data()`** - Loads route.json, then looks up `dest_furigana` from translations.json using `dest` key
+- `_init_pygame()`, `run()`, `_handle_input()`
 - `_next_pa()` - Advance PA (blocked while playing)
 - `_next_sta()` - Play STA (jumps to sta_cut if playing)
 
@@ -223,8 +228,11 @@ python main.py
 4. **Playback behavior is specific** - review _next_pa() and _next_sta() logic carefully
 5. **User tests thoroughly** - verify changes work before presenting
 6. **Furigana cycling is synchronized** - all upper LCD elements (destination, prefix, station name) switch together every 4 seconds
-7. **stations.json is line-specific** - one file per line (e.g., `audio/chuo/stations.json`), not shared across lines
-8. **Name-based fallback lookup** - use `name_駅名` keys for stations without official JR codes (e.g., 蘇我 on Keiyo Line)
+7. **translations.json is centralized** - single `data/translations.json` for all lines (not per-line)
+8. **Translation lookup by Japanese text** - keys are raw Japanese text (e.g., `東京`), not station codes
+9. **dest_furigana auto-lookup** - `dest` value in route.json is used to lookup furigana from translations.json
+10. **Line-specific stations.json** - `audio/[line]/stations.json` keeps keys only (empty values) for future line-specific data
+11. **Windows console encoding** - set `PYTHONUTF8=1` when running Python scripts that output Japanese characters
 
 ---
 
