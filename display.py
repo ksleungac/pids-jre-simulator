@@ -177,13 +177,22 @@ class UpperDisplay:
                 self.display_mode = 1 - self.display_mode  # Toggle 0 <-> 1
                 self.last_switch_time = current_time
 
+    def _get_current_dest(self) -> str:
+        """Get the current destination, checking for stop-level override.
+
+        Returns:
+            Destination text from stop if available, otherwise route-level destination
+        """
+        if self.stops and self.state.curr_stop < len(self.stops):
+            stop_dest = self.stops[self.state.curr_stop].get("dest")
+            if stop_dest:
+                return stop_dest
+        return self.dest
+
     def _draw_destination(self) -> None:
-        """Draw the destination with cycling between kanji and furigana."""
-        # Select display text based on mode
-        if self.display_mode == 1 and self.dest_furigana:
-            dest_text = self.dest_furigana
-        else:
-            dest_text = self.dest
+        """Draw the destination (always kanji, no furigana cycling)."""
+        # Get destination, checking for stop-level override
+        dest_text = self._get_current_dest()
 
         # Clear destination area first (fill with dark background)
         box_w = 150
