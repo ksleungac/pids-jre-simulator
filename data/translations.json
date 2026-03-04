@@ -65,7 +65,7 @@
     },
     "十条": {
         "furigana": "じゅうじょう",
-        "english": "Jujo"
+        "english": "Jūjō"
     },
     "千葉みなと": {
         "furigana": "ちばみなと",
@@ -105,7 +105,7 @@
     },
     "国府津": {
         "furigana": "こうづ",
-        "english": "Kozu"
+        "english": "Kōzu"
     },
     "国立": {
         "furigana": "くにたち",
@@ -117,23 +117,23 @@
     },
     "大宮": {
         "furigana": "おおみや",
-        "english": "Omiya"
+        "english": "Ōmiya"
     },
     "大崎": {
         "furigana": "おおさき",
-        "english": "Osaki"
+        "english": "Ōsaki"
     },
     "大森": {
         "furigana": "おおもり",
-        "english": "Omori"
+        "english": "Ōmori"
     },
     "大磯": {
         "furigana": "おおいそ",
-        "english": "Oiso"
+        "english": "Ōiso"
     },
     "大船": {
         "furigana": "おおふな",
-        "english": "Ofuna"
+        "english": "Ōfuna"
     },
     "小田原": {
         "furigana": "おだわら",
@@ -165,7 +165,7 @@
     },
     "御徒町": {
         "furigana": "おかちまち",
-        "english": "Okachimachi"
+        "english": "Ōkachimachi"
     },
     "御茶ノ水": {
         "furigana": "おちゃのみず",
@@ -245,11 +245,11 @@
     },
     "東京": {
         "furigana": "とうきょう",
-        "english": "Tokyo"
+        "english": "Tōkyō"
     },
     "東十条": {
         "furigana": "ひがしじゅうじょう",
-        "english": "Higashi-Jujo"
+        "english": "Higashi-Jūjō"
     },
     "東小金井": {
         "furigana": "ひがしこがねい",
@@ -325,7 +325,7 @@
     },
     "港南台": {
         "furigana": "こうなんだい",
-        "english": "Konandai"
+        "english": "Kōnandai"
     },
     "湯河原": {
         "furigana": "ゆがわら",
@@ -341,7 +341,7 @@
     },
     "王子": {
         "furigana": "おうじ",
-        "english": "Oji"
+        "english": "Ōji"
     },
     "田町": {
         "furigana": "たまち",
@@ -445,7 +445,7 @@
     },
     "越中島": {
         "furigana": "えっちゅうじま",
-        "english": "Etchujima"
+        "english": "Etchūjima"
     },
     "辻堂": {
         "furigana": "つじどう",
@@ -509,7 +509,7 @@
     },
     "大久保": {
         "furigana": "おおくぼ",
-        "english": "Okubo"
+        "english": "Ōkubō"
     },
     "五反田": {
         "furigana": "ごたんた",
@@ -520,14 +520,14 @@
         "english": "Komagome"
     },
     "品川・東京": {
-        "english": "Shinagawa&\nTokyo"
+        "english": "Shinagawa&\nTōkyō"
     },
     "原宿": {
         "furigana": "はらじゅく",
         "english": "Harajuku"
     },
     "東京・上野": {
-        "english": "Tokyo&\nUeno"
+        "english": "Tōkyō&\nUeno"
     },
     "上野・池袋": {
         "english": "Ueno&\nIkebukuro"
@@ -547,7 +547,7 @@
     },
     "新大久保": {
         "furigana": "しんおおくぼ",
-        "english": "Shin-Okubo"
+        "english": "Shin-Ōkubō"
     },
     "高田馬場": {
         "furigana": "たかだのばば",

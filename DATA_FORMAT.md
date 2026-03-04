@@ -94,6 +94,32 @@ For routes that display multiple destinations (like 品川・東京), use the `&
 
 **Note:** Compound destinations typically don't need `furigana` field as they are used for English display only (not for furigana cycling on the upper LCD).
 
+### English Translation Convention (Hepburn Romanization)
+
+English translations use **modified Hepburn romanization with macrons** to indicate long vowels:
+
+| Long Vowel | Source | Example |
+|------------|--------|---------|
+| **ō** | おう, おお | 東京 → T**ō**ky**ō**, 大宮 → **Ō**miya |
+| **ū** | う, うう, うう | 越中島 → Etch**ū**jima |
+
+**Modified Hepburn notes:**
+- Macrons (¯) indicate long vowels
+- Some spellings follow IRL JR East usage (e.g., "Etchūjima" not "Ecchūjima")
+- Not all vowels get macrons - only true long vowels (e.g., Ebisu stays as-is)
+
+**Examples:**
+```json
+{
+    "東京": { "english": "Tōkyō" },
+    "大宮": { "english": "Ōmiya" },
+    "大久保": { "english": "Ōkubō" },
+    "十条": { "english": "Jūjō" },
+    "越中島": { "english": "Etchūjima" },
+    "港南台": { "english": "Kōnandai" }
+}
+```
+
 ### Stop-Level Destination Override
 
 Routes can override the route-level `dest` at individual stops using the `dest` field:
