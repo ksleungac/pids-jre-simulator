@@ -220,19 +220,6 @@ pids_jre_simulator/
 
 ---
 
-## Potential Future Enhancements (Discuss With User)
-
-1. **Home Key**: Small window mode (partially implemented in app.py, commented out)
-2. **Additional Routes**: Easy to add by creating audio/[route]/[diagram]/ folders
-3. **Volume Control**: Currently no user volume control
-4. **Playback Speed**: Could add variable speed playback
-5. **Playlist Mode**: Queue multiple routes/trains
-6. **Settings Persistence**: Remember last selected route
-7. **Visual Themes**: Custom color schemes
-8. **Export/Recording**: Record PA sequences
-
----
-
 ## Running The Simulator
 
 ```bash
@@ -258,25 +245,21 @@ python main.py
 
 ## Notes for Next AI
 
-1. **User prefers sta naming convention** (not "departure_melody" or similar)
-2. **Folder structure is important** - diagram extracted from folder name
-3. **Character spacing is critical** - use draw_text_given_width for station names
-4. **Playback behavior is specific** - review _next_pa() and _next_sta() logic carefully
-5. **User tests thoroughly** - verify changes work before presenting
-6. **Furigana cycling is synchronized** - prefix and station name switch together every 4 seconds
-7. **translations.json is centralized** - single `data/translations.json` for all lines (not per-line)
-8. **Translation lookup by Japanese text** - keys are raw Japanese text (e.g., `東京`), not station codes
-9. **dest_furigana auto-lookup** - `dest` value in route.json is used to lookup furigana from translations.json
-10. **Line-specific stations.json** - `audio/[line]/stations.json` keeps keys only (empty values) for future line-specific data
-11. **Windows console encoding** - set `PYTHONUTF8=1` when running Python scripts that output Japanese characters
-12. **TIME_SCALE constant** - Controls real-time countdown speed (60=real-time, lower=faster testing)
-13. **Countdown timing** - Time decrements only after full minute elapsed (floor division)
-14. **departure_time tracking** - Set in AppState when curr_stop increments (train departs)
-15. **Destination always kanji** - Upper LCD destination does NOT cycle to furigana (IRL behavior)
-16. **Stop-level dest override** - Stops can have `dest` field to override route-level destination
-17. **Compound destination format** - English uses `"StationA&\nStationB"` for multi-line display
-18. **Black pre-commit hook** - `.git/hooks/pre-commit` auto-formats staged Python files
-19. **Pre-commit uses venv** - Hook calls `.venv/Scripts/python -m black` (avoids PATH issues)
+1. **Character spacing is critical** - use draw_text_given_width for station names
+2. **Playback behavior is specific** - review _next_pa() and _next_sta() logic carefully
+3. **Furigana cycling is synchronized** - prefix and station name switch together every 4 seconds
+4. **Translation lookup by Japanese text** - keys are raw Japanese text (e.g., `東京`), not station codes
+5. **dest_furigana auto-lookup** - `dest` value in route.json is used to lookup furigana from translations.json
+6. **Line-specific stations.json** - `audio/[line]/stations.json` keeps keys only (empty values) for future line-specific data
+7. **Windows console encoding** - set `PYTHONUTF8=1` when running Python scripts that output Japanese characters
+8. **TIME_SCALE constant** - Controls real-time countdown speed (60=real-time, lower=faster testing)
+9. **Countdown timing** - Time decrements only after full minute elapsed (floor division)
+10. **departure_time tracking** - Set in AppState when curr_stop increments (train departs)
+11. **Destination always kanji** - Upper LCD destination does NOT cycle to furigana (IRL behavior)
+12. **Stop-level dest override** - Stops can have `dest` field to override route-level destination
+13. **Compound destination format** - English uses `"StationA&\nStationB"` for multi-line display
+
+**Personal working preferences** are in `.claude/rules/preferences.md` (naming conventions, collaboration style, tooling).
 
 ---
 
