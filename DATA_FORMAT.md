@@ -109,6 +109,27 @@ Routes can override the route-level `dest` at individual stops using the `dest` 
 
 This allows displaying different destinations at different points along the route (useful for circular lines like Yamanote).
 
+**Implementation behavior:**
+- The `dest` value is read from the current stop when drawing the upper display
+- If no stop-level `dest` exists, falls back to route-level `dest`
+- Destination always displays as kanji (no furigana cycling)
+- The `dest` value is looked up in `data/translations.json` for English display
+
+**Yamanote Line Example:**
+The Yamanote line uses stop-level `dest` overrides to show changing destinations as the train travels around the loop:
+
+| Station | Displayed Dest |
+|---------|----------------|
+| 大崎 (start) | 品川・東京 (route-level) |
+| 田町 | 東京・上野 |
+| 神田 | 上野・池袋 |
+| 鶯谷 | 池袋・新宿 |
+| 目白 | 新宿・渋谷 |
+| 代々木 | 渋谷・品川 |
+| 恵比寿 | 品川・東京 |
+
+This matches real-world behavior where the "bound for" destination changes based on current position.
+
 ### Benefits of Centralized Design
 
 - **No duplication**: Station like 東京 appear once, even though used by multiple lines
