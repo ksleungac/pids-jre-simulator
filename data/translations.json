@@ -510,5 +510,47 @@
     "大久保": {
         "furigana": "おおくぼ",
         "english": "Okubo"
+    },
+    "五反田": {
+        "furigana": "ごたんた",
+        "english": "Gotanda"
+    },
+    "駒込": {
+        "furigana": "こまごめ",
+        "english": "Komagome"
+    },
+    "品川・東京": {
+        "english": "Shinagawa&\nTokyo"
+    },
+    "原宿": {
+        "furigana": "はらじゅく",
+        "english": "Harajuku"
+    },
+    "東京・上野": {
+        "english": "Tokyo&\nUeno"
+    },
+    "上野・池袋": {
+        "english": "Ueno&\nIkebukuro"
+    },
+    "池袋・新宿": {
+        "english": "Ikebukuro&\nShinjuku"
+    },
+    "新宿・渋谷": {
+        "english": "Shinjuku&\nShibuya"
+    },
+    "渋谷・品川": {
+        "english": "Shibuya&\nShinagawa"
+    },
+    "目白": {
+        "furigana": "めじろ",
+        "english": "Mejiro"
+    },
+    "新大久保": {
+        "furigana": "しんおおくぼ",
+        "english": "Shin-Okubo"
+    },
+    "高田馬場": {
+        "furigana": "たかだのばば",
+        "english": "Takadanobaba"
     }
 }

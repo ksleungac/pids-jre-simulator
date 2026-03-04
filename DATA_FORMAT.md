@@ -75,6 +75,40 @@ Centralized translation lookup for **any Japanese text** used in the simulator:
 | `furigana` | Hiragana reading for the text |
 | `english` | English translation/romanization |
 
+### Compound Destinations (e.g., Yamanote Line)
+
+For routes that display multiple destinations (like 品川・東京), use the `&` character as a separator with a newline after it for multi-line display:
+
+```json
+{
+    "品川・東京": {
+        "english": "Shinagawa&\nTokyo"
+    },
+    "東京・上野": {
+        "english": "Tokyo&\nUeno"
+    }
+}
+```
+
+**Format:** `"StationA&\nStationB"` - The `&` indicates a line break point. No space before `&`.
+
+**Note:** Compound destinations typically don't need `furigana` field as they are used for English display only (not for furigana cycling on the upper LCD).
+
+### Stop-Level Destination Override
+
+Routes can override the route-level `dest` at individual stops using the `dest` field:
+
+```json
+{
+    "name": "田町",
+    "pa": ["3"],
+    "dest": "東京・上野",  // Overrides route-level destination
+    "time": 3
+}
+```
+
+This allows displaying different destinations at different points along the route (useful for circular lines like Yamanote).
+
 ### Benefits of Centralized Design
 
 - **No duplication**: Station like 東京 appear once, even though used by multiple lines
@@ -277,6 +311,7 @@ All lines share the central `data/translations.json` for translations. Line-spec
 | Keiyo (京葉線) | JE | `audio/keiyo/stations.json` |
 | Saikyo (埼京線) | JA | `audio/saikyo/stations.json` |
 | Tokaido (東海道線) | JT | `audio/tokaido/stations.json` |
+| Yamanote (山手線) | JY | `audio/yamanote/stations.json` |
 
 ---
 
@@ -301,6 +336,12 @@ All lines share the central `data/translations.json` for translations. Line-spec
 5. **Circular routes:**
    - First and last station have the same name
    - Handled automatically by the simulator
+   - Example: Yamanote Line (大崎 appears twice in stops array)
+
+6. **Stop-level destination override:**
+   - Individual stops can have a `dest` field to override the route-level destination
+   - Useful for circular routes where destination changes based on current position
+   - The `dest` value is looked up in `data/translations.json` like station names
 
 ---
 
@@ -337,6 +378,7 @@ lines = [
     ('keiyo', 'JE'),
     ('saikyo', 'JA'),
     ('tokaido', 'JT'),
+    ('yamanote', 'JY'),
 ]
 
 # Load central translations
