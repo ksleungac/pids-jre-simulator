@@ -4,12 +4,15 @@
 
 **Japanese Train PA (Public Address) Simulator** - A pygame-based application that simulates train station announcements and arrival melodies with visual LCD display.
 
-**Current Date:** 2026-03-03
+**Current Date:** 2026-03-04
 
 **Last Update:**
 - Real-time countdown for travel times on lower LCD (TIME_SCALE constant controls speed)
 - Centralized translations.json for all furigana/english lookups
 - Destination furigana now loaded from translations.json (removed from route.json)
+- **Destination always displays as kanji** (no furigana cycling - IRL behavior)
+- **Stop-level dest override** - Individual stops can override route-level dest (Yamanote line)
+- **Black formatting** - Pre-commit hook auto-formats Python files before commit
 
 ---
 
@@ -90,15 +93,22 @@ pids_jre_simulator/
 - Variable color schemes per route (color, contrast_color, type_color)
 - Stations with no PA announcements (skipped automatically)
 
-### 6. Furigana Cycling (Updated 2026-03-03)
+### 6. Furigana Cycling (Updated 2026-03-04)
 **Upper LCD cycles between kanji and furigana every 4 seconds:**
-- **Destination** (left side): `dest_furigana` loaded from `data/translations.json` using `dest` key
+- **Destination** (left side): **Always kanji, no cycling** (IRL behavior - updated 2026-03-04)
 - **Prefix** (center): "次は" cycles to "つぎは" (other prefixes stay as-is)
 - **Station name** (right side): Cycles if furigana data available in `translations.json`
 - **Synchronized cycling**: All elements switch together every 4 seconds
 - **Graceful fallback**: Routes without translation data show kanji only (no cycling)
 
-### 7. Real-Time Countdown System (Updated 2026-03-04)
+### 7. Stop-Level Destination Override (NEW 2026-03-04)
+**Individual stops can override the route-level `dest` field:**
+- Used by Yamanote line to show changing destinations around the loop
+- Example: At 田町，destination shows "東京・上野" instead of route-level "品川・東京"
+- Implementation: `UpperDisplay._get_current_dest()` checks stop-level `dest` first
+- Compound destinations use `"Shinagawa&\nTokyo"` format for multi-line English display
+
+### 8. Real-Time Countdown System (Updated 2026-03-04)
 **Lower LCD travel times count down in real-time as the train travels:**
 - **Countdown start**: When train departs (first PA of new segment, `curr_stop` increments)
 - **Display formula**: `max(1, time - floor(elapsed_minutes))`
@@ -151,8 +161,9 @@ pids_jre_simulator/
 
 ### `display.py`
 - `UpperDisplay` - Train info, station name, clock, hint square
+  - **`_get_current_dest()`** - Gets current destination, checking stop-level override first
   - **`_update_display_mode()`** - Toggles display_mode every 4 seconds (kanji/furigana)
-  - **`_draw_destination()`** - Draws destination with furigana cycling
+  - **`_draw_destination()`** - Draws destination (always kanji, no cycling)
   - **`_draw_prefix()`** - Draws prefix with cycling for "次は" → "つぎは"
   - **`_draw_station_name()`** - Draws station name with furigana cycling
   - `draw_clock()` - Updates display mode and redraws cycling elements
@@ -187,10 +198,13 @@ pids_jre_simulator/
 6. **Character Spacing**: Station names use even character spacing (draw_text_given_width)
 7. **Route Scrolling**: Setup screen scrolls and shows scrollbar indicator
 8. **Temp File Cleanup**: Uses system temp dir, auto-deleted on exit
-9. **Furigana Cycling**: Upper LCD cycles kanji/furigana every 4 seconds (destination, prefix, station name)
-10. **Real-Time Countdown**: Lower LCD travel times count down in real-time from departure
-11. **Last PA Forces Time to 1**: When on last PA before arriving, display shows "1" (arriving now)
-12. **Full Minute Rule**: Time only decrements after full minute elapsed (e.g., "3" → "2" after 1 min)
+9. **Furigana Cycling**: Upper LCD cycles kanji/furigana every 4 seconds (prefix, station name)
+10. **Destination Always Kanji**: Destination stays as kanji, no furigana cycling (IRL behavior)
+11. **Stop-Level Dest Override**: Individual stops can override route-level dest (Yamanote line)
+12. **Real-Time Countdown**: Lower LCD travel times count down in real-time from departure
+13. **Last PA Forces Time to 1**: When on last PA before arriving, display shows "1" (arriving now)
+14. **Full Minute Rule**: Time only decrements after full minute elapsed (e.g., "3" → "2" after 1 min)
+15. **Black Formatting**: Pre-commit hook auto-formats Python files with black before commit
 
 ---
 
@@ -249,7 +263,7 @@ python main.py
 3. **Character spacing is critical** - use draw_text_given_width for station names
 4. **Playback behavior is specific** - review _next_pa() and _next_sta() logic carefully
 5. **User tests thoroughly** - verify changes work before presenting
-6. **Furigana cycling is synchronized** - all upper LCD elements (destination, prefix, station name) switch together every 4 seconds
+6. **Furigana cycling is synchronized** - prefix and station name switch together every 4 seconds
 7. **translations.json is centralized** - single `data/translations.json` for all lines (not per-line)
 8. **Translation lookup by Japanese text** - keys are raw Japanese text (e.g., `東京`), not station codes
 9. **dest_furigana auto-lookup** - `dest` value in route.json is used to lookup furigana from translations.json
@@ -258,6 +272,11 @@ python main.py
 12. **TIME_SCALE constant** - Controls real-time countdown speed (60=real-time, lower=faster testing)
 13. **Countdown timing** - Time decrements only after full minute elapsed (floor division)
 14. **departure_time tracking** - Set in AppState when curr_stop increments (train departs)
+15. **Destination always kanji** - Upper LCD destination does NOT cycle to furigana (IRL behavior)
+16. **Stop-level dest override** - Stops can have `dest` field to override route-level destination
+17. **Compound destination format** - English uses `"StationA&\nStationB"` for multi-line display
+18. **Black pre-commit hook** - `.git/hooks/pre-commit` auto-formats staged Python files
+19. **Pre-commit uses venv** - Hook calls `.venv/Scripts/python -m black` (avoids PATH issues)
 
 ---
 
