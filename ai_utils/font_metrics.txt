@@ -1,0 +1,129 @@
+=== Font Metrics for ShinGoPr6N-Medium ===
+Font path: C:\Users\oscar.leung\Documents\pids-jre-simulator\fonts\ShinGoPr6N-Medium.otf
+
+
+=== Size 12 ===
+Height: 12
+Ascent: 11
+Descent: -1
+Line spacing: 24
+  Latin A: 10x12
+  Latin W: 12x12
+  Latin i: 3x12
+  Digit 1: 9x12
+  Kanji: mountain: 12x14
+  Kanji: hand: 12x13
+  Kanji: line: 12x14
+  Hiragana: a: 12x12
+  Katakana: a: 12x12
+
+=== Size 16 ===
+Height: 16
+Ascent: 15
+Descent: -1
+Line spacing: 32
+  Latin A: 13x16
+  Latin W: 16x16
+  Latin i: 4x16
+  Digit 1: 12x16
+  Kanji: mountain: 16x17
+  Kanji: hand: 16x17
+  Kanji: line: 16x18
+  Hiragana: a: 16x17
+  Katakana: a: 16x17
+
+=== Size 20 ===
+Height: 20
+Ascent: 18
+Descent: -2
+Line spacing: 40
+  Latin A: 16x20
+  Latin W: 20x20
+  Latin i: 5x20
+  Digit 1: 15x20
+  Kanji: mountain: 20x20
+  Kanji: hand: 20x21
+  Kanji: line: 20x20
+  Hiragana: a: 20x20
+  Katakana: a: 20x20
+
+=== Size 24 ===
+Height: 24
+Ascent: 22
+Descent: -2
+Line spacing: 48
+  Latin A: 20x24
+  Latin W: 24x24
+  Latin i: 6x24
+  Digit 1: 18x24
+  Kanji: mountain: 24x25
+  Kanji: hand: 24x25
+  Kanji: line: 24x25
+  Hiragana: a: 24x24
+  Katakana: a: 24x24
+
+=== Size 32 ===
+Height: 32
+Ascent: 29
+Descent: -3
+Line spacing: 64
+  Latin A: 26x32
+  Latin W: 32x32
+  Latin i: 8x32
+  Digit 1: 24x32
+  Kanji: mountain: 32x33
+  Kanji: hand: 32x33
+  Kanji: line: 32x33
+  Hiragana: a: 32x32
+  Katakana: a: 32x32
+
+=== Size 48 ===
+Height: 48
+Ascent: 43
+Descent: -5
+Line spacing: 96
+  Latin A: 39x48
+  Latin W: 48x48
+  Latin i: 12x48
+  Digit 1: 36x48
+  Kanji: mountain: 48x48
+  Kanji: hand: 48x48
+  Kanji: line: 48x49
+  Hiragana: a: 48x48
+  Katakana: a: 48x48
+
+=== Size 78 ===
+Height: 78
+Ascent: 69
+Descent: -9
+Line spacing: 156
+  Latin A: 64x78
+  Latin W: 78x78
+  Latin i: 20x78
+  Digit 1: 59x78
+  Kanji: mountain: 78x78
+  Kanji: hand: 78x78
+  Kanji: line: 78x78
+  Hiragana: a: 78x78
+  Katakana: a: 78x78
+
+
+=== Station Names at FONT_STATION_SIZE=78 ===
+Screen width: 730
+Station area width (54%): 394
+
+3 chars: Tokyo Station
+  Original: 234x78px (3 chars, avg 78px/char)
+  Action: EXPAND (add spacing) to fit 394px
+
+3 chars: Yamanote Line
+  Original: 234x78px (3 chars, avg 78px/char)
+  Action: EXPAND (add spacing) to fit 394px
+
+5 chars: Shinjuku-gyoemmae
+  Original: 390x78px (5 chars, avg 78px/char)
+  Action: EXPAND (add spacing) to fit 394px
+
+7 chars: Tokyo Teleport
+  Original: 546x78px (7 chars, avg 78px/char)
+  Action: COMPRESS to 72% to fit 394px

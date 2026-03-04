@@ -1,0 +1,47 @@
+=== ShinGoPr6N-Medium at FONT_STATION_SIZE=78 ===
+
+Individual character measurements:
+  Kanji: east: 78x78 pixels
+  Kanji: capital: 78x78 pixels
+  Kanji: station: 78x78 pixels
+  Kanji: mountain: 78x78 pixels
+  Kanji: hand: 78x78 pixels
+  Kanji: line: 78x78 pixels
+  Katakana: te: 78x78 pixels
+  Katakana: re: 78x78 pixels
+  Katakana: po: 78x78 pixels
+  Latin A: 64x78 pixels
+  Digit 1: 59x78 pixels
+
+Full station name measurements:
+  3 chars (Kanji):
+    Total: 234x78 pixels
+    Avg per char: 78.0x78 pixels
+  3 chars (Mixed):
+    Total: 234x78 pixels
+    Avg per char: 78.0x78 pixels
+  5 chars (Kanji):
+    Total: 468x78 pixels
+    Avg per char: 78.0x78 pixels
+  5 chars (Mixed):
+    Total: 390x78 pixels
+    Avg per char: 78.0x78 pixels
+  7 chars:
+    Total: 546x78 pixels
+    Avg per char: 78.0x78 pixels
+  7 chars (Long):
+    Total: 858x78 pixels
+    Avg per char: 78.0x78 pixels
+
+=== Upper LCD Station Area ===
+Screen width: 730
+Station area width (54%): 394
+Font size: 78
+
+=== Scaling Analysis ===
+  3 chars (Kanji): Scaled to 394w = 168.38% horizontal ratio
+  3 chars (Mixed): Scaled to 394w = 168.38% horizontal ratio
+  5 chars (Kanji): Scaled to 394w = 84.19% horizontal ratio
+  5 chars (Mixed): Scaled to 394w = 101.03% horizontal ratio
+  7 chars: Scaled to 394w = 72.16% horizontal ratio
+  7 chars (Long): Scaled to 394w = 45.92% horizontal ratio

@@ -9,7 +9,7 @@ import sys
 import pygame
 
 # Suppress pygame welcome message
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 
 from setup import SetupScreen
 from app import PASimulator
@@ -22,7 +22,7 @@ def main():
     pygame.mixer.init()
 
     # Get the directory where the executable is located (for PyInstaller)
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         # Running as compiled executable
         BASE_DIR = os.path.dirname(sys.executable)
     else:
@@ -31,7 +31,7 @@ def main():
 
     # Create screen for setup
     screen = pygame.display.set_mode((730, 420))
-    pygame.display.set_caption('PA Simulator - Route Selection')
+    pygame.display.set_caption("PA Simulator - Route Selection")
 
     # Run setup screen to select route (scan from exe directory)
     setup = SetupScreen(screen)
@@ -54,6 +54,7 @@ def main():
     except Exception as e:
         print(f"Error running simulator: {e}")
         import traceback
+
         traceback.print_exc()
     finally:
         pygame.quit()

@@ -22,11 +22,11 @@ CURRENT_COLOR = [175, 150, 6]
 INACTIVE_COLOR = [110, 110, 110]
 
 # Font configurations
-FONT_STOPS_NAME = 'shingopr6nmedium'
+FONT_STOPS_NAME = "shingopr6nmedium"
 FONT_STOPS_SIZE = 25
-FONT_STOPS_BOLD_NAME = 'shingopr6nheavy'
-FONT_CLOCK_NAME = 'helveticaneueroman'
-FONT_TIME_NAME = 'helveticaneue'
+FONT_STOPS_BOLD_NAME = "shingopr6nheavy"
+FONT_CLOCK_NAME = "helveticaneueroman"
+FONT_TIME_NAME = "helveticaneue"
 
 # Font sizes
 FONT_CLOCK_SIZE = 26
@@ -65,7 +65,7 @@ STATION_DISPLAY_INTERVAL = 4  # Seconds between kanji/furigana cycling
 TIME_SCALE = 60  # Real-time countdown
 
 # Audio
-TEMP_AUDIO_FILE = './temp_audio.mp3'
+TEMP_AUDIO_FILE = "./temp_audio.mp3"
 
 # Small window mode
 SMALL_WIDTH = 400

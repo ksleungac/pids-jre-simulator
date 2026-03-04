@@ -7,21 +7,53 @@ import time
 from typing import Dict, List, Any, Tuple, Optional
 
 from constants import (
-    S_WIDTH, S_HEIGHT, UPPER_HEIGHT,
-    DARK_BG, WHITE_BG, PASSED_COLOR, CURRENT_COLOR, INACTIVE_COLOR,
-    FONT_STOPS_NAME, FONT_STOPS_SIZE, FONT_STOPS_BOLD_NAME,
-    FONT_CLOCK_NAME, FONT_CLOCK_SIZE, FONT_TIME_NAME, FONT_TIME_SIZE,
-    FONT_STOPS_SMALL_SIZE, FONT_STOPS_MINUTE_SIZE,
-    FONT_TYPE_SIZE, FONT_TYPE_BOLD_SIZE, FONT_DEST_SIZE, FONT_PREFIX_SIZE, FONT_STATION_SIZE,
-    STOPS_BAR_HEIGHT, STOPS_WIDTH, STOPS_PER_LINE, STATION_DISPLAY_INTERVAL
+    S_WIDTH,
+    S_HEIGHT,
+    UPPER_HEIGHT,
+    DARK_BG,
+    WHITE_BG,
+    PASSED_COLOR,
+    CURRENT_COLOR,
+    INACTIVE_COLOR,
+    FONT_STOPS_NAME,
+    FONT_STOPS_SIZE,
+    FONT_STOPS_BOLD_NAME,
+    FONT_CLOCK_NAME,
+    FONT_CLOCK_SIZE,
+    FONT_TIME_NAME,
+    FONT_TIME_SIZE,
+    FONT_STOPS_SMALL_SIZE,
+    FONT_STOPS_MINUTE_SIZE,
+    FONT_TYPE_SIZE,
+    FONT_TYPE_BOLD_SIZE,
+    FONT_DEST_SIZE,
+    FONT_PREFIX_SIZE,
+    FONT_STATION_SIZE,
+    STOPS_BAR_HEIGHT,
+    STOPS_WIDTH,
+    STOPS_PER_LINE,
+    STATION_DISPLAY_INTERVAL,
+    TIME_SCALE,
 )
-from utils import draw_text, draw_text_given_width, draw_aapolygon, arrow_points, draw_stops_text
+from utils import (
+    draw_text,
+    draw_text_given_width,
+    draw_aapolygon,
+    arrow_points,
+    draw_stops_text,
+)
 
 
 class UpperDisplay:
     """Handles the upper portion of the LCD (train info, current station)."""
 
-    def __init__(self, screen: pygame.Surface, route_data: Dict, app_state: Any, stops: List[Dict]):
+    def __init__(
+        self,
+        screen: pygame.Surface,
+        route_data: Dict,
+        app_state: Any,
+        stops: List[Dict],
+    ):
         """Initialize the upper display.
 
         Args:
@@ -36,12 +68,12 @@ class UpperDisplay:
         self.stops = stops
 
         # Extract route data with defaults
-        self.route_name = route_data.get('route', 'Unknown')
-        self.train_type = route_data.get('type', '')
-        self.dest = route_data.get('dest', '')
-        self.dest_furigana = route_data.get('dest_furigana', '')
-        self.color = route_data.get('color', [255, 255, 255])
-        self.type_color = route_data.get('type_color', [0, 0, 0])
+        self.route_name = route_data.get("route", "Unknown")
+        self.train_type = route_data.get("type", "")
+        self.dest = route_data.get("dest", "")
+        self.dest_furigana = route_data.get("dest_furigana", "")
+        self.color = route_data.get("color", [255, 255, 255])
+        self.type_color = route_data.get("type_color", [0, 0, 0])
 
         # Layout
         self.x = 0
@@ -74,9 +106,26 @@ class UpperDisplay:
         box_w = 150
         pygame.draw.rect(self.screen, self.white_bg, pygame.Rect(15, 5, box_w, 31), 0, 2)
         if len(self.train_type) > 2:
-            draw_text_given_width(15, 7, box_w, self.font_type_bold, self.train_type, self.type_color, self.screen, collapse=True)
+            draw_text_given_width(
+                15,
+                7,
+                box_w,
+                self.font_type_bold,
+                self.train_type,
+                self.type_color,
+                self.screen,
+                collapse=True,
+            )
         else:
-            draw_text_given_width(15, 7, box_w, self.font_type_bold, self.train_type, self.type_color, self.screen)
+            draw_text_given_width(
+                15,
+                7,
+                box_w,
+                self.font_type_bold,
+                self.train_type,
+                self.type_color,
+                self.screen,
+            )
 
         # Color band
         pygame.draw.rect(self.screen, self.color, pygame.Rect(int(S_WIDTH * 0.25), 0, 30, self.h - 7))
@@ -93,10 +142,18 @@ class UpperDisplay:
 
         # Hint square (indicates multiple PA announcements)
         # Positioned at bottom right of upper section, aligned with bottom edge
-        if self.stops and len(self.stops[self.state.curr_stop].get('pa', [])) > 1:
-            pygame.draw.rect(self.screen, (247, 225, 158), pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20))
+        if self.stops and len(self.stops[self.state.curr_stop].get("pa", [])) > 1:
+            pygame.draw.rect(
+                self.screen,
+                (247, 225, 158),
+                pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20),
+            )
         else:
-            pygame.draw.rect(self.screen, self.dark_bg, pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20))
+            pygame.draw.rect(
+                self.screen,
+                self.dark_bg,
+                pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20),
+            )
 
         pygame.display.flip()
 
@@ -110,7 +167,7 @@ class UpperDisplay:
 
         # Check if furigana is available for current station
         if self.state.curr_stop < len(self.stops):
-            has_furigana = 'furigana' in self.stops[self.state.curr_stop]
+            has_furigana = "furigana" in self.stops[self.state.curr_stop]
         else:
             has_furigana = False
 
@@ -166,10 +223,10 @@ class UpperDisplay:
             return
 
         # Get station name based on display mode
-        if self.display_mode == 1 and 'furigana' in self.stops[self.state.curr_stop]:
-            name = self.stops[self.state.curr_stop].get('furigana', '').replace(' ', '')
+        if self.display_mode == 1 and "furigana" in self.stops[self.state.curr_stop]:
+            name = self.stops[self.state.curr_stop].get("furigana", "").replace(" ", "")
         else:
-            name = self.stops[self.state.curr_stop].get('name', '').replace(' ', '')
+            name = self.stops[self.state.curr_stop].get("name", "").replace(" ", "")
 
         if not name:
             return
@@ -183,10 +240,22 @@ class UpperDisplay:
         name_y = self.h - name_h - 5
 
         # Clear background
-        pygame.draw.rect(self.screen, self.dark_bg, pygame.Rect(name_x, name_y, max_width, name_h + 5))
+        pygame.draw.rect(
+            self.screen,
+            self.dark_bg,
+            pygame.Rect(name_x, name_y, max_width, name_h + 5),
+        )
 
         # Use draw_text_given_width for even character spacing
-        draw_text_given_width(name_x, name_y, int(max_width), self.font_station, name, self.white_bg, self.screen)
+        draw_text_given_width(
+            name_x,
+            name_y,
+            int(max_width),
+            self.font_station,
+            name,
+            self.white_bg,
+            self.screen,
+        )
 
     def draw_current_station(self) -> None:
         """Update current station name and prefix (次は/まもなく)."""
@@ -209,10 +278,18 @@ class UpperDisplay:
         self._draw_station_name()
 
         # Draw hint square (indicates multiple PA announcements)
-        if self.stops and len(self.stops[self.state.curr_stop].get('pa', [])) > 1:
-            pygame.draw.rect(self.screen, (247, 225, 158), pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20))
+        if self.stops and len(self.stops[self.state.curr_stop].get("pa", [])) > 1:
+            pygame.draw.rect(
+                self.screen,
+                (247, 225, 158),
+                pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20),
+            )
         else:
-            pygame.draw.rect(self.screen, self.dark_bg, pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20))
+            pygame.draw.rect(
+                self.screen,
+                self.dark_bg,
+                pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20),
+            )
 
         pygame.display.flip()
 
@@ -225,7 +302,7 @@ class UpperDisplay:
         # Update display mode (kanji/furigana cycling)
         self._update_display_mode()
 
-        curr_time = time.strftime('%H:%M', time.localtime(timestamp))
+        curr_time = time.strftime("%H:%M", time.localtime(timestamp))
 
         clock_x = S_WIDTH - 160
         pygame.draw.rect(self.screen, self.dark_bg, pygame.Rect(clock_x, 5, 80, 25))
@@ -239,10 +316,18 @@ class UpperDisplay:
 
         # Redraw hint square to ensure it persists
         # Positioned at bottom right of upper section, aligned with bottom edge
-        if self.stops and len(self.stops[self.state.curr_stop].get('pa', [])) > 1:
-            pygame.draw.rect(self.screen, (247, 225, 158), pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20))
+        if self.stops and len(self.stops[self.state.curr_stop].get("pa", [])) > 1:
+            pygame.draw.rect(
+                self.screen,
+                (247, 225, 158),
+                pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20),
+            )
         else:
-            pygame.draw.rect(self.screen, self.dark_bg, pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20))
+            pygame.draw.rect(
+                self.screen,
+                self.dark_bg,
+                pygame.Rect(S_WIDTH - 20, self.h - 20, 20, 20),
+            )
 
         pygame.display.flip()
 
@@ -250,7 +335,13 @@ class UpperDisplay:
 class LowerDisplay:
     """Handles the lower portion of the LCD (route map, station markers)."""
 
-    def __init__(self, screen: pygame.Surface, route_data: Dict, app_state: Any, stops: List[Dict]):
+    def __init__(
+        self,
+        screen: pygame.Surface,
+        route_data: Dict,
+        app_state: Any,
+        stops: List[Dict],
+    ):
         """Initialize the lower display.
 
         Args:
@@ -263,9 +354,9 @@ class LowerDisplay:
         self.route_data = route_data
         self.state = app_state
         self.stops = stops
-        self.dest = route_data.get('dest', '')
-        self.color = route_data.get('color', [255, 255, 255])
-        self.contrast_color = route_data.get('contrast_color', [224, 54, 37])
+        self.dest = route_data.get("dest", "")
+        self.color = route_data.get("color", [255, 255, 255])
+        self.contrast_color = route_data.get("contrast_color", [224, 54, 37])
 
         # Calculate layout
         self._calculate_layout()
@@ -296,7 +387,7 @@ class LowerDisplay:
         self.top_pad = 40
 
         # Determine continuity (for circular routes or long routes)
-        self.circular = 1 if self.stops and self.stops[0].get('name') == self.stops[-1].get('name') else 0
+        self.circular = 1 if self.stops and self.stops[0].get("name") == self.stops[-1].get("name") else 0
         self.continuity = [0, 0, 0]
 
         if self.circular == 1 or num_stops > 28:
@@ -327,13 +418,13 @@ class LowerDisplay:
         if len(self.stops) <= self.STOPS_QUANTITY:
             return self.stops
 
-        f_stops = self.stops[:self.STOPS_QUANTITY]
+        f_stops = self.stops[: self.STOPS_QUANTITY]
 
         # If approaching end of route, show last STOPS_QUANTITY stations
         # Guard against negative indexing edge case
         remaining = len(self.stops) - self.state.curr_stop
         if 0 < remaining < self.STOPS_QUANTITY:
-            f_stops = self.stops[len(self.stops) - self.STOPS_QUANTITY:]
+            f_stops = self.stops[len(self.stops) - self.STOPS_QUANTITY :]
             self._refresh_curr_stop_disp()
 
         return f_stops
@@ -355,7 +446,7 @@ class LowerDisplay:
             Index of destination station, or last index if not found
         """
         try:
-            return [s.get('name', '') for s in f_stops].index(self.dest)
+            return [s.get("name", "") for s in f_stops].index(self.dest)
         except ValueError:
             return len(f_stops) - 1
 
@@ -380,12 +471,12 @@ class LowerDisplay:
                 self.screen,
                 PASSED_COLOR,
                 arrow_points(int(x + ptr - offset - 2), int(l_y), 23, self.bar_height, 16),
-                5
+                5,
             )
             draw_aapolygon(
                 self.screen,
                 ptr_color,
-                arrow_points(int(x + ptr - offset), int(l_y - 2), w, self.bar_height + 4, 10)
+                arrow_points(int(x + ptr - offset), int(l_y - 2), w, self.bar_height + 4, 10),
             )
         else:
             overhang = 2
@@ -394,7 +485,7 @@ class LowerDisplay:
                 (x, l_y + self.bar_height + overhang),
                 (x + self.stops_w - 10, l_y + self.bar_height + overhang),
                 (x + self.stops_w - 2, l_y + self.bar_height / 2),
-                (x + self.stops_w - 10, l_y - overhang)
+                (x + self.stops_w - 10, l_y - overhang),
             ]
             draw_aapolygon(self.screen, PASSED_COLOR, [(i + 3, j) for (i, j) in points])
             draw_aapolygon(self.screen, ptr_color, points)
@@ -423,14 +514,20 @@ class LowerDisplay:
                     radius = 5
                     pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, radius, PASSED_COLOR)
                     pygame.gfxdraw.aacircle(self.screen, center_x, center_y, radius, PASSED_COLOR)
-                elif not stop.get('pa', []):
+                elif not stop.get("pa", []):
                     # Station with no PA - arrow
                     w = 20
                     arrow_offset = int(self.stops_w * 0.3)
                     draw_aapolygon(
                         self.screen,
                         PASSED_COLOR,
-                        arrow_points(int(x + ptr + arrow_offset), int(l_y + 4), 14, self.bar_height - 8, 6)
+                        arrow_points(
+                            int(x + ptr + arrow_offset),
+                            int(l_y + 4),
+                            14,
+                            self.bar_height - 8,
+                            6,
+                        ),
                     )
                 else:
                     # Regular station - large circle
@@ -458,8 +555,6 @@ class LowerDisplay:
             dest_idx: Index of destination station
             current_time: Current timestamp for real-time countdown calculation
         """
-        from constants import TIME_SCALE
-
         x = self.x
         y = self.y
         cumulative_time = 0
@@ -488,7 +583,7 @@ class LowerDisplay:
                 t_w, t_h = self.font_time.size("0")
 
                 # Add travel time
-                if 'time' in stop:
+                if "time" in stop:
                     if is_first_station:
                         # First station ahead - apply countdown or last PA logic
                         if is_last_pa:
@@ -498,12 +593,12 @@ class LowerDisplay:
                             # Countdown based on elapsed time, but only decrement when full minute passes
                             # Use floor to ensure we show full time until that minute elapsed
                             elapsed_full_minutes = int(elapsed_minutes)
-                            remaining_time = max(1, stop['time'] - elapsed_full_minutes)
+                            remaining_time = max(1, stop["time"] - elapsed_full_minutes)
                             cumulative_time = remaining_time
                         is_first_station = False
                     else:
                         # Subsequent stations - add full time to cumulative
-                        cumulative_time += stop['time']
+                        cumulative_time += stop["time"]
 
                     time_str = str(int(cumulative_time))
                     time_x = int(x + ptr + (self.stops_w - t_w * len(time_str)) / 2)
@@ -520,12 +615,22 @@ class LowerDisplay:
                     pygame.draw.rect(
                         self.screen,
                         self.color,
-                        pygame.Rect(int(x + ptr + self.stops_w), int(l_y), minute_w, self.bar_height)
+                        pygame.Rect(
+                            int(x + ptr + self.stops_w),
+                            int(l_y),
+                            minute_w,
+                            self.bar_height,
+                        ),
                     )
                     pygame.draw.rect(
                         self.screen,
                         WHITE_BG,
-                        pygame.Rect(int(x + ptr + self.stops_w + minute_w - 3), int(l_y), 3, self.bar_height)
+                        pygame.Rect(
+                            int(x + ptr + self.stops_w + minute_w - 3),
+                            int(l_y),
+                            3,
+                            self.bar_height,
+                        ),
                     )
 
                     minute_img = self.font_minute.render("分", True, WHITE_BG)
@@ -558,13 +663,29 @@ class LowerDisplay:
             is_passed = i >= self.state.curr_stop_disp and i <= dest_idx
 
             if is_passed:
-                pygame.draw.rect(self.screen, self.color, pygame.Rect(int(x + ptr), l_y, self.stops_w, self.bar_height))
-                text_color = INACTIVE_COLOR if (not stop.get('pa', []) and i != 0) else (0, 0, 0)
+                pygame.draw.rect(
+                    self.screen,
+                    self.color,
+                    pygame.Rect(int(x + ptr), l_y, self.stops_w, self.bar_height),
+                )
+                text_color = INACTIVE_COLOR if (not stop.get("pa", []) and i != 0) else (0, 0, 0)
             else:
-                pygame.draw.rect(self.screen, INACTIVE_COLOR, pygame.Rect(int(x + ptr), l_y, self.stops_w, self.bar_height))
+                pygame.draw.rect(
+                    self.screen,
+                    INACTIVE_COLOR,
+                    pygame.Rect(int(x + ptr), l_y, self.stops_w, self.bar_height),
+                )
                 text_color = INACTIVE_COLOR
 
-            draw_stops_text(self.font_stops, stop.get('name', ''), text_color, int(x + ptr), int(l_y - 7), self.stops_w, self.screen)
+            draw_stops_text(
+                self.font_stops,
+                stop.get("name", ""),
+                text_color,
+                int(x + ptr),
+                int(l_y - 7),
+                self.stops_w,
+                self.screen,
+            )
 
         # Draw markers, pointer, and times
         self.draw_marks(f_stops, dest_idx)
@@ -587,16 +708,16 @@ class LowerDisplay:
 
         # Check if next station has no PA
         next_stop = f_stops[self.state.curr_stop_disp + 1]
-        if not next_stop.get('pa', []):
+        if not next_stop.get("pa", []):
             self.state.curr_stop_disp += 1
 
             if self.state.cnt_pa == 0:
                 i = self.state.curr_stop_disp
-                while i < len(f_stops) and not f_stops[i].get('pa', []):
+                while i < len(f_stops) and not f_stops[i].get("pa", []):
                     i += 1
                 self.state.skip = i - self.state.curr_stop_disp
 
-                if i < len(f_stops) and len(f_stops[i].get('pa', [])) == 1:
+                if i < len(f_stops) and len(f_stops[i].get("pa", [])) == 1:
                     self.state.curr_stop_disp += self.state.skip
                     self.state.skip = 0
             elif self.state.cnt_pa >= 1:

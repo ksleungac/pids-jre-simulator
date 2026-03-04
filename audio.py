@@ -11,12 +11,9 @@ from typing import Optional
 from constants import TARGET_LOUDNESS, AUDIO_FADE_MS
 
 # Create a temp directory for audio files
-_temp_dir = tempfile.mkdtemp(prefix='pa_simulator_audio_')
+_temp_dir = tempfile.mkdtemp(prefix="pa_simulator_audio_")
 # Use two temp files for double-buffering (avoid file locking issues)
-_temp_file_paths = [
-    os.path.join(_temp_dir, 'temp_audio_1.mp3'),
-    os.path.join(_temp_dir, 'temp_audio_2.mp3')
-]
+_temp_file_paths = [os.path.join(_temp_dir, "temp_audio_1.mp3"), os.path.join(_temp_dir, "temp_audio_2.mp3")]
 _current_temp_index = 0
 
 
@@ -55,8 +52,8 @@ class AudioPlayer:
             work_dir: Base directory containing pa/ and sta/ folders
             stops: List of station data from route.json
         """
-        self.pa_dir = os.path.join(work_dir, 'pa')
-        self.sta_dir = os.path.join(work_dir, 'sta')
+        self.pa_dir = os.path.join(work_dir, "pa")
+        self.sta_dir = os.path.join(work_dir, "sta")
         self.stops = stops
         self._temp_index = 0  # Track which temp file to use next
 
@@ -72,7 +69,7 @@ class AudioPlayer:
             pa_index: Index of the PA track within the stop
         """
         try:
-            pa_tracks = self.stops[stop_index].get('pa', [])
+            pa_tracks = self.stops[stop_index].get("pa", [])
             if not pa_tracks or pa_index >= len(pa_tracks):
                 return
 
@@ -80,17 +77,12 @@ class AudioPlayer:
             if not track_name:
                 return
 
-            track_path = os.path.join(self.pa_dir, track_name + '.mp3')
+            track_path = os.path.join(self.pa_dir, track_name + ".mp3")
             self._load_and_play(track_path)
         except (IndexError, KeyError) as e:
             print(f"PA playback error: {e}")
 
-    def play_sta(
-        self,
-        stop_index: int,
-        sta_index: int,
-        cut_position: float = 0
-    ) -> None:
+    def play_sta(self, stop_index: int, sta_index: int, cut_position: float = 0) -> None:
         """Load and play departure melody (sta = station melody).
 
         Args:
@@ -99,7 +91,7 @@ class AudioPlayer:
             cut_position: Position in seconds to start playback (default 0)
         """
         try:
-            sta_tracks = self.stops[stop_index].get('sta', [])
+            sta_tracks = self.stops[stop_index].get("sta", [])
             if not sta_tracks or sta_index >= len(sta_tracks):
                 return
 
@@ -107,7 +99,7 @@ class AudioPlayer:
             if not track_name:
                 return
 
-            track_path = os.path.join(self.sta_dir, track_name + '.mp3')
+            track_path = os.path.join(self.sta_dir, track_name + ".mp3")
             self._load_and_play(track_path, cut_position=cut_position)
         except (IndexError, KeyError) as e:
             print(f"STA playback error: {e}")

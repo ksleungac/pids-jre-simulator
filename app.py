@@ -47,7 +47,7 @@ class PASimulator:
 
         # Initialize state
         self.state = AppState()
-        self.state.circular = 1 if (self.stops and self.stops[0].get('name') == self.stops[-1].get('name')) else 0
+        self.state.circular = 1 if (self.stops and self.stops[0].get("name") == self.stops[-1].get("name")) else 0
 
         # Initialize components
         self.audio = AudioPlayer(work_dir, self.stops)
@@ -59,8 +59,8 @@ class PASimulator:
     def _load_route_data(self) -> None:
         """Load route.json configuration and merge with stations.json data."""
         if self.route_data is None:
-            json_path = os.path.join(self.work_dir, 'route.json')
-            with open(json_path, encoding='utf-8') as f:
+            json_path = os.path.join(self.work_dir, "route.json")
+            with open(json_path, encoding="utf-8") as f:
                 self.route_data = json.load(f)
 
         # Load stations.json if available (provides furigana, english names, etc.)
@@ -68,21 +68,21 @@ class PASimulator:
 
         # Merge station database into stops
         self.stops = self._merge_station_data()
-        self.route_name = self.route_data.get('route', 'Unknown')
-        self.train_type = self.route_data.get('type', '')
-        self.dest = self.route_data.get('dest', '')
+        self.route_name = self.route_data.get("route", "Unknown")
+        self.train_type = self.route_data.get("type", "")
+        self.dest = self.route_data.get("dest", "")
 
         # Lookup destination furigana from translations (fallback to route.json if present)
-        self.dest_furigana = self.route_data.get('dest_furigana', '')
+        self.dest_furigana = self.route_data.get("dest_furigana", "")
         if not self.dest_furigana and self.dest and self.dest in self.station_db:
-            self.dest_furigana = self.station_db[self.dest].get('furigana', '')
+            self.dest_furigana = self.station_db[self.dest].get("furigana", "")
 
         # Add dest_furigana to route_data so UpperDisplay can access it
-        self.route_data['dest_furigana'] = self.dest_furigana
+        self.route_data["dest_furigana"] = self.dest_furigana
 
-        self.color = self.route_data.get('color', [255, 255, 255])
-        self.contrast_color = self.route_data.get('contrast_color', [224, 54, 37])
-        self.type_color = self.route_data.get('type_color', [0, 0, 0])
+        self.color = self.route_data.get("color", [255, 255, 255])
+        self.contrast_color = self.route_data.get("contrast_color", [224, 54, 37])
+        self.type_color = self.route_data.get("type_color", [0, 0, 0])
 
     def _load_station_db(self) -> Dict:
         """Load central translations.json from data/ directory.
@@ -96,13 +96,13 @@ class PASimulator:
         project_root = os.path.dirname(os.path.dirname(self.work_dir.rstrip(os.sep)))
 
         # Handle case where work_dir is directly under audio/ (e.g., audio/keiyo)
-        if os.path.basename(project_root) == 'audio':
+        if os.path.basename(project_root) == "audio":
             project_root = os.path.dirname(project_root)
 
-        translations_path = os.path.join(project_root, 'data', 'translations.json')
+        translations_path = os.path.join(project_root, "data", "translations.json")
 
         if os.path.exists(translations_path):
-            with open(translations_path, encoding='utf-8') as f:
+            with open(translations_path, encoding="utf-8") as f:
                 return json.load(f)
 
         return {}
@@ -113,20 +113,20 @@ class PASimulator:
         Lookup is by station name (Japanese kanji/kana).
         Adds furigana and english fields to each stop.
         """
-        stops = self.route_data.get('stops', [])
+        stops = self.route_data.get("stops", [])
         merged = []
 
         for stop in stops:
             stop_copy = stop.copy()
-            station_name = stop.get('name', '')
+            station_name = stop.get("name", "")
 
             # Lookup by station name in central translations
             if station_name and station_name in self.station_db:
                 translation = self.station_db[station_name]
-                if 'furigana' not in stop_copy and 'furigana' in translation:
-                    stop_copy['furigana'] = translation['furigana']
-                if 'english' not in stop_copy and 'english' in translation:
-                    stop_copy['english'] = translation['english']
+                if "furigana" not in stop_copy and "furigana" in translation:
+                    stop_copy["furigana"] = translation["furigana"]
+                if "english" not in stop_copy and "english" in translation:
+                    stop_copy["english"] = translation["english"]
 
             merged.append(stop_copy)
 
@@ -138,12 +138,12 @@ class PASimulator:
         pygame.mixer.init()
         self.clock = pygame.time.Clock()
         self.screen = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
-        pygame.display.set_caption('PA Simulator')
+        pygame.display.set_caption("PA Simulator")
 
         # Set window position
         try:
             info = pygame.display.get_wm_info()
-            win32gui.SetWindowPos(info['window'], -1, S_WIDTH, S_HEIGHT, 0, 0, 1)
+            win32gui.SetWindowPos(info["window"], -1, S_WIDTH, S_HEIGHT, 0, 0, 1)
         except Exception as e:
             print(f"Warning: Could not set window position: {e}")
 
@@ -176,12 +176,12 @@ class PASimulator:
     def _handle_input(self) -> None:
         """Process keyboard input."""
         try:
-            if keyboard.is_pressed('page down'):
+            if keyboard.is_pressed("page down"):
                 self._next_pa()
                 pygame.time.wait(KEY_REPEAT_DELAY)
-            elif keyboard.is_pressed('page_up'):
+            elif keyboard.is_pressed("page_up"):
                 self._next_sta()
-            elif keyboard.is_pressed('end') and self.audio.is_playing():
+            elif keyboard.is_pressed("end") and self.audio.is_playing():
                 self.audio.pause()
         except Exception as e:
             print(f"Input error: {e}")
@@ -196,7 +196,7 @@ class PASimulator:
             return
 
         current_stop_data = self.stops[self.state.curr_stop]
-        pa_tracks = current_stop_data.get('pa', [])
+        pa_tracks = current_stop_data.get("pa", [])
 
         # Check if we've exhausted PA announcements for this stop
         if self.state.cnt_pa >= len(pa_tracks) - 1:
@@ -211,8 +211,7 @@ class PASimulator:
                 self.state.departure_time = time.time()
 
                 # Skip stations with no PA
-                while (self.state.curr_stop < len(self.stops) and
-                       not self.stops[self.state.curr_stop].get('pa', [])):
+                while self.state.curr_stop < len(self.stops) and not self.stops[self.state.curr_stop].get("pa", []):
                     self.state.curr_stop += 1
 
                 # Check if we went past the end
@@ -255,14 +254,14 @@ class PASimulator:
             return
 
         current_stop_data = self.stops[self.state.curr_stop]
-        sta_tracks = current_stop_data.get('sta', [])
+        sta_tracks = current_stop_data.get("sta", [])
 
         # Handle empty station melody list
-        if not sta_tracks or sta_tracks == ['']:
+        if not sta_tracks or sta_tracks == [""]:
             return
 
         # Get cut position (default to 0 if not specified)
-        cut_position = current_stop_data.get('sta_cut', 0)
+        cut_position = current_stop_data.get("sta_cut", 0)
 
         # If already playing, restart from cut position
         if self.audio.is_playing():
@@ -277,7 +276,7 @@ class PASimulator:
 
     def cleanup(self) -> None:
         """Clean up resources."""
-        if hasattr(self, 'audio'):
+        if hasattr(self, "audio"):
             self.audio.cleanup()
         pygame.quit()
 
@@ -288,7 +287,7 @@ class PASimulator:
         pygame.display.set_mode((SMALL_WIDTH, SMALL_HEIGHT))
         try:
             info = pygame.display.get_wm_info()
-            win32gui.SetWindowPos(info['window'], -1, 400, SMALL_Y, 0, 0, 1)
+            win32gui.SetWindowPos(info["window"], -1, 400, SMALL_Y, 0, 0, 1)
         except Exception:
             pass
 
@@ -298,7 +297,7 @@ class PASimulator:
         pygame.draw.rect(self.screen, (240, 240, 240), pygame.Rect(0, 0, SMALL_WIDTH, 120))
         pygame.draw.rect(self.screen, self.color, pygame.Rect(20, 10, 10, 55))
 
-        font_n = pygame.font.SysFont('shingopr6nmedium', 20)
+        font_n = pygame.font.SysFont("shingopr6nmedium", 20)
         draw_text = lambda t, f, c, x, y: self.screen.blit(f.render(t, True, c), (x, y))
 
         draw_text(self.route_name, font_n, (0, 0, 0), 40, 10)

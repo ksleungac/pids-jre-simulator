@@ -16,5 +16,9 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "black>=26.1.0",
     "pyinstaller>=6.19.0",
 ]
+
+[tool.black]
+  line-length = 150

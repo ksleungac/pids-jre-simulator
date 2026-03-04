@@ -13,7 +13,7 @@ def draw_text(
     y: int,
     bg: Tuple[int, int, int] = None,
     h_ratio: float = 1.0,
-    v_ratio: float = 1.0
+    v_ratio: float = 1.0,
 ) -> pygame.Surface:
     """Draw text with optional scaling.
 
@@ -50,7 +50,7 @@ def draw_text_given_width(
     text: str,
     color: Tuple[int, int, int],
     screen: pygame.Surface,
-    collapse: bool = False
+    collapse: bool = False,
 ) -> None:
     """Draw text constrained to a specific width, compressing if needed.
 
@@ -92,7 +92,7 @@ def draw_aapolygon(
     color: Tuple[int, int, int],
     points: List[Tuple[float, float]],
     scale: int = 2,
-    width: int = 0
+    width: int = 0,
 ) -> None:
     """Draw antialiased polygon using supersampling.
 
@@ -131,14 +131,7 @@ def arrow_points(x: int, y: int, w: int, h: int, stroke: int) -> Tuple[Tuple[flo
     Returns:
         Tuple of (x, y) points defining the arrow shape
     """
-    return (
-        (x, y),
-        (x + w - stroke, y + h / 2),
-        (x, y + h),
-        (x + stroke, y + h),
-        (x + w, y + h / 2),
-        (x + stroke, y)
-    )
+    return ((x, y), (x + w - stroke, y + h / 2), (x, y + h), (x + stroke, y + h), (x + w, y + h / 2), (x + stroke, y))
 
 
 def draw_1col_text(
@@ -148,7 +141,7 @@ def draw_1col_text(
     y: int,
     vert_space: int,
     text_color: Tuple[int, int, int],
-    screen: pygame.Surface
+    screen: pygame.Surface,
 ) -> None:
     """Draw text vertically (one column).
 
@@ -188,7 +181,7 @@ def draw_stops_text(
     x: int,
     y: int,
     stops_w: int,
-    screen: pygame.Surface
+    screen: pygame.Surface,
 ) -> None:
     """Draw station name text with support for multi-line stations.
 

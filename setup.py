@@ -24,9 +24,9 @@ class SetupScreen:
         self.max_visible = max(5, available_height // self.row_height)
 
         # Fonts
-        self.title_font = pygame.font.SysFont('shingopr6nmedium', 28)
-        self.route_font = pygame.font.SysFont('shingopr6nmedium', 20)
-        self.instruction_font = pygame.font.SysFont('shingopr6nmedium', 16)
+        self.title_font = pygame.font.SysFont("shingopr6nmedium", 28)
+        self.route_font = pygame.font.SysFont("shingopr6nmedium", 20)
+        self.instruction_font = pygame.font.SysFont("shingopr6nmedium", 16)
 
         # Colors
         self.bg_color = (30, 30, 30)
@@ -70,13 +70,15 @@ class SetupScreen:
                         # Prefer folder name for diagram, fallback to JSON
                         diagram = folder_diagram if folder_diagram else route_data.get("diagram", "")
 
-                        self.routes.append({
-                            "path": root,
-                            "name": route_data.get("route", "Unknown"),
-                            "diagram": diagram,
-                            "type": route_data.get("type", ""),
-                            "dest": route_data.get("dest", ""),
-                        })
+                        self.routes.append(
+                            {
+                                "path": root,
+                                "name": route_data.get("route", "Unknown"),
+                                "diagram": diagram,
+                                "type": route_data.get("type", ""),
+                                "dest": route_data.get("dest", ""),
+                            }
+                        )
                 except Exception as e:
                     print(f"Error loading {route_path}: {e}")
 
@@ -140,12 +142,11 @@ class SetupScreen:
             line2 = "  |  ".join(line2_parts) if line2_parts else ""
 
             # Check if selected
-            is_selected = (i == selected_idx)
+            is_selected = i == selected_idx
 
             if is_selected:
                 # Draw highlight background (taller to cover both lines)
-                highlight_rect = pygame.Rect(20, y_offset + display_idx * self.row_height - 5,
-                                           self.screen.get_width() - 40, self.row_height)
+                highlight_rect = pygame.Rect(20, y_offset + display_idx * self.row_height - 5, self.screen.get_width() - 40, self.row_height)
                 pygame.draw.rect(self.screen, self.highlight_color, highlight_rect, border_radius=5)
                 text_color = (255, 255, 255)
             else:
@@ -189,14 +190,10 @@ class SetupScreen:
         thumb_y = int(list_area_start + scroll_ratio * (list_area_height - thumb_height))
 
         # Draw scrollbar track
-        pygame.draw.rect(self.screen, (80, 80, 80),
-                        pygame.Rect(bar_x, list_area_start, bar_width, list_area_height),
-                        border_radius=3)
+        pygame.draw.rect(self.screen, (80, 80, 80), pygame.Rect(bar_x, list_area_start, bar_width, list_area_height), border_radius=3)
 
         # Draw scrollbar thumb
-        pygame.draw.rect(self.screen, (180, 180, 180),
-                        pygame.Rect(bar_x, thumb_y, bar_width, int(thumb_height)),
-                        border_radius=3)
+        pygame.draw.rect(self.screen, (180, 180, 180), pygame.Rect(bar_x, thumb_y, bar_width, int(thumb_height)), border_radius=3)
 
     def run(self) -> dict | None:
         """Run the setup screen loop. Returns configuration or None if cancelled.
