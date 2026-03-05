@@ -4,7 +4,7 @@
 
 **Japanese Train PA (Public Address) Simulator** - A pygame-based application that simulates train station announcements and arrival melodies with visual LCD display.
 
-**Current Date:** 2026-03-04
+**Current Date:** 2026-03-05
 
 **Last Update:**
 - Real-time countdown for travel times on lower LCD (TIME_SCALE constant controls speed)
@@ -13,6 +13,8 @@
 - **Destination always displays as kanji** (no furigana cycling - IRL behavior)
 - **Stop-level dest override** - Individual stops can override route-level dest (Yamanote line)
 - **Black formatting** - Pre-commit hook auto-formats Python files before commit
+- **3-mode display cycling** - Upper LCD cycles through KANJI → FURIGANA → ENGLISH (unified single cycling system)
+- **English page support** - Upper LCD preview script prototypes English romanized display with proper fonts/layout
 
 ---
 
@@ -93,13 +95,17 @@ pids_jre_simulator/
 - Variable color schemes per route (color, contrast_color, type_color)
 - Stations with no PA announcements (skipped automatically)
 
-### 6. Furigana Cycling (Updated 2026-03-04)
-**Upper LCD cycles between kanji and furigana every 4 seconds:**
-- **Destination** (left side): **Always kanji, no cycling** (IRL behavior - updated 2026-03-04)
-- **Prefix** (center): "次は" cycles to "つぎは" (other prefixes stay as-is)
-- **Station name** (right side): Cycles if furigana data available in `translations.json`
-- **Synchronized cycling**: All elements switch together every 4 seconds
-- **Graceful fallback**: Routes without translation data show kanji only (no cycling)
+### 6. Furigana Cycling (Updated 2026-03-05)
+**Upper LCD cycles through 3 modes every 2 seconds:**
+- **KANJI** (mode 0): Japanese kanji characters
+- **FURIGANA** (mode 1): Japanese phonetic furigana
+- **ENGLISH** (mode 2): English romanized with macrons (Hepburn system)
+- **Destination** (left side): **Always kanji, no cycling** (IRL behavior)
+- **Prefix** (center): "次は" → "つぎは" in FURIGANA mode, "Next" in ENGLISH mode
+- **Station name** (right side): Cycles based on mode (kanji/furigana/english)
+- **Graceful fallback**: If station lacks furigana or English data, that mode is skipped in cycle
+- **Single cycling system**: Uses `DisplayMode` enum (not dual-layer approach)
+- **Preview script**: `preview_upper_lcd.py` for prototyping display layouts
 
 ### 7. Stop-Level Destination Override (NEW 2026-03-04)
 **Individual stops can override the route-level `dest` field:**
@@ -161,12 +167,15 @@ pids_jre_simulator/
 
 ### `display.py`
 - `UpperDisplay` - Train info, station name, clock, hint square
+  - **`DisplayMode` enum**: KANJI (0), FURIGANA (1), ENGLISH (2)
   - **`_get_current_dest()`** - Gets current destination, checking stop-level override first
-  - **`_update_display_mode()`** - Toggles display_mode every 4 seconds (kanji/furigana)
+  - **`_update_display_mode()`** - Cycles through 3 modes every 2 seconds
   - **`_draw_destination()`** - Draws destination (always kanji, no cycling)
-  - **`_draw_prefix()`** - Draws prefix with cycling for "次は" → "つぎは"
-  - **`_draw_station_name()`** - Draws station name with furigana cycling
+  - **`_draw_prefix()`** - Draws prefix with 3-mode support (kanji/furigana/english)
+  - **`_draw_station_name()`** - Draws station name with 3-mode support
+  - **`_get_current_layout()`** - Returns layout config for current mode (KANJI/FURIGANA share same layout)
   - `draw_clock()` - Updates display mode and redraws cycling elements
+  - **Layout sharing**: FURIGANA reuses KANJI layout via `.copy()` (programmatically shared, not duplicated)
 - `LowerDisplay` - Route map, markers, times, pointer
 - Both receive route_data, app_state, **and stops** (merged data) via dependency injection
 
@@ -198,13 +207,15 @@ pids_jre_simulator/
 6. **Character Spacing**: Station names use even character spacing (draw_text_given_width)
 7. **Route Scrolling**: Setup screen scrolls and shows scrollbar indicator
 8. **Temp File Cleanup**: Uses system temp dir, auto-deleted on exit
-9. **Furigana Cycling**: Upper LCD cycles kanji/furigana every 4 seconds (prefix, station name)
-10. **Destination Always Kanji**: Destination stays as kanji, no furigana cycling (IRL behavior)
+9. **3-Mode Cycling**: Upper LCD cycles KANJI → FURIGANA → ENGLISH every 2 seconds (DisplayMode enum)
+10. **Destination Always Kanji**: Destination stays as kanji, no cycling (IRL behavior)
 11. **Stop-Level Dest Override**: Individual stops can override route-level dest (Yamanote line)
 12. **Real-Time Countdown**: Lower LCD travel times count down in real-time from departure
 13. **Last PA Forces Time to 1**: When on last PA before arriving, display shows "1" (arriving now)
 14. **Full Minute Rule**: Time only decrements after full minute elapsed (e.g., "3" → "2" after 1 min)
 15. **Black Formatting**: Pre-commit hook auto-formats Python files with black before commit
+16. **Graceful Fallback**: If station lacks furigana/English data, that mode is skipped in cycle
+17. **Layout Sharing**: FURIGANA mode reuses KANJI layout config (programmatically via .copy())
 
 ---
 
@@ -247,7 +258,7 @@ python main.py
 
 1. **Character spacing is critical** - use draw_text_given_width for station names
 2. **Playback behavior is specific** - review _next_pa() and _next_sta() logic carefully
-3. **Furigana cycling is synchronized** - prefix and station name switch together every 4 seconds
+3. **3-mode cycling system** - DisplayMode enum (KANJI=0, FURIGANA=1, ENGLISH=2), single cycling logic
 4. **Translation lookup by Japanese text** - keys are raw Japanese text (e.g., `東京`), not station codes
 5. **dest_furigana auto-lookup** - `dest` value in route.json is used to lookup furigana from translations.json
 6. **Line-specific stations.json** - `audio/[line]/stations.json` keeps keys only (empty values) for future line-specific data
@@ -258,6 +269,10 @@ python main.py
 11. **Destination always kanji** - Upper LCD destination does NOT cycle to furigana (IRL behavior)
 12. **Stop-level dest override** - Stops can have `dest` field to override route-level destination
 13. **Compound destination format** - English uses `"StationA&\nStationB"` for multi-line display
+14. **Layout sharing pattern** - FURIGANA reuses KANJI layout via `.copy()` (not duplicated code)
+15. **Graceful fallback** - If station lacks data for a mode, that mode is skipped in cycling
+16. **Preview script for prototyping** - `preview_upper_lcd.py` for testing display changes before integrating to display.py
+17. **Hepburn romanization with macrons** - English translations use ō/ū for long vowels (Tōkyō, Yūrakuchō)
 
 **Personal working preferences** are in `.claude/rules/preferences.md` (naming conventions, collaboration style, tooling).
 
