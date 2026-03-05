@@ -170,10 +170,28 @@ def _get_station_display(self) -> str:
 ## Files Modified
 
 - `preview_upper_lcd.py` - Standalone preview script for Upper LCD prototyping
+- `fonts/HelveticaNeue-Medium.otf` - English font for preview script
 
 ---
 
-## Testing
+## Status: PROTOTYPING IN PROGRESS
+
+**The preview script (`preview_upper_lcd.py`) is for user testing and tuning.**
+
+Once the display layouts (fonts, sizes, positions) are finalized by the user, the changes will be integrated into the main `display.py` file.
+
+**Integration checklist (TODO - after user approval):**
+1. Update `display.py` with `DisplayMode` enum
+2. Add English fonts to `UpperDisplay.__init__()`
+3. Implement 3-mode cycling logic in `_update_display_mode()`
+4. Update `_get_prefix_display()` for 3-mode support
+5. Update `_get_station_display()` for 3-mode support
+6. Add layout configuration system with shared KANJI/FURIGANA layout
+7. Integrate English translations from `translations.json` (using `DisplayMode.ENGLISH` key)
+
+---
+
+## Testing (Preview Script Only)
 
 Run the preview script to verify cycling:
 
@@ -208,3 +226,15 @@ Once the preview logic is validated, integrate these changes into the main `disp
 - `CLAUDE.md` - Project overview and architecture
 - `DATA_FORMAT.md` - JSON data format specifications (translations.json structure)
 - `constants.py` - Timing constant `STATION_DISPLAY_INTERVAL = 2`
+
+---
+
+## Notes for Integration (When Ready)
+
+**DO NOT integrate until user has finalized styling in preview script.**
+
+When the user confirms the preview is ready for integration:
+1. Compare `preview_upper_lcd.py` with `display.py` to identify all changes
+2. Port the 3-mode system to `display.py`
+3. Ensure English translations are loaded from `translations.json`
+4. Test thoroughly before committing
