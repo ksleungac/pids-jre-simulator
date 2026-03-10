@@ -4,7 +4,7 @@
 
 **Japanese Train PA (Public Address) Simulator** - A pygame-based application that simulates train station announcements and arrival melodies with visual LCD display.
 
-**Current Date:** 2026-03-05
+**Current Date:** 2026-03-07
 
 **Last Update:**
 - Real-time countdown for travel times on lower LCD (TIME_SCALE constant controls speed)
@@ -15,6 +15,7 @@
 - **Black formatting** - Pre-commit hook auto-formats Python files before commit
 - **3-mode display cycling** - Upper LCD cycles through KANJI → FURIGANA → ENGLISH (unified single cycling system)
 - **English page support** - Upper LCD preview script prototypes English romanized display with proper fonts/layout
+- **Modular display architecture (NEW 2026-03-07)** - Refactored to support multiple train models (E235-1000, E231-500, etc.) with separate Upper/Lower LCD implementations per model
 
 ---
 
@@ -25,14 +26,24 @@ pids_jre_simulator/
 ├── main.py              # Entry point - runs setup screen, then simulator
 ├── app.py               # PASimulator and AppState classes
 ├── audio.py             # AudioPlayer with loudness normalization (double-buffered temp files)
-├── display.py           # UpperDisplay and LowerDisplay classes
+├── display.py           # UpperDisplay and LowerDisplay classes (legacy, being replaced)
 ├── constants.py         # All constants (screen, colors, fonts, timing)
 ├── utils.py             # Drawing utilities (draw_text, draw_text_given_width, etc.)
 ├── setup.py             # Route selection setup screen
+├── preview_upper_lcd.py # Standalone preview for E235-1000 Upper LCD (uses new architecture)
 ├── old_version.py       # User's original backup (keep for reference)
 ├── pyproject.toml       # Project configuration (uses uv)
+├── displays/            # NEW: Modular display system (2026-03-07)
+│   ├── __init__.py      # Package entry - exports DisplayMode, ModeCycler, get_train_display
+│   ├── base.py          # DisplayMode enum, ModeCycler class
+│   └── train_models/
+│       ├── __init__.py  # Factory registry
+│       └── e235_1000/   # E235-1000 series implementation
+│           ├── __init__.py      # Exports: UpperDisplay, LowerDisplay
+│           ├── upper_lcd.py     # Upper LCD: JapaneseDisplay, FuriganaDisplay, EnglishDisplay
+│           └── lower_lcd.py     # Lower LCD (placeholder)
 ├── data/
-│   └── translations.json  # Central translation database (furigana, english)
+│   └── translations.json      # Central translation database (furigana, english, station names, destinations)
 └── audio/               # Audio files organized by route
     ├── yamanote/
     ├── nanbu/4027F/
@@ -130,6 +141,15 @@ pids_jre_simulator/
 - `AppState.is_last_pa`: Flag set when on last PA before arriving
 - `draw_times()`: Calculates elapsed time and applies countdown logic
 - Main loop calls `show_stops(current_time=timestamp)` every frame for smooth updates
+
+### 9. Modular Display Architecture (NEW 2026-03-07)
+**Refactored display system to support multiple train models with different LCD styles:**
+- **Train model isolation**: Each train model (E235-1000, E231-500) has its own display classes
+- **Mode renderer pattern**: JapaneseDisplay, FuriganaDisplay, EnglishDisplay are self-contained
+- **Manager class**: UpperDisplay handles mode cycling and delegates rendering
+- **Factory pattern**: `get_train_display("e235_1000")` returns model-specific display
+- **Room for Lower LCD**: Architecture supports `lower_lcd.py` per train model
+- **See UPPER_DISPLAY_UPDATE.md** for detailed architecture documentation
 
 ---
 
@@ -273,6 +293,9 @@ python main.py
 15. **Graceful fallback** - If station lacks data for a mode, that mode is skipped in cycling
 16. **Preview script for prototyping** - `preview_upper_lcd.py` for testing display changes before integrating to display.py
 17. **Hepburn romanization with macrons** - English translations use ō/ū for long vowels (Tōkyō, Yūrakuchō)
+18. **Modular display architecture** - New `displays/` package supports multiple train models; use `get_train_display()` factory or import directly from `displays.train_models.e235_1000`
+19. **Mode renderer pattern** - Each display mode (JapaneseDisplay, FuriganaDisplay, EnglishDisplay) is self-contained with its own fonts/positions; duplication across modes is intentional for flexibility
+20. **Adding new train model** - Create `displays/train_models/{model}/` with `upper_lcd.py`, `lower_lcd.py`, `__init__.py`; register in `displays/train_models/__init__.py`
 
 **Personal working preferences** are in `.claude/rules/preferences.md` (naming conventions, collaboration style, tooling).
 
@@ -281,4 +304,10 @@ python main.py
 ## Data Format Specification
 
 For detailed JSON data format specifications (route.json, stations.json field definitions, conventions), see **[DATA_FORMAT.md](DATA_FORMAT.md)**.
+
+---
+
+## Display Architecture Documentation
+
+For detailed documentation on the modular display architecture (train models, mode renderers, cycling system), see **[UPPER_DISPLAY_UPDATE.md](UPPER_DISPLAY_UPDATE.md)**.
 
