@@ -3,6 +3,7 @@
     "color": [233, 91, 31],
     "contrast_color": [0, 92, 0],
     "type": "快速",
+    "type_color": [233, 91, 31],
     "dest": "東京",
     "stops": [
         {

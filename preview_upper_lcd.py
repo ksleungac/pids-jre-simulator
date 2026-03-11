@@ -31,34 +31,34 @@ MOCK_ROUTE_DATA = {
     "dest": "池袋・新宿",
     "dest_furigana": "とうきょう",
     "color": [0, 128, 0],  # Green for Yamanote
-    "type_color": [0, 0, 0],
+    "type_color": [150, 40, 0],
 }
 
 MOCK_STOPS = [
     {
         "name": "東京",
         "furigana": "とうきょう",
-        DisplayMode.ENGLISH: "Tōkyō",
+        "english": "Tōkyō",
     },
     {
         "name": "有楽町",
         "furigana": "ゆうらくちょう",
-        DisplayMode.ENGLISH: "Yūrakuchō",
+        "english": "Yūrakuchō",
     },
     {
         "name": "新橋",
         "furigana": "しんばし",
-        DisplayMode.ENGLISH: "Shimbashi",
+        "english": "Shimbashi",
     },
     {
         "name": "品川",
         "furigana": "しながわ",
-        DisplayMode.ENGLISH: "Shinagawa",
+        "english": "Shinagawa",
     },
     {
         "name": "高輪ゲートウェイ",
         "furigana": "たかなわげーとうぇい",
-        DisplayMode.ENGLISH: "Takanawa Gateway",
+        "english": "Takanawa Gateway",
     },
 ]
 

@@ -1,0 +1,33 @@
+{
+    "内回り": {
+        "english": "Inner Loop"
+    },
+    "外回り": {
+        "english": "Outer Loop"
+    },
+    "快速": {
+        "english": "Rapid"
+    },
+    "中央特快": {
+        "english": "Chūō Special Rapid",
+        "english_short": "Chūō Sp. Rapid"
+    },
+    "普通": {
+        "english": "Local"
+    },
+    "通勤快速": {
+        "english": "Commuter Rapid"
+    },
+    "通勤特快": {
+        "english": "Commuter Special Rapid"
+    },
+    "特急": {
+        "english": "Limited Express"
+    },
+    "急行": {
+        "english": "Express"
+    },
+    "各駅停車": {
+        "english": "Local"
+    }
+}

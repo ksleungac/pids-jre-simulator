@@ -55,7 +55,7 @@ class JapaneseDisplay:
         self.route_data = route_data
         self.stops = stops
 
-        # E235-1000 specific fonts
+        # E235-1000 specific fonts (shared across methods)
         self.font_type_bold = pygame.font.SysFont("shingopr6nheavy", 26, bold=True, italic=True)
         self.font_dest = pygame.font.SysFont("shingopr6nmedium", 35)
         self.font_prefix = pygame.font.SysFont("shingopr6nmedium", 25)
@@ -63,45 +63,40 @@ class JapaneseDisplay:
         self.font_clock = pygame.font.SysFont("helveticaneueroman", 26)
         self.font_suffix = pygame.font.SysFont("shingopr6nmedium", 18)
 
-        # E235-1000 specific positions
-        self.dest_box_x = 15
-        self.dest_box_y = 50
-        self.dest_box_w = 150
-        self.dest_box_h = 35
-        self.suffix_x_offset = 10
-        self.suffix_y_offset = 5
-
     def draw_train_type(self, train_type: str, type_color: tuple) -> None:
         """Draw train type box."""
-        box_w = 150
-        pygame.draw.rect(self.screen, WHITE_BG, pygame.Rect(15, 8, box_w, 31), 0, 2)
+        box_x, box_y, box_w, box_h = 15, 8, 150, 31
+        pygame.draw.rect(self.screen, WHITE_BG, pygame.Rect(box_x, box_y, box_w, box_h), 0, 2)
+        text_x, text_y = 15, 10
         if len(train_type) > 2:
-            draw_text_given_width(15, 10, box_w, self.font_type_bold, train_type, type_color, self.screen, collapse=True)
+            draw_text_given_width(text_x, text_y, box_w, self.font_type_bold, train_type, type_color, self.screen, collapse=True)
         else:
-            draw_text_given_width(15, 10, box_w, self.font_type_bold, train_type, type_color, self.screen)
+            draw_text_given_width(text_x, text_y, box_w, self.font_type_bold, train_type, type_color, self.screen)
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
         """Draw destination with suffix (ゆき/方面)."""
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(self.dest_box_x, self.dest_box_y, self.dest_box_w, self.dest_box_h))
+        dest_box_x, dest_box_y, dest_box_w, dest_box_h = 15, 50, 150, 35
+        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(dest_box_x, dest_box_y, dest_box_w, dest_box_h))
         draw_text_given_width(
-            self.dest_box_x, self.dest_box_y, self.dest_box_w,
+            dest_box_x, dest_box_y, dest_box_w,
             self.font_dest, dest_text, WHITE_BG, self.screen,
             collapse=False, script="japanese"
         )
 
         suffix = "方面" if route_name == "山手線" else "ゆき"
         t_w, t_h = self.font_suffix.size(suffix)
-        suffix_x = int(S_WIDTH * 0.25) - t_w - self.suffix_x_offset
-        suffix_y = UPPER_HEIGHT - t_h - self.suffix_y_offset
+        suffix_x = int(S_WIDTH * 0.25) - t_w - 10
+        suffix_y = UPPER_HEIGHT - t_h - 5
         suffix_img = self.font_suffix.render(suffix, True, WHITE_BG, DARK_BG)
         self.screen.blit(suffix_img, (suffix_x, suffix_y))
 
     def draw_prefix(self, prefix_text: str) -> None:
         """Draw prefix (次は/まもなく/ただいま)."""
-        prefix_x = int(S_WIDTH * 0.25) + 40
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(prefix_x, 5, 300, 30))
+        prefix_x, prefix_y = int(S_WIDTH * 0.25) + 40, 5
+        prefix_w, prefix_h = 300, 30
+        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(prefix_x, prefix_y, prefix_w, prefix_h))
         prefix_img = self.font_prefix.render(prefix_text, True, WHITE_BG)
-        self.screen.blit(prefix_img, (prefix_x, 5))
+        self.screen.blit(prefix_img, (prefix_x, prefix_y))
 
     def draw_station(self, station_text: str) -> None:
         """Draw station name with even character spacing."""
@@ -124,8 +119,8 @@ class JapaneseDisplay:
 
     def draw_clock(self, time_text: str) -> None:
         """Draw clock."""
-        clock_x = S_WIDTH - 160
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(clock_x, 5, 80, 25))
+        clock_x, clock_w, clock_h = S_WIDTH - 160, 80, 25
+        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(clock_x, 5, clock_w, clock_h))
         clock_img = self.font_clock.render(time_text, True, WHITE_BG)
         self.screen.blit(clock_img, (clock_x, 0))
 
@@ -147,7 +142,7 @@ class FuriganaDisplay:
         self.route_data = route_data
         self.stops = stops
 
-        # E235-1000 specific fonts (same as Japanese for now)
+        # E235-1000 specific fonts (shared across methods)
         self.font_type_bold = pygame.font.SysFont("shingopr6nheavy", 26, bold=True, italic=True)
         self.font_dest = pygame.font.SysFont("shingopr6nmedium", 35)
         self.font_prefix = pygame.font.SysFont("shingopr6nmedium", 25)
@@ -155,45 +150,40 @@ class FuriganaDisplay:
         self.font_clock = pygame.font.SysFont("helveticaneueroman", 26)
         self.font_suffix = pygame.font.SysFont("shingopr6nmedium", 18)
 
-        # E235-1000 specific positions (same as Japanese)
-        self.dest_box_x = 15
-        self.dest_box_y = 50
-        self.dest_box_w = 150
-        self.dest_box_h = 35
-        self.suffix_x_offset = 10
-        self.suffix_y_offset = 5
-
     def draw_train_type(self, train_type: str, type_color: tuple) -> None:
         """Draw train type box."""
-        box_w = 150
-        pygame.draw.rect(self.screen, WHITE_BG, pygame.Rect(15, 8, box_w, 31), 0, 2)
+        box_x, box_y, box_w, box_h = 15, 8, 150, 31
+        pygame.draw.rect(self.screen, WHITE_BG, pygame.Rect(box_x, box_y, box_w, box_h), 0, 2)
+        text_x, text_y = 15, 10
         if len(train_type) > 2:
-            draw_text_given_width(15, 10, box_w, self.font_type_bold, train_type, type_color, self.screen, collapse=True)
+            draw_text_given_width(text_x, text_y, box_w, self.font_type_bold, train_type, type_color, self.screen, collapse=True)
         else:
-            draw_text_given_width(15, 10, box_w, self.font_type_bold, train_type, type_color, self.screen)
+            draw_text_given_width(text_x, text_y, box_w, self.font_type_bold, train_type, type_color, self.screen)
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
         """Draw destination with suffix - same as Japanese (kanji stays kanji)."""
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(self.dest_box_x, self.dest_box_y, self.dest_box_w, self.dest_box_h))
+        dest_box_x, dest_box_y, dest_box_w, dest_box_h = 15, 50, 150, 35
+        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(dest_box_x, dest_box_y, dest_box_w, dest_box_h))
         draw_text_given_width(
-            self.dest_box_x, self.dest_box_y, self.dest_box_w,
+            dest_box_x, dest_box_y, dest_box_w,
             self.font_dest, dest_text, WHITE_BG, self.screen,
             collapse=False, script="japanese"
         )
 
         suffix = "方面" if route_name == "山手線" else "ゆき"
         t_w, t_h = self.font_suffix.size(suffix)
-        suffix_x = int(S_WIDTH * 0.25) - t_w - self.suffix_x_offset
-        suffix_y = UPPER_HEIGHT - t_h - self.suffix_y_offset
+        suffix_x = int(S_WIDTH * 0.25) - t_w - 10
+        suffix_y = UPPER_HEIGHT - t_h - 5
         suffix_img = self.font_suffix.render(suffix, True, WHITE_BG, DARK_BG)
         self.screen.blit(suffix_img, (suffix_x, suffix_y))
 
     def draw_prefix(self, prefix_text: str) -> None:
         """Draw prefix (already converted to furigana by UpperDisplay manager)."""
-        prefix_x = int(S_WIDTH * 0.25) + 40
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(prefix_x, 5, 300, 30))
+        prefix_x, prefix_y = int(S_WIDTH * 0.25) + 40, 5
+        prefix_w, prefix_h = 300, 30
+        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(prefix_x, prefix_y, prefix_w, prefix_h))
         prefix_img = self.font_prefix.render(prefix_text, True, WHITE_BG)
-        self.screen.blit(prefix_img, (prefix_x, 5))
+        self.screen.blit(prefix_img, (prefix_x, prefix_y))
 
     def draw_station(self, station_text: str) -> None:
         """Draw station name in furigana."""
@@ -216,8 +206,8 @@ class FuriganaDisplay:
 
     def draw_clock(self, time_text: str) -> None:
         """Draw clock."""
-        clock_x = S_WIDTH - 160
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(clock_x, 5, 80, 25))
+        clock_x, clock_w, clock_h = S_WIDTH - 160, 80, 25
+        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(clock_x, 5, clock_w, clock_h))
         clock_img = self.font_clock.render(time_text, True, WHITE_BG)
         self.screen.blit(clock_img, (clock_x, 0))
 
@@ -234,68 +224,59 @@ class EnglishDisplay:
         self.route_data = route_data
         self.stops = stops
 
-        # E235-1000 specific English fonts
+        # E235-1000 specific English fonts (shared across methods)
         self.font_type_bold = pygame.font.SysFont("shingopr6nheavy", 26, bold=True, italic=True)
-        self.font_dest = pygame.font.SysFont("helveticaneuemedium", 33)
+        self.font_dest = pygame.font.SysFont("helveticaneuemedium", 22)
         self.font_prefix = pygame.font.SysFont("helveticaneuemedium", 27)
         self.font_main_prefix = pygame.font.SysFont("helveticaneuemedium", 27)
         self.font_station = pygame.font.SysFont("helveticaneuebold", 115)
         self.font_clock = pygame.font.SysFont("helveticaneueroman", 26)
-        self.font_suffix = pygame.font.SysFont("helveticaneuemedium", 27)
-
-        # E235-1000 specific English positions
-        self.dest_box_x = 15
-        self.dest_box_y = 50
-        self.dest_box_w = 150
-        self.dest_box_h = 35
-        self.suffix_x_offset = -20
-        self.suffix_y_offset = 30
+        self.font_suffix = pygame.font.SysFont("helveticaneuemedium", 20)
 
     def draw_train_type(self, train_type: str, type_color: tuple) -> None:
         """Draw train type box."""
-        box_w = 150
-        pygame.draw.rect(self.screen, WHITE_BG, pygame.Rect(15, 8, box_w, 31), 0, 2)
-        if len(train_type) > 2:
-            draw_text_given_width(15, 10, box_w, self.font_type_bold, train_type, type_color, self.screen, collapse=True)
-        else:
-            draw_text_given_width(15, 10, box_w, self.font_type_bold, train_type, type_color, self.screen)
+        box_x, box_y, box_w, box_h = 15, 8, 150, 31
+        pygame.draw.rect(self.screen, WHITE_BG, pygame.Rect(box_x, box_y, box_w, box_h), 0, 2)
+        draw_text_given_width(box_x, 10, box_w, self.font_type_bold, train_type, type_color, self.screen, collapse=True, script="latin")
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
         """Draw destination with prefix ('Bound for')."""
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(self.dest_box_x, self.dest_box_y, self.dest_box_w, self.dest_box_h))
+        dest_box_x, dest_box_y, dest_box_w, dest_box_h = 15, 72, 150, 35
+        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(dest_box_x, dest_box_y, dest_box_w, dest_box_h))
 
         if "\n" in dest_text:
             lines = dest_text.split("\n")
             line_height = self.font_dest.get_height()
             total_height = line_height * len(lines)
-            start_y = self.dest_box_y + (self.dest_box_h - total_height) // 2
+            start_y = dest_box_y + (dest_box_h - total_height) // 2
             for i, line in enumerate(lines):
                 y_pos = start_y + i * line_height
                 draw_text_given_width(
-                    self.dest_box_x, y_pos, self.dest_box_w,
+                    dest_box_x, y_pos, dest_box_w,
                     self.font_dest, line, WHITE_BG, self.screen,
                     collapse=True, script="latin"
                 )
         else:
             draw_text_given_width(
-                self.dest_box_x, self.dest_box_y, self.dest_box_w,
+                dest_box_x, dest_box_y, dest_box_w,
                 self.font_dest, dest_text, WHITE_BG, self.screen,
                 collapse=True, script="latin"
             )
 
-        suffix = "Bound for"
+        suffix = "for"
         t_w, t_h = self.font_suffix.size(suffix)
-        suffix_x = int(S_WIDTH * 0.25) - t_w + self.suffix_x_offset
-        suffix_y = UPPER_HEIGHT - t_h - self.suffix_y_offset
-        suffix_img = self.font_suffix.render(suffix, True, WHITE_BG, DARK_BG)
+        suffix_x = int(S_WIDTH * 0.25) - t_w - 150
+        suffix_y = UPPER_HEIGHT - t_h - 50
+        suffix_img = self.font_suffix.render(suffix, True, (182, 182, 199), DARK_BG)
         self.screen.blit(suffix_img, (suffix_x, suffix_y))
 
     def draw_prefix(self, prefix_text: str) -> None:
         """Draw English prefix (already translated by UpperDisplay manager)."""
-        prefix_x = int(S_WIDTH * 0.25) + 40
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(prefix_x, 5, 300, 30))
+        prefix_x, prefix_y = int(S_WIDTH * 0.25) + 40, 5
+        prefix_w, prefix_h = 300, 30
+        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(prefix_x, prefix_y, prefix_w, prefix_h))
         prefix_img = self.font_main_prefix.render(prefix_text, True, WHITE_BG)
-        self.screen.blit(prefix_img, (prefix_x, 5))
+        self.screen.blit(prefix_img, (prefix_x, prefix_y))
 
     def draw_station(self, station_text: str) -> None:
         """Draw station name in English (Latin script, collapsed)."""
@@ -318,8 +299,8 @@ class EnglishDisplay:
 
     def draw_clock(self, time_text: str) -> None:
         """Draw clock."""
-        clock_x = S_WIDTH - 160
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(clock_x, 5, 80, 25))
+        clock_x, clock_w, clock_h = S_WIDTH - 160, 80, 25
+        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(clock_x, 5, clock_w, clock_h))
         clock_img = self.font_clock.render(time_text, True, WHITE_BG)
         self.screen.blit(clock_img, (clock_x, 0))
 
@@ -366,6 +347,9 @@ class UpperDisplay:
         # Load translations (station names, destinations)
         self.translations = load_json_relative("data/translations.json")
 
+        # Load train type translations
+        self.train_types = load_json_relative("data/train_types.json")
+
         # Prefix mappings (inline - no need for separate JSON file)
         self.prefix_furigana = {
             "次は": "つぎは",
@@ -400,6 +384,22 @@ class UpperDisplay:
 
         return dest_key
 
+    def _get_train_type_display(self) -> str:
+        """Get train type text based on current display mode."""
+        mode = self.mode_cycler.get_current_mode()
+
+        if mode == DisplayMode.ENGLISH:
+            translation = self.train_types.get(self.train_type, {})
+            # Check for short version first (for narrow box), then full english
+            english_type = translation.get("english_short", "")
+            if not english_type:
+                english_type = translation.get("english", "")
+            if english_type:
+                return english_type
+            return self.train_type
+
+        return self.train_type
+
     def _get_prefix_display(self) -> str:
         """Get prefix text based on current display mode."""
         mode = self.mode_cycler.get_current_mode()
@@ -420,7 +420,7 @@ class UpperDisplay:
         mode = self.mode_cycler.get_current_mode()
 
         if mode == DisplayMode.ENGLISH:
-            return self.stops[self.curr_stop].get(DisplayMode.ENGLISH, "")
+            return self.stops[self.curr_stop].get("english", "")
         elif mode == DisplayMode.FURIGANA:
             return self.stops[self.curr_stop].get("furigana", "").replace(" ", "")
         else:
@@ -452,7 +452,8 @@ class UpperDisplay:
         pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(0, 0, S_WIDTH, UPPER_HEIGHT))
         pygame.draw.rect(self.screen, self.color, pygame.Rect(int(S_WIDTH * 0.25), 0, 30, UPPER_HEIGHT - 7))
 
-        display.draw_train_type(self.train_type, self.type_color)
+        train_type_text = self._get_train_type_display()
+        display.draw_train_type(train_type_text, self.type_color)
 
         dest_text = self._get_destination_display()
         display.draw_destination(dest_text, self.route_name)

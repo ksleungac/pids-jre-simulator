@@ -10,7 +10,8 @@ from typing import Dict, Any, Optional
 
 from constants import S_WIDTH, S_HEIGHT, FRAME_RATE, KEY_REPEAT_DELAY
 from audio import AudioPlayer
-from display import UpperDisplay, LowerDisplay
+from display import LowerDisplay
+from displays.train_models.e235_1000 import UpperDisplay
 from utils import draw_text
 
 
@@ -51,7 +52,7 @@ class PASimulator:
 
         # Initialize components
         self.audio = AudioPlayer(work_dir, self.stops)
-        self.upper = UpperDisplay(self.screen, self.route_data, self.state, self.stops)
+        self.upper = UpperDisplay(self.screen, self.route_data, self.stops)
         self.lower = LowerDisplay(self.screen, self.route_data, self.state, self.stops)
 
         self.running = True
@@ -150,15 +151,17 @@ class PASimulator:
     def run(self) -> None:
         """Main game loop."""
         # Draw initial state
-        self.upper.draw_init()
+        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa)
+        self.upper.draw()
         self.lower.show_stops()
 
         while self.running:
             self.clock.tick(FRAME_RATE)
             timestamp = time.time()
 
-            # Draw clock (this also updates upper display)
-            self.upper.draw_clock(timestamp)
+            # Update and draw upper display
+            self.upper.update(timestamp)
+            self.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
 
             # Update lower display with current time for real-time countdown
             self.lower.show_stops(current_time=timestamp)
@@ -233,7 +236,8 @@ class PASimulator:
 
             self.state.cnt_sta = 0
             self.audio.play_pa(self.state.curr_stop, self.state.cnt_pa)
-            self.upper.draw_current_station()
+            self.upper.set_state(self.state.curr_stop, self.state.cnt_pa)
+            self.upper.draw()
         else:
             # Next PA within current stop
             self.state.cnt_pa += 1
@@ -241,7 +245,8 @@ class PASimulator:
             self.state.is_last_pa = self.state.cnt_pa >= len(pa_tracks) - 1
             self.lower.increment_current_stop_display()
             self.audio.play_pa(self.state.curr_stop, self.state.cnt_pa)
-            self.upper.draw_current_station()
+            self.upper.set_state(self.state.curr_stop, self.state.cnt_pa)
+            self.upper.draw()
 
     def _next_sta(self) -> None:
         """Play next station melody.
