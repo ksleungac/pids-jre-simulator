@@ -71,6 +71,11 @@ After user approval, update:
 - Conventions section
 - Examples
 
+**Auto Memory (MEMORY.md):**
+- Update "Recent Session Notes" section with what was worked on
+- Add any personal preferences or working style notes learned
+- Keep project specifications in CLAUDE.md, not memory
+
 ### Step 5: Commit
 
 Commit with a descriptive message like:
@@ -89,6 +94,8 @@ docs: Update CLAUDE.md with session discoveries
 3. **Preferences matter** - If the user expressed a preference (e.g., "hard-coding is fine", "don't over-engineer"), note it for future sessions.
 
 4. **Be specific** - Instead of "fixed display bug", write "Destination always displays as kanji (no furigana cycling) to match IRL behavior".
+
+5. **Update auto memory** - Always update `MEMORY.md` "Recent Session Notes" section at end of session for session continuity. Keep personal preferences there, project specs in CLAUDE.md.
 
 ---
 

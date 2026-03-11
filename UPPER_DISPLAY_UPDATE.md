@@ -1,269 +1,38 @@
-# Upper LCD Display Update - 3-Mode Cycling System
+# Upper LCD Display System - Modular Architecture
 
-**Date:** 2026-03-05
+**Date:** 2026-03-11 (Updated)
+
+**Status:** COMPLETED & INTEGRATED
+
+---
 
 ## Overview
 
-Refactored the Upper LCD display cycling system from a dual-layer approach (language_mode + japanese_mode) to a **single 3-mode cycling system** that cycles through all display states uniformly.
+The Upper LCD display system uses a **modular, multi-train-model architecture** with **3-mode cycling** (KANJI → FURIGANA → ENGLISH). The system is fully integrated into the main application.
+
+**Key features:**
+- Multiple train models (E235-1000, future E231-500, etc.) with different display styles
+- 3-mode display cycling every 2 seconds
+- Graceful fallback when furigana/English data is unavailable
+- English train type display with optional `english_short` for narrow boxes
+- Centralized translations in `data/translations.json` and `data/train_types.json`
 
 ---
 
-## Changes Made
-
-### 1. New `DisplayMode` Enum
-
-Replaced the 2-mode `LanguageMode` enum with a 3-mode `DisplayMode` enum:
-
-```python
-class DisplayMode(IntEnum):
-    """Display modes for Upper LCD - cycles through all 3 modes."""
-    KANJI = 0      # Japanese kanji
-    FURIGANA = 1   # Japanese furigana (phonetic)
-    ENGLISH = 2    # English romanized
-```
-
-**Previous approach (removed):**
-- `LanguageMode.JAPANESE` and `LanguageMode.ENGLISH`
-- Separate `japanese_mode` string state (`'kanji'` or `'furigana'`)
-- Two independent cycling timers and logics
-
-**New approach:**
-- Single enum with 3 modes
-- Single cycling logic
-- Cleaner, more maintainable code
-
----
-
-### 2. Single Cycling System
-
-**Method:** `_update_display_mode()` (renamed from `_update_language_mode()`)
-
-**Cycle:** KANJI → FURIGANA → ENGLISH → KANJI ...
-
-**Logic:**
-```python
-# Determine which modes are available for current station
-available_modes = [DisplayMode.KANJI]  # Always available
-if has_furigana:
-    available_modes.append(DisplayMode.FURIGANA)
-if has_english:
-    available_modes.append(DisplayMode.ENGLISH)
-
-# Cycle to next mode
-current_idx = available_modes.index(self.display_mode)
-next_idx = (current_idx + 1) % len(available_modes)
-self.display_mode = available_modes[next_idx]
-```
-
-**Graceful fallback:** If a station lacks furigana or English data, that mode is skipped in the cycle.
-
----
-
-### 3. Programmatically Shared Layout Configuration
-
-KANJI and FURIGANA use the same layout (both are Japanese text). Instead of duplicating the configuration, it's defined once and reused:
-
-```python
-# Define KANJI layout once
-kanji_base = {
-    "_draw_prefix.font": self.font_prefix,
-    "_draw_prefix.y": 5,
-    "_draw_prefix.script": "japanese",
-    "_draw_station_name.font": self.font_station,
-    "_draw_station_name.y_offset": 5,
-    "_draw_station_name.collapse": False,
-    "_draw_station_name.script": "japanese",
-}
-
-# FURIGANA reuses KANJI layout (programmatically, not duplicated)
-self.layouts = {
-    DisplayMode.KANJI: kanji_base,
-    DisplayMode.FURIGANA: kanji_base.copy(),  # ← Reuse, no duplication
-    DisplayMode.ENGLISH: {
-        # Different layout for English (different fonts, collapse=True, script='latin')
-        ...
-    },
-}
-```
-
-**Benefits:**
-- No duplicated configuration code
-- Easy to maintain (change once, applies to both KANJI and FURIGANA)
-- Clear intent: FURIGANA uses same styling as KANJI
-
----
-
-### 4. Updated Helper Methods
-
-#### `_get_prefix_display()`
-```python
-def _get_prefix_display(self) -> str:
-    """Get prefix text based on display mode."""
-    if self.display_mode == DisplayMode.ENGLISH:
-        # Return English translation
-        return {"次は": "Next", "ただいま": "Now stopping at", ...}[self.prefix_text]
-
-    if self.display_mode == DisplayMode.FURIGANA:
-        # Return furigana for specific prefixes
-        if self.prefix_text == "次は":
-            return "つぎは"
-
-    # KANJI mode (default)
-    return self.prefix_text
-```
-
-#### `_get_station_display()`
-```python
-def _get_station_display(self) -> str:
-    """Get station name based on display mode."""
-    if self.display_mode == DisplayMode.ENGLISH:
-        return self.stops[curr_stop].get(DisplayMode.ENGLISH, "")
-    elif self.display_mode == DisplayMode.FURIGANA:
-        return self.stops[curr_stop].get("furigana", "").replace(" ", "")
-    else:  # KANJI
-        return self.stops[curr_stop].get("name", "").replace(" ", "")
-```
-
----
-
-### 5. Updated Method/Variable Names
-
-| Old Name | New Name |
-|----------|----------|
-| `LanguageMode` | `DisplayMode` |
-| `language_mode` | `display_mode` |
-| `_update_language_mode()` | `_update_display_mode()` |
-| `japanese_mode` | (removed - no longer needed) |
-
----
-
-## Cycling Behavior
-
-### Default Configuration
-- **Interval:** 2 seconds (`STATION_DISPLAY_INTERVAL`)
-- **Default mode:** `DisplayMode.ENGLISH` (for prototyping)
-- **Cycling:** Enabled by default (`cycling_enabled = True`)
-
-### Full Cycle Example (station with all data)
-
-| Time | Display Mode | Prefix | Station Name |
-|------|--------------|--------|--------------|
-| 0-2s | KANJI | 次は | 東京 |
-| 2-4s | FURIGANA | つぎは | とうきょう |
-| 4-6s | ENGLISH | Next | Tōkyō |
-| 6-8s | KANJI | 次は | 東京 |
-| ... | ... | ... | ... |
-
-### Partial Data Example (no English)
-
-| Time | Display Mode | Prefix | Station Name |
-|------|--------------|--------|--------------|
-| 0-2s | KANJI | 次は | 東京 |
-| 2-4s | FURIGANA | つぎは | とうきょう |
-| 4-6s | KANJI | 次は | 東京 |
-| ... | ... | ... | ... |
-
-(ENGLISH mode is skipped since data is unavailable)
-
----
-
-## Files Modified
-
-- `preview_upper_lcd.py` - Standalone preview script for Upper LCD prototyping
-- `fonts/HelveticaNeue-Medium.otf` - English font for preview script
-
----
-
-## Status: PROTOTYPING IN PROGRESS
-
-**The preview script (`preview_upper_lcd.py`) is for user testing and tuning.**
-
-Once the display layouts (fonts, sizes, positions) are finalized by the user, the changes will be integrated into the main `display.py` file.
-
-**Integration checklist (TODO - after user approval):**
-1. Update `display.py` with `DisplayMode` enum
-2. Add English fonts to `UpperDisplay.__init__()`
-3. Implement 3-mode cycling logic in `_update_display_mode()`
-4. Update `_get_prefix_display()` for 3-mode support
-5. Update `_get_station_display()` for 3-mode support
-6. Add layout configuration system with shared KANJI/FURIGANA layout
-7. Integrate English translations from `translations.json` (using `DisplayMode.ENGLISH` key)
-
----
-
-## Testing (Preview Script Only)
-
-Run the preview script to verify cycling:
-
-```bash
-python preview_upper_lcd.py
-```
-
-**Controls:**
-- **Page Down:** Next station
-- **Page Up:** Next PA (cycles prefix: 次は → まもなく → ただいま)
-- **ESC:** Quit
-
-**Observe:**
-- Display cycles through KANJI → FURIGANA → ENGLISH every 2 seconds
-- Debug output shows mode switches: `[DEBUG] Display mode switched to: KANJI`
-- Prefix and station name update together on mode switch
-
----
-
-## Next Steps
-
-Once the preview logic is validated, integrate these changes into the main `display.py` file:
-1. Update `UpperDisplay` class with `DisplayMode` enum
-2. Replace `language_mode` with `display_mode`
-3. Apply the 3-mode cycling logic
-4. Apply the programmatically shared layout pattern
-
----
-
-## Related Documentation
-
-- `CLAUDE.md` - Project overview and architecture
-- `DATA_FORMAT.md` - JSON data format specifications (translations.json structure)
-- `constants.py` - Timing constant `STATION_DISPLAY_INTERVAL = 2`
-
----
-
-## Notes for Integration (When Ready)
-
-**DO NOT integrate until user has finalized styling in preview script.**
-
-When the user confirms the preview is ready for integration:
-1. Compare `preview_upper_lcd.py` with `display.py` to identify all changes
-2. Port the 3-mode system to `display.py`
-3. Ensure English translations are loaded from `translations.json`
-4. Test thoroughly before committing
-
----
-
-## Major Refactor: Modular Display Architecture (2026-03-07)
-
-**Status:** COMPLETED
-
-The display system has been completely refactored from a monolithic `preview_upper_lcd.py` to a **modular, multi-train-model architecture** that supports:
-- Multiple train models (E235-1000, E231-500, etc.) with different display styles
-- Separate Upper LCD and Lower LCD implementations per train model
-- Clean separation of display modes (KANJI, FURIGANA, ENGLISH) into independent renderer classes
-
----
-
-### Architecture Overview
+## Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Factory Layer (displays/)                                  │
 │  - get_train_display() returns model-specific display       │
+│  - DisplayMode enum (KANJI, FURIGANA, ENGLISH)              │
+│  - ModeCycler (handles mode switching timing)               │
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
 │  Train Model Layer (displays/train_models/e235_1000/)      │
 │  - UpperDisplay (manager)                                   │
-│  - LowerDisplay (manager, placeholder)                      │
+│  - LowerDisplay (placeholder - not yet implemented)         │
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -276,15 +45,16 @@ The display system has been completely refactored from a monolithic `preview_upp
 
 ---
 
-### File Structure
+## File Structure
 
 ```
 displays/
 ├── __init__.py              # Package entry point
 │   # Exports: DisplayMode, ModeCycler, get_train_display
 ├── base.py                  # Shared utilities
-│   - DisplayMode (IntEnum: KANJI, FURIGANA, ENGLISH)
+│   - DisplayMode (IntEnum: KANJI=0, FURIGANA=1, ENGLISH=2)
 │   - ModeCycler (handles mode switching timing)
+├── utils.py                 # Shared drawing utilities
 └── train_models/
     ├── __init__.py          # Factory registry
     │   - TRAIN_DISPLAYS dict, get_train_display()
@@ -301,7 +71,7 @@ displays/
 
 ---
 
-### Naming Conventions
+## Naming Conventions
 
 | Level | Pattern | Example |
 |-------|---------|---------|
@@ -314,51 +84,107 @@ displays/
 
 ---
 
-### Mode Renderer Classes
+## Mode Renderer Design
 
-Each mode renderer is **self-contained** with its own fonts, positions, and drawing logic:
+Each mode renderer (`JapaneseDisplay`, `FuriganaDisplay`, `EnglishDisplay`) is **self-contained**:
+
+- **Fonts** are shared as class members (defined in `__init__`)
+- **Position constants** are inlined in each method (not shared)
+- **Destinations** stay as kanji in KANJI/FURIGANA modes (IRL behavior)
+- **English mode** uses "Bound for" prefix + English destination
+
+### Example: JapaneseDisplay
 
 ```python
-# displays/train_models/e235_1000/upper_lcd.py
-
 class JapaneseDisplay:
     """Upper LCD Japanese (KANJI) rendering for E235-1000."""
 
     def __init__(self, screen, route_data, stops):
-        # E235-1000 specific fonts
+        # Fonts are shared (defined once in __init__)
+        self.font_type_bold = pygame.font.SysFont("shingopr6nheavy", 26, bold=True, italic=True)
         self.font_dest = pygame.font.SysFont("shingopr6nmedium", 35)
-        self.dest_box_x, self.dest_box_y = 15, 50
-        # ... positions, colors
+        self.font_prefix = pygame.font.SysFont("shingopr6nmedium", 25)
+        self.font_station = pygame.font.SysFont("shingopr6nmedium", 78)
+        self.font_clock = pygame.font.SysFont("helveticaneueroman", 26)
+        self.font_suffix = pygame.font.SysFont("shingopr6nmedium", 18)
 
-    def draw_destination(self, dest_text, route_name):
-        # Japanese layout: kanji dest + suffix on right
-        ...
-
-class FuriganaDisplay:
-    """Upper LCD Furigana rendering for E235-1000."""
-    # Inherits same structure, overrides prefix/station for furigana
-    # Destination stays as kanji (same as JapaneseDisplay)
-
-class EnglishDisplay:
-    """Upper LCD English rendering for E235-1000."""
-
-    def __init__(self, screen, route_data, stops):
-        # E235-1000 specific English fonts
-        self.font_dest = pygame.font.SysFont("helveticaneuebold", 33)
-        self.font_suffix = pygame.font.SysFont("helveticaneuemedium", 20)  # "Bound for"
-        # English-specific positions (suffix becomes prefix)
-        self.suffix_x_offset = -20  # Negative = appears before dest
-
-    def draw_destination(self, dest_text, route_name):
-        # English layout: "Bound for" prefix + English dest
-        # Handles multiline: "Ikebukuro&\nShinjuku"
+    def draw_station(self, station_text: str) -> None:
+        # Position constants are inline (not shared)
+        name_x = int(S_WIDTH * 0.40)
+        max_width = S_WIDTH * 0.54
+        # ... drawing logic
 ```
 
 ---
 
-### Manager Class (UpperDisplay)
+## 3-Mode Cycling System
 
-The manager handles mode cycling and delegates all rendering:
+### DisplayMode Enum
+
+```python
+class DisplayMode(IntEnum):
+    """Display modes for Upper LCD - cycles through all 3 modes."""
+    KANJI = 0      # Japanese kanji
+    FURIGANA = 1   # Japanese furigana (phonetic)
+    ENGLISH = 2    # English romanized (Hepburn with macrons)
+```
+
+### Cycling Behavior
+
+| Time | Display Mode | Prefix | Station Name |
+|------|--------------|--------|--------------|
+| 0-2s | KANJI | 次は | 東京 |
+| 2-4s | FURIGANA | つぎは | とうきょう |
+| 4-6s | ENGLISH | Next | Tōkyō |
+| 6-8s | KANJI | 次は | 東京 |
+
+**Graceful fallback:** If a station lacks furigana or English data, that mode is skipped in the cycle.
+
+---
+
+## Data Files
+
+### translations.json (Station Names)
+
+```json
+{
+    "東京": {
+        "furigana": "とうきょう",
+        "english": "Tōkyō"
+    },
+    "品川・東京": {
+        "english": "Shinagawa&\nTōkyō"
+    }
+}
+```
+
+- Keys are Japanese station names (kanji/kana)
+- `english` field uses Hepburn romanization with macrons (ō, ū)
+- Compound destinations use `"&\n"` for multiline (e.g., `"Shinagawa&\nTōkyō"`)
+
+### train_types.json (Train Type Names)
+
+```json
+{
+    "快速": {
+        "english": "Rapid"
+    },
+    "中央特快": {
+        "english": "Chūō Special Rapid",
+        "english_short": "Chūō Sp. Rapid"
+    }
+}
+```
+
+- `english_short` is optional - used for narrow display boxes
+- Falls back to `english` if `english_short` doesn't exist
+- Falls back to Japanese train type if neither exists
+
+---
+
+## Manager Class (UpperDisplay)
+
+The manager handles mode cycling and delegates rendering:
 
 ```python
 class UpperDisplay:
@@ -377,112 +203,165 @@ class UpperDisplay:
             DisplayMode.ENGLISH: self.english_display,
         })
 
-    def update(self, current_time):
-        self.mode_cycler.update(current_time)  # Handles cycling
+        # Load translations
+        self.translations = load_json_relative("data/translations.json")
+        self.train_types = load_json_relative("data/train_types.json")
 
-    def draw(self, current_time_str):
+    def set_state(self, curr_stop: int, cnt_pa: int) -> None:
+        """Update display state (current stop and PA count)."""
+        self.curr_stop = curr_stop
+        self.cnt_pa = cnt_pa
+
+    def update(self, current_time: float = None) -> None:
+        """Update mode cycling."""
+        self.mode_cycler.update(current_time)
+
+    def draw(self, current_time_str: str = None) -> None:
+        """Draw the upper display with current mode's renderer."""
         display = self.mode_cycler.get_current_display()
+        display.draw_train_type(...)
         display.draw_destination(...)
         display.draw_prefix(...)
         display.draw_station(...)
+        display.draw_clock(...)
 ```
 
 ---
 
-### Key Design Decisions
+## Integration with Main Application
 
-1. **Duplication OK:** Each mode renderer defines its own fonts/positions. JapaneseDisplay and FuriganaDisplay are ~90% similar but separate for flexibility.
-
-2. **No shared mode renderers across train models:** E235-1000's `JapaneseDisplay` is completely independent from future E231-500's `JapaneseDisplay`. Different trains have different layouts.
-
-3. **Destination/Suffix behavior:**
-   - **KANJI/FURIGANA:** Destination stays as kanji, suffix (ゆき/方面) on right
-   - **ENGLISH:** Destination shows English, "Bound for" prefix appears before destination
-
-4. **Centralized translations:** All displays load from `data/translations.json` (station names, destinations, prefixes). Prefix translations (次は/まもなく/ただいま → English/furigana) are defined inline in the display classes.
-
-5. **Graceful fallback:** If station lacks English/furigana data, that mode is skipped in cycling
-
----
-
-### Usage Examples
+### app.py
 
 ```python
-# Option 1: Factory (for Upper LCD)
+from displays.train_models.e235_1000 import UpperDisplay
+from display import LowerDisplay  # Old display.py until LowerDisplay is refactored
+
+class PASimulator:
+    def __init__(self, work_dir: str, route_data: Optional[Dict] = None):
+        # ...
+        self.upper = UpperDisplay(self.screen, self.route_data, self.stops)
+        self.lower = LowerDisplay(self.screen, self.route_data, self.state, self.stops)
+
+    def run(self) -> None:
+        while self.running:
+            timestamp = time.time()
+
+            # Update and draw upper display
+            self.upper.update(timestamp)
+            self.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
+
+            # Update lower display
+            self.lower.show_stops(current_time=timestamp)
+```
+
+### Key Changes from Legacy display.py
+
+| Old Method | New Method |
+|------------|------------|
+| `draw_init()` | `set_state()` + `draw()` |
+| `draw_clock(timestamp)` | `update(timestamp)` + `draw(time_str)` |
+| `draw_current_station()` | `set_state()` + `draw()` |
+| State in `self.state` | Internal state + `set_state()` API |
+
+---
+
+## Usage Examples
+
+```python
+# Option 1: Direct import (recommended for single train model)
+from displays.train_models.e235_1000 import UpperDisplay
+upper = UpperDisplay(screen, route_data, stops)
+upper.set_state(curr_stop=0, cnt_pa=0)
+upper.update(timestamp)
+upper.draw()
+
+# Option 2: Factory (for multiple train models)
 from displays import get_train_display
 display = get_train_display("e235_1000", screen, route_data, stops)
-display.update()
+display.update(timestamp)
 display.draw()
-
-# Option 2: Direct import (gives both Upper and Lower)
-from displays.train_models.e235_1000 import UpperDisplay, LowerDisplay
-upper = UpperDisplay(screen, route_data, stops)
-lower = LowerDisplay(screen, route_data, stops)
 ```
 
 ---
 
-### Adding New Train Model
+## Adding New Train Model
 
-1. Create `displays/train_models/e231_500/` directory
-2. Copy `upper_lcd.py` → modify fonts/positions for E231-500
-3. Implement `lower_lcd.py` with LowerDisplay
+1. Create `displays/train_models/{model_name}/` directory
+2. Copy `upper_lcd.py` → modify fonts/positions for the new train model
+3. Implement `lower_lcd.py` with `LowerDisplay`
 4. Create `__init__.py` exporting `UpperDisplay`, `LowerDisplay`
 5. Register in `displays/train_models/__init__.py`:
    ```python
-   TRAIN_DISPLAYS["e231_500"] = E231_500UpperDisplay
+   TRAIN_DISPLAYS["{model_name}"] = {ModelName}UpperDisplay
    ```
 
 ---
 
-### Files Modified/Created
+## Design Decisions
 
-**Created:**
-- `displays/__init__.py` - Package entry
-- `displays/base.py` - DisplayMode, ModeCycler
-- `displays/train_models/__init__.py` - Factory
+1. **Duplication OK:** Mode renderers may have ~90% similar code, but are separate for flexibility. Different trains may need different layouts.
+
+2. **No shared mode renderers across train models:** E235-1000's `JapaneseDisplay` is independent from future E231-500's `JapaneseDisplay`.
+
+3. **Position constants inlined:** Position values are local to each method (not shared as `self.xxx`), making it clear they're method-specific.
+
+4. **Fonts shared:** Fonts are defined once in `__init__` and reused across methods.
+
+5. **Destination always kanji:** In KANJI/FURIGANA modes, destination stays as kanji (IRL behavior).
+
+6. **English suffix becomes prefix:** In ENGLISH mode, "Bound for" appears before the destination.
+
+7. **Centralized translations:** All displays load from `data/translations.json` and `data/train_types.json`.
+
+---
+
+## Files
+
+**Core Module Files:**
+- `displays/__init__.py` - Package entry point
+- `displays/base.py` - DisplayMode enum, ModeCycler class
+- `displays/utils.py` - Shared drawing utilities
+- `displays/train_models/__init__.py` - Factory registry
 - `displays/train_models/e235_1000/__init__.py` - Module exports
 - `displays/train_models/e235_1000/upper_lcd.py` - Upper LCD implementation
 - `displays/train_models/e235_1000/lower_lcd.py` - Lower LCD placeholder
 
-**Updated:**
-- `preview_upper_lcd.py` - Now uses new architecture
+**Data Files:**
+- `data/translations.json` - Station names (furigana, english)
+- `data/train_types.json` - Train type translations
 
-**Deleted:**
-- `displays/train_models/e235_1000.py` - Replaced by directory structure
+**Preview Script:**
+- `preview_upper_lcd.py` - Standalone preview for testing (uses new architecture)
 
 ---
 
-### Testing
+## Testing
 
 ```bash
-# Run preview script (uses new architecture)
+# Run preview script
 uv run preview_upper_lcd.py
 
 # Test imports
 python -c "from displays import get_train_display, DisplayMode; print('OK')"
+python -c "from displays.train_models.e235_1000 import UpperDisplay; print('OK')"
 ```
 
-**Controls:**
+**Controls (preview script):**
 - Page Down: Next station
 - Page Up: Next PA
 - ESC: Quit
 
----
-
-### Migration Path to main.py
-
-The current `main.py` and `display.py` still use the old monolithic structure. When ready to integrate:
-
-1. Replace `display.py` UpperDisplay with `displays.train_models.e235_1000.UpperDisplay`
-2. Update `main.py` to use factory: `get_train_display(train_model, ...)`
-3. Remove old display cycling code from `display.py`
-4. Update CLAUDE.md with new architecture
+**Observe:**
+- Display cycles through KANJI → FURIGANA → ENGLISH every 2 seconds
+- Prefix and station name update together on mode switch
+- English train type uses `english_short` if available (for narrow box)
 
 ---
 
 ## Related Documentation
 
-- `CLAUDE.md` - Project overview (updated with new file structure)
+- `CLAUDE.md` - Project overview (updated with new architecture)
 - `DATA_FORMAT.md` - JSON data format specifications
 - `displays/base.py` - ModeCycler implementation details
+- `data/translations.json` - Station translation database
+- `data/train_types.json` - Train type translation database

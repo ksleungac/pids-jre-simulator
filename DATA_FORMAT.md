@@ -11,7 +11,8 @@ This document defines the JSON data formats used by the PA Simulator for route c
 ```
 project_root/
 ├── data/
-│   └── translations.json        # Central translation database (furigana, english)
+│   ├── translations.json        # Central translation database (furigana, english)
+│   └── train_types.json         # Train type English translations (with optional english_short)
 └── audio/
     ├── [line]/                  # Line name (e.g., chuo, keihin, saikyo)
     │   ├── stations.json        # Line-specific station data (interchange, facilities, etc.)
@@ -166,6 +167,83 @@ This matches real-world behavior where the "bound for" destination changes based
 
 ---
 
+## train_types.json Format (Train Type Translations)
+
+**Location:** `data/train_types.json` (project root)
+
+### Purpose
+
+English translations for train type names (列車種別). Unlike stations, train types do **not** have furigana since they are only displayed in kanji or English.
+
+### Structure
+
+```json
+{
+    "快速": {
+        "english": "Rapid"
+    },
+    "中央特快": {
+        "english": "Chūō Special Rapid",
+        "english_short": "Chūō Sp. Rapid"
+    },
+    "普通": {
+        "english": "Local"
+    },
+    "内回り": {
+        "english": "Inner Loop"
+    },
+    "外回り": {
+        "english": "Outer Loop"
+    }
+}
+```
+
+### Key Format
+
+| Pattern | Use Case | Example |
+|---------|----------|---------|
+| `[Japanese train type]` | Any train type name | `快速`, `普通`, `内回り`, `外回り` |
+
+### Value Fields
+
+| Field | Description | Required |
+|-------|-------------|----------|
+| `english` | Full English translation | Yes |
+| `english_short` | Abbreviated version for narrow display boxes | No |
+
+### english_short Fallback
+
+The `english_short` field is optional and used for narrow train type display boxes (150px wide on E235-1000):
+
+1. Check for `english_short` first (if available)
+2. Fall back to `english` if `english_short` doesn't exist
+3. Fall back to Japanese kanji if neither exists
+
+**Example:**
+```json
+{
+    "中央特快": {
+        "english": "Chūō Special Rapid",
+        "english_short": "Chūō Sp. Rapid"
+    }
+}
+```
+
+- Full English (18 chars): "Chūō Special Rapid" - may not fit in narrow box
+- Short English (15 chars): "Chūō Sp. Rapid" - fits comfortably
+
+### English Translation Convention
+
+Train type English translations follow the same **modified Hepburn romanization with macrons** as station names:
+
+| Train Type | English | Notes |
+|------------|---------|-------|
+| 中央特快 | Chūō Special Rapid | "ō" for long vowel |
+| 通勤特快 | Commuter Special Rapid | No macrons needed |
+| 各駅停車 | Local | Standard translation |
+
+---
+
 ## stations.json Format (Line-Specific Data)
 
 **Location:** `audio/[line]/stations.json`
@@ -310,43 +388,6 @@ Each stop in the `stops` array:
 
 ---
 
-## stations.json Format (Line-Specific Data)
-
-**Location:** `audio/[line]/stations.json`
-
-### Purpose
-
-Line-specific station data that is **not** related to translations:
-- Interchange lines
-- Station facilities (elevators, escalators)
-- Exit information
-- Future line-specific features
-
-**Note:** Translation data (furigana, english) has been moved to `data/translations.json`.
-
-### Structure
-
-```json
-{
-    "JC01": {},
-    "JC02": {},
-    "name_蘇我": {}
-}
-```
-
-**Note:** Currently keys are placeholders for future line-specific data. Values are empty objects `{}`.
-
-### Key Format
-
-| Pattern | Use Case | Example |
-|---------|----------|---------|
-| `[Prefix][Number]` | Stations with official JR codes | `JC01`, `JK47`, `JA08` |
-| `name_駅名` | Stations without official codes | `name_蘇我`, `name_日進` |
-
-**Important:** These keys are for **line-specific data organization**, not translation lookup.
-
----
-
 ## Supported Lines (as of 2026-03-03)
 
 All lines share the central `data/translations.json` for translations. Line-specific `stations.json` files are placeholders for future line-specific data.
@@ -366,10 +407,12 @@ All lines share the central `data/translations.json` for translations. Line-spec
 
 1. **Separation of translations and line-specific data:**
    - `data/translations.json`: Central furigana/english translations (keyed by Japanese text)
+   - `data/train_types.json`: Train type English translations (optional `english_short` for narrow boxes)
    - `audio/[line]/stations.json`: Line-specific data (keyed by sta_code or name_)
 
 2. **Translation lookup:**
    - By station name: `"東京"` → `translations.json["東京"]`
+   - By train type: `"快速"` → `train_types.json["快速"]`
 
 3. **Empty values:**
    - No PA: `"pa": []`
@@ -399,6 +442,7 @@ Use this checklist when adding or modifying route data to ensure consistency.
 ### Manual Checklist
 
 - [ ] **data/translations.json exists** and contains translations for all station names
+- [ ] **data/train_types.json exists** and contains translations for train types used in routes
 - [ ] **dest_furigana** is present in route.json (exactly once, at route level)
 - [ ] **sta_code** is present in every stop (value or `null`)
 - [ ] **sta_code format** is simple (e.g., `JC05`, not `JC05_SJK`)
@@ -408,6 +452,7 @@ Use this checklist when adding or modifying route data to ensure consistency.
 - [ ] **No duplicate keys** in JSON files (especially `dest_furigana`)
 - [ ] **PA tracks** are assigned to correct stations (do not renumber subsequent stations when modifying)
 - [ ] **Station names in route.json** have entries in `data/translations.json`
+- [ ] **Train types in route.json** have entries in `data/train_types.json` (optional, falls back to kanji)
 
 ### Automated Validation Script
 
@@ -437,6 +482,16 @@ if os.path.exists(translations_file):
 else:
     print('ERROR: data/translations.json missing!')
     translations = {}
+
+# Load train type translations
+train_types_file = 'data/train_types.json'
+if os.path.exists(train_types_file):
+    with open(train_types_file, encoding='utf-8') as f:
+        train_types = json.load(f)
+    print(f'Train types train_types.json: OK ({len(train_types)} entries)')
+else:
+    print('WARNING: data/train_types.json missing (train types will fall back to kanji)')
+    train_types = {}
 
 # Pattern to detect if sta_code has a suffix (wrong!)
 suffix_pattern = re.compile(r'_[A-Z]{2,}$')  # e.g., _OSK, _SBY, _TYO
@@ -485,6 +540,11 @@ def validate_route(route_file, stations_db):
     if 'dest_furigana' not in data:
         issues.append('Missing dest_furigana at route level')
 
+    # Check train type translation exists
+    route_type = data.get('type', '')
+    if route_type and route_type not in train_types:
+        issues.append(f'Train type "{route_type}": No translation in data/train_types.json (will fall back to kanji)')
+
     # Check stops
     for i, stop in enumerate(data.get('stops', [])):
         name = stop.get('name', '?')
@@ -525,6 +585,7 @@ print('\nValidation complete.')
 === PA Simulator Data Validation ===
 
 Central translations.json: OK (120 entries)
+Train types train_types.json: OK (10 entries)
 
 === CHUO Line ===
   stations.json: OK (24 entries)

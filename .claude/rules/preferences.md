@@ -14,3 +14,9 @@
 
 ## Tooling
 - Black formatting via pre-commit hook (`.venv/Scripts/python -m black`)
+
+---
+
+## Project Reference
+
+**Implementation notes:** `notes.md` - Critical patterns, edge cases, validation rules, architecture details
