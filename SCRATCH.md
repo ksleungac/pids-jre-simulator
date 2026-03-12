@@ -6,6 +6,14 @@ Recent interaction notes - kept concise, detailed for recent sessions.
 
 ## 2026-03-12
 
+### v0.5.0 Release
+- GitHub Actions workflow: `.github/workflows/release.yml` - auto-builds exe on tag push
+- Bilingual README (EN/中文) with installation, usage, planned features
+- Distribution folder structure (CRITICAL):
+  - EXE must be alongside `audio/`, `data/`, `fonts/` at same directory level
+  - Folders are siblings to exe, not nested inside subfolders
+  - Relative path loading from exe directory
+
 ### Automemory Removal
 - User requested removal of automemory references from skills and documentation
 - Updated `.claude/skills/session-recap/SKILL.md`:

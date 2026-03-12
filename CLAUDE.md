@@ -7,6 +7,8 @@
 **Current Date:** 2026-03-12
 
 **Last Update:**
+- v0.5.0 release: GitHub Actions auto-build workflow, bilingual README
+- Executable distribution: exe must be alongside `audio/`, `data/`, `fonts/` at same level
 - Modular UpperDisplay integrated from `displays/train_models/e235_1000/upper_lcd.py`
 - English train type display with `data/train_types.json` (`english_short` for narrow boxes)
 - Code refactor: inlined position constants, fonts shared as class members
@@ -95,6 +97,29 @@ pids_jre_simulator/
 ```bash
 uv run main.py
 ```
+
+---
+
+## Distribution Folder Structure
+
+**Executable must be placed alongside folders at same level:**
+
+```
+your-folder/
+├── JRE-PA-Simulator.exe
+├── audio/
+│   ├── chuo/
+│   ├── yamanote/
+│   └── ...
+├── data/
+│   ├── translations.json
+│   └── train_types.json
+└── fonts/
+    ├── ShinGoPr6N-Medium.otf
+    └── ...
+```
+
+The exe loads audio/data/fonts relative to its directory - folders must be siblings, not nested.
 
 ---
 

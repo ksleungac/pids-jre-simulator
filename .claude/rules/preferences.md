@@ -3,6 +3,7 @@
 ## Collaboration Style
 - **Discussion-first approach**: Present findings/learnings before making documentation updates
 - User reviews and confirms understanding before changes are committed
+- **No auto-commit**: Never commit during session-recap or other tasks unless explicitly asked
 
 ## Naming Conventions
 - Use "sta" terminology (not "departure_melody" or similar)

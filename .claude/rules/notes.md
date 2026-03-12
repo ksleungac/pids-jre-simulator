@@ -95,6 +95,26 @@
 3. **Circular routes**: First and last station same name (大崎 in Yamanote)
 4. **Multiple PA tracks**: Yellow hint square shown when `len(pa_tracks) > 1`
 5. **STA cut**: Seconds where melody stops and door chime begins
+6. **Distribution folder structure**: EXE must be alongside `audio/`, `data/`, `fonts/` at same level (folders are siblings, not nested)
+
+## Distribution Notes
+
+**Executable folder structure (CRITICAL for release builds):**
+```
+dist-folder/
+├── JRE-PA-Simulator.exe
+├── audio/
+│   ├── chuo/
+│   ├── yamanote/
+│   └── ...
+├── data/
+│   ├── translations.json
+│   └── train_types.json
+└── fonts/
+    └── ...
+```
+- Paths are resolved relative to exe directory
+- Folders must be direct siblings of exe, not nested in subfolders
 
 ## Testing Notes
 
