@@ -1,0 +1,101 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Build executable with PyInstaller
+        run: uv run pyinstaller --onefile --windowed --name "JRE-PA-Simulator" main.py --clean --noconfirm
+
+      - name: Create data package (excluding large audio files)
+        run: |
+          # Create data-only package (users need to clone repo for audio)
+          mkdir data-pack
+          copy data\translations.json data-pack\
+          copy data\train_types.json data-pack\
+          xcopy /E /I fonts data-pack\fonts
+          Compress-Archive -Path data-pack\* -DestinationPath dist\data-pack.zip -Force
+
+      - name: Create release notes
+        id: release_notes
+        run: |
+          $version = "${{ github.ref_name }}"
+          $notes = @"
+          ## Release Highlights
+
+          ### Features
+          - Modular UpperDisplay architecture with 3-mode cycling (KANJI/FURIGANA/ENGLISH)
+          - English train type display with optional short names
+          - Centralized translations in data/translations.json
+          - Real-time countdown timer on lower LCD
+          - Stop-level destination override for circular routes
+
+          ### Installation
+
+          **Required:** Python 3.12+ runtime OR download the complete repository
+
+          1. **Download executable:** JRE-PA-Simulator.exe
+          2. **Download data pack:** data-pack.zip (contains fonts and translation files)
+          3. **Audio files:** Clone/download this repository (audio/ folder is ~475MB)
+
+          ### File Structure
+          \`\`\`
+          JRE-PA-Simulator.exe
+          data-pack/
+          ├── fonts/
+          │   ├── ShinGoPr6N-Medium.otf
+          │   ├── ShinGoPr6N-Heavy.otf
+          │   └── HelveticaNeue-*.otf
+          └── translations.json
+          audio/  (clone from repo)
+          └── [line]/[diagram]/route.json
+          \`\`\`
+
+          ### Full Installation
+          For the complete experience, clone the repository:
+          \`\`\`bash
+          git clone https://github.com/${{ github.repository }}.git
+          cd pids-jre-simulator
+          uv sync
+          uv run main.py
+          \`\`\`
+
+          ### Documentation
+          - CLAUDE.md - Quick reference
+          - DATA_FORMAT.md - Route data format
+          - UPPER_DISPLAY_UPDATE.md - Display architecture
+          "@
+          $notes | Out-File -FilePath release_notes.md -Encoding utf8
+        shell: pwsh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/JRE-PA-Simulator.exe
+            dist/data-pack.zip
+          body_path: release_notes.md
+          generate_release_notes: false
+          verify_tag: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
