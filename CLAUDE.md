@@ -4,13 +4,14 @@
 
 **Japanese Train PA (Public Address) Simulator** - A pygame-based application that simulates train station announcements and arrival melodies with visual LCD display.
 
-**Current Date:** 2026-03-11
+**Current Date:** 2026-03-12
 
 **Last Update:**
 - Modular UpperDisplay integrated from `displays/train_models/e235_1000/upper_lcd.py`
 - English train type display with `data/train_types.json` (`english_short` for narrow boxes)
 - Code refactor: inlined position constants, fonts shared as class members
 - Hepburn romanization with macrons (中央特快 → Chūō Special Rapid)
+- Session scratch log for misc interaction notes
 
 ---
 
@@ -80,13 +81,12 @@ pids_jre_simulator/
 
 ## Critical Notes for Next AI
 
-1. **Dictionary keys are strings** - Use `"english"` not `DisplayMode.ENGLISH` for stop data lookups
-2. **DisplayMode enum internally** - Use enum for mode state tracking, strings for data keys
-3. **Translation lookup** - Keys are raw Japanese text (「東京」), not station codes
-4. **Hepburn macrons** - Long vowels: ō (おう/おお), ū (う)
-5. **Position constants inline** - Method-local variables; fonts as `self.font_xxx` members
-6. **english_short fallback** - Check short → full → kanji
-7. **PYTHONUTF8=1** - Windows console encoding for Japanese output
+**See [.claude/rules/notes.md](.claude/rules/notes.md)** for detailed implementation patterns:
+- Dictionary keys vs enum usage
+- Translation lookup (raw Japanese text keys)
+- Hepburn macrons (ō, ū)
+- Position constants inline, fonts as class members
+- WINDOWS console encoding (`PYTHONUTF8=1`)
 
 ---
 
@@ -101,4 +101,8 @@ uv run main.py
 **Full docs:** [DATA_FORMAT.md](DATA_FORMAT.md) | [UPPER_DISPLAY_UPDATE.md](UPPER_DISPLAY_UPDATE.md)
 
 **Implementation notes:** [.claude/rules/notes.md](.claude/rules/notes.md) - Detailed patterns, edge cases, validation rules
+
+**Preferences:** [.claude/rules/preferences.md](.claude/rules/preferences.md) - User preferences, working style
+
+**Session log:** [SCRATCH.md](SCRATCH.md) - Recent interaction notes (dated, under 200 lines)
 

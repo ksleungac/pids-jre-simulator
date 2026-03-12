@@ -71,17 +71,25 @@ After user approval, update:
 - Conventions section
 - Examples
 
-**Auto Memory (MEMORY.md):**
-- Update "Recent Session Notes" section with what was worked on
-- Add any personal preferences or working style notes learned
-- Keep project specifications in CLAUDE.md, not memory
+**UPPER_DISPLAY_UPDATE.md:**
+- Display architecture updates
+- Integration status
+- Usage examples
 
-### Step 5: Commit
+**.claude/rules/notes.md:**
+- Implementation patterns
+- Edge cases
+- Validation rules
 
-Commit with a descriptive message like:
-```
-docs: Update CLAUDE.md with session discoveries
-```
+**.claude/rules/preferences.md:**
+- User preferences
+- Working style
+- Naming conventions
+
+**SCRATCH.md:**
+- Recent session log
+- Misc interaction notes
+- Keep under 200 lines, date entries, trim old
 
 ---
 
@@ -94,8 +102,6 @@ docs: Update CLAUDE.md with session discoveries
 3. **Preferences matter** - If the user expressed a preference (e.g., "hard-coding is fine", "don't over-engineer"), note it for future sessions.
 
 4. **Be specific** - Instead of "fixed display bug", write "Destination always displays as kanji (no furigana cycling) to match IRL behavior".
-
-5. **Update auto memory** - Always update `MEMORY.md` "Recent Session Notes" section at end of session for session continuity. Keep personal preferences there, project specs in CLAUDE.md.
 
 ---
 
@@ -122,6 +128,10 @@ After a session fixing the Yamanote line destination display:
 ### Documentation Updates Needed
 - CLAUDE.md: Add stop-level dest override section, update known behaviors #10-11, add notes 15-19
 - DATA_FORMAT.md: Document compound destination format, expand stop-level override examples
+- UPPER_DISPLAY_UPDATE.md: Update architecture diagram if applicable
+- .claude/rules/notes.md: Add new edge case if discovered
+- .claude/rules/preferences.md: Update if new preferences expressed
+- SCRATCH.md: Log session highlights with date
 ```
 
 Then wait for user confirmation before proceeding.
