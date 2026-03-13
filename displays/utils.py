@@ -64,10 +64,6 @@ def draw_text_given_width(
         else:
             img = draw_text(text, font, color, x + (width - t_w) // 2, y)
             screen.blit(img, (x + (width - t_w) // 2, y))
-    elif collapse:
-        # Collapse mode for Japanese: render full text centered
-        img = draw_text(text, font, color, x + (width - t_w) // 2, y)
-        screen.blit(img, (x + (width - t_w) // 2, y))
     elif t_w > width:
         # Japanese text too wide - compress character by character
         sep = width / len(text)
@@ -76,6 +72,10 @@ def draw_text_given_width(
             x_coord = x + sep * i
             img = draw_text(char, font, color, int(x_coord), y, h_ratio=hr)
             screen.blit(img, (int(x_coord), y))
+    elif collapse:
+        # Collapse mode for Japanese: render full text centered
+        img = draw_text(text, font, color, x + (width - t_w) // 2, y)
+        screen.blit(img, (x + (width - t_w) // 2, y))
     else:
         # Japanese text fits - add even spacing between characters
         sep = (width - t_w) // (len(text) + 1)

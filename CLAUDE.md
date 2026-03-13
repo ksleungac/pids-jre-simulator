@@ -14,6 +14,8 @@
 - Code refactor: inlined position constants, fonts shared as class members
 - Hepburn romanization with macrons (中央特快 → Chūō Special Rapid)
 - Session scratch log for misc interaction notes
+- Filename-based PA tracks: `pa` array uses descriptive filenames (e.g., `"tokyo_dep"`) instead of sequential numbers
+- Station skip logic fix: single-skip jumps immediately, multi-skip uses two-phase approach
 
 ---
 
@@ -78,6 +80,7 @@ pids_jre_simulator/
 6. Graceful fallback: Skip missing furigana/English modes
 7. Countdown: Full minute rule, forces "1" on last PA
 8. Black formatting: Pre-commit hook
+9. Station skip: Single-skip (1 passing station) jumps directly; multi-skip (2+) uses two-phase approach
 
 ---
 

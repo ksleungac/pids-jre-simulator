@@ -4,6 +4,36 @@ Recent interaction notes - kept concise, detailed for recent sessions.
 
 ---
 
+## 2026-03-13
+
+### Station Skip Logic Bug Fix
+- **Bug**: Single-station skips failed when destination had 2+ PA tracks (e.g., skipping 辻堂 on Tokaido 3535E)
+- **Root cause**: Condition checked `len(pa_tracks) == 1` instead of `skip == 1`
+- **Fix**: `display.py:increment_current_stop_display()` - single-skip jumps directly, multi-skip preserves two-phase
+- Files modified: `display.py` (LowerDisplay class, ~10 lines)
+
+### Audio Cutting & Tokaido 3535E Diagram
+- Created new diagram `audio/tokaido/3535E/` for 快速アクティー (Rapid Acty) service
+- Cut audio from single MP3 using ffmpeg: 34 segments with descriptive filenames
+- PA tracks use filename-based references (e.g., `"tokyo_dep"`, `"shinagawa_arr"`) not sequential numbers
+- Added `快速アクティー` → "Rapid" to `data/train_types.json`
+- Skipped stations (辻堂，大磯，二宮，鴨宮) have `pa: []` but retain `time` values
+
+### ffmpeg Audio Cutting Workflow
+```bash
+# Add dev dependencies
+uv add --dev pydub ffmpeg-python
+
+# Cut audio using ffmpeg subprocess (no re-encoding, copy codec)
+cmd = ['ffmpeg', '-y', '-ss', start_sec, '-i', input_file, '-t', duration, '-c', 'copy', output_file]
+```
+
+### Documentation Updates
+- DATA_FORMAT.md: Documented filename-based PA track naming convention
+- CLAUDE.md: Added note about filename-based PA tracks
+
+---
+
 ## 2026-03-12
 
 ### v0.5.0 Release

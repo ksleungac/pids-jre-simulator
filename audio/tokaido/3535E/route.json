@@ -1,0 +1,173 @@
+{
+    "route": "東海道線",
+    "color": [244, 132, 44],
+    "type_color": [244, 132, 44],
+    "type": "快速アクティー",
+    "dest": "熱海",
+    "stops": [
+        {
+            "name": "東京",
+            "pa": [],
+            "sta": ["JT01_TYO"],
+            "sta_cut": 6,
+            "time": 0,
+            "sta_code": "JT01"
+        },
+        {
+            "name": "新橋",
+            "pa": ["tokyo_dep"],
+            "sta": ["JT02_SMB"],
+            "sta_cut": 11,
+            "time": 2,
+            "sta_code": "JT02"
+        },
+        {
+            "name": "品川",
+            "pa": ["shimbashi_dep", "shinagawa_arr"],
+            "sta": ["JT03_SGW"],
+            "sta_cut": 17,
+            "time": 5,
+            "sta_code": "JT03"
+        },
+        {
+            "name": "川崎",
+            "pa": ["shinagawa_dep", "kawasaki_arr"],
+            "sta": ["JT04_KWS"],
+            "sta_cut": 11,
+            "time": 9,
+            "sta_code": "JT04"
+        },
+        {
+            "name": "横浜",
+            "pa": ["kawasaki_dep", "yokohama_arr"],
+            "sta": ["JT05_YHM"],
+            "sta_cut": 8,
+            "time": 8,
+            "sta_code": "JT05"
+        },
+        {
+            "name": "戸塚",
+            "pa": ["yokohama_dep", "totsuka_arr"],
+            "sta": ["JT06_TTK"],
+            "sta_cut": 11,
+            "time": 10,
+            "sta_code": "JT06"
+        },
+        {
+            "name": "大船",
+            "pa": ["totsuka_dep", "ofuna_arr"],
+            "sta": ["JT07_OFN"],
+            "sta_cut": 11,
+            "time": 6,
+            "sta_code": "JT07"
+        },
+        {
+            "name": "藤沢",
+            "pa": ["ofuna_dep", "fujisawa_arr"],
+            "sta": ["JT08"],
+            "sta_cut": 7,
+            "time": 4,
+            "sta_code": "JT08"
+        },
+        {
+            "name": "辻堂",
+            "pa": [],
+            "sta": ["JT09"],
+            "sta_cut": 14,
+            "sta_code": "JT09"
+        },
+        {
+            "name": "茅ヶ崎",
+            "pa": ["fujisawa_dep", "chigasaki_arr"],
+            "sta": ["JT10"],
+            "sta_cut": 15,
+            "time": 6,
+            "sta_code": "JT10"
+        },
+        {
+            "name": "平塚",
+            "pa": ["chigasaki_dep", "hiratsuka_arr"],
+            "sta": ["JT11"],
+            "sta_cut": 17,
+            "time": 5,
+            "sta_code": "JT11"
+        },
+        {
+            "name": "大磯",
+            "pa": [],
+            "sta": ["JT12"],
+            "sta_cut": 11,
+            "sta_code": "JT12"
+        },
+        {
+            "name": "二宮",
+            "pa": [],
+            "sta": ["JT13"],
+            "sta_cut": 15,
+            "sta_code": "JT13"
+        },
+        {
+            "name": "国府津",
+            "pa": ["hiratsuka_dep", "kozu_arr"],
+            "sta": ["JT14"],
+            "sta_cut": 18,
+            "time": 10,
+            "sta_code": "JT14"
+        },
+        {
+            "name": "鴨宮",
+            "pa": [],
+            "sta": ["JT15"],
+            "sta_cut": 11,
+            "sta_code": "JT15"
+        },
+        {
+            "name": "小田原",
+            "pa": ["kozu_dep", "odawara_arr"],
+            "sta": ["JT16"],
+            "sta_cut": 15,
+            "time": 6,
+            "sta_code": "JT16"
+        },
+        {
+            "name": "早川",
+            "pa": ["odawara_dep", "hayakawa_arr"],
+            "sta": ["JT17"],
+            "sta_cut": 16,
+            "time": 3,
+            "sta_code": "JT17"
+        },
+        {
+            "name": "根府川",
+            "pa": ["hayakawa_dep", "nebukawa_arr"],
+            "sta": ["JT18"],
+            "sta_cut": 10,
+            "time": 5,
+            "sta_code": "JT18"
+        },
+        {
+            "name": "真鶴",
+            "pa": ["nebukawa_dep", "manazuru_arr"],
+            "sta": ["JT19"],
+            "sta_cut": 10,
+            "time": 5,
+            "sta_code": "JT19"
+        },
+        {
+            "name": "湯河原",
+            "pa": ["manazuru_dep", "yugawara_arr"],
+            "sta": ["JT20"],
+            "sta_cut": 10,
+            "time": 4,
+            "sta_code": "JT20"
+        },
+        {
+            "name": "熱海",
+            "pa": ["yugawara_dep", "atami_arr"],
+            "sta": ["JT21"],
+            "sta_cut": 6,
+            "time": 4,
+            "sta_code": "JT21"
+        }
+    ]
+}

@@ -17,6 +17,9 @@ dependencies = [
 [dependency-groups]
 dev = [
     "black>=26.1.0",
+    "ffmpeg>=1.4",
+    "ffmpeg-python>=0.2.0",
+    "pydub>=0.25.1",
     "pyinstaller>=6.19.0",
 ]
 

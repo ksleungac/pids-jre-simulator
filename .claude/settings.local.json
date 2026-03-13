@@ -10,7 +10,8 @@
       "WebFetch(domain:en.wikipedia.org)",
       "Bash(python:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(ls -la \"C:/Users/oscar/.claude/projects/D--pids-jre-simulator/memory/\" 2>/dev/null || dir \"C:\\\\Users\\\\oscar\\\\.claude\\\\projects\\\\D--pids-jre-simulator\\\\memory\" 2>&1)"
     ]
   },
   "skipWebFetchPreflight": true

@@ -327,34 +327,43 @@ Each stop in the `stops` array:
 | Value | Meaning |
 |-------|---------|
 | `[]` | No PA announcement - train doesn't stop OR first station |
-| `["1"]` | Single PA track |
-| `["1", "2"]` | Multiple PA tracks (user cycles with Page Down) |
+| `["tokyo_dep"]` | Single PA track using filename |
+| `["tokyo_dep", "shinagawa_arr"]` | Multiple PA tracks using filenames |
 
-**PA Track Numbering Convention:**
+**PA Track Filename Convention:**
 
-- PA tracks are numbered sequentially across the route (1, 2, 3, ...)
-- Track numbers correspond to `audio/[line]/[diagram]/pa/[number].mp3` files
-- General pattern (varies by route):
-  - Track 1 at a station = "Next station is [Station]" (played after departing previous station)
-  - Track 2 at a station = "Arriving at [Station]" (played when approaching)
-  - Subsequent tracks = departure announcements, connecting trains, safety messages, etc.
-- First station may have `["1"]` for pre-departure announcement (played while stopped at platform)
+The `pa` array contains **descriptive filenames** (without `.mp3` extension) that map directly to audio files in the `pa/` folder:
 
-**Important:** The `pa` array defines which tracks belong to which station. When modifying route data:
-- Only add/remove/reassign PA tracks at the specific station being edited
-- Do NOT renumber subsequent stations' PA tracks
-- Example: If moving track 1 from Station B to Station A, only change those two stations; leave Station C's tracks unchanged even if numbering becomes non-sequential
+- Track reference `"tokyo_dep"` → `audio/[line]/[diagram]/pa/tokyo_dep.mp3`
+- Allows meaningful names like `{station}_{dep|arr}` instead of sequential numbers
+- Common pattern:
+  - `{station}_dep` = Departure announcement (played after departing, announcing next station)
+  - `{station}_arr` = Arrival announcement (played when approaching station)
+
+**Example:**
+```json
+{
+    "name": "品川",
+    "pa": ["shimbashi_dep", "shinagawa_arr"],  // shimbashi_dep.mp3, shinagawa_arr.mp3
+    "sta": ["JT03_SGW"],
+    "sta_cut": 17,
+    "time": 5,
+    "sta_code": "JT03"
+}
+```
+
+**Skipping Stations:**
+Stations with empty `pa: []` are skipped automatically (train passes through without stopping). The `time` field should still be set for proper countdown behavior between active stops.
 
 ```json
-// Before (track 1 incorrectly at Shinbashi):
-"東京": { "pa": [] }
-"新橋": { "pa": ["1", "2"] }
-"品川": { "pa": ["3", "4"] }
-
-// After (track 1 moved to Tokyo):
-"東京": { "pa": ["1"] }      // Only this station changed
-"新橋": { "pa": ["2"] }      // Only this station changed
-"品川": { "pa": ["3", "4"] } // Unchanged - do NOT renumber to ["2", "3"]
+{
+    "name": "辻堂",
+    "pa": [],        // Empty = train skips this station
+    "sta": ["JT09"],
+    "sta_cut": 14,
+    "time": 3,       // Still countdowns, but doesn't stop
+    "sta_code": "JT09"
+}
 ```
 
 #### `sta` Array (STA Melodies)

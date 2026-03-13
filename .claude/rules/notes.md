@@ -31,6 +31,14 @@
 - Last PA behavior: Forces display to "1" (arriving now)
 - `departure_time` set when `curr_stop` increments (train departs)
 
+### Station Skip Logic (LowerDisplay)
+- **Single-skip** (1 passing station): `curr_stop_disp` jumps directly to next station with PA, `skip = 0`
+- **Multi-skip** (2+ passing stations): Two-phase approach
+  - Phase 1 (`cnt_pa == 0`): Set `skip` count, keep `curr_stop_disp` at first passing station
+  - Phase 2 (`cnt_pa >= 1`): Complete jump via `curr_stop_disp += skip - 1`
+- **Rationale**: `draw_marks()` uses `effective_idx = i - skip` to compensate for multi-skip highlighting
+- **Bug pattern**: Original code checked `len(pa_tracks) == 1` instead of `skip == 1`, breaking single-skip for stations with 2+ PA tracks
+
 ### PA Track Numbering
 - Tracks numbered sequentially across route (1, 2, 3, ...)
 - When modifying: Only change affected stations, don't renumber subsequent stations
