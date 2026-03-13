@@ -726,9 +726,15 @@ class LowerDisplay:
                     i += 1
                 self.state.skip = i - self.state.curr_stop_disp
 
-                if i < len(f_stops) and len(f_stops[i].get("pa", [])) == 1:
+                if self.state.skip == 1:
+                    # Single skip: jump directly to next station with PA
                     self.state.curr_stop_disp += self.state.skip
                     self.state.skip = 0
+                else:
+                    # Multi-skip: keep curr_stop_disp at first passing station,
+                    # use effective_idx compensation in draw_marks.
+                    # Second PA call will complete the skip via line 738.
+                    pass
             elif self.state.cnt_pa >= 1:
                 self.state.curr_stop_disp += self.state.skip - 1
                 self.state.skip = 0
