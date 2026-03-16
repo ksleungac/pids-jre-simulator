@@ -1,6 +1,6 @@
 # Upper LCD Display System - Modular Architecture
 
-**Date:** 2026-03-11 (Updated)
+**Date:** 2026-03-14 (Updated)
 
 **Status:** COMPLETED & INTEGRATED
 
@@ -8,14 +8,16 @@
 
 ## Overview
 
-The Upper LCD display system uses a **modular, multi-train-model architecture** with **3-mode cycling** (KANJI → FURIGANA → ENGLISH). The system is fully integrated into the main application.
+The Upper LCD display system uses a **modular, multi-train-model architecture** with **mode cycling** (KANJI → FURIGANA → ENGLISH). The system is fully integrated into the main application.
 
 **Key features:**
 - Multiple train models (E235-1000, future E231-500, etc.) with different display styles
-- 3-mode display cycling every 2 seconds
+- Display mode cycling every 2 seconds (English mode currently disabled until fonts verified)
 - Graceful fallback when furigana/English data is unavailable
 - English train type display with optional `english_short` for narrow boxes
 - Centralized translations in `data/translations.json` and `data/train_types.json`
+- **Font loading:** Uses `pygame.font.Font()` with direct file paths for cross-platform compatibility (avoids Windows font registry issues on non-English systems)
+- **JSON loading:** Uses `sys.executable` for path resolution in PyInstaller exe (avoids temp folder issues)
 
 ---
 
@@ -88,7 +90,7 @@ displays/
 
 Each mode renderer (`JapaneseDisplay`, `FuriganaDisplay`, `EnglishDisplay`) is **self-contained**:
 
-- **Fonts** are shared as class members (defined in `__init__`)
+- **Fonts** are shared as class members (defined in `__init__`) - use `pygame.font.Font()` with file paths
 - **Position constants** are inlined in each method (not shared)
 - **Destinations** stay as kanji in KANJI/FURIGANA modes (IRL behavior)
 - **English mode** uses "Bound for" prefix + English destination
@@ -100,13 +102,15 @@ class JapaneseDisplay:
     """Upper LCD Japanese (KANJI) rendering for E235-1000."""
 
     def __init__(self, screen, route_data, stops):
-        # Fonts are shared (defined once in __init__)
-        self.font_type_bold = pygame.font.SysFont("shingopr6nheavy", 26, bold=True, italic=True)
-        self.font_dest = pygame.font.SysFont("shingopr6nmedium", 35)
-        self.font_prefix = pygame.font.SysFont("shingopr6nmedium", 25)
-        self.font_station = pygame.font.SysFont("shingopr6nmedium", 78)
-        self.font_clock = pygame.font.SysFont("helveticaneueroman", 26)
-        self.font_suffix = pygame.font.SysFont("shingopr6nmedium", 18)
+        # Fonts are shared (defined once in __init__) - load from fonts/ folder
+        self.font_type_bold = pygame.font.Font("fonts/ShinGoPr6N-Heavy.otf", 26)
+        self.font_type_bold.set_bold(True)
+        self.font_type_bold.set_italic(True)
+        self.font_dest = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 35)
+        self.font_prefix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 25)
+        self.font_station = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 78)
+        self.font_clock = pygame.font.Font("fonts/HelveticaNeue-Roman.otf", 26)
+        self.font_suffix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 18)
 
     def draw_station(self, station_text: str) -> None:
         # Position constants are inline (not shared)
@@ -114,6 +118,13 @@ class JapaneseDisplay:
         max_width = S_WIDTH * 0.54
         # ... drawing logic
 ```
+
+### Font Loading Note
+
+All mode renderers use `pygame.font.Font()` with direct file paths instead of `pygame.font.SysFont()`:
+- **Reason:** `SysFont()` scans Windows font registry, which can fail on non-English Windows systems (Chinese, Japanese locale)
+- **Solution:** Load fonts directly from `fonts/` folder using relative paths
+- **Distribution:** `fonts/` folder must be placed alongside the exe at runtime
 
 ---
 
@@ -138,7 +149,26 @@ class DisplayMode(IntEnum):
 | 4-6s | ENGLISH | Next | Tōkyō |
 | 6-8s | KANJI | 次は | 東京 |
 
+**Note:** English mode is currently disabled (as of 2026-03-14) until font loading is verified. Default mode is KANJI with KANJI → FURIGANA cycling.
+
 **Graceful fallback:** If a station lacks furigana or English data, that mode is skipped in the cycle.
+
+### JSON Loading (PyInstaller exe compatibility)
+
+The `load_json_relative()` function uses `sys.executable` for path resolution when running as a compiled exe:
+
+```python
+def get_base_dir() -> Path:
+    """Get base directory - works for both dev and PyInstaller exe."""
+    if getattr(sys, "frozen", False):
+        # Running as compiled exe - use exe directory
+        return Path(sys.executable).parent
+    else:
+        # Running as script - go up 4 levels from this file
+        return Path(__file__).parent.parent.parent.parent
+```
+
+**Reason:** In PyInstaller one-file exe, `__file__` points to temp extraction folder (`_MEIxxxxx`), not the actual exe location. Using `sys.executable` ensures JSON files are loaded from the exe directory at runtime.
 
 ---
 
@@ -196,14 +226,14 @@ class UpperDisplay:
         self.furigana_display = FuriganaDisplay(screen, route_data, stops)
         self.english_display = EnglishDisplay(screen, route_data, stops)
 
-        # Initialize mode cycler
+        # Initialize mode cycler (ENGLISH disabled until fonts verified)
         self.mode_cycler = ModeCycler({
             DisplayMode.KANJI: self.japanese_display,
             DisplayMode.FURIGANA: self.furigana_display,
-            DisplayMode.ENGLISH: self.english_display,
-        })
+            # DisplayMode.ENGLISH: self.english_display,  # DISABLED
+        }, default_mode=DisplayMode.KANJI)
 
-        # Load translations
+        # Load translations (uses sys.executable for exe compatibility)
         self.translations = load_json_relative("data/translations.json")
         self.train_types = load_json_relative("data/train_types.json")
 
@@ -330,8 +360,44 @@ display.draw()
 - `data/translations.json` - Station names (furigana, english)
 - `data/train_types.json` - Train type translations
 
+**Fonts Files:**
+- `fonts/ShinGoPr6N-Medium.otf` - Japanese text (destinations, stations, prefixes)
+- `fonts/ShinGoPr6N-Heavy.otf` - Train type (bold/italic)
+- `fonts/HelveticaNeue-Roman.otf` - English clock, Roman text
+- `fonts/HelveticaNeue-Medium.otf` - English destinations, prefixes
+- `fonts/HelveticaNeueBold.ttf` - English station names (large)
+
 **Preview Script:**
 - `preview_upper_lcd.py` - Standalone preview for testing (uses new architecture)
+
+---
+
+## Distribution (PyInstaller exe)
+
+**Folder structure - folders must be alongside exe at runtime:**
+
+```
+your-folder/
+├── JRE-PA-Simulator.exe
+├── fonts/
+├── data/
+│   ├── translations.json
+│   └── train_types.json
+└── audio/
+    ├── chuo/
+    ├── yamanote/
+    └── ...
+```
+
+**Build command:**
+```bash
+uv run pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean --noconfirm
+```
+
+**Key notes:**
+- `--console` enabled for error visibility on non-English Windows systems
+- Fonts/data/audio not bundled inside exe - loaded from runtime directory
+- Uses `sys.executable` for path resolution (not `__file__`) to handle PyInstaller temp folder
 
 ---
 
@@ -352,9 +418,24 @@ python -c "from displays.train_models.e235_1000 import UpperDisplay; print('OK')
 - ESC: Quit
 
 **Observe:**
-- Display cycles through KANJI → FURIGANA → ENGLISH every 2 seconds
+- Display cycles through KANJI → FURIGANA every 2 seconds (English currently disabled)
 - Prefix and station name update together on mode switch
 - English train type uses `english_short` if available (for narrow box)
+
+---
+
+## Changes Log
+
+### 2026-03-14
+- **Font loading fix:** Changed all `pygame.font.SysFont()` to `pygame.font.Font()` with direct file paths to fix crashes on non-English Windows systems (Chinese locale)
+- **JSON loading fix:** Updated `load_json_relative()` to use `sys.executable` instead of `__file__` for PyInstaller exe compatibility
+- **English mode disabled:** Temporarily disabled English display mode until fonts are verified
+- **Build command updated:** Changed from `--windowed` to `--console` for error visibility
+
+### 2026-03-11
+- Initial modular architecture implementation
+- 3-mode display cycling (KANJI → FURIGANA → ENGLISH)
+- Integration with main application
 
 ---
 

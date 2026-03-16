@@ -24,6 +24,33 @@
 - **Fonts**: Shared as class members (`self.font_type_bold`)
 - **Rationale**: Positions may differ per train model; fonts are consistent within a model
 
+### Font Loading (CRITICAL for non-English Windows)
+- **Problem**: `pygame.font.SysFont()` scans Windows font registry, which can fail on Chinese/Japanese locale systems
+- **Error**: `TypeError: expected str, bytes or os.PathLike object, not int`
+- **Solution**: Use `pygame.font.Font("fonts/filename.otf", size)` with direct file paths
+- **Distribution**: `fonts/` folder must be placed alongside exe at runtime
+- **Example**:
+  ```python
+  # WRONG - crashes on Chinese Windows
+  self.font = pygame.font.SysFont("shingopr6nmedium", 35)
+
+  # CORRECT - loads from file
+  self.font = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 35)
+  ```
+
+### JSON Loading (PyInstaller Exe Compatibility)
+- **Problem**: In PyInstaller one-file exe, `__file__` points to temp extraction folder (`_MEIxxxxx`), not actual exe location
+- **Solution**: Use `sys.executable` when `sys.frozen` is True
+- **Pattern**:
+  ```python
+  def get_base_dir() -> Path:
+      if getattr(sys, "frozen", False):
+          return Path(sys.executable).parent  # Exe directory
+      else:
+          return Path(__file__).parent.parent.parent.parent  # Project root
+  ```
+- **Usage**: `load_json_relative("data/translations.json")` resolves to exe/data/translations.json at runtime
+
 ### Countdown System
 - `TIME_SCALE = 60` means 60 real seconds = 1 travel minute
 - Floor division: Time only decrements after **full minute** elapsed
@@ -48,6 +75,7 @@
 - Set `PYTHONUTF8=1` before running Python scripts with Japanese output
 - File I/O uses `encoding='utf-8'` explicitly
 - Console output requires environment variable or `sys.stdout.reconfigure('utf-8')`
+- **PyInstaller exe**: Use `--console` flag to enable console window for error visibility
 
 ## Display Architecture Notes
 
@@ -111,18 +139,42 @@
 ```
 dist-folder/
 ├── JRE-PA-Simulator.exe
+├── fonts/
+│   ├── ShinGoPr6N-Medium.otf
+│   ├── ShinGoPr6N-Heavy.otf
+│   ├── HelveticaNeue-Roman.otf
+│   ├── HelveticaNeue-Medium.otf
+│   └── HelveticaNeueBold.ttf
 ├── audio/
 │   ├── chuo/
 │   ├── yamanote/
 │   └── ...
-├── data/
-│   ├── translations.json
-│   └── train_types.json
-└── fonts/
-    └── ...
+└── data/
+    ├── translations.json
+    └── train_types.json
 ```
 - Paths are resolved relative to exe directory
 - Folders must be direct siblings of exe, not nested in subfolders
+- **Build command**: `uv run pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean --noconfirm`
+- **Console enabled**: For error visibility on non-English Windows systems
+
+### Path Resolution Pattern
+
+```python
+def get_base_dir() -> Path:
+    """Get base directory - works for both dev and PyInstaller exe."""
+    if getattr(sys, "frozen", False):
+        # Running as compiled exe - use exe directory
+        return Path(sys.executable).parent
+    else:
+        # Running as script - go up from this file
+        return Path(__file__).parent.parent.parent.parent
+```
+
+**Why this matters:**
+- `__file__` points to `_MEIxxxxx` temp folder in PyInstaller one-file exe
+- `sys.executable` points to the actual exe location
+- Fonts, data, and audio are loaded relative to exe directory at runtime
 
 ## Testing Notes
 

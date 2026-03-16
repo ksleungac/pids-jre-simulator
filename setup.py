@@ -23,10 +23,10 @@ class SetupScreen:
         available_height = screen.get_height() - 100  # 20px title + 20px top + 60px bottom
         self.max_visible = max(5, available_height // self.row_height)
 
-        # Fonts
-        self.title_font = pygame.font.SysFont("shingopr6nmedium", 28)
-        self.route_font = pygame.font.SysFont("shingopr6nmedium", 20)
-        self.instruction_font = pygame.font.SysFont("shingopr6nmedium", 16)
+        # Fonts - load from fonts/ folder
+        self.title_font = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 28)
+        self.route_font = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 20)
+        self.instruction_font = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 16)
 
         # Colors
         self.bg_color = (30, 30, 30)

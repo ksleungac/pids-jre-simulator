@@ -8,6 +8,7 @@ import pygame
 import pygame.gfxdraw
 import json
 import time
+import sys
 from pathlib import Path
 
 from displays.base import DisplayMode, ModeCycler
@@ -31,15 +32,23 @@ WHITE_BG = [230, 230, 230]
 # JSON Loading
 # =============================================================================
 
+def get_base_dir() -> Path:
+    """Get base directory - works for both dev and PyInstaller exe."""
+    if getattr(sys, "frozen", False):
+        # Running as compiled exe - use exe directory
+        return Path(sys.executable).parent
+    else:
+        # Running as script - go up 4 levels from this file
+        return Path(__file__).parent.parent.parent.parent
+
+
 def load_json_relative(filename: str) -> dict:
     """Load JSON file relative to project root."""
-    # Go up 4 levels: e235_1000/ -> train_models/ -> displays/ -> project root
-    path = Path(__file__).parent.parent.parent.parent / filename
+    path = get_base_dir() / filename
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
-        print(f"[WARNING] JSON file not found: {path}")
         return {}
 
 
@@ -55,13 +64,15 @@ class JapaneseDisplay:
         self.route_data = route_data
         self.stops = stops
 
-        # E235-1000 specific fonts (shared across methods)
-        self.font_type_bold = pygame.font.SysFont("shingopr6nheavy", 26, bold=True, italic=True)
-        self.font_dest = pygame.font.SysFont("shingopr6nmedium", 35)
-        self.font_prefix = pygame.font.SysFont("shingopr6nmedium", 25)
-        self.font_station = pygame.font.SysFont("shingopr6nmedium", 78)
-        self.font_clock = pygame.font.SysFont("helveticaneueroman", 26)
-        self.font_suffix = pygame.font.SysFont("shingopr6nmedium", 18)
+        # E235-1000 specific fonts (shared across methods) - load from fonts/ folder
+        self.font_type_bold = pygame.font.Font("fonts/ShinGoPr6N-Heavy.otf", 26)
+        self.font_type_bold.set_bold(True)
+        self.font_type_bold.set_italic(True)
+        self.font_dest = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 35)
+        self.font_prefix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 25)
+        self.font_station = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 78)
+        self.font_clock = pygame.font.Font("fonts/HelveticaNeue-Roman.otf", 26)
+        self.font_suffix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 18)
 
     def draw_train_type(self, train_type: str, type_color: tuple) -> None:
         """Draw train type box."""
@@ -142,13 +153,15 @@ class FuriganaDisplay:
         self.route_data = route_data
         self.stops = stops
 
-        # E235-1000 specific fonts (shared across methods)
-        self.font_type_bold = pygame.font.SysFont("shingopr6nheavy", 26, bold=True, italic=True)
-        self.font_dest = pygame.font.SysFont("shingopr6nmedium", 35)
-        self.font_prefix = pygame.font.SysFont("shingopr6nmedium", 25)
-        self.font_station = pygame.font.SysFont("shingopr6nmedium", 78)
-        self.font_clock = pygame.font.SysFont("helveticaneueroman", 26)
-        self.font_suffix = pygame.font.SysFont("shingopr6nmedium", 18)
+        # E235-1000 specific fonts (shared across methods) - load from fonts/ folder
+        self.font_type_bold = pygame.font.Font("fonts/ShinGoPr6N-Heavy.otf", 26)
+        self.font_type_bold.set_bold(True)
+        self.font_type_bold.set_italic(True)
+        self.font_dest = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 35)
+        self.font_prefix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 25)
+        self.font_station = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 78)
+        self.font_clock = pygame.font.Font("fonts/HelveticaNeue-Roman.otf", 26)
+        self.font_suffix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 18)
 
     def draw_train_type(self, train_type: str, type_color: tuple) -> None:
         """Draw train type box."""
@@ -224,14 +237,16 @@ class EnglishDisplay:
         self.route_data = route_data
         self.stops = stops
 
-        # E235-1000 specific English fonts (shared across methods)
-        self.font_type_bold = pygame.font.SysFont("shingopr6nheavy", 26, bold=True, italic=True)
-        self.font_dest = pygame.font.SysFont("helveticaneuemedium", 22)
-        self.font_prefix = pygame.font.SysFont("helveticaneuemedium", 27)
-        self.font_main_prefix = pygame.font.SysFont("helveticaneuemedium", 27)
-        self.font_station = pygame.font.SysFont("helveticaneuebold", 115)
-        self.font_clock = pygame.font.SysFont("helveticaneueroman", 26)
-        self.font_suffix = pygame.font.SysFont("helveticaneuemedium", 20)
+        # E235-1000 specific English fonts (shared across methods) - load from fonts/ folder
+        self.font_type_bold = pygame.font.Font("fonts/ShinGoPr6N-Heavy.otf", 26)
+        self.font_type_bold.set_bold(True)
+        self.font_type_bold.set_italic(True)
+        self.font_dest = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 22)
+        self.font_prefix = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 27)
+        self.font_main_prefix = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 27)
+        self.font_station = pygame.font.Font("fonts/HelveticaNeueBold.ttf", 115)
+        self.font_clock = pygame.font.Font("fonts/HelveticaNeue-Roman.otf", 26)
+        self.font_suffix = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 20)
 
     def draw_train_type(self, train_type: str, type_color: tuple) -> None:
         """Draw train type box."""
@@ -336,13 +351,13 @@ class UpperDisplay:
         self.furigana_display = FuriganaDisplay(screen, route_data, stops)
         self.english_display = EnglishDisplay(screen, route_data, stops)
 
-        # Initialize mode cycler
+        # Initialize mode cycler (ENGLISH disabled until fonts verified)
         self.mode_displays = {
             DisplayMode.KANJI: self.japanese_display,
             DisplayMode.FURIGANA: self.furigana_display,
-            DisplayMode.ENGLISH: self.english_display,
+            # DisplayMode.ENGLISH: self.english_display,  # DISABLED
         }
-        self.mode_cycler = ModeCycler(self.mode_displays, default_mode=DisplayMode.ENGLISH)
+        self.mode_cycler = ModeCycler(self.mode_displays, default_mode=DisplayMode.KANJI)
 
         # Load translations (station names, destinations)
         self.translations = load_json_relative("data/translations.json")

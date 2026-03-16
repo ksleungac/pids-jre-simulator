@@ -302,7 +302,7 @@ class PASimulator:
         pygame.draw.rect(self.screen, (240, 240, 240), pygame.Rect(0, 0, SMALL_WIDTH, 120))
         pygame.draw.rect(self.screen, self.color, pygame.Rect(20, 10, 10, 55))
 
-        font_n = pygame.font.SysFont("shingopr6nmedium", 20)
+        font_n = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 20)
         draw_text = lambda t, f, c, x, y: self.screen.blit(f.render(t, True, c), (x, y))
 
         draw_text(self.route_name, font_n, (0, 0, 0), 40, 10)

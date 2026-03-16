@@ -84,13 +84,15 @@ class UpperDisplay:
         self.dark_bg = DARK_BG
         self.white_bg = WHITE_BG
 
-        # Fonts
-        self.font_type_bold = pygame.font.SysFont(FONT_STOPS_BOLD_NAME, FONT_TYPE_BOLD_SIZE, bold=True, italic=True)
-        self.font_dest = pygame.font.SysFont(FONT_STOPS_NAME, FONT_DEST_SIZE)
-        self.font_prefix = pygame.font.SysFont(FONT_STOPS_NAME, FONT_PREFIX_SIZE)
-        self.font_station = pygame.font.SysFont(FONT_STOPS_NAME, FONT_STATION_SIZE)
-        self.font_clock = pygame.font.SysFont(FONT_CLOCK_NAME, FONT_CLOCK_SIZE)
-        self.font_suffix = pygame.font.SysFont(FONT_STOPS_NAME, 18)
+        # Fonts - load from fonts/ folder
+        self.font_type_bold = pygame.font.Font("fonts/ShinGoPr6N-Heavy.otf", FONT_TYPE_BOLD_SIZE)
+        self.font_type_bold.set_bold(True)
+        self.font_type_bold.set_italic(True)
+        self.font_dest = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", FONT_DEST_SIZE)
+        self.font_prefix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", FONT_PREFIX_SIZE)
+        self.font_station = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", FONT_STATION_SIZE)
+        self.font_clock = pygame.font.Font("fonts/HelveticaNeue-Roman.otf", FONT_CLOCK_SIZE)
+        self.font_suffix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 18)
 
         # Unified display cycling (kanji <-> furigana for all elements together)
         self.display_mode = 0  # 0 = kanji, 1 = furigana
@@ -370,10 +372,10 @@ class LowerDisplay:
         # Calculate layout
         self._calculate_layout()
 
-        # Fonts
-        self.font_stops = pygame.font.SysFont(FONT_STOPS_NAME, FONT_STOPS_SIZE)
-        self.font_time = pygame.font.SysFont(FONT_TIME_NAME, FONT_TIME_SIZE)
-        self.font_minute = pygame.font.SysFont(FONT_STOPS_NAME, FONT_STOPS_MINUTE_SIZE)
+        # Fonts - load from fonts/ folder
+        self.font_stops = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", FONT_STOPS_SIZE)
+        self.font_time = pygame.font.Font("fonts/HelveticaNeueBold.ttf", FONT_TIME_SIZE)
+        self.font_minute = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", FONT_STOPS_MINUTE_SIZE)
 
     def _calculate_layout(self) -> None:
         """Calculate station display layout based on route length."""

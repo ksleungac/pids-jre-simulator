@@ -25,65 +25,41 @@ jobs:
         run: uv sync --frozen
 
       - name: Build executable with PyInstaller
-        run: uv run pyinstaller --onefile --windowed --name "JRE-PA-Simulator" main.py --clean --noconfirm
+        run: uv run pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean --noconfirm
 
-      - name: Create data package (excluding large audio files)
+      - name: Create distribution folder structure
         run: |
-          # Create data-only package (users need to clone repo for audio)
-          mkdir data-pack
-          copy data\translations.json data-pack\
-          copy data\train_types.json data-pack\
-          xcopy /E /I fonts data-pack\fonts
-          Compress-Archive -Path data-pack\* -DestinationPath dist\data-pack.zip -Force
+          # Create distribution folder with correct structure
+          mkdir dist-release\JRE-PA-Simulator\fonts
+          mkdir dist-release\JRE-PA-Simulator\data
+          mkdir dist-release\JRE-PA-Simulator\audio
+          # Copy exe
+          copy dist\JRE-PA-Simulator.exe dist-release\JRE-PA-Simulator\
+          # Copy fonts
+          copy fonts\* dist-release\JRE-PA-Simulator\fonts\
+          # Copy data files
+          copy data\translations.json dist-release\JRE-PA-Simulator\data\
+          copy data\train_types.json dist-release\JRE-PA-Simulator\data\
+        shell: pwsh
 
-      - name: Create release notes
+      - name: Create distribution zip
+        run: |
+          Compress-Archive -Path 'dist-release\JRE-PA-Simulator' -DestinationPath 'dist-release\JRE-PA-Simulator-${{ github.ref_name }}-distribution.zip' -Force
+        shell: pwsh
+
+      - name: Create release notes from git changelog
         id: release_notes
         run: |
           $version = "${{ github.ref_name }}"
+          $changelog = git log --pretty=format:"- %s" --no-merges --reverse
           $notes = @"
-          ## Release Highlights
+          ## $version Release
 
-          ### Features
-          - Modular UpperDisplay architecture with 3-mode cycling (KANJI/FURIGANA/ENGLISH)
-          - English train type display with optional short names
-          - Centralized translations in data/translations.json
-          - Real-time countdown timer on lower LCD
-          - Stop-level destination override for circular routes
+          ### Changes
+          $changelog
 
-          ### Installation
-
-          **Required:** Python 3.12+ runtime OR download the complete repository
-
-          1. **Download executable:** JRE-PA-Simulator.exe
-          2. **Download data pack:** data-pack.zip (contains fonts and translation files)
-          3. **Audio files:** Clone/download this repository (audio/ folder is ~475MB)
-
-          ### File Structure
-          \`\`\`
-          JRE-PA-Simulator.exe
-          data-pack/
-          ├── fonts/
-          │   ├── ShinGoPr6N-Medium.otf
-          │   ├── ShinGoPr6N-Heavy.otf
-          │   └── HelveticaNeue-*.otf
-          └── translations.json
-          audio/  (clone from repo)
-          └── [line]/[diagram]/route.json
-          \`\`\`
-
-          ### Full Installation
-          For the complete experience, clone the repository:
-          \`\`\`bash
-          git clone https://github.com/${{ github.repository }}.git
-          cd pids-jre-simulator
-          uv sync
-          uv run main.py
-          \`\`\`
-
-          ### Documentation
-          - CLAUDE.md - Quick reference
-          - DATA_FORMAT.md - Route data format
-          - UPPER_DISPLAY_UPDATE.md - Display architecture
+          ---
+          **Distribution:** JRE-PA-Simulator.exe must be placed alongside \`fonts/\`, \`data/\`, and \`audio/\` folders at the same directory level.
           "@
           $notes | Out-File -FilePath release_notes.md -Encoding utf8
         shell: pwsh
@@ -93,9 +69,8 @@ jobs:
         with:
           files: |
             dist/JRE-PA-Simulator.exe
-            dist/data-pack.zip
+            dist-release/JRE-PA-Simulator-${{ github.ref_name }}-distribution.zip
           body_path: release_notes.md
-          generate_release_notes: false
           verify_tag: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

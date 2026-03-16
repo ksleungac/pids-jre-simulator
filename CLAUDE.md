@@ -4,7 +4,7 @@
 
 **Japanese Train PA (Public Address) Simulator** - A pygame-based application that simulates train station announcements and arrival melodies with visual LCD display.
 
-**Current Date:** 2026-03-12
+**Current Date:** 2026-03-14
 
 **Last Update:**
 - v0.5.0 release: GitHub Actions auto-build workflow, bilingual README
@@ -16,6 +16,10 @@
 - Session scratch log for misc interaction notes
 - Filename-based PA tracks: `pa` array uses descriptive filenames (e.g., `"tokyo_dep"`) instead of sequential numbers
 - Station skip logic fix: single-skip jumps immediately, multi-skip uses two-phase approach
+- **Font loading fix**: Changed `pygame.font.SysFont()` to `pygame.font.Font()` with direct file paths to fix crashes on non-English Windows (Chinese locale)
+- **JSON loading fix**: Uses `sys.executable` for path resolution in PyInstaller exe (avoids temp folder `_MEIxxxxx` issues)
+- **English mode disabled**: Temporarily disabled until fonts verified (KANJI → FURIGANA cycling only)
+- **Build command**: Changed from `--windowed` to `--console` for error visibility
 
 ---
 
@@ -39,7 +43,7 @@ pids_jre_simulator/
 
 ## Key Features
 
-1. **3-Mode Display Cycling** (2s each): KANJI → FURIGANA → ENGLISH
+1. **Display Cycling** (2s each): KANJI → FURIGANA (ENGLISH disabled until fonts verified)
    - Destination: always kanji (IRL behavior)
    - Prefix/Station: cycle with translations
    - Train type: cycles, uses `english_short` if available
@@ -53,6 +57,10 @@ pids_jre_simulator/
 4. **Real-Time Countdown**: `TIME_SCALE=60` (60s = 1 travel minute), floor division
 
 5. **Audio**: -15 LUFS normalization, double-buffered temp files
+
+6. **Cross-Platform Font Loading**: Uses `pygame.font.Font()` with file paths (avoids Windows font registry issues on non-English systems)
+
+7. **PyInstaller Exe Compatibility**: JSON loading uses `sys.executable` for path resolution (not `__file__`)
 
 ---
 
@@ -81,6 +89,9 @@ pids_jre_simulator/
 7. Countdown: Full minute rule, forces "1" on last PA
 8. Black formatting: Pre-commit hook
 9. Station skip: Single-skip (1 passing station) jumps directly; multi-skip (2+) uses two-phase approach
+10. Font loading: Uses `pygame.font.Font()` with file paths (not `SysFont()`) to avoid Windows registry issues
+11. JSON loading: Uses `sys.executable` when frozen, `__file__` when running as script
+12. English mode: Currently disabled (KANJI → FURIGANA only) until fonts verified
 
 ---
 
@@ -92,6 +103,8 @@ pids_jre_simulator/
 - Hepburn macrons (ō, ū)
 - Position constants inline, fonts as class members
 - WINDOWS console encoding (`PYTHONUTF8=1`)
+- **Font loading**: Use `pygame.font.Font("fonts/...")` not `SysFont()` - avoids Windows font registry crashes on non-English systems
+- **JSON loading**: Use `sys.executable.parent` when `sys.frozen` for PyInstaller exe path resolution
 
 ---
 
@@ -110,19 +123,32 @@ uv run main.py
 ```
 your-folder/
 ├── JRE-PA-Simulator.exe
-├── audio/
-│   ├── chuo/
-│   ├── yamanote/
-│   └── ...
+├── fonts/
+│   ├── ShinGoPr6N-Medium.otf
+│   ├── ShinGoPr6N-Heavy.otf
+│   ├── HelveticaNeue-Roman.otf
+│   ├── HelveticaNeue-Medium.otf
+│   └── HelveticaNeueBold.ttf
 ├── data/
 │   ├── translations.json
 │   └── train_types.json
-└── fonts/
-    ├── ShinGoPr6N-Medium.otf
+└── audio/
+    ├── chuo/
+    ├── yamanote/
     └── ...
 ```
 
 The exe loads audio/data/fonts relative to its directory - folders must be siblings, not nested.
+
+**Build command:**
+```bash
+uv run pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean --noconfirm
+```
+
+**Key notes:**
+- `--console` enabled for error visibility on non-English Windows systems
+- Fonts/data/audio not bundled inside exe - loaded from runtime directory
+- Path resolution uses `sys.executable` (not `__file__`) to handle PyInstaller temp folder
 
 ---
 
