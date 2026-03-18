@@ -4,11 +4,11 @@
 
 **Japanese Train PA (Public Address) Simulator** - A pygame-based application that simulates train station announcements and arrival melodies with visual LCD display.
 
-**Current Date:** 2026-03-14
+**Current Date:** 2026-03-16
 
 **Last Update:**
-- v0.5.0 release: GitHub Actions auto-build workflow, bilingual README
-- Executable distribution: exe must be alongside `audio/`, `data/`, `fonts/` at same level
+- v0.5.0b release: Local release script (`release.ps1`), `gh` CLI for releases, manual workflow dispatch
+- Executable distribution: Distribution zip includes exe + fonts + data + empty audio folder
 - Modular UpperDisplay integrated from `displays/train_models/e235_1000/upper_lcd.py`
 - English train type display with `data/train_types.json` (`english_short` for narrow boxes)
 - Code refactor: inlined position constants, fonts shared as class members
@@ -149,6 +149,15 @@ uv run pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean
 - `--console` enabled for error visibility on non-English Windows systems
 - Fonts/data/audio not bundled inside exe - loaded from runtime directory
 - Path resolution uses `sys.executable` (not `__file__`) to handle PyInstaller temp folder
+
+**Create Release:**
+```powershell
+# Build exe, create zip, and publish release in one command
+.\release.ps1 v0.5.0b
+```
+- Requires `gh` CLI authenticated with `workflow` scope
+- Creates distribution zip: exe + fonts + data + empty audio folder
+- Uploads both standalone exe and distribution zip to GitHub release
 
 ---
 

@@ -1,9 +1,12 @@
 name: Build and Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v0.5.0b)'
+        required: true
+        default: 'v0.5.0b'
 
 jobs:
   build:
@@ -29,48 +32,24 @@ jobs:
 
       - name: Create distribution folder structure
         run: |
-          # Create distribution folder with correct structure
           mkdir dist-release\JRE-PA-Simulator\fonts
           mkdir dist-release\JRE-PA-Simulator\data
           mkdir dist-release\JRE-PA-Simulator\audio
-          # Copy exe
           copy dist\JRE-PA-Simulator.exe dist-release\JRE-PA-Simulator\
-          # Copy fonts
           copy fonts\* dist-release\JRE-PA-Simulator\fonts\
-          # Copy data files
           copy data\translations.json dist-release\JRE-PA-Simulator\data\
           copy data\train_types.json dist-release\JRE-PA-Simulator\data\
         shell: pwsh
 
       - name: Create distribution zip
         run: |
-          Compress-Archive -Path 'dist-release\JRE-PA-Simulator' -DestinationPath 'dist-release\JRE-PA-Simulator-${{ github.ref_name }}-distribution.zip' -Force
+          Compress-Archive -Path 'dist-release\JRE-PA-Simulator' -DestinationPath 'dist-release\JRE-PA-Simulator-${{ inputs.version }}-distribution.zip' -Force
         shell: pwsh
 
-      - name: Create release notes from git changelog
-        id: release_notes
-        run: |
-          $version = "${{ github.ref_name }}"
-          $changelog = git log --pretty=format:"- %s" --no-merges --reverse
-          $notes = @"
-          ## $version Release
-
-          ### Changes
-          $changelog
-
-          ---
-          **Distribution:** JRE-PA-Simulator.exe must be placed alongside \`fonts/\`, \`data/\`, and \`audio/\` folders at the same directory level.
-          "@
-          $notes | Out-File -FilePath release_notes.md -Encoding utf8
-        shell: pwsh
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          files: |
+          name: release-files
+          path: |
             dist/JRE-PA-Simulator.exe
-            dist-release/JRE-PA-Simulator-${{ github.ref_name }}-distribution.zip
-          body_path: release_notes.md
-          verify_tag: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            dist-release/JRE-PA-Simulator-${{ inputs.version }}-distribution.zip
