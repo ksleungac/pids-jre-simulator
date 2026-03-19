@@ -99,6 +99,35 @@ cmd = ['ffmpeg', '-y', '-ss', start_sec, '-i', input_file, '-t', duration, '-c',
 
 ---
 
+## 2026-03-19
+
+### Takasaki Line - Complete STA/PA Setup Workflow
+- Created full Takasaki Line diagrams: `audio/takasaki/831M/` (Local) and `audio/takasaki/3922E/` (Rapid Urban)
+- **STA splitting workflow** (`pa_sta_split_workflow/split_sta_takasaki.py`):
+  - Source: `takasaki_sta_src.mp3` - single continuous departure melody
+  - `timestamps.txt` format: `駅名 ＝ 曲名 M:SS` (station name, song name, start time)
+  - Parse timestamps, calculate duration to next station
+  - Output: lowercase English station names with `.mp3` (e.g., `ueno.mp3`, `kita-ageo.mp3`)
+- **PA splitting workflow** (`pa_sta_split_workflow/split_pa.py`):
+  - Source: `takasaki_rapid_urban_pa.mp3` - continuous PA announcements
+  - `pa_timestamps.txt` format: `M:SS station_action` (e.g., `0:09 ueno_dep`, `1:10 akabane_arr`)
+  - Output: `{station}-{dep|arr}.mp3` format
+- **route.json mapping**: `sta` array uses filenames with `.mp3` extension
+- **Verification lesson**: Always Glob files BEFORE modifying route.json references (learned the hard way with `kita-ageo.mp3`)
+
+### Files Added
+- `audio/takasaki/831M/route.json` - Local service (no PA, 24 stations)
+- `audio/takasaki/3922E/route.json` - Rapid Urban (with PA + STA)
+- `audio/takasaki/3922E/sta/*.mp3` - 24 station melodies
+- `audio/takasaki/3922E/pa/*.mp3` - 30 PA announcements
+- `data/translations.json` - 20 Takasaki stations (Hepburn with macrons: Kōnosu, Gyōda, Honjō, etc.)
+- `data/train_types.json` - `快速アーバン` → `Rapid Service Urban`
+
+### Critical Lesson Documented
+- `.claude/rules/critical_lessons.md` - Verify files BEFORE destructive operations
+
+---
+
 ## Template for Future Sessions
 
 ```markdown

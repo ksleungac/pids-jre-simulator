@@ -32,7 +32,7 @@
             "name": "川崎",
             "pa": ["5", "6"],
             "sta": ["JT04_KWS"],
-            "sta_cut": 11,
+            "sta_cut": 12,
             "time": 9,
             "sta_code": "JT04"
         },

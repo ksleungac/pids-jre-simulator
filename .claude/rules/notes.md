@@ -182,8 +182,25 @@ def get_base_dir() -> Path:
 - Verify changes work in actual program, not just preview script
 - Test with multiple routes when possible
 
+---
+
+## Working Practices
+
+### Document References in CLAUDE.md
+**Rule:** When creating any new `.md` documentation file, immediately add a reference to it in `CLAUDE.md`.
+
+**Why:** `CLAUDE.md` is the primary entry point - without a reference there, new documentation is invisible in future sessions.
+
+**Pattern:**
+```markdown
+**Full docs:** [DATA_FORMAT.md](DATA_FORMAT.md) | [AUDIO_SPLITTING_WORKFLOW.md](AUDIO_SPLITTING_WORKFLOW.md)
+```
+
+---
+
 ## Reference Documents
 
+- **[AUDIO_SPLITTING_WORKFLOW.md](../AUDIO_SPLITTING_WORKFLOW.md)** - PA/STA splitting guide
 - **DATA_FORMAT.md**: JSON field definitions, validation script
 - **UPPER_DISPLAY_UPDATE.md**: Display architecture details
 - **CLAUDE.md**: Quick reference (this file complements it)

@@ -552,5 +552,81 @@
     "高田馬場": {
         "furigana": "たかだのばば",
         "english": "Takadanobaba"
+    },
+    "上尾": {
+        "furigana": "あげお",
+        "english": "Ageo"
+    },
+    "尾久": {
+        "furigana": "おく",
+        "english": "Oku"
+    },
+    "北本": {
+        "furigana": "きたもと",
+        "english": "Kitamoto"
+    },
+    "北上尾": {
+        "furigana": "きたあげお",
+        "english": "Kita-Ageo"
+    },
+    "北鴻巣": {
+        "furigana": "きたこうのす",
+        "english": "Kita-Kōnosu"
+    },
+    "神保原": {
+        "furigana": "かんぼはら",
+        "english": "Kanhobara"
+    },
+    "行田": {
+        "furigana": "ぎょうだ",
+        "english": "Gyōda"
+    },
+    "鴻巣": {
+        "furigana": "こうのす",
+        "english": "Kōnosu"
+    },
+    "倉賀野": {
+        "furigana": "くらがの",
+        "english": "Kuragano"
+    },
+    "熊谷": {
+        "furigana": "くまがや",
+        "english": "Kumagaya"
+    },
+    "籠原": {
+        "furigana": "かごはら",
+        "english": "Kagohara"
+    },
+    "深谷": {
+        "furigana": "ふかや",
+        "english": "Fukaya"
+    },
+    "吹上": {
+        "furigana": "ふきあげ",
+        "english": "Fukiage"
+    },
+    "新町": {
+        "furigana": "しんまち",
+        "english": "Shinmachi"
+    },
+    "高崎": {
+        "furigana": "たかさき",
+        "english": "Takasaki"
+    },
+    "桶川": {
+        "furigana": "おけがわ",
+        "english": "Okegawa"
+    },
+    "本庄": {
+        "furigana": "ほんじょう",
+        "english": "Honjō"
+    },
+    "岡部": {
+        "furigana": "おかべ",
+        "english": "Okabe"
+    },
+    "宮原": {
+        "furigana": "みやはら",
+        "english": "Miyahara"
     }
 }

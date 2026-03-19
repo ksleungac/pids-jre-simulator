@@ -11,7 +11,12 @@
       "Bash(python:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(ls -la \"C:/Users/oscar/.claude/projects/D--pids-jre-simulator/memory/\" 2>/dev/null || dir \"C:\\\\Users\\\\oscar\\\\.claude\\\\projects\\\\D--pids-jre-simulator\\\\memory\" 2>&1)"
+      "Bash(ls -la \"C:/Users/oscar/.claude/projects/D--pids-jre-simulator/memory/\" 2>/dev/null || dir \"C:\\\\Users\\\\oscar\\\\.claude\\\\projects\\\\D--pids-jre-simulator\\\\memory\" 2>&1)",
+      "Bash(ren \"赤羽-arr.mp3\" \"akabane-arr.mp3\")",
+      "Bash(ren \"赤羽-dep.mp3\" \"akabane-dep.mp3\")",
+      "Bash(ren \"浦和-arr.mp3\" \"urawa-arr.mp3\")",
+      "Bash(ren \"浦和-dep.mp3\" \"urawa-dep.mp3\")",
+      "Bash(ren \"大宮-arr.mp3\" \"omiya-arr.mp3\")"
     ]
   },
   "skipWebFetchPreflight": true

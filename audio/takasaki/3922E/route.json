@@ -1,0 +1,192 @@
+{
+    "route": "高崎線",
+    "color": [244, 132, 44],
+    "type": "快速アーバン",
+    "dest": "高崎",
+    "stops": [
+        {
+            "name": "上野",
+            "pa": [],
+            "sta": ["ueno"],
+            "sta_cut": 17,
+            "time": 0,
+            "sta_code": "JU02"
+        },
+        {
+            "name": "尾久",
+            "pa": [],
+            "sta": ["oku"],
+            "sta_cut": 14,
+            "sta_code": "JU03"
+        },
+        {
+            "name": "赤羽",
+            "pa": ["ueno-dep", "akabane-arr"],
+            "sta": ["akabane"],
+            "sta_cut": 11,
+            "time": 9,
+            "sta_code": "JU04"
+        },
+        {
+            "name": "浦和",
+            "pa": ["akabane-dep", "urawa-arr"],
+            "sta": ["urawa"],
+            "sta_cut": 11,
+            "time": 8,
+            "sta_code": "JU05"
+        },
+        {
+            "name": "さいたま 新都心",
+            "pa": [],
+            "sta": ["saitama-shintoshin"],
+            "sta_cut": 11,
+            "sta_code": "JU06"
+        },
+        {
+            "name": "大宮",
+            "pa": ["urawa-dep", "omiya-arr"],
+            "sta": ["omiya"],
+            "sta_cut": 12,
+            "time": 6,
+            "sta_code": "JU07"
+        },
+        {
+            "name": "宮原",
+            "pa": [],
+            "sta": ["miyahara"],
+            "sta_cut": 10,
+            "sta_code": null
+        },
+        {
+            "name": "上尾",
+            "pa": ["omiya-dep", "ageo-arr"],
+            "sta": ["ageo"],
+            "sta_cut": 16,
+            "time": 9,
+            "sta_code": null
+        },
+        {
+            "name": "北上尾",
+            "pa": [],
+            "sta": ["kita-ageo"],
+            "sta_cut": 15,
+            "sta_code": null
+        },
+        {
+            "name": "桶川",
+            "pa": ["ageo-dep", "okegawa-arr"],
+            "sta": ["okegawa"],
+            "sta_cut": 10,
+            "time": 6,
+            "sta_code": null
+        },
+        {
+            "name": "北本",
+            "pa": [],
+            "sta": ["kitamoto"],
+            "sta_cut": 9,
+            "sta_code": null
+        },
+        {
+            "name": "鴻巣",
+            "pa": ["okegawa-dep", "konosu-arr"],
+            "sta": ["konosu"],
+            "sta_cut": 16,
+            "time": 7,
+            "sta_code": null
+        },
+        {
+            "name": "北鴻巣",
+            "pa": [],
+            "sta": ["kita-konosu"],
+            "sta_cut": 15,
+            "sta_code": null
+        },
+        {
+            "name": "吹上",
+            "pa": [],
+            "sta": ["fukiage"],
+            "sta_cut": 16,
+            "sta_code": null
+        },
+        {
+            "name": "行田",
+            "pa": [],
+            "sta": ["gyoda"],
+            "sta_cut": 10,
+            "sta_code": null
+        },
+        {
+            "name": "熊谷",
+            "pa": ["konosu-dep", "kumagaya-arr"],
+            "sta": ["kumagaya"],
+            "sta_cut": 12,
+            "time": 13,
+            "sta_code": null
+        },
+        {
+            "name": "籠原",
+            "pa": ["kumagaya-dep", "kagohara-arr"],
+            "sta": ["kagohara"],
+            "sta_cut": 16,
+            "time": 5,
+            "sta_code": null
+        },
+        {
+            "name": "深谷",
+            "pa": ["kagohara-dep", "fukaya-arr"],
+            "sta": ["fukaya"],
+            "sta_cut": 15,
+            "time": 5,
+            "sta_code": null
+        },
+        {
+            "name": "岡部",
+            "pa": ["fukaya-dep", "okabe-arr"],
+            "sta": ["okabe"],
+            "sta_cut": 10,
+            "time": 4,
+            "sta_code": null
+        },
+        {
+            "name": "本庄",
+            "pa": ["okabe-dep", "honjo-arr"],
+            "sta": ["honjo"],
+            "sta_cut": 9,
+            "time": 5,
+            "sta_code": null
+        },
+        {
+            "name": "神保原",
+            "pa": ["honjo-dep", "kanhobara-arr"],
+            "sta": ["kanhobara"],
+            "sta_cut": 10,
+            "time": 4,
+            "sta_code": null
+        },
+        {
+            "name": "新町",
+            "pa": ["kanhobara-dep", "shinmachi-arr"],
+            "sta": ["shinmachi"],
+            "sta_cut": 11,
+            "time": 4,
+            "sta_code": null
+        },
+        {
+            "name": "倉賀野",
+            "pa": ["shinmachi-dep", "kuragano-arr"],
+            "sta": ["kuragano"],
+            "sta_cut": 2,
+            "time": 2,
+            "sta_code": null
+        },
+        {
+            "name": "高崎",
+            "pa": ["kuragano-dep", "takasaki-arr"],
+            "sta": ["takasaki"],
+            "sta_cut": 17,
+            "time": 5,
+            "sta_code": null
+        }
+    ]
+}

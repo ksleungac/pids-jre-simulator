@@ -20,6 +20,7 @@
 - **JSON loading fix**: Uses `sys.executable` for path resolution in PyInstaller exe (avoids temp folder `_MEIxxxxx` issues)
 - **English mode disabled**: Temporarily disabled until fonts verified (KANJI → FURIGANA cycling only)
 - **Build command**: Changed from `--windowed` to `--console` for error visibility
+- **Takasaki Line setup**: Complete diagram creation workflow - STA/PA splitting from single MP3 using timestamps (`pa_sta_split_workflow/`), 3922E (Rapid Urban) and 831M (Local) diagrams
 
 ---
 
@@ -161,7 +162,7 @@ uv run pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean
 
 ---
 
-**Full docs:** [DATA_FORMAT.md](DATA_FORMAT.md) | [UPPER_DISPLAY_UPDATE.md](UPPER_DISPLAY_UPDATE.md)
+**Full docs:** [DATA_FORMAT.md](DATA_FORMAT.md) | [UPPER_DISPLAY_UPDATE.md](UPPER_DISPLAY_UPDATE.md) | [AUDIO_SPLITTING_WORKFLOW.md](AUDIO_SPLITTING_WORKFLOW.md)
 
 **Implementation notes:** [.claude/rules/notes.md](.claude/rules/notes.md) - Detailed patterns, edge cases, validation rules
 
