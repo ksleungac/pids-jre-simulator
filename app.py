@@ -29,6 +29,9 @@ class AppState:
         self.frame_mode = 1
         self.departure_time = 0.0  # Timestamp when train departed for current segment
         self.is_last_pa = False  # Whether current PA is the last one before arriving
+        # Time-based skip progression
+        self.time_to_next = 0  # Time from current to next stopping station
+        self.skip_progress = 0  # Current position in skip sequence (0 = at stopping station)
 
 
 class PASimulator:

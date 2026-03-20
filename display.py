@@ -19,13 +19,14 @@ from constants import (
     STOPS_WIDTH,
     STOPS_PER_LINE,
     TIME_SCALE,
-    DARK_BG
+    DARK_BG,
 )
 from utils import (
     draw_aapolygon,
     arrow_points,
     draw_stops_text,
 )
+
 
 class LowerDisplay:
     """Handles the lower portion of the LCD (route map, station markers)."""
@@ -145,6 +146,39 @@ class LowerDisplay:
         except ValueError:
             return len(f_stops) - 1
 
+    def _update_skip_progress(self, current_time: float, f_stops: List[Dict]) -> None:
+        """Update curr_stop_disp through passing stations based on elapsed time.
+
+        Args:
+            current_time: Current timestamp
+            f_stops: List of displayed stops
+        """
+        skip = self.state.skip
+        if skip == 0:
+            return
+
+        # Calculate elapsed time since departure
+        if current_time > 0 and self.state.departure_time > 0:
+            elapsed_seconds = current_time - self.state.departure_time
+            elapsed_minutes = elapsed_seconds / TIME_SCALE
+        else:
+            return
+
+        time_to_next = self.state.time_to_next
+        if time_to_next <= 0:
+            return
+
+        # Progress through passing stations based on time
+        # Skip stations divide the time into (skip + 1) segments
+        # At skip=1: 50% time -> progress to first passing
+        # At skip=2: 33% time -> first passing, 67% time -> second passing
+        for i in range(1, skip + 1):
+            # Threshold: time_to_next * i / (skip + 1)
+            threshold = time_to_next * i / (skip + 1)
+            if elapsed_minutes >= threshold and self.state.skip_progress < i:
+                self.state.curr_stop_disp += 1
+                self.state.skip_progress = i
+
     def draw_ptr(self, f_stops: List[Dict], dest_idx: int) -> None:
         """Draw the pointer/triangle indicating current position.
 
@@ -231,9 +265,7 @@ class LowerDisplay:
                     pygame.gfxdraw.aacircle(self.screen, center_x, center_y, radius, PASSED_COLOR)
 
                     # Current station - inner circle
-                    # Use state.skip with guard against negative index
-                    effective_idx = i - self.state.skip
-                    if i == self.state.curr_stop_disp or effective_idx == self.state.curr_stop_disp:
+                    if i == self.state.curr_stop:
                         pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, radius - 2, CURRENT_COLOR)
                         pygame.gfxdraw.aacircle(self.screen, center_x, center_y, radius - 2, CURRENT_COLOR)
             else:
@@ -349,6 +381,9 @@ class LowerDisplay:
 
         dest_idx = self._find_dest_index(f_stops)
 
+        # Time-based skip progression: move through passing stations based on elapsed time
+        self._update_skip_progress(current_time, f_stops)
+
         # Draw station bars
         for i, stop in enumerate(f_stops):
             ptr = (i % self.per_line) * self.stops_w
@@ -403,8 +438,12 @@ class LowerDisplay:
 
         # If we're in the middle of a skip, complete it on 2nd PA
         if self.state.skip > 0 and self.state.cnt_pa >= 1:
-            self.state.curr_stop_disp += self.state.skip
+            # Deduct time-based advancement from skip (may have already progressed)
+            remaining = self.state.skip - self.state.skip_progress
+            self.state.curr_stop_disp += remaining
             self.state.skip = 0
+            self.state.time_to_next = 0
+            self.state.skip_progress = 0
             return
 
         # First PA at a new station (cnt_pa == 0): advance to next station
@@ -419,4 +458,9 @@ class LowerDisplay:
                 while i < len(f_stops) and not f_stops[i].get("pa", []):
                     i += 1
                 self.state.skip = i - self.state.curr_stop_disp
+                # Get time to next stopping station (from target station with PA)
+                target_stop = f_stops[i]
+                self.state.time_to_next = target_stop.get("time", 0)
+                # Reset skip progress for time-based animation
+                self.state.skip_progress = 0
                 # Keep curr_stop_disp at first passing station, complete on 2nd PA
