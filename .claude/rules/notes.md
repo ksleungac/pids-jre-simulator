@@ -59,12 +59,14 @@
 - `departure_time` set when `curr_stop` increments (train departs)
 
 ### Station Skip Logic (LowerDisplay)
-- **Single-skip** (1 passing station): `curr_stop_disp` jumps directly to next station with PA, `skip = 0`
-- **Multi-skip** (2+ passing stations): Two-phase approach
-  - Phase 1 (`cnt_pa == 0`): Set `skip` count, keep `curr_stop_disp` at first passing station
-  - Phase 2 (`cnt_pa >= 1`): Complete jump via `curr_stop_disp += skip - 1`
-- **Rationale**: `draw_marks()` uses `effective_idx = i - skip` to compensate for multi-skip highlighting
-- **Bug pattern**: Original code checked `len(pa_tracks) == 1` instead of `skip == 1`, breaking single-skip for stations with 2+ PA tracks
+- **Time-based progression**: Red arrow (●) advances through passing stations based on elapsed time
+  - Travel time from stopping to stopping station divided into (skip + 1) segments
+  - Example: Skip 2 stations, 10min travel → arrow moves at ~3.33min intervals
+- **Two-phase approach**:
+  - Phase 1 (`cnt_pa == 0`): Set `skip` count and `time_to_next`, reset `skip_progress`
+  - Phase 2 (`cnt_pa >= 1`): Complete jump, deduct `skip_progress` from remaining (time-based may have already advanced)
+- **Inner circle**: Always drawn at `curr_stop` (logical PA station), not `curr_stop_disp` (display can be at passing station)
+- **State fields**: `time_to_next`, `skip_progress` (not just `skip`)
 
 ### PA Track Numbering
 - Tracks numbered sequentially across route (1, 2, 3, ...)

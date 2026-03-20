@@ -4,9 +4,11 @@
 
 **Japanese Train PA (Public Address) Simulator** - A pygame-based application that simulates train station announcements and arrival melodies with visual LCD display.
 
-**Current Date:** 2026-03-16
+**Current Date:** 2026-03-20
 
 **Last Update:**
+- **Time-based skip progression**: Red arrow (●) advances through passing stations based on elapsed time - divides travel time into proportional segments for smooth animation
+- Station skip logic: Two-phase approach (stay on 1st PA, complete on 2nd PA), inner circle stays at logical curr_stop (not display position)
 - v0.5.0b release: Local release script (`release.ps1`), `gh` CLI for releases, manual workflow dispatch
 - Executable distribution: Distribution zip includes exe + fonts + data + empty audio folder
 - Modular UpperDisplay integrated from `displays/train_models/e235_1000/upper_lcd.py`
