@@ -61,7 +61,6 @@ Wait for the user to:
 After user approval, update:
 
 **CLAUDE.md:**
-- Project Overview "Last Update" section
 - Known Behaviors list
 - Notes for Next AI section
 - Module responsibilities (if applicable)
@@ -86,10 +85,9 @@ After user approval, update:
 - Working style
 - Naming conventions
 
-**SCRATCH.md:**
-- Recent session log
-- Misc interaction notes
-- Keep under 200 lines, date entries, trim old
+**memory/YYYY-MM-DD.md:**
+- Create or update today's entry with session summary
+- Update memory/MEMORY.md if new operating principles established
 
 ---
 
@@ -131,7 +129,7 @@ After a session fixing the Yamanote line destination display:
 - UPPER_DISPLAY_UPDATE.md: Update architecture diagram if applicable
 - .claude/rules/notes.md: Add new edge case if discovered
 - .claude/rules/preferences.md: Update if new preferences expressed
-- SCRATCH.md: Log session highlights with date
+- memory/YYYY-MM-DD.md: Log session highlights
 ```
 
 Then wait for user confirmation before proceeding.

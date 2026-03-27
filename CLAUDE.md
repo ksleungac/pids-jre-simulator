@@ -4,25 +4,48 @@
 
 **Japanese Train PA (Public Address) Simulator** - A pygame-based application that simulates train station announcements and arrival melodies with visual LCD display.
 
-**Current Date:** 2026-03-20
+---
 
-**Last Update:**
-- **Time-based skip progression**: Red arrow (●) advances through passing stations based on elapsed time - divides travel time into proportional segments for smooth animation
-- Station skip logic: Two-phase approach (stay on 1st PA, complete on 2nd PA), inner circle stays at logical curr_stop (not display position)
-- v0.5.0b release: Local release script (`release.ps1`), `gh` CLI for releases, manual workflow dispatch
-- Executable distribution: Distribution zip includes exe + fonts + data + empty audio folder
-- Modular UpperDisplay integrated from `displays/train_models/e235_1000/upper_lcd.py`
-- English train type display with `data/train_types.json` (`english_short` for narrow boxes)
-- Code refactor: inlined position constants, fonts shared as class members
-- Hepburn romanization with macrons (中央特快 → Chūō Special Rapid)
-- Session scratch log for misc interaction notes
-- Filename-based PA tracks: `pa` array uses descriptive filenames (e.g., `"tokyo_dep"`) instead of sequential numbers
-- Station skip logic fix: single-skip jumps immediately, multi-skip uses two-phase approach
-- **Font loading fix**: Changed `pygame.font.SysFont()` to `pygame.font.Font()` with direct file paths to fix crashes on non-English Windows (Chinese locale)
-- **JSON loading fix**: Uses `sys.executable` for path resolution in PyInstaller exe (avoids temp folder `_MEIxxxxx` issues)
-- **English mode disabled**: Temporarily disabled until fonts verified (KANJI → FURIGANA cycling only)
-- **Build command**: Changed from `--windowed` to `--console` for error visibility
-- **Takasaki Line setup**: Complete diagram creation workflow - STA/PA splitting from single MP3 using timestamps (`pa_sta_split_workflow/`), 3922E (Rapid Urban) and 831M (Local) diagrams
+## Session Startup
+
+Before doing anything else:
+
+1. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
+2. Read [memory/MEMORY.md](memory/MEMORY.md) — long-term memory and operating principles
+3. Read [preferences.md](.claude/rules/preferences.md) — user preferences and working style
+
+Don't ask permission. Just do it.
+
+## Red Lines
+
+* Don't exfiltrate private data. Ever.
+* Don't run destructive commands without asking.
+* When in doubt, ask.
+
+## Memory
+
+You wake up fresh each session. These files are your continuity:
+
+* **Daily notes:** `memory/YYYY-MM-DD.md` (create `memory/` if needed) — raw logs of what happened
+* **Long-term:** `memory/MEMORY.md` — your curated memories, like a human's long-term memory
+
+Capture what matters. Decisions, context, things to remember. Skip the secrets unless asked to keep them.
+
+### 🧠 MEMORY.md - Your Long-Term Memory
+
+* You can **read, edit, and update** MEMORY.md freely in sessions
+* Write significant events, thoughts, decisions, opinions, lessons learned
+* This is your curated memory — the distilled essence, not raw logs
+* Over time, review your daily files and update MEMORY.md with what's worth keeping
+
+### 📝 Write It Down - No "Mental Notes"!
+
+* **Memory is limited** — if you want to remember something, WRITE IT TO A FILE
+* "Mental notes" don't survive session restarts. Files do.
+* When someone says "remember this" → update `memory/YYYY-MM-DD.md` or relevant file
+* When you learn a lesson → update CLAUDE.md, rules, or the relevant skill
+* When you make a mistake → document it so future-you doesn't repeat it
+* **Text > Brain**
 
 ---
 
@@ -41,6 +64,24 @@ pids_jre_simulator/
 │   └── train_types.json               # Train type English translations
 └── audio/[line]/[diagram]/route.json
 ```
+
+---
+
+## When Working On...
+
+**Don't read these upfront — consult when needed:**
+
+- **Data/JSON** → Read [DATA_FORMAT.md](DATA_FORMAT.md) first
+  - Working with `data/`, translations.json, train_types.json, route.json, stations.json
+
+- **Display/UI** → Read [UPPER_DISPLAY_UPDATE.md](UPPER_DISPLAY_UPDATE.md) first
+  - Working with `displays/`, UpperDisplay, LowerDisplay, mode cycling
+
+- **Audio/Diagram** → Read [AUDIO_SPLITTING_WORKFLOW.md](AUDIO_SPLITTING_WORKFLOW.md) first
+  - Working with `audio/`, PA/STA splitting, creating new diagrams
+
+- **Code Patterns** → Read [.claude/rules/notes.md](.claude/rules/notes.md) first
+  - Font loading, JSON paths, PyInstaller, station skip logic
 
 ---
 
@@ -163,12 +204,3 @@ uv run pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean
 - Uploads both standalone exe and distribution zip to GitHub release
 
 ---
-
-**Full docs:** [DATA_FORMAT.md](DATA_FORMAT.md) | [UPPER_DISPLAY_UPDATE.md](UPPER_DISPLAY_UPDATE.md) | [AUDIO_SPLITTING_WORKFLOW.md](AUDIO_SPLITTING_WORKFLOW.md)
-
-**Implementation notes:** [.claude/rules/notes.md](.claude/rules/notes.md) - Detailed patterns, edge cases, validation rules
-
-**Preferences:** [.claude/rules/preferences.md](.claude/rules/preferences.md) - User preferences, working style
-
-**Session log:** [SCRATCH.md](SCRATCH.md) - Recent interaction notes (dated, under 200 lines)
-
