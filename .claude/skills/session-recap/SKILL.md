@@ -58,36 +58,30 @@ Wait for the user to:
 
 ### Step 4: Update Documentation
 
-After user approval, update:
+After user approval, update the appropriate files. **Each piece of information has ONE home — never duplicate across files.**
 
-**CLAUDE.md:**
-- Known Behaviors list
-- Notes for Next AI section
-- Module responsibilities (if applicable)
+#### Where things live (single source of truth)
 
-**DATA_FORMAT.md:**
-- Field definitions
-- Conventions section
-- Examples
+| What | Where | NOT in |
+|------|-------|--------|
+| Project overview, file structure, module table, key features, commands | `CLAUDE.md` | rules files |
+| Implementation patterns, code gotchas, edge cases, data validation | `.claude/rules/notes.md` | CLAUDE.md |
+| User preferences, collaboration style, naming conventions | `.claude/rules/preferences.md` | CLAUDE.md, MEMORY.md |
+| Red lines, hard boundaries | `.claude/rules/redlines.md` | CLAUDE.md, MEMORY.md |
+| Lessons from past mistakes | `.claude/rules/critical_lessons.md` | anywhere else |
+| Build/distribution details, folder structure | `.claude/skills/build/SKILL.md` | CLAUDE.md, notes.md |
+| JSON field definitions, data format conventions | `DATA_FORMAT.md` | CLAUDE.md |
+| Display architecture details | `UPPER_DISPLAY_UPDATE.md` | CLAUDE.md |
+| Daily session logs | `memory/YYYY-MM-DD.md` | — |
+| Long-term memory index (pointers only) | `memory/MEMORY.md` | — |
 
-**UPPER_DISPLAY_UPDATE.md:**
-- Display architecture updates
-- Integration status
-- Usage examples
+#### Rules for updating
 
-**.claude/rules/notes.md:**
-- Implementation patterns
-- Edge cases
-- Validation rules
-
-**.claude/rules/preferences.md:**
-- User preferences
-- Working style
-- Naming conventions
-
-**memory/YYYY-MM-DD.md:**
-- Create or update today's entry with session summary
-- Update memory/MEMORY.md if new operating principles established
+1. **Before writing, check if the info already exists** somewhere. Update in place, don't add a second copy.
+2. **CLAUDE.md stays slim** — it's a quick-reference entry point with pointers, not a knowledge dump. Only add to it if the info doesn't fit in any rules/skills file.
+3. **Cross-reference, don't copy** — e.g., CLAUDE.md says "See `/build` skill" rather than repeating the folder tree.
+4. **MEMORY.md is an index** — one-line pointers to memory files. No content, no rules, no preferences.
+5. **When in doubt about placement**: implementation detail → `notes.md`, preference → `preferences.md`, build/release → `build/SKILL.md`.
 
 ---
 
@@ -100,6 +94,8 @@ After user approval, update:
 3. **Preferences matter** - If the user expressed a preference (e.g., "hard-coding is fine", "don't over-engineer"), note it for future sessions.
 
 4. **Be specific** - Instead of "fixed display bug", write "Destination always displays as kanji (no furigana cycling) to match IRL behavior".
+
+5. **No duplication** - If you find yourself writing the same fact in two places, stop and pick the one canonical home from the table above.
 
 ---
 

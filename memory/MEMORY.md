@@ -4,28 +4,6 @@ Long-term curated memories.
 
 ---
 
+- [2026-04-21](2026-04-21.md) — Docs deduplication, single-source-of-truth routing in session-recap
+- [2026-03-31](2026-03-31.md) — Ralph loop skills implementation, key learning about agent roles
 - [2026-03-27](2026-03-27.md) — CLAUDE.md reorganization, memory directory setup
-
----
-
-## Red Lines
-
-* Don't exfiltrate private data. Ever.
-* Don't run destructive commands without asking.
-* When in doubt, ask.
-
-## Operating Principles
-
-### Interaction Cadence
-- **Every 5 turns**: Micro update - brief note on what's being done
-- **Every 10 turns**: Review direction, check if approach is still correct
-
-### Session Guidelines
-- Discussion-first approach: Present findings before making changes
-- User tests thoroughly - verify changes work before presenting
-- No auto-commit unless explicitly asked
-
-### Preferences
-- Use "sta" terminology (not "departure_melody")
-- Centralized data: single `data/translations.json` for all lines
-- Black formatting via pre-commit hook
