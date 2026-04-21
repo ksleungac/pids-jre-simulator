@@ -11,13 +11,31 @@
       "Bash(python:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(ls -la \"C:/Users/oscar/.claude/projects/D--pids-jre-simulator/memory/\" 2>/dev/null || dir \"C:\\\\Users\\\\oscar\\\\.claude\\\\projects\\\\D--pids-jre-simulator\\\\memory\" 2>&1)",
-      "Bash(ren \"赤羽-arr.mp3\" \"akabane-arr.mp3\")",
-      "Bash(ren \"赤羽-dep.mp3\" \"akabane-dep.mp3\")",
-      "Bash(ren \"浦和-arr.mp3\" \"urawa-arr.mp3\")",
-      "Bash(ren \"浦和-dep.mp3\" \"urawa-dep.mp3\")",
-      "Bash(ren \"大宮-arr.mp3\" \"omiya-arr.mp3\")"
+      "Bash(uv sync:*)",
+      "Bash(find .claude -type f -name *.md -o -name *.yml -o -name *.yaml -o -name *.json)",
+      "Bash(grep -r \"skill\\\\|Skill\" --include=*.py --include=*.md .)",
+      "Bash(xargs -I {} sh -c \"echo \"\"=== {} ===\"\"; head -10 {}\")",
+      "Bash(grep -r Agent --include=*.md --include=*.json --include=*.ts --include=*.js --include=*.py .)",
+      "Bash(find . -name \"*.md\" -exec grep -l \"Agent\" {})"
+    ],
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(**/.env*)",
+      "Write(~/.ssh/**)",
+      "Write(~/.aws/**)",
+      "Bash(curl * | bash)",
+      "Bash(ssh *)",
+      "Bash(scp *)",
+      "Bash(nc *)",
+      "Bash(rm -rf *)",
+      "Bash(sudo *)",
+      "Bash(chmod 777 *)",
+      "Bash(* > /dev/*)"
     ]
+  },
+  "enabledPlugins": {
+    "pyright-lsp@claude-plugins-official": true
   },
   "skipWebFetchPreflight": true
 }

@@ -21,6 +21,7 @@ dev = [
     "ffmpeg-python>=0.2.0",
     "pydub>=0.25.1",
     "pyinstaller>=6.19.0",
+    "pyright>=1.1.408",
 ]
 
 [tool.black]
