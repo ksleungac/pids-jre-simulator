@@ -14,7 +14,6 @@ from pathlib import Path
 from displays.base import DisplayMode, ModeCycler
 from displays.utils import draw_text, draw_text_given_width
 
-
 # =============================================================================
 # Constants (E235-1000 specific - shared across all modes)
 # =============================================================================
@@ -31,6 +30,7 @@ WHITE_BG = [230, 230, 230]
 # =============================================================================
 # JSON Loading
 # =============================================================================
+
 
 def get_base_dir() -> Path:
     """Get base directory - works for both dev and PyInstaller exe."""
@@ -55,6 +55,7 @@ def load_json_relative(filename: str) -> dict:
 # =============================================================================
 # Japanese Display (KANJI mode)
 # =============================================================================
+
 
 class JapaneseDisplay:
     """Upper LCD Japanese (KANJI) rendering for E235-1000."""
@@ -88,11 +89,7 @@ class JapaneseDisplay:
         """Draw destination with suffix (ゆき/方面)."""
         dest_box_x, dest_box_y, dest_box_w, dest_box_h = 15, 50, 150, 35
         pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(dest_box_x, dest_box_y, dest_box_w, dest_box_h))
-        draw_text_given_width(
-            dest_box_x, dest_box_y, dest_box_w,
-            self.font_dest, dest_text, WHITE_BG, self.screen,
-            collapse=False, script="japanese"
-        )
+        draw_text_given_width(dest_box_x, dest_box_y, dest_box_w, self.font_dest, dest_text, WHITE_BG, self.screen, collapse=False, script="japanese")
 
         suffix = "方面" if route_name == "山手線" else "ゆき"
         t_w, t_h = self.font_suffix.size(suffix)
@@ -123,9 +120,7 @@ class JapaneseDisplay:
         pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(name_x, name_y, max_width, name_h + 5))
 
         draw_text_given_width(
-            name_x, name_y, int(max_width),
-            self.font_station, station_text, WHITE_BG, self.screen,
-            collapse=False, script="japanese"
+            name_x, name_y, int(max_width), self.font_station, station_text, WHITE_BG, self.screen, collapse=False, script="japanese"
         )
 
     def draw_clock(self, time_text: str) -> None:
@@ -139,6 +134,7 @@ class JapaneseDisplay:
 # =============================================================================
 # Furigana Display (FURIGANA mode)
 # =============================================================================
+
 
 class FuriganaDisplay:
     """
@@ -177,11 +173,7 @@ class FuriganaDisplay:
         """Draw destination with suffix - same as Japanese (kanji stays kanji)."""
         dest_box_x, dest_box_y, dest_box_w, dest_box_h = 15, 50, 150, 35
         pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(dest_box_x, dest_box_y, dest_box_w, dest_box_h))
-        draw_text_given_width(
-            dest_box_x, dest_box_y, dest_box_w,
-            self.font_dest, dest_text, WHITE_BG, self.screen,
-            collapse=False, script="japanese"
-        )
+        draw_text_given_width(dest_box_x, dest_box_y, dest_box_w, self.font_dest, dest_text, WHITE_BG, self.screen, collapse=False, script="japanese")
 
         suffix = "方面" if route_name == "山手線" else "ゆき"
         t_w, t_h = self.font_suffix.size(suffix)
@@ -212,9 +204,7 @@ class FuriganaDisplay:
         pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(name_x, name_y, max_width, name_h + 5))
 
         draw_text_given_width(
-            name_x, name_y, int(max_width),
-            self.font_station, station_text, WHITE_BG, self.screen,
-            collapse=False, script="japanese"
+            name_x, name_y, int(max_width), self.font_station, station_text, WHITE_BG, self.screen, collapse=False, script="japanese"
         )
 
     def draw_clock(self, time_text: str) -> None:
@@ -229,6 +219,7 @@ class FuriganaDisplay:
 # English Display (ENGLISH mode)
 # =============================================================================
 
+
 class EnglishDisplay:
     """Upper LCD English rendering for E235-1000."""
 
@@ -241,10 +232,10 @@ class EnglishDisplay:
         self.font_type_bold = pygame.font.Font("fonts/ShinGoPr6N-Heavy.otf", 26)
         self.font_type_bold.set_bold(True)
         self.font_type_bold.set_italic(True)
-        self.font_dest = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 22)
+        self.font_dest = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 25)
         self.font_prefix = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 27)
         self.font_main_prefix = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 27)
-        self.font_station = pygame.font.Font("fonts/HelveticaNeueBold.ttf", 115)
+        self.font_station = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 75)
         self.font_clock = pygame.font.Font("fonts/HelveticaNeue-Roman.otf", 26)
         self.font_suffix = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 20)
 
@@ -255,35 +246,33 @@ class EnglishDisplay:
         draw_text_given_width(box_x, 10, box_w, self.font_type_bold, train_type, type_color, self.screen, collapse=True, script="latin")
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
-        """Draw destination with prefix ('Bound for')."""
-        dest_box_x, dest_box_y, dest_box_w, dest_box_h = 15, 72, 150, 35
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(dest_box_x, dest_box_y, dest_box_w, dest_box_h))
+        """Draw destination with 'for' label above."""
+        dest_box_x, dest_box_w = 15, 150
+        for_y = 50
+        dest_y = 67
 
+        # Draw "for" label
+        for_img = self.font_suffix.render("for", True, (182, 182, 199), DARK_BG)
+        self.screen.blit(for_img, (5, for_y))
+
+        # Draw destination name
+        _, for_h = self.font_suffix.size("for")
         if "\n" in dest_text:
             lines = dest_text.split("\n")
             line_height = self.font_dest.get_height()
-            total_height = line_height * len(lines)
-            start_y = dest_box_y + (dest_box_h - total_height) // 2
             for i, line in enumerate(lines):
-                y_pos = start_y + i * line_height
+                y_pos = dest_y + i * line_height
                 draw_text_given_width(
-                    dest_box_x, y_pos, dest_box_w,
-                    self.font_dest, line, WHITE_BG, self.screen,
-                    collapse=True, script="latin"
+                    dest_box_x + 10, y_pos, dest_box_w - 10, self.font_dest, line, WHITE_BG, self.screen, collapse=True, script="latin"
                 )
         else:
+            # Single line: vertically center between "for" bottom and UPPER_HEIGHT
+            dest_h = self.font_dest.get_height()
+            zone_top = for_y + for_h
+            single_y = zone_top + (UPPER_HEIGHT - zone_top - dest_h) // 2 - 5
             draw_text_given_width(
-                dest_box_x, dest_box_y, dest_box_w,
-                self.font_dest, dest_text, WHITE_BG, self.screen,
-                collapse=True, script="latin"
+                dest_box_x + 10, single_y, dest_box_w - 10, self.font_dest, dest_text, WHITE_BG, self.screen, collapse=True, script="latin"
             )
-
-        suffix = "for"
-        t_w, t_h = self.font_suffix.size(suffix)
-        suffix_x = int(S_WIDTH * 0.25) - t_w - 150
-        suffix_y = UPPER_HEIGHT - t_h - 50
-        suffix_img = self.font_suffix.render(suffix, True, (182, 182, 199), DARK_BG)
-        self.screen.blit(suffix_img, (suffix_x, suffix_y))
 
     def draw_prefix(self, prefix_text: str) -> None:
         """Draw English prefix (already translated by UpperDisplay manager)."""
@@ -302,15 +291,10 @@ class EnglishDisplay:
         max_width = S_WIDTH * 0.54
 
         _, name_h = self.font_station.size(station_text)
+        # Bottom-aligned with small margin
         name_y = UPPER_HEIGHT - name_h - 2
 
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(name_x, name_y, max_width, name_h + 2))
-
-        draw_text_given_width(
-            name_x, name_y, int(max_width),
-            self.font_station, station_text, WHITE_BG, self.screen,
-            collapse=True, script="latin"
-        )
+        draw_text_given_width(name_x, name_y, int(max_width), self.font_station, station_text, WHITE_BG, self.screen, collapse=True, script="latin")
 
     def draw_clock(self, time_text: str) -> None:
         """Draw clock."""
@@ -323,6 +307,7 @@ class EnglishDisplay:
 # =============================================================================
 # Upper Display Manager
 # =============================================================================
+
 
 class UpperDisplay:
     """
@@ -355,7 +340,7 @@ class UpperDisplay:
         self.mode_displays = {
             DisplayMode.KANJI: self.japanese_display,
             DisplayMode.FURIGANA: self.furigana_display,
-            # DisplayMode.ENGLISH: self.english_display,  # DISABLED
+            DisplayMode.ENGLISH: self.english_display,
         }
         self.mode_cycler = ModeCycler(self.mode_displays, default_mode=DisplayMode.KANJI)
 

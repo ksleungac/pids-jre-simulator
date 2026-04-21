@@ -10,8 +10,15 @@ Current Layout Zones (Upper LCD, height = 117px):
 │             ──┴──                                            │
 │            Prefix    Station Name                            │  Bottom zone (50-117px)
 └─────────────────────────────────────────────────────────────┘
+
+Usage:
+  uv run preview_upper_lcd.py                          # Interactive mode
+  uv run preview_upper_lcd.py --screenshot out.png     # Save screenshot and exit
+  uv run preview_upper_lcd.py --screenshot out.png --mode english --stop 2 --pa 1
 """
 
+import argparse
+import os
 import pygame
 import time
 import sys
@@ -20,7 +27,6 @@ from displays.train_models.e235_1000 import UpperDisplay
 from displays.base import DisplayMode
 from displays.train_models.e235_1000.upper_lcd import S_WIDTH, S_HEIGHT, UPPER_HEIGHT
 
-
 # =============================================================================
 # Mock Data (for preview - modify to test different scenarios)
 # =============================================================================
@@ -28,7 +34,7 @@ from displays.train_models.e235_1000.upper_lcd import S_WIDTH, S_HEIGHT, UPPER_H
 MOCK_ROUTE_DATA = {
     "route": "山手線",
     "type": "快速",
-    "dest": "池袋・新宿",
+    "dest": "君津",
     "dest_furigana": "とうきょう",
     "color": [0, 128, 0],  # Green for Yamanote
     "type_color": [150, 40, 0],
@@ -60,6 +66,11 @@ MOCK_STOPS = [
         "furigana": "たかなわげーとうぇい",
         "english": "Takanawa Gateway",
     },
+    {
+        "name": "久里浜",
+        "furigana": "くりはま",
+        "english": "Kurihama",
+    },
 ]
 
 MOCK_STATE = {
@@ -73,8 +84,23 @@ MOCK_STATE = {
 # =============================================================================
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Upper LCD Preview (E235-1000)")
+    parser.add_argument("--screenshot", type=str, help="Save screenshot to file and exit")
+    parser.add_argument("--mode", type=str, choices=["kanji", "furigana", "english"], default=None, help="Force display mode (default: cycles)")
+    parser.add_argument("--stop", type=int, default=0, help="Station index (default: 0)")
+    parser.add_argument("--pa", type=int, default=0, help="PA count: 0=次は, 1=まもなく, 2=ただいま (default: 0)")
+    return parser.parse_args()
+
+
 def main():
     """Run the preview loop for testing Upper LCD display."""
+    args = parse_args()
+
+    # Use dummy video driver for headless screenshot mode
+    if args.screenshot:
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+
     pygame.init()
     screen = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
     pygame.display.set_caption("Upper LCD Preview (E235-1000) - Press: PageDown=next station, PageUp=next PA, ESC=quit")
@@ -82,7 +108,31 @@ def main():
 
     # Initialize display using new architecture
     display = UpperDisplay(screen, MOCK_ROUTE_DATA, MOCK_STOPS)
-    display.set_state(MOCK_STATE["curr_stop"], MOCK_STATE["cnt_pa"])
+
+    # Force mode if specified (temporarily enable all modes including English)
+    mode_map = {"kanji": DisplayMode.KANJI, "furigana": DisplayMode.FURIGANA, "english": DisplayMode.ENGLISH}
+    if args.mode:
+        forced_mode = mode_map[args.mode]
+        # Enable all modes so forced mode works even if normally disabled
+        display.mode_displays[DisplayMode.ENGLISH] = display.english_display
+        display.mode_cycler.current_mode = forced_mode
+        display.mode_cycler.paused = True
+
+    stop_idx = min(args.stop, len(MOCK_STOPS) - 1)
+    pa_count = args.pa
+    display.set_state(stop_idx, pa_count)
+
+    if args.screenshot:
+        # Render one frame and save
+        display.update()
+        display.draw()
+        pygame.image.save(screen, args.screenshot)
+        print(f"Screenshot saved to {args.screenshot}")
+        pygame.quit()
+        return
+
+    MOCK_STATE["curr_stop"] = stop_idx
+    MOCK_STATE["cnt_pa"] = pa_count
 
     running = True
     while running:
