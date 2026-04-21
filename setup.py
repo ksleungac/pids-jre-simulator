@@ -4,6 +4,8 @@ import os
 import json
 import pygame
 
+from constants import SETUP_KEY_REPEAT_DELAY, SETUP_KEY_REPEAT_INTERVAL
+
 
 class SetupScreen:
     """Handles route and train selection before starting the simulator."""
@@ -208,31 +210,48 @@ class SetupScreen:
             print("No routes found. Please add route.json files to the audio/ directory.")
             return None
 
+        # Store original key repeat state to restore later
+        # pygame.key.get_repeat() returns (delay, interval) or None if repeat is disabled
+        original_repeat = pygame.key.get_repeat()
+
+        # Enable key repeat for arrow keys using configured timing
+        # This allows holding down arrow keys to scroll continuously
+        pygame.key.set_repeat(SETUP_KEY_REPEAT_DELAY, SETUP_KEY_REPEAT_INTERVAL)
+
         running = True
 
-        while running:
-            self.draw(self.selected_idx)
+        try:
+            while running:
+                self.draw(self.selected_idx)
 
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    return None
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
                         return None
-                    elif event.key == pygame.K_UP:
-                        self.selected_idx = max(0, self.selected_idx - 1)
-                    elif event.key == pygame.K_DOWN:
-                        self.selected_idx = min(len(self.routes) - 1, self.selected_idx + 1)
-                    elif event.key == pygame.K_RETURN:
-                        if self.routes:
-                            selected = self.routes[self.selected_idx]
-                            # Load full route data
-                            try:
-                                with open(os.path.join(selected["path"], "route.json"), encoding="utf-8") as f:
-                                    route_data = json.load(f)
-                                return {"work_dir": selected["path"], "route_data": route_data}
-                            except Exception as e:
-                                print(f"Error loading route data: {e}")
-                                return None
-
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            return None
+                        elif event.key == pygame.K_UP:
+                            self.selected_idx = max(0, self.selected_idx - 1)
+                        elif event.key == pygame.K_DOWN:
+                            self.selected_idx = min(len(self.routes) - 1, self.selected_idx + 1)
+                        elif event.key == pygame.K_RETURN:
+                            if self.routes:
+                                selected = self.routes[self.selected_idx]
+                                # Load full route data
+                                try:
+                                    with open(os.path.join(selected["path"], "route.json"), encoding="utf-8") as f:
+                                        route_data = json.load(f)
+                                    return {"work_dir": selected["path"], "route_data": route_data}
+                                except Exception as e:
+                                    print(f"Error loading route data: {e}")
+                                    return None
+        finally:
+            # Restore original key repeat state when exiting setup screen
+            # This ensures the main simulator doesn't inherit modified key repeat settings
+            if original_repeat is None:
+                pygame.key.set_repeat()  # Disable repeat
+            else:
+                # Restore exact original delay and interval values
+                delay, interval = original_repeat
+                pygame.key.set_repeat(delay, interval)
         return None

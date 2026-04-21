@@ -51,6 +51,8 @@ WINDOW_Y = S_HEIGHT
 # Timing
 FRAME_RATE = 15
 KEY_REPEAT_DELAY = 200
+SETUP_KEY_REPEAT_DELAY = 300  # Initial delay before key repeat starts (milliseconds)
+SETUP_KEY_REPEAT_INTERVAL = 30  # Interval between repeated key events (milliseconds)
 AUDIO_FADE_MS = 800
 TARGET_LOUDNESS = -15.0
 STATION_DISPLAY_INTERVAL = 4  # Seconds between kanji/furigana cycling
