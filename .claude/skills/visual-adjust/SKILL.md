@@ -15,7 +15,7 @@ a real-world ground truth photo provided by the user.
 
 ## Prerequisites
 
-- `preview_upper_lcd.py` supports `--screenshot`, `--mode`, `--stop`, `--pa` flags
+- `preview_display.py` supports `--screenshot`, `--mode`, `--stop`, `--pa` flags
 - User provides a ground truth photo (real train display photo or reference image)
 - Read the relevant display renderer code before starting (e.g., `upper_lcd.py`)
 
@@ -27,7 +27,7 @@ Study it carefully — note font sizes, spacing, alignment, colors, margins.
 
 ### Step 2: Screenshot current state
 ```bash
-uv run preview_upper_lcd.py --screenshot screenshot_<name>.png --mode english --stop 0 --pa 2
+uv run preview_display.py --screenshot screenshot_<name>.png --mode english --stop 0 --pa 2
 ```
 Read the PNG to see the current rendering. Compare against ground truth.
 
@@ -112,8 +112,8 @@ When writing or adjusting layout code:
 --pa <0|1|2>               # 0=次は/Next, 1=まもなく/Arriving at, 2=ただいま/Now stopping at
 
 # Examples
-uv run preview_upper_lcd.py --screenshot out.png --mode english --stop 0 --pa 2
-uv run preview_upper_lcd.py --screenshot out.png --mode kanji --stop 3 --pa 0
+uv run preview_display.py --screenshot out.png --mode english --stop 0 --pa 2
+uv run preview_display.py --screenshot out.png --mode kanji --stop 3 --pa 0
 ```
 
 ## Common Pitfalls

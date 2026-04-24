@@ -34,6 +34,7 @@ Rules:
 ```
 pids_jre_simulator/
 ├── main.py, app.py, audio.py, display.py (LowerDisplay), constants.py, utils.py
+├── preview_display.py                 # Audio-free preview entry point — uses PASimulator(preview=True)
 ├── displays/                          # Modular display system
 │   ├── base.py                        # DisplayMode enum, ModeCycler
 │   └── train_models/e235_1000/
@@ -43,7 +44,9 @@ pids_jre_simulator/
 │   ├── translations.json              # Station names (furigana, english)
 │   ├── train_types.json               # Train type English translations
 │   └── stations.json                  # Station metadata, line-independent (3-letter codes; more fields later)
-└── audio/[line]/[diagram]/route.json
+└── audio/
+    ├── [line]/[diagram]/route.json    # Real routes
+    └── mock/main/route.json           # Curated edge-case catalog for preview (not shipped)
 ```
 
 ## Module Responsibilities
@@ -67,6 +70,7 @@ pids_jre_simulator/
 5. **Audio**: -15 LUFS normalization, double-buffered temp files.
 6. **Station Skip**: Time-based red arrow progression through passing stations.
 7. **Station Code Badge**: JY/03 framed square + optional 3-letter code (AKB, TYO, ...) for the 22 major JR East interchange stations. Code source: `data/stations.json` keyed by Japanese name.
+8. **Single train-position index** (`app.py` `AppState`): `state.curr_stop` is the only stored "where is the train" index. The visual cursor `state.cursor_pos` is a derived property: `curr_stop - max(0, skip - skip_progress)`. During skip animation the cursor lags behind curr_stop and walks forward as `skip_progress` ticks up. All rendering uses global indices; rendering iterates `(global_idx, stop)` pairs from `_get_stops_list_disp()` and local column index appears only in pixel math.
 
 ## Controls
 
@@ -85,5 +89,6 @@ Yellow hint square = multiple PA tracks available.
 - **Data/JSON** → Read [DATA_FORMAT.md](DATA_FORMAT.md) first
 - **Display/UI** → Read [UPPER_DISPLAY_UPDATE.md](UPPER_DISPLAY_UPDATE.md) first
 - **Audio/Diagram** → Read [AUDIO_SPLITTING_WORKFLOW.md](AUDIO_SPLITTING_WORKFLOW.md) first
-- **Code Patterns** → Read [.claude/rules/notes.md](.claude/rules/notes.md) — font loading, JSON paths, PyInstaller, station skip logic, distribution
+- **Code Patterns** → Read [.claude/rules/notes.md](.claude/rules/notes.md) — font loading, JSON paths, PyInstaller, station skip logic, long-route refresh, preview mode
+- **Testing / previewing** → `uv run preview_display.py` defaults to the mock catalog (`audio/mock/main`). Keys: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. See notes.md "Preview Mode" for `jump_to_stop` backward-rounding semantics.
 - **Building/Releasing** → Use `/build` skill

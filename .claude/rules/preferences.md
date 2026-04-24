@@ -21,7 +21,7 @@
 - **Reference-image driven**: Layout iteration uses `real/` folder photos as ground truth. Use `/visual-adjust` for this work. Reference images go in `real/`, screenshots during iteration go in project root (prefix `screenshot_`) and should be cleaned up once the user approves.
 
 ## Code Review Scope
-- **Exclude testing harnesses from production reviews**: `preview_upper_lcd.py` is a testing tool (not shipped). When invoking `/review-dirty` or `/review+fix` for feature work, mark it out of scope in the prompt.
+- **Exclude testing harnesses from production reviews**: `preview_display.py` is a testing tool (not shipped). When invoking `/review-dirty` or `/review+fix` for feature work, mark it out of scope in the prompt.
 
 ---
 

@@ -368,7 +368,7 @@ display.draw()
 - `fonts/HelveticaNeueBold.ttf` - English station names (large)
 
 **Preview Script:**
-- `preview_upper_lcd.py` - Standalone preview for testing (uses new architecture)
+- `preview_display.py` - Standalone preview for testing (uses new architecture)
 
 ---
 
@@ -405,7 +405,7 @@ uv run pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean
 
 ```bash
 # Run preview script
-uv run preview_upper_lcd.py
+uv run preview_display.py
 
 # Test imports
 python -c "from displays import get_train_display, DisplayMode; print('OK')"

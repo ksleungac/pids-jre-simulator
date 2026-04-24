@@ -59,14 +59,22 @@
 - `departure_time` set when `curr_stop` increments (train departs)
 
 ### Station Skip Logic (LowerDisplay)
-- **Time-based progression**: Red arrow (●) advances through passing stations based on elapsed time
-  - Travel time from stopping to stopping station divided into (skip + 1) segments
-  - Example: Skip 2 stations, 10min travel → arrow moves at ~3.33min intervals
-- **Two-phase approach**:
-  - Phase 1 (`cnt_pa == 0`): Set `skip` count and `time_to_next`, reset `skip_progress`
-  - Phase 2 (`cnt_pa >= 1`): Complete jump, deduct `skip_progress` from remaining (time-based may have already advanced)
-- **Inner circle**: Always drawn at `curr_stop` (logical PA station), not `curr_stop_disp` (display can be at passing station)
-- **State fields**: `time_to_next`, `skip_progress` (not just `skip`)
+- **Single source of truth**: `state.curr_stop` is the only stored "where is the train" index. The visual cursor on the lower LCD is derived: `state.cursor_pos = curr_stop - max(0, skip - skip_progress)`. When no skip is in flight (`skip == 0`), cursor_pos == curr_stop.
+- **Skip setup happens in `app._next_pa`'s "advance to next stop" branch** (not in `display.py`):
+  - Records `prev_stop = curr_stop`, advances `curr_stop` past passing stations to the next PA station.
+  - Sets `skip = curr_stop - prev_stop - 1` (number of passing stations crossed), `skip_progress = 0`, `time_to_next = stops[curr_stop].time` if `skip > 0`.
+  - First frame after this: cursor_pos = curr_stop − skip = first passing station. The cursor visibly steps onto it.
+- **Time-based progression**: `LowerDisplay._update_skip_progress` increments `skip_progress` at thresholds `time_to_next * i / (skip + 1)`. cursor_pos auto-advances because it's derived. No `curr_stop_disp` mutation.
+- **Catch-up at next PA tick**: `_next_pa`'s "next PA within current stop" branch zeros `skip`/`skip_progress`/`time_to_next` on every cnt_pa increment. Cursor snaps to curr_stop. Idempotent — no-op if skip was already 0.
+- **No leak class possible**: Because the "advance" branch *overwrites* skip from the gap (not appends), and the "within stop" branch unconditionally zeros it, single-PA-target leakage (the old bug) cannot recur. There is no separate "flush" path to remember.
+- **Inner circle**: Drawn at `curr_stop` (PA target) via `gi == self.state.curr_stop` in `draw_marks`. During skip animation cursor_pos lags behind by `skip - skip_progress` — intentional: pointer (red triangle) shows animation position, inner dot shows the actual PA target.
+- **State fields**: `skip`, `skip_progress`, `time_to_next` — three integers fully describe the animation. `cursor_pos` is a property on `AppState`, not stored.
+
+### Long-Route Window Refresh
+- Constants: `STOPS_PER_LINE = 14`, so `STOPS_QUANTITY = 28`. Refresh only triggers for routes with **more than 28 stops**.
+- Hits: Keihin-Tōhoku (46), Chuo (32), Yamanote (30). Below threshold: Nanbu (26), Saikyō/Takasaki (24), etc.
+- Trigger: when `len(stops) - curr_stop < STOPS_QUANTITY`, `_get_stops_list_disp()` returns `self.stops[len(stops) - STOPS_QUANTITY:]` (last 28 stops) and sets `continuity = [1, 1, 0]` on the exact transition frame.
+- Window carries tuples `(global_idx, stop)` — draw code doesn't need a separate `window_start` parameter to compare state, the global index travels with each cell.
 
 ### PA Track Numbering
 - Tracks numbered sequentially across route (1, 2, 3, ...)
@@ -122,6 +130,23 @@
    ```python
    TRAIN_DISPLAYS["{model_name}"] = {ModelName}UpperDisplay
    ```
+
+## Preview Mode (testing harness)
+
+`PASimulator(preview=True)` runs the real app with two swaps: `_SilentAudio` replaces `AudioPlayer`, and `_handle_input_preview` (pygame events) replaces the `keyboard`-library polling. `pygame.mixer.init()` and `win32gui.SetWindowPos` are skipped. Everything else — route loading, `_next_pa`, `_next_sta`, draw loop — is shared with the real app. Bug fixes to state-machine code automatically apply to preview.
+
+`preview_display.py` is the thin entry point (~110 lines of CLI plumbing + screenshot mode). No duplicated state machine.
+
+### Mock route
+- Path: `audio/mock/main/route.json`. Default when `--route` is omitted.
+- Curated 10-stop fictional line covering: code_3 badge presence/absence, PA-track counts 0/1/2/3, 1-station skip to single-PA target (reproduces the single-PA skip-flush bug), 2-station skip to multi-PA target (happy path), long-name wrap (高輪ゲートウェイ), compound destination (品川・高輪ゲートウェイ).
+- Lives as a real `route.json` file — not in-code constants. Loads via the same path as real routes. Edit freely to experiment.
+
+### `jump_to_stop(target, direction=-1)`
+- Hard-jumps to a stop, bypassing PA cycle. Used by `--stop` CLI and ←/→ arrow keys.
+- If target is a passing station (`pa == []`), rolls in `direction` to the nearest PA station. Default `-1` (backward) — lands on pre-skip state so PageDown exercises the skip logic.
+- Consequence: `→` key is a no-op when the next station is passing. Cross skips via PageDown, not arrow keys.
+- Resets `skip`/`skip_progress`/`time_to_next`/`departure_time` — preview starts from a clean state.
 
 ## Data Validation Rules
 
