@@ -15,8 +15,8 @@ project_root/
 │   ├── train_types.json         # Train type English translations (with optional english_short)
 │   └── stations.json            # Station metadata (3-letter codes; more fields over time)
 └── audio/
-    └── [line]/                  # Line name (e.g., chuo, keihin, saikyo)
-        └── [diagram]/           # Train diagram folder (e.g., 1349F, 759K)
+    └── [line]/                  # Line folder (e.g., chuo, keihin, nambu, yamanote)
+        └── [diagram]/           # Train diagram folder (e.g., 1349F, 759K). Omit for single-diagram lines.
             └── route.json       # Route configuration
 ```
 
@@ -290,7 +290,7 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 {
     "route": "路線名",              // Route name (e.g., 中央線快速電車，埼京線)
     "color": [R, G, B],            // Main route color for UI elements
-    "contrast_color": [R, G, B],   // Contrast color for pointers/highlights
+    "contrast_color": [R, G, B],   // Contrast color for pointers/highlights (optional, default: [224, 54, 37] JR red)
     "type_color": [R, G, B],       // Color for train type text (optional, default: black)
     "type": "列車種別",             // Train type (e.g., 快速，普通，各駅停車)
     "dest": "終点"                  // Final destination (kanji) - furigana loaded from data/translations.json
@@ -352,16 +352,16 @@ The `pa` array contains **descriptive filenames** (without `.mp3` extension) tha
 ```
 
 **Skipping Stations:**
-Stations with empty `pa: []` are skipped automatically (train passes through without stopping). The `time` field should still be set for proper countdown behavior between active stops.
+Stations with empty `pa: []` are skipped automatically (train passes through without stopping). Passing stations must omit `sta`, `sta_cut`, and `time` — the train doesn't stop, so no departure melody plays and the countdown is driven by the next PA station's `time`.
 
 ```json
 {
     "name": "辻堂",
-    "pa": [],        // Empty = train skips this station
-    "sta": ["JT09"],
-    "sta_cut": 14,
-    "time": 3,       // Still countdowns, but doesn't stop
+    "pa": [],
     "sta_code": "JT09"
+    // NO "sta" — train doesn't stop, no departure melody
+    // NO "sta_cut" — melody won't play
+    // NO "time" — countdown derived from next PA station
 }
 ```
 
@@ -369,11 +369,11 @@ Stations with empty `pa: []` are skipped automatically (train passes through wit
 
 | Value | Meaning |
 |-------|---------|
-| `[]` or `[""]` | No STA melody for this station |
+| *(field omitted)* | No STA melody — use this on passing stations and termini (no departure melody needed) |
 | `["JC01"]` | Single STA audio file |
 | `["JC01", "JC01_1"]` | Multiple STA audio files (variants) |
 
-**Note:** The `sta` field contains actual audio filenames (without `.mp3`). It may include suffixes like `_OSK`, `_SBY`, `_TYO` for disambiguation.
+**Note:** The `sta` field contains actual audio filenames (without `.mp3`). It may include suffixes like `_OSK`, `_SBY`, `_TYO` for disambiguation. When a station has no STA melody, **omit the field entirely** rather than setting `[]` or `[""]`.
 
 #### `sta_code` Field (Station Numbering)
 
@@ -383,7 +383,7 @@ Stations with empty `pa: []` are skipped automatically (train passes through wit
 | `null` | Station has no official code (e.g., Kawagoe Line stations) |
 
 **Format:** `[Line Prefix][Number]` (e.g., `JC01`, `JK47`, `JA08`)
-- Line prefixes: JC (Chuo), JK (Keihin-Tohoku), JA (Saikyo), JE (Keiyo), JY (Yamanote), JT (Tokaido)
+- Line prefixes: JC (Chuo), JK (Keihin-Tohoku), JA (Saikyo), JE (Keiyo), JY (Yamanote), JT (Tokaido), JN (Nambu), JJ (Joban), JU (Takasaki)
 - No 3-letter suffixes in `sta_code` (those go in `sta` field only)
 - **Note:** `sta_code` is route-local — used by `upper_lcd.py` to render the station code badge. Line-independent station metadata lives in `data/stations.json`.
 
@@ -396,18 +396,21 @@ Stations with empty `pa: []` are skipped automatically (train passes through wit
 
 ---
 
-## Supported Lines (as of 2026-03-03)
+## Supported Lines
 
 All lines share the central `data/translations.json` (display text) and `data/stations.json` (operational metadata).
 
-| Line | Code Prefix |
-|------|-------------|
-| Chuo Main (中央線) | JC |
-| Keihin-Tohoku (京浜東北) | JK |
-| Keiyo (京葉線) | JE |
-| Saikyo (埼京線) | JA |
-| Tokaido (東海道線) | JT |
-| Yamanote (山手線) | JY |
+| Line | Code Prefix | Folder |
+|------|-------------|--------|
+| Chuo Main (中央線) | JC | `audio/chuo/` |
+| Joban (常磐線) | JJ | `audio/joban/` |
+| Keihin-Tohoku (京浜東北) | JK | `audio/keihin/` |
+| Keiyo (京葉線) | JE | `audio/keiyo/` |
+| Nambu (南武線) | JN | `audio/nambu/` |
+| Saikyo (埼京線) | JA | `audio/saikyo/` |
+| Takasaki (高崎線) | JU | `audio/takasaki/` |
+| Tokaido (東海道線) | JT | `audio/tokaido/` |
+| Yamanote (山手線) | JY | `audio/yamanote/` |
 
 ---
 
@@ -423,13 +426,14 @@ All lines share the central `data/translations.json` (display text) and `data/st
    - By train type: `"快速"` → `train_types.json["快速"]`
 
 3. **Empty values:**
-   - No PA: `"pa": []`
-   - No STA: `"sta": []` or `"sta": [""]`
+   - No PA at this stop: `"pa": []`
+   - No STA melody: **omit the `sta` field entirely** (not `[]` or `[""]`)
    - No code: `"sta_code": null`
 
 4. **Travel time:**
    - First station: `"time": 0`
-   - Other stations: minutes to next station
+   - Other PA stations: minutes to next PA station (spans any intermediate passing stations)
+   - Passing stations (`pa: []`): **must NOT have a `time` field**
 
 5. **Circular routes:**
    - First and last station have the same name
@@ -459,141 +463,28 @@ Use this checklist when adding or modifying route data to ensure consistency.
 - [ ] **PA tracks** are assigned to correct stations (do not renumber subsequent stations when modifying)
 - [ ] **Station names in route.json** have entries in `data/translations.json`
 - [ ] **Train types in route.json** have entries in `data/train_types.json` (optional, falls back to kanji)
+- [ ] **Passing stations** (`pa: []`) have NO `sta`, NO `sta_cut`, NO `time` fields
 
-### Automated Validation Script
+### Automated Validation
 
-Run this Python script to validate all route data:
+Run `validate_data.py` at the project root:
 
-```python
-import json
-import os
-import re
-
-# Lines to validate
-lines = [
-    ('chuo', 'JC'),
-    ('keihin', 'JK'),
-    ('keiyo', 'JE'),
-    ('saikyo', 'JA'),
-    ('tokaido', 'JT'),
-    ('yamanote', 'JY'),
-]
-
-# Load central translations
-translations_file = 'data/translations.json'
-if os.path.exists(translations_file):
-    with open(translations_file, encoding='utf-8') as f:
-        translations = json.load(f)
-    print(f'Central translations.json: OK ({len(translations)} entries)')
-else:
-    print('ERROR: data/translations.json missing!')
-    translations = {}
-
-# Load train type translations
-train_types_file = 'data/train_types.json'
-if os.path.exists(train_types_file):
-    with open(train_types_file, encoding='utf-8') as f:
-        train_types = json.load(f)
-    print(f'Train types train_types.json: OK ({len(train_types)} entries)')
-else:
-    print('WARNING: data/train_types.json missing (train types will fall back to kanji)')
-    train_types = {}
-
-# Pattern to detect if sta_code has a suffix (wrong!)
-suffix_pattern = re.compile(r'_[A-Z]{2,}$')  # e.g., _OSK, _SBY, _TYO
-
-def validate_line(line_name, prefix):
-    print(f'\n=== {line_name.upper()} Line ===')
-
-    # Get all route.json files for this line
-    route_dir = f'audio/{line_name}'
-    for root, dirs, files in os.walk(route_dir):
-        for file in files:
-            if file == 'route.json':
-                route_file = os.path.join(root, file)
-                validate_route(route_file)
-
-def validate_route(route_file):
-    diag_name = os.path.basename(os.path.dirname(route_file))
-    issues = []
-
-    try:
-        with open(route_file, encoding='utf-8') as f:
-            data = json.load(f)
-    except json.JSONDecodeError as e:
-        print(f'  {diag_name}: JSON ERROR - {e}')
-        return
-
-    # Check train type translation exists
-    route_type = data.get('type', '')
-    if route_type and route_type not in train_types:
-        issues.append(f'Train type "{route_type}": No translation in data/train_types.json (will fall back to kanji)')
-
-    # Check stops
-    for i, stop in enumerate(data.get('stops', [])):
-        name = stop.get('name', '?')
-
-        # Check sta_code exists
-        if 'sta_code' not in stop:
-            issues.append(f'Stop {i} ({name}): Missing sta_code')
-            continue
-
-        sta_code = stop.get('sta_code')
-
-        # Check sta_code doesn't have suffix
-        if sta_code and suffix_pattern.search(sta_code):
-            issues.append(f'Stop {i} ({name}): sta_code="{sta_code}" should not have suffix')
-
-        # Check translation exists for station name
-        if name and name not in translations:
-            issues.append(f'Stop {i} ({name}): No translation in data/translations.json')
-
-    if issues:
-        print(f'  {diag_name}: ISSUES FOUND')
-        for issue in issues:
-            print(f'    - {issue}')
-    else:
-        print(f'  {diag_name}: OK ({len(data.get("stops", []))} stops)')
-
-# Run validation
-print('\n=== PA Simulator Data Validation ===')
-for line_name, prefix in lines:
-    validate_line(line_name, prefix)
-
-print('\nValidation complete.')
+```bash
+PYTHONUTF8=1 python validate_data.py
 ```
 
-### Expected Output (All Passing)
+Exits 0 if clean, 1 if issues found (usable as a pre-commit or CI gate). Checks performed:
 
-```
-=== PA Simulator Data Validation ===
+- Every stop has `sta_code` (value or `null`); value has no `_XX` suffix
+- Every `name` has an entry in `data/translations.json`
+- Route-level `dest` and stop-level `dest` overrides are translated
+- Route-level `type` has an entry in `data/train_types.json`
+- Passing stations (`pa: []`, non-first) have NO `sta`, NO `sta_cut`, NO `time`
+- First station has `time: 0`
+- Every file referenced by `pa` / `sta` exists on disk (`pa/<name>.mp3`, `sta/<name>.mp3`)
+- `stations.json` `code_3` count matches the documented 22
 
-Central translations.json: OK (120 entries)
-Train types train_types.json: OK (10 entries)
-
-=== CHUO Line ===
-  1654T: OK (32 stops)
-  916H: OK (32 stops)
-
-=== KEIHIN Line ===
-  1275A: OK (46 stops)
-  727B: OK (46 stops)
-
-=== KEIYO Line ===
-  780Y_1510Y: OK (17 stops)
-
-=== SAIKYO Line ===
-  1349F: OK (24 stops)
-  759K: OK (24 stops)
-
-=== TOKAIDO Line ===
-  1865E: OK (21 stops)
-
-=== YAMANOTE Line ===
-  yamanote: OK (30 stops)
-
-Validation complete.
-```
+Issues are grouped by route with stop index + name. Add new checks by editing `validate_data.py` — don't re-embed them here.
 
 ### Common Issues and Fixes
 
@@ -601,6 +492,8 @@ Validation complete.
 |-------|---------|-----|
 | sta_code with suffix | `"sta_code": "JC05_SJK"` | Change to `"sta_code": "JC05"` |
 | Missing sta_code | Stop has no `sta_code` field | Add `"sta_code": "JC05"` or `null` |
+| Passing station has `time`/`sta_cut` | `"pa": [], "sta_cut": 10` | Remove those fields (passing stations must not have them) |
+| Missing audio file | `sta/JK05.mp3 missing` | Add file, rename reference, or strip `sta` on passing stations |
 
 ---
 
@@ -617,14 +510,14 @@ UnicodeEncodeError: 'charmap' codec can't encode characters
 ```bash
 # Command Prompt
 set PYTHONUTF8=1
-python validate.py
+python validate_data.py
 
 # PowerShell
 $env:PYTHONUTF8=1
-python validate.py
+python validate_data.py
 
 # Git Bash
-PYTHONUTF8=1 python validate.py
+PYTHONUTF8=1 python validate_data.py
 ```
 
 Alternatively, add this to the top of your Python script:

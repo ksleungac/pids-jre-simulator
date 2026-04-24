@@ -15,8 +15,6 @@
         {
             "name": "尾久",
             "pa": [],
-            "sta": ["oku"],
-            "sta_cut": 14,
             "sta_code": "JU03"
         },
         {
@@ -38,8 +36,6 @@
         {
             "name": "さいたま 新都心",
             "pa": [],
-            "sta": ["saitama-shintoshin"],
-            "sta_cut": 11,
             "sta_code": "JU06"
         },
         {
@@ -53,8 +49,6 @@
         {
             "name": "宮原",
             "pa": [],
-            "sta": ["miyahara"],
-            "sta_cut": 10,
             "sta_code": null
         },
         {
@@ -68,8 +62,6 @@
         {
             "name": "北上尾",
             "pa": [],
-            "sta": ["kita-ageo"],
-            "sta_cut": 15,
             "sta_code": null
         },
         {
@@ -83,8 +75,6 @@
         {
             "name": "北本",
             "pa": [],
-            "sta": ["kitamoto"],
-            "sta_cut": 9,
             "sta_code": null
         },
         {
@@ -98,22 +88,16 @@
         {
             "name": "北鴻巣",
             "pa": [],
-            "sta": ["kita-konosu"],
-            "sta_cut": 15,
             "sta_code": null
         },
         {
             "name": "吹上",
             "pa": [],
-            "sta": ["fukiage"],
-            "sta_cut": 16,
             "sta_code": null
         },
         {
             "name": "行田",
             "pa": [],
-            "sta": ["gyoda"],
-            "sta_cut": 10,
             "sta_code": null
         },
         {

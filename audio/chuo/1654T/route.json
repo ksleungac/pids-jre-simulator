@@ -161,13 +161,11 @@
         {
             "name": "東中野",
             "pa": [],
-            "sta": [],
             "sta_code": null
         },
         {
             "name": "大久保",
             "pa": [],
-            "sta": [],
             "sta_code": null
         },
         {
@@ -181,19 +179,16 @@
         {
             "name": "代々木",
             "pa": [],
-            "sta": [],
             "sta_code": null
         },
         {
             "name": "千駄ヶ谷",
             "pa": [],
-            "sta": [],
             "sta_code": null
         },
         {
             "name": "信濃町",
             "pa": [],
-            "sta": [],
             "sta_code": null
         },
         {
@@ -207,19 +202,16 @@
         {
             "name": "市ヶ谷",
             "pa": [],
-            "sta": [],
             "sta_code": null
         },
         {
             "name": "飯田橋",
             "pa": [],
-            "sta": [],
             "sta_code": null
         },
         {
             "name": "水道橋",
             "pa": [],
-            "sta": [],
             "sta_code": null
         },
         {
@@ -241,9 +233,7 @@
         {
             "name": "東京",
             "pa": ["34"],
-            "sta": [""],
             "sta_code": "JC01",
-            "sta_cut": 0,
             "time": 1
         }
     ]

@@ -7,7 +7,7 @@
 
 ## Naming Conventions
 - Use "sta" terminology (not "departure_melody" or similar)
-- Folder structure matters - diagram extracted from folder name (e.g., `nanbu/4027F/`)
+- Folder structure matters - diagram extracted from folder name (e.g., `nambu/4027F/`)
 
 ## Working Style
 - User tests thoroughly - verify changes work before presenting

@@ -1,7 +1,6 @@
 {
     "route": "山手線",
     "color": [116,193,30],
-    "diagram": "1275A",
     "type": "内回り",
     "dest": "品川・東京",
     "stops": [
@@ -10,6 +9,7 @@
             "pa": [],
             "sta": ["JY24_OSK"],
             "sta_cut": 10,
+            "time": 0,
             "sta_code": "JY24"
         },
         {

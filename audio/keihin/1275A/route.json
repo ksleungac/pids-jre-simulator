@@ -181,25 +181,16 @@
         {
             "name": "西日暮里",
             "pa": [],
-            "sta": [
-                "JK33"
-            ],
             "sta_code": "JK33"
         },
         {
             "name": "日暮里",
             "pa": [],
-            "sta": [
-                "JK32_NPR"
-            ],
             "sta_code": "JK32"
         },
         {
             "name": "鶯谷",
             "pa": [],
-            "sta": [
-                "JK31"
-            ],
             "sta_code": "JK31"
         },
         {
@@ -218,9 +209,6 @@
         {
             "name": "御徒町",
             "pa": [],
-            "sta": [
-                "JK29"
-            ],
             "sta_code": "JK29"
         },
         {
@@ -262,17 +250,11 @@
         {
             "name": "有楽町",
             "pa": [],
-            "sta": [
-                "JK25"
-            ],
             "sta_code": "JK25"
         },
         {
             "name": "新橋",
             "pa": [],
-            "sta": [
-                "JK24_SMB"
-            ],
             "sta_code": "JK24"
         },
         {
@@ -546,10 +528,6 @@
                 "58",
                 "59"
             ],
-            "sta": [
-                "JK01_OFN"
-            ],
-            "sta_cut": 0,
             "time": 4,
             "sta_code": "JK01"
         }

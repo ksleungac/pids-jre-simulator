@@ -2,7 +2,6 @@
     "route": "モック線",
     "color": [150, 30, 120],
     "contrast_color": [255, 215, 0],
-    "diagram": "MOCK",
     "type": "各駅停車",
     "dest": "品川・高輪ゲートウェイ",
     "type_color": [150, 40, 0],
@@ -25,7 +24,6 @@
         {
             "name": "秋葉原",
             "pa": [],
-            "sta": [""],
             "sta_cut": 0,
             "sta_code": "JM03"
         },
@@ -48,14 +46,12 @@
         {
             "name": "日暮里",
             "pa": [],
-            "sta": [""],
             "sta_cut": 0,
             "sta_code": "JM06"
         },
         {
             "name": "西日暮里",
             "pa": [],
-            "sta": [""],
             "sta_cut": 0,
             "sta_code": "JM07"
         },

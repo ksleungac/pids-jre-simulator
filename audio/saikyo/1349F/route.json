@@ -71,13 +71,11 @@
         {
             "name": "北赤羽",
             "pa": [],
-            "sta": ["JA16"],
             "sta_code": "JA16"
         },
         {
             "name": "浮間舟渡",
             "pa": [],
-            "sta": ["JA17"],
             "sta_code": "JA17"
         },
         {
@@ -91,13 +89,11 @@
         {
             "name": "戸田",
             "pa": [],
-            "sta": ["JA19"],
             "sta_code": "JA19"
         },
         {
             "name": "北戸田",
             "pa": [],
-            "sta": ["JA20"],
             "sta_code": "JA20"
         },
         {

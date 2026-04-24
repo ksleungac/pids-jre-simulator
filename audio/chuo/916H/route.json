@@ -96,19 +96,11 @@
         {
             "name": "国立",
             "pa": [],
-            "sta": [
-                "11"
-            ],
-            "sta_cut": 11,
             "sta_code": "JC18"
         },
         {
             "name": "西国分寺",
             "pa": [],
-            "sta": [
-                "13"
-            ],
-            "sta_cut": 6,
             "sta_code": "JC17"
         },
         {
@@ -127,28 +119,16 @@
         {
             "name": "武蔵小金井",
             "pa": [],
-            "sta": [
-                "16"
-            ],
-            "sta_cut": 6,
             "sta_code": "JC15"
         },
         {
             "name": "東小金井",
             "pa": [],
-            "sta": [
-                "18"
-            ],
-            "sta_cut": 12,
             "sta_code": "JC14"
         },
         {
             "name": "武蔵境",
             "pa": [],
-            "sta": [
-                "20"
-            ],
-            "sta_cut": 8,
             "sta_code": "JC13"
         },
         {
@@ -167,46 +147,26 @@
         {
             "name": "吉祥寺",
             "pa": [],
-            "sta": [
-                "23"
-            ],
-            "sta_cut": 11,
             "sta_code": "JC11"
         },
         {
             "name": "西荻窪",
             "pa": [],
-            "sta": [
-                "24"
-            ],
-            "sta_cut": 15,
             "sta_code": "JC10"
         },
         {
             "name": "荻窪",
             "pa": [],
-            "sta": [
-                "25"
-            ],
-            "sta_cut": 9,
             "sta_code": "JC09"
         },
         {
             "name": "阿佐ヶ谷",
             "pa": [],
-            "sta": [
-                "26"
-            ],
-            "sta_cut": 18,
             "sta_code": "JC08"
         },
         {
             "name": "高円寺",
             "pa": [],
-            "sta": [
-                "27"
-            ],
-            "sta_cut": 14,
             "sta_code": "JC07"
         },
         {
@@ -318,10 +278,6 @@
             "pa": [
                 "25"
             ],
-            "sta": [
-                "JC01"
-            ],
-            "sta_cut": 0,
             "time": 1,
             "sta_code": "JC01"
         }

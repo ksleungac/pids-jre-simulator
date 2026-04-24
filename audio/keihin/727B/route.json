@@ -514,41 +514,26 @@
         {
             "name": "新杉田",
             "pa": [],
-            "sta": [
-                "JK05"
-            ],
             "sta_code": "JK05"
         },
         {
             "name": "洋光台",
             "pa": [],
-            "sta": [
-                "JK04"
-            ],
             "sta_code": "JK04"
         },
         {
             "name": "港南台",
             "pa": [],
-            "sta": [
-                "JK03"
-            ],
             "sta_code": "JK03"
         },
         {
             "name": "本郷台",
             "pa": [],
-            "sta": [
-                "JK02"
-            ],
             "sta_code": "JK02"
         },
         {
             "name": "大船",
             "pa": [],
-            "sta": [
-                "JK01_OFN"
-            ],
             "sta_code": "JK01"
         }
     ]

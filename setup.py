@@ -40,7 +40,7 @@ class SetupScreen:
         """Scan for available routes by finding route.json files.
 
         Groups routes by name, then by train diagram.
-        Extracts diagram from folder name when available (e.g., nanbu/4027F/route.json).
+        Extracts diagram from folder name when available (e.g., nambu/4027F/route.json).
 
         Args:
             base_dir: Base directory to scan for routes
@@ -61,7 +61,7 @@ class SetupScreen:
                     with open(route_path, encoding="utf-8") as f:
                         route_data = json.load(f)
 
-                        # Extract diagram from folder name (e.g., "4027F" from "nanbu/4027F")
+                        # Extract diagram from folder name (e.g., "4027F" from "nambu/4027F")
                         rel_path = os.path.relpath(root, base_dir)
                         path_parts = rel_path.split(os.sep)
                         folder_diagram = ""

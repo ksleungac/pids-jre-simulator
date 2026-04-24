@@ -72,7 +72,7 @@
 
 ### Long-Route Window Refresh
 - Constants: `STOPS_PER_LINE = 14`, so `STOPS_QUANTITY = 28`. Refresh only triggers for routes with **more than 28 stops**.
-- Hits: Keihin-Tōhoku (46), Chuo (32), Yamanote (30). Below threshold: Nanbu (26), Saikyō/Takasaki (24), etc.
+- Hits: Keihin-Tōhoku (46), Chuo (32), Yamanote (30). Below threshold: Nambu (26), Saikyō/Takasaki (24), etc.
 - Trigger: when `len(stops) - curr_stop < STOPS_QUANTITY`, `_get_stops_list_disp()` returns `self.stops[len(stops) - STOPS_QUANTITY:]` (last 28 stops) and sets `continuity = [1, 1, 0]` on the exact transition frame.
 - Window carries tuples `(global_idx, stop)` — draw code doesn't need a separate `window_start` parameter to compare state, the global index travels with each cell.
 
@@ -160,6 +160,7 @@
 - `data/train_types.json`: Train types (optional, falls back to kanji)
 - `sta_code` in every stop (value or `null`)
 - `dest_furigana` is NOT stored in route.json — it's auto-looked-up from `translations.json[dest]` at load time
+- **Passing stations** (`pa: []`): must NOT have `sta`, `sta_cut`, or `time`. Train doesn't stop → no departure melody. Countdown timing comes from the next PA station's `time`, which spans the whole skip.
 
 ### Key Format Patterns
 | Pattern | Use Case | Example |

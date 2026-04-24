@@ -72,8 +72,6 @@
         {
             "name": "辻堂",
             "pa": [],
-            "sta": ["JT09"],
-            "sta_cut": 14,
             "sta_code": "JT09"
         },
         {
@@ -95,15 +93,11 @@
         {
             "name": "大磯",
             "pa": [],
-            "sta": ["JT12"],
-            "sta_cut": 11,
             "sta_code": "JT12"
         },
         {
             "name": "二宮",
             "pa": [],
-            "sta": ["JT13"],
-            "sta_cut": 15,
             "sta_code": "JT13"
         },
         {
@@ -117,8 +111,6 @@
         {
             "name": "鴨宮",
             "pa": [],
-            "sta": ["JT15"],
-            "sta_cut": 11,
             "sta_code": "JT15"
         },
         {

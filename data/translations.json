@@ -295,6 +295,10 @@
         "furigana": "むさしうらわ",
         "english": "Musashi-Urawa"
     },
+    "武蔵小杉": {
+        "furigana": "むさしこすぎ",
+        "english": "Musashi-Kosugi"
+    },
     "池袋": {
         "furigana": "いけぶくろ",
         "english": "Ikebukuro"
@@ -378,6 +382,98 @@
     "立川": {
         "furigana": "たちかわ",
         "english": "Tachikawa"
+    },
+    "尻手": {
+        "furigana": "しって",
+        "english": "Shitte"
+    },
+    "矢向": {
+        "furigana": "やこう",
+        "english": "Yakō"
+    },
+    "鹿島田": {
+        "furigana": "かしまだ",
+        "english": "Kashimada"
+    },
+    "平間": {
+        "furigana": "ひらま",
+        "english": "Hirama"
+    },
+    "向河原": {
+        "furigana": "むかいがわら",
+        "english": "Mukaigawara"
+    },
+    "武蔵中原": {
+        "furigana": "むさしなかはら",
+        "english": "Musashi-Nakahara"
+    },
+    "武蔵新城": {
+        "furigana": "むさししんじょう",
+        "english": "Musashi-Shinjō"
+    },
+    "武蔵溝ノ口": {
+        "furigana": "むさしみぞのくち",
+        "english": "Musashi-Mizonokuchi"
+    },
+    "津田山": {
+        "furigana": "つだやま",
+        "english": "Tsudayama"
+    },
+    "久地": {
+        "furigana": "くじ",
+        "english": "Kuji"
+    },
+    "宿河原": {
+        "furigana": "しゅくがわら",
+        "english": "Shukugawara"
+    },
+    "登戸": {
+        "furigana": "のぼりと",
+        "english": "Noborito"
+    },
+    "中野島": {
+        "furigana": "なかのしま",
+        "english": "Nakanoshima"
+    },
+    "稲田堤": {
+        "furigana": "いなだづつみ",
+        "english": "Inadazutsumi"
+    },
+    "矢野口": {
+        "furigana": "やのくち",
+        "english": "Yanokuchi"
+    },
+    "稲城長沼": {
+        "furigana": "いなぎながぬま",
+        "english": "Inaginaganuma"
+    },
+    "南多摩": {
+        "furigana": "みなみたま",
+        "english": "Minamitama"
+    },
+    "府中本町": {
+        "furigana": "ふちゅうほんまち",
+        "english": "Fuchū-Honmachi"
+    },
+    "分倍河原": {
+        "furigana": "ぶばいがわら",
+        "english": "Bubaigawara"
+    },
+    "西府": {
+        "furigana": "にしふ",
+        "english": "Nishifu"
+    },
+    "谷保": {
+        "furigana": "やほ",
+        "english": "Yaho"
+    },
+    "矢川": {
+        "furigana": "やがわ",
+        "english": "Yagawa"
+    },
+    "西国立": {
+        "furigana": "にしくにたち",
+        "english": "Nishi-Kunitachi"
     },
     "舞浜": {
         "furigana": "まいはま",
@@ -515,9 +611,21 @@
         "furigana": "ごたんた",
         "english": "Gotanda"
     },
+    "目黒": {
+        "furigana": "めぐろ",
+        "english": "Meguro"
+    },
     "駒込": {
         "furigana": "こまごめ",
         "english": "Komagome"
+    },
+    "巣鴨": {
+        "furigana": "すがも",
+        "english": "Sugamo"
+    },
+    "大塚": {
+        "furigana": "おおつか",
+        "english": "Ōtsuka"
     },
     "品川・東京": {
         "english": "Shinagawa&\nTōkyō"
