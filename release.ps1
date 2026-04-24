@@ -11,9 +11,52 @@ Write-Host "=== Building JRE-PA-Simulator Release $VERSION ===" -ForegroundColor
 # Clean previous builds
 Remove-Item -Path "dist", "dist-release", "build" -Recurse -Force -ErrorAction SilentlyContinue
 
+# Parse $VERSION into tuple + string for Windows version resource (matches /build skill)
+# Subversion letters are sub-revisions, not beta: a=1, b=2, c=3 → 4th tuple slot.
+$versionString = $VERSION -replace '^v', ''
+if ($versionString -notmatch '^(\d+)\.(\d+)\.(\d+)([a-z])?$') {
+    throw "Cannot parse version '$versionString'. Expected format: MAJOR.MINOR.PATCH[a-z] (e.g. 0.5.2, 0.5.2b)."
+}
+$major = [int]$matches[1]
+$minor = [int]$matches[2]
+$patch = [int]$matches[3]
+$sub   = if ($matches[4]) { [int][char]$matches[4] - [int][char]'a' + 1 } else { 0 }
+
+# Write version_info.txt for PyInstaller --version-file
+$versionInfo = @"
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=($major, $minor, $patch, $sub),
+    prodvers=($major, $minor, $patch, $sub),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+      StringTable(
+        u'040904B0',
+        [StringStruct(u'CompanyName', u''),
+         StringStruct(u'FileDescription', u'JR East PA Simulator'),
+         StringStruct(u'FileVersion', u'$versionString'),
+         StringStruct(u'InternalName', u'JRE-PA-Simulator'),
+         StringStruct(u'OriginalFilename', u'JRE-PA-Simulator.exe'),
+         StringStruct(u'ProductName', u'JRE-PA-Simulator'),
+         StringStruct(u'ProductVersion', u'$versionString')])
+      ]),
+    VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
+  ]
+)
+"@
+$versionInfo | Out-File -FilePath "version_info.txt" -Encoding ascii
+
 # Build executable
-Write-Host "`n[1/5] Building executable..." -ForegroundColor Yellow
-uv run pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean --noconfirm
+Write-Host "`n[1/5] Building executable (embedding version $versionString)..." -ForegroundColor Yellow
+uv run pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean --noconfirm --version-file version_info.txt
 if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 
 # Create distribution folder structure
