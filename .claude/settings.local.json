@@ -22,7 +22,8 @@
       "WebFetch(domain:superuser.com)",
       "WebFetch(domain:www.reddit.com)",
       "PowerShell(uv run *)",
-      "Bash(git diff *)"
+      "Bash(git diff *)",
+      "Bash(PYTHONUTF8=1 python validate_data.py)"
     ],
     "deny": [
       "Read(~/.ssh/**)",
