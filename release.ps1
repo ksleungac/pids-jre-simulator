@@ -30,55 +30,63 @@ Copy-Item "data\*.json" "dist-release\JRE-PA-Simulator\data\"
 Write-Host "`n[3/5] Creating distribution zip..." -ForegroundColor Yellow
 Compress-Archive -Path "dist-release\JRE-PA-Simulator" -DestinationPath "dist-release\JRE-PA-Simulator-$VERSION-distribution.zip" -Force
 
-# Generate release notes from git changelog (two sections: Program / Data)
-Write-Host "`n[4/5] Generating release notes..." -ForegroundColor Yellow
+# Generate (or reuse) release notes
+# If release_notes.md already exists, honor it — Claude may have pre-written prose notes
+# with the shipped-artifact rule applied and mixed commits split. Only fall back to the
+# auto-classifier when no prose exists.
+$notesExistedBeforehand = Test-Path "release_notes.md"
 
-# Find the previous release tag: the tag immediately before $VERSION in creation order,
-# or (if $VERSION isn't tagged yet) the most recent existing tag. No tags -> full history.
-$allTags = @(git tag --list --sort=-creatordate)
-$prevTag = $null
-$hitCurrent = $false
-foreach ($t in $allTags) {
-    if ($hitCurrent) { $prevTag = $t; break }
-    if ($t -eq $VERSION) { $hitCurrent = $true }
-}
-if (-not $prevTag -and $allTags.Count -gt 0 -and -not $hitCurrent) {
-    $prevTag = $allTags[0]
-}
-
-if ($prevTag) {
-    $range = "$prevTag..HEAD"
-    Write-Host "  Changelog range: $range" -ForegroundColor DarkGray
+if ($notesExistedBeforehand) {
+    Write-Host "`n[4/5] Using pre-written release_notes.md (skipping auto-classifier)..." -ForegroundColor Yellow
 } else {
-    $range = "HEAD"
-    Write-Host "  Changelog range: full history (no prior tags)" -ForegroundColor DarkGray
-}
+    Write-Host "`n[4/5] Generating release notes..." -ForegroundColor Yellow
 
-# Classify each commit: "Data" = every touched file is under data/ or audio/. Else "Program".
-$dataLines = @()
-$programLines = @()
-$commits = @(git log $range --pretty=format:"%H|%s" --no-merges --reverse)
-foreach ($c in $commits) {
-    if (-not $c) { continue }
-    $parts = $c -split '\|', 2
-    $hash = $parts[0]
-    $subject = $parts[1]
-    $files = @(git show --pretty=format: --name-only $hash | Where-Object { $_ -ne "" })
-    if ($files.Count -eq 0) { continue }
-    $isDataOnly = $true
-    foreach ($f in $files) {
-        if ($f -notmatch '^(data/|audio/)') { $isDataOnly = $false; break }
+    # Find the previous release tag: the tag immediately before $VERSION in creation order,
+    # or (if $VERSION isn't tagged yet) the most recent existing tag. No tags -> full history.
+    $allTags = @(git tag --list --sort=-creatordate)
+    $prevTag = $null
+    $hitCurrent = $false
+    foreach ($t in $allTags) {
+        if ($hitCurrent) { $prevTag = $t; break }
+        if ($t -eq $VERSION) { $hitCurrent = $true }
     }
-    if ($isDataOnly) { $dataLines += "- $subject" }
-    else             { $programLines += "- $subject" }
-}
+    if (-not $prevTag -and $allTags.Count -gt 0 -and -not $hitCurrent) {
+        $prevTag = $allTags[0]
+    }
 
-$sections = @()
-if ($programLines.Count -gt 0) { $sections += "### Program`n" + ($programLines -join "`n") }
-if ($dataLines.Count    -gt 0) { $sections += "### Data`n"    + ($dataLines    -join "`n") }
-$changelogBody = if ($sections.Count -gt 0) { $sections -join "`n`n" } else { "_No changes since previous release._" }
+    if ($prevTag) {
+        $range = "$prevTag..HEAD"
+        Write-Host "  Changelog range: $range" -ForegroundColor DarkGray
+    } else {
+        $range = "HEAD"
+        Write-Host "  Changelog range: full history (no prior tags)" -ForegroundColor DarkGray
+    }
 
-$notes = @"
+    # Classify each commit: "Data" = every touched file is under data/ or audio/. Else "Program".
+    $dataLines = @()
+    $programLines = @()
+    $commits = @(git log $range --pretty=format:"%H|%s" --no-merges --reverse)
+    foreach ($c in $commits) {
+        if (-not $c) { continue }
+        $parts = $c -split '\|', 2
+        $hash = $parts[0]
+        $subject = $parts[1]
+        $files = @(git show --pretty=format: --name-only $hash | Where-Object { $_ -ne "" })
+        if ($files.Count -eq 0) { continue }
+        $isDataOnly = $true
+        foreach ($f in $files) {
+            if ($f -notmatch '^(data/|audio/)') { $isDataOnly = $false; break }
+        }
+        if ($isDataOnly) { $dataLines += "- $subject" }
+        else             { $programLines += "- $subject" }
+    }
+
+    $sections = @()
+    if ($programLines.Count -gt 0) { $sections += "### Program`n" + ($programLines -join "`n") }
+    if ($dataLines.Count    -gt 0) { $sections += "### Data`n"    + ($dataLines    -join "`n") }
+    $changelogBody = if ($sections.Count -gt 0) { $sections -join "`n`n" } else { "_No changes since previous release._" }
+
+    $notes = @"
 ## $VERSION Release
 
 $changelogBody
@@ -86,7 +94,8 @@ $changelogBody
 ---
 **Distribution:** JRE-PA-Simulator.exe must be placed alongside ``fonts/``, ``data/``, and ``audio/`` folders at the same directory level.
 "@
-$notes | Out-File -FilePath "release_notes.md" -Encoding utf8
+    $notes | Out-File -FilePath "release_notes.md" -Encoding utf8
+}
 
 # Create GitHub release
 Write-Host "`n[5/5] Creating GitHub release..." -ForegroundColor Yellow
@@ -100,5 +109,7 @@ gh release create $VERSION `
 Write-Host "`n=== Release $VERSION completed! ===" -ForegroundColor Green
 Write-Host "View at: https://github.com/ksleungac/pids-jre-simulator/releases/tag/$VERSION" -ForegroundColor Green
 
-# Cleanup
-Remove-Item "release_notes.md" -Force -ErrorAction SilentlyContinue
+# Cleanup (but preserve user-written notes)
+if (-not $notesExistedBeforehand) {
+    Remove-Item "release_notes.md" -Force -ErrorAction SilentlyContinue
+}
