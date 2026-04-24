@@ -2,60 +2,40 @@
 
 Japanese Train PA (Public Address) Simulator — JR East style train announcements with visual LCD display.
 
-**[繁體中文說明 / Traditional Chinese](README.zh-HK.md)**
+**[繁體中文](README.zh-HK.md)** · **[简体中文](README.zh-CN.md)** · **[Supported Routes](ROUTES.md)**
 
 ---
 
-## Installation
+## Download
 
-```
-your-folder/
-├── JRE-PA-Simulator.exe
-├── fonts/
-├── data/
-└── audio/
-```
+From [**Releases**](https://github.com/ksleungac/pids-jre-simulator/releases/latest):
 
-1. **Download** `JRE-PA-Simulator.exe` from [Releases](https://github.com/ksleungac/pids-jre-simulator/releases) and clone this repo. Place the exe in the repo root.
-2. **Install fonts** — install every font in the `fonts/` folder on your system.
-
-> Data in `audio/` and `data/` is updated periodically. For the latest route data, clone this repo and `git pull` from master regularly.
+- **`JRE-PA-Simulator-<version>-distribution.zip`** — full bundle (exe + fonts + data + audio, ~629 MB). Extract and run `JRE-PA-Simulator.exe`.
+- **`JRE-PA-Simulator.exe`** — standalone exe, if you already have `fonts/`, `data/`, and `audio/` locally.
 
 ---
 
 ## Usage
 
+Pick a line and diagram on the setup screen, press Enter to start.
+
+**Page Down drives everything.** The simulation is fully manual — the train doesn't advance on a timer; every announcement and every stop happens only when you press Page Down.
+
 | Key | Action |
 |-----|--------|
-| Page Down | Next PA announcement |
-| Page Up | Departure melody (press again during playback to skip to the closing-door announcement) |
+| Page Down | Next PA announcement / advance to next stop |
+| Page Up | Play departure melody (press again to skip to closing-door announcement) |
 | End | Pause |
 | ESC | Quit |
 
----
+A **yellow square** on the display means this stop has more than one announcement — keep pressing Page Down to play them all before arriving at the station.
 
-## Supported Routes
-
-| Line | Diagram | Train Type |
-|------|---------|------------|
-| 山手線 | 1275A | 内回り |
-| 埼京線 | 759K | 各駅停車 |
-| 埼京線・川越線 | 1349F | 快速 |
-| 京浜東北・根岸線 | 1275A | 各駅停車 |
-| 京浜東北・根岸線 | 727B | 快速 |
-| 南武線 | 603F | 各駅停車 |
-| 南武線 | 4027F | 快速 |
-| 上野東京ライン・常磐線直通 | — | 快速 |
-| 中央線快速 | 916H | 中央特快 |
-| 中央線快速 | 1654T | 快速 |
-| 京葉線 | 780Y_1510Y | 普通 |
-| 東海道線 | 1865E | 普通 |
-| 東海道線 | 3535E | 快速アクティー |
+The upper LCD cycles between Japanese, Furigana, and English. Major JR East interchange stations also show their 3-letter Roman code (AKB, TYO, SJK…) above the line-code square.
 
 ---
 
 ## Planned Features
 
-- **More route diagrams** — additional train variations
-- **Additional LCD styles** — E233-0 series, E231 series, etc.
-- **Enhanced Lower LCD** — more features and information display
+- More route diagrams
+- Additional LCD styles (E233-0, E231, …)
+- Enhanced Lower LCD

@@ -8,7 +8,7 @@ Japanese Train PA (Public Address) Simulator — pygame-based app simulating sta
 uv run main.py
 ```
 
-Build executable: use `/build` skill. Code review: use `/review-dirty` or `/review-plus-fix-relentlessly`.
+Build executable (local test build): use `/build` skill. Cut a GitHub release: `.\release.ps1 v<version>` (tag first). Update READMEs / translations: use `/readme` skill. Code review: use `/review-dirty` or `/review-plus-fix-relentlessly`. Commit hygiene: use `/commit` skill.
 
 ## Session Startup
 
