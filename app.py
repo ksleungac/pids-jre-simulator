@@ -24,26 +24,57 @@ class AppState:
         self.cnt_pa = 0
         self.cnt_sta = 0
         self.circular = 0
-        self.curr_stop_disp = 0
         self.skip = 0
         self.frame_mode = 1
         self.departure_time = 0.0  # Timestamp when train departed for current segment
         self.is_last_pa = False  # Whether current PA is the last one before arriving
-        # Time-based skip progression
+        # Time-based skip progression. cursor_pos derives from these.
         self.time_to_next = 0  # Time from current to next stopping station
-        self.skip_progress = 0  # Current position in skip sequence (0 = at stopping station)
+        self.skip_progress = 0  # Passing-station ticks completed (0..skip)
+
+    @property
+    def cursor_pos(self) -> int:
+        """Visual cursor position on the lower-LCD route map.
+
+        Equals ``curr_stop`` except during skip animation, when the cursor
+        lags behind by ``skip - skip_progress`` and walks forward as time
+        passes (or a PA-within-stop tick fires) until it catches up.
+        """
+        return self.curr_stop - max(0, self.skip - self.skip_progress)
+
+
+class _SilentAudio:
+    """No-op audio used in preview mode.
+
+    Drops in for AudioPlayer so preview can step through PA/state logic
+    instantly without playing sound, while `_next_pa` / `_next_sta` stay
+    unchanged (they only call audio through this interface).
+    """
+
+    def play_pa(self, *args, **kwargs) -> None: ...
+    def play_sta(self, *args, **kwargs) -> None: ...
+    def pause(self) -> None: ...
+    def is_playing(self) -> bool:
+        return False
+
+    def cleanup(self) -> None: ...
 
 
 class PASimulator:
     """Main application class managing game loop and state."""
 
-    def __init__(self, work_dir: str, route_data: Optional[Dict] = None):
+    def __init__(self, work_dir: str, route_data: Optional[Dict] = None, preview: bool = False):
         """Initialize the PA Simulator.
 
         Args:
             work_dir: Directory containing the route.json and audio folders
             route_data: Optional pre-loaded route data dictionary
+            preview: If True, run with silent audio and pygame-event input
+                (used by preview_display.py — skips mixer init and win32gui
+                positioning, and routes key input through pygame events instead
+                of the global `keyboard` library).
         """
+        self.preview = preview
         self.work_dir = work_dir
         self.route_data = route_data
         self._load_route_data()
@@ -54,7 +85,7 @@ class PASimulator:
         self.state.circular = 1 if (self.stops and self.stops[0].get("name") == self.stops[-1].get("name")) else 0
 
         # Initialize components
-        self.audio = AudioPlayer(work_dir, self.stops)
+        self.audio = _SilentAudio() if preview else AudioPlayer(work_dir, self.stops)
         self.upper = UpperDisplay(self.screen, self.route_data, self.stops)
         self.lower = LowerDisplay(self.screen, self.route_data, self.state, self.stops)
 
@@ -139,17 +170,19 @@ class PASimulator:
     def _init_pygame(self) -> None:
         """Initialize pygame display."""
         pygame.init()
-        pygame.mixer.init()
+        if not self.preview:
+            pygame.mixer.init()
         self.clock = pygame.time.Clock()
         self.screen = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
-        pygame.display.set_caption("PA Simulator")
+        pygame.display.set_caption("PIDS Preview  —  PageDown=PA  PageUp=Mode  ←/→=Jump  ESC=Quit" if self.preview else "PA Simulator")
 
-        # Set window position
-        try:
-            info = pygame.display.get_wm_info()
-            win32gui.SetWindowPos(info["window"], -1, S_WIDTH, S_HEIGHT, 0, 0, 1)
-        except Exception as e:
-            print(f"Warning: Could not set window position: {e}")
+        if not self.preview:
+            # Set window position (real app only; preview uses default placement)
+            try:
+                info = pygame.display.get_wm_info()
+                win32gui.SetWindowPos(info["window"], -1, S_WIDTH, S_HEIGHT, 0, 0, 1)
+            except Exception as e:
+                print(f"Warning: Could not set window position: {e}")
 
     def run(self) -> None:
         """Main game loop."""
@@ -180,7 +213,14 @@ class PASimulator:
         self.cleanup()
 
     def _handle_input(self) -> None:
-        """Process keyboard input."""
+        """Dispatch input handling based on mode."""
+        if self.preview:
+            self._handle_input_preview()
+        else:
+            self._handle_input_main()
+
+    def _handle_input_main(self) -> None:
+        """Real app: global keyboard polling via `keyboard` library."""
         try:
             if keyboard.is_pressed("page down"):
                 self._next_pa()
@@ -191,6 +231,89 @@ class PASimulator:
                 self.audio.pause()
         except Exception as e:
             print(f"Input error: {e}")
+
+    def _handle_input_preview(self) -> None:
+        """Preview: focus-based pygame events. Also drains the event queue
+        (including QUIT), so run()'s own event loop sees nothing and is a no-op
+        in preview mode."""
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    self.running = False
+                elif event.key == pygame.K_PAGEDOWN:
+                    self._next_pa()
+                elif event.key == pygame.K_PAGEUP:
+                    self._next_sta()
+                elif event.key == pygame.K_RIGHT:
+                    self.jump_to_stop(self.state.curr_stop + 1)
+                elif event.key == pygame.K_LEFT:
+                    self.jump_to_stop(self.state.curr_stop - 1)
+                elif event.key == pygame.K_m:
+                    self._cycle_display_mode()
+
+    def _cycle_display_mode(self) -> None:
+        """Cycle the upper display's forced mode (preview helper, bound to M)."""
+        from displays.base import DisplayMode
+
+        order = [DisplayMode.KANJI, DisplayMode.FURIGANA, DisplayMode.ENGLISH]
+        cur = self.upper.mode_cycler.current_mode
+        nxt = order[(order.index(cur) + 1) % len(order)]
+        self.upper.mode_cycler.current_mode = nxt
+        self.upper.mode_cycler.enabled = False
+
+    def jump_to_stop(self, target: int, direction: int = -1) -> None:
+        """Hard-jump to a stop index, bypassing PA/audio cycle.
+
+        If ``target`` lands on a passing station (``pa == []``), rolls in
+        ``direction`` (-1 backward default, +1 forward) to the nearest station
+        the train would actually stop at. Passing stations are not valid
+        resting states in the real app — ``_next_pa``'s while-loop skips them
+        on every transition — so the preview should not land there either.
+
+        Default is backward so the preview always lands on the stop just
+        *before* any upcoming skip: a pre-skip state from which PageDown
+        exercises the skip logic. Consequence: the → arrow becomes a no-op
+        when the next station is passing — use PageDown to cross the skip.
+
+        Resets animation state so countdown and skip-progress start fresh
+        (``departure_time=0`` keeps the lower-LCD countdown frozen until the
+        next real PA advance).
+        """
+        if not self.stops:
+            return
+        target = max(0, min(target, len(self.stops) - 1))
+
+        def _has_pa(i: int) -> bool:
+            return bool(self.stops[i].get("pa"))
+
+        if not _has_pa(target):
+            step = 1 if direction >= 0 else -1
+            scan = target
+            while 0 <= scan < len(self.stops) and not _has_pa(scan):
+                scan += step
+            if 0 <= scan < len(self.stops):
+                target = scan
+            else:
+                # Hit the boundary without finding PA — fall back the other way.
+                scan = target
+                step = -step
+                while 0 <= scan < len(self.stops) and not _has_pa(scan):
+                    scan += step
+                if 0 <= scan < len(self.stops):
+                    target = scan
+                # else: no stop with PA anywhere — stay on clamped target.
+
+        self.state.curr_stop = target
+        self.state.cnt_pa = 0
+        self.state.cnt_sta = 0
+        self.state.skip = 0
+        self.state.skip_progress = 0
+        self.state.time_to_next = 0
+        self.state.is_last_pa = False
+        self.state.departure_time = 0.0
+        self.upper.set_state(target, 0)
 
     def _next_pa(self) -> None:
         """Advance to next PA announcement."""
@@ -208,29 +331,34 @@ class PASimulator:
         if self.state.cnt_pa >= len(pa_tracks) - 1:
             # Move to next stop
             if self.state.curr_stop < len(self.stops) - 1:
+                prev_stop = self.state.curr_stop
                 self.state.curr_stop += 1
-                self.state.cnt_pa = 0
-                self.state.is_last_pa = False
-                self.lower.increment_current_stop_display()
-
-                # Set departure time when starting to travel to next station
-                self.state.departure_time = time.time()
-
-                # Skip stations with no PA
+                # Skip stations with no PA — land curr_stop on the next PA station.
                 while self.state.curr_stop < len(self.stops) and not self.stops[self.state.curr_stop].get("pa", []):
                     self.state.curr_stop += 1
 
-                # Check if we went past the end
                 if self.state.curr_stop >= len(self.stops):
                     self.state.curr_stop = len(self.stops) - 1
                     self.state.cnt_pa = max(0, len(pa_tracks) - 1)
                     return
+
+                # Set up the skip animation. cursor_pos starts at
+                # (curr_stop - skip), so it appears on the first passing
+                # station and walks forward as skip_progress ticks up.
+                self.state.skip = self.state.curr_stop - prev_stop - 1
+                self.state.skip_progress = 0
+                self.state.time_to_next = self.stops[self.state.curr_stop].get("time", 0) if self.state.skip > 0 else 0
+                self.state.cnt_pa = 0
+                self.state.is_last_pa = False
+                self.state.departure_time = time.time()
             elif self.state.circular == 1:
                 # Loop back to start for circular routes
                 self.state.curr_stop = 0
                 self.state.cnt_pa = 0
                 self.state.is_last_pa = False
-                self.state.curr_stop_disp = 0
+                self.state.skip = 0
+                self.state.skip_progress = 0
+                self.state.time_to_next = 0
                 self.state.departure_time = time.time()
             else:
                 # End of route
@@ -242,11 +370,14 @@ class PASimulator:
             self.upper.set_state(self.state.curr_stop, self.state.cnt_pa)
             self.upper.draw()
         else:
-            # Next PA within current stop
+            # Next PA within current stop. Catches the cursor up if a skip
+            # animation was still mid-flight (e.g., user clicked PageDown
+            # faster than the time threshold).
             self.state.cnt_pa += 1
-            # Check if this is now the last PA (approaching station)
             self.state.is_last_pa = self.state.cnt_pa >= len(pa_tracks) - 1
-            self.lower.increment_current_stop_display()
+            self.state.skip = 0
+            self.state.skip_progress = 0
+            self.state.time_to_next = 0
             self.audio.play_pa(self.state.curr_stop, self.state.cnt_pa)
             self.upper.set_state(self.state.curr_stop, self.state.cnt_pa)
             self.upper.draw()

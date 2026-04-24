@@ -1,0 +1,123 @@
+"""Entry point for the audio-free PIDS preview.
+
+Thin wrapper around `PASimulator(preview=True)`. Everything that isn't CLI
+plumbing — route loading, state machine, drawing, input handling — lives in
+app.py and is shared with the real application, so behavior can't drift.
+
+Usage:
+  uv run preview_display.py                                     # MOCK route (audio/mock/main)
+  uv run preview_display.py --route yamanote                    # real route by shorthand
+  uv run preview_display.py --route chuo/916H --stop 6          # real route at a specific stop
+  uv run preview_display.py --screenshot out.png --mode english --stop 2 --pa 1
+
+Interactive controls (forwarded to PASimulator._handle_input_preview):
+  PageDown  next PA phase (advances to next stop when phases exhausted)
+  PageUp    next STA melody (no-op in preview — audio is silent)
+  M         cycle forced display mode (KANJI → FURIGANA → ENGLISH)
+  Right     jump to next stop (bypasses PA cycle)
+  Left      jump to previous stop
+  ESC       quit
+
+--route accepts: a path to route.json, a directory containing one, or a
+shorthand like 'yamanote' / 'chuo/916H' (resolved under audio/).
+"""
+
+import argparse
+import os
+import sys
+import time
+from pathlib import Path
+
+import pygame
+
+from app import PASimulator
+from displays.base import DisplayMode
+
+DEFAULT_MOCK_ROUTE = "mock/main"
+
+MODE_MAP = {
+    "kanji": DisplayMode.KANJI,
+    "furigana": DisplayMode.FURIGANA,
+    "english": DisplayMode.ENGLISH,
+}
+
+
+def _resolve_work_dir(spec: str) -> str:
+    """Resolve a --route arg into a work_dir (directory containing route.json).
+
+    Accepts a path to route.json, a directory, or a shorthand like
+    'yamanote' / 'chuo/916H' / 'mock/main' (probed under audio/).
+    """
+    candidates = [
+        Path(spec),
+        Path(spec) / "route.json",
+        Path("audio") / spec,
+        Path("audio") / spec / "route.json",
+    ]
+    for c in candidates:
+        if c.is_file() and c.name == "route.json":
+            return str(c.parent)
+        if c.is_dir() and (c / "route.json").is_file():
+            return str(c)
+    for base in (Path(spec), Path("audio") / spec):
+        if base.is_dir():
+            matches = sorted(base.glob("*/route.json")) or sorted(base.glob("**/route.json"))
+            if matches:
+                return str(matches[0].parent)
+    raise FileNotFoundError(f"Could not resolve --route {spec!r} to a route.json file")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="PIDS Display Preview (upper + lower LCD, audio-free)")
+    parser.add_argument("--screenshot", type=str, help="Save one frame to file and exit")
+    parser.add_argument("--mode", type=str, choices=list(MODE_MAP), default=None, help="Force display mode (default: cycles automatically)")
+    parser.add_argument("--stop", type=int, default=0, help="Initial station index (default: 0)")
+    parser.add_argument("--pa", type=int, default=0, help="PA phase: 0=次は/Next, 1=まもなく/Arriving, 2=ただいま/Now stopping (default: 0)")
+    parser.add_argument(
+        "--route",
+        type=str,
+        default=DEFAULT_MOCK_ROUTE,
+        help=f"Route shorthand, path, or directory containing route.json. Default: {DEFAULT_MOCK_ROUTE!r} (audio/mock/main/route.json).",
+    )
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    if args.screenshot:
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+
+    work_dir = _resolve_work_dir(args.route)
+    print(f"[preview] work_dir={work_dir}")
+
+    sim = PASimulator(work_dir, preview=True)
+
+    # Initial position + PA phase
+    sim.jump_to_stop(args.stop)
+    sim.state.cnt_pa = max(0, min(args.pa, 2))
+    sim.upper.set_state(sim.state.curr_stop, sim.state.cnt_pa)
+
+    # Force display mode if requested
+    if args.mode:
+        sim.upper.mode_cycler.current_mode = MODE_MAP[args.mode]
+        sim.upper.mode_cycler.enabled = False
+
+    if args.screenshot:
+        timestamp = time.time()
+        sim.upper.update(timestamp)
+        sim.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
+        # current_time=0.0 freezes the lower-LCD countdown at full values for
+        # a readable static snapshot.
+        sim.lower.show_stops(current_time=0.0)
+        pygame.image.save(sim.screen, args.screenshot)
+        print(f"Screenshot saved to {args.screenshot}")
+        sim.cleanup()
+        return
+
+    sim.run()
+    sys.exit()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,87 @@
+{
+    "route": "モック線",
+    "color": [150, 30, 120],
+    "contrast_color": [255, 215, 0],
+    "diagram": "MOCK",
+    "type": "各駅停車",
+    "dest": "品川・高輪ゲートウェイ",
+    "type_color": [150, 40, 0],
+    "stops": [
+        {
+            "name": "東京",
+            "pa": ["1", "2"],
+            "sta": [""],
+            "sta_cut": 0,
+            "sta_code": "JM01"
+        },
+        {
+            "name": "神田",
+            "pa": ["1"],
+            "sta": [""],
+            "sta_cut": 0,
+            "time": 2,
+            "sta_code": "JM02"
+        },
+        {
+            "name": "秋葉原",
+            "pa": [],
+            "sta": [""],
+            "sta_cut": 0,
+            "sta_code": "JM03"
+        },
+        {
+            "name": "御徒町",
+            "pa": ["1"],
+            "sta": [""],
+            "sta_cut": 0,
+            "time": 6,
+            "sta_code": "JM04"
+        },
+        {
+            "name": "上野",
+            "pa": ["1", "2", "3"],
+            "sta": [""],
+            "sta_cut": 0,
+            "time": 2,
+            "sta_code": "JM05"
+        },
+        {
+            "name": "日暮里",
+            "pa": [],
+            "sta": [""],
+            "sta_cut": 0,
+            "sta_code": "JM06"
+        },
+        {
+            "name": "西日暮里",
+            "pa": [],
+            "sta": [""],
+            "sta_cut": 0,
+            "sta_code": "JM07"
+        },
+        {
+            "name": "田端",
+            "pa": ["1", "2"],
+            "sta": [""],
+            "sta_cut": 0,
+            "time": 10,
+            "sta_code": "JM08"
+        },
+        {
+            "name": "高輪ゲートウェイ",
+            "pa": ["1"],
+            "sta": [""],
+            "sta_cut": 0,
+            "time": 4,
+            "sta_code": "JM09"
+        },
+        {
+            "name": "品川",
+            "pa": ["1"],
+            "sta": [""],
+            "sta_cut": 0,
+            "time": 3,
+            "sta_code": "JM10"
+        }
+    ]
+}

@@ -1,7 +1,7 @@
 """Display handling for PA Simulator - Lower LCD section."""
 
 import math
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 import pygame
 import pygame.gfxdraw
 
@@ -105,59 +105,57 @@ class LowerDisplay:
         """
         return 1 if i < self.per_line else 2
 
-    def _get_stops_list_disp(self) -> List[Dict]:
-        """Get the list of stops to display based on current position.
+    def _get_stops_list_disp(self) -> List[Tuple[int, Dict]]:
+        """Get the list of (global_index, stop) pairs currently visible.
 
-        Returns:
-            List of stop dictionaries to display
+        Every rendered cell carries its global index into ``self.stops`` so
+        drawing code can compare directly against ``curr_stop`` / ``cursor_pos``
+        without juggling a second "local" index space.
         """
         if len(self.stops) <= self.STOPS_QUANTITY:
-            return self.stops
+            return list(enumerate(self.stops))
 
+        window_start = 0
         f_stops = self.stops[: self.STOPS_QUANTITY]
 
         # If approaching end of route, show last STOPS_QUANTITY stations
-        # Guard against negative indexing edge case
         remaining = len(self.stops) - self.state.curr_stop
         if 0 < remaining < self.STOPS_QUANTITY:
-            f_stops = self.stops[len(self.stops) - self.STOPS_QUANTITY :]
-            self._refresh_curr_stop_disp()
-
-        return f_stops
-
-    def _refresh_curr_stop_disp(self) -> None:
-        """Refresh current stop display position when scrolling."""
-        if len(self.stops) - self.state.curr_stop == self.STOPS_QUANTITY - 1:
-            if self.circular != 1:
+            window_start = len(self.stops) - self.STOPS_QUANTITY
+            f_stops = self.stops[window_start:]
+            # On the frame we flip to the final window, drop the right-side
+            # continuity indicator — nothing is off-screen past it anymore.
+            if remaining == self.STOPS_QUANTITY - 1 and self.circular != 1:
                 self.continuity = [1, 1, 0]
-            self.state.curr_stop_disp = 1
 
-    def _find_dest_index(self, f_stops: List[Dict]) -> int:
-        """Find the index of the destination station.
+        return [(window_start + i, stop) for i, stop in enumerate(f_stops)]
 
-        Args:
-            f_stops: List of displayed stops
+    def _find_dest_index(self, f_stops: List[Tuple[int, Dict]]) -> int:
+        """Return the global index of the destination within the visible window.
 
-        Returns:
-            Index of destination station, or last index if not found
+        Falls back to the last visible global index if the destination isn't
+        in the current window.
         """
-        try:
-            return [s.get("name", "") for s in f_stops].index(self.dest)
-        except ValueError:
-            return len(f_stops) - 1
+        for gi, stop in f_stops:
+            if stop.get("name", "") == self.dest:
+                return gi
+        return f_stops[-1][0] if f_stops else 0
 
-    def _update_skip_progress(self, current_time: float, f_stops: List[Dict]) -> None:
-        """Update curr_stop_disp through passing stations based on elapsed time.
+    def _update_skip_progress(self, current_time: float, f_stops: List[Tuple[int, Dict]]) -> None:
+        """Advance ``skip_progress`` through passing stations based on elapsed time.
+
+        ``cursor_pos`` derives from ``curr_stop - (skip - skip_progress)`` —
+        bumping ``skip_progress`` here is what pulls the visual cursor forward.
 
         Args:
             current_time: Current timestamp
-            f_stops: List of displayed stops
+            f_stops: List of displayed stops (unused — kept for signature parity
+                with other draw helpers)
         """
         skip = self.state.skip
         if skip == 0:
             return
 
-        # Calculate elapsed time since departure
         if current_time > 0 and self.state.departure_time > 0:
             elapsed_seconds = current_time - self.state.departure_time
             elapsed_minutes = elapsed_seconds / TIME_SCALE
@@ -168,29 +166,38 @@ class LowerDisplay:
         if time_to_next <= 0:
             return
 
-        # Progress through passing stations based on time
-        # Skip stations divide the time into (skip + 1) segments
-        # At skip=1: 50% time -> progress to first passing
-        # At skip=2: 33% time -> first passing, 67% time -> second passing
+        # Skip stations divide the travel time into (skip + 1) segments.
+        # skip=1: 50% mark -> progress to first passing.
+        # skip=2: 33% / 67% marks -> first / second passing.
         for i in range(1, skip + 1):
-            # Threshold: time_to_next * i / (skip + 1)
             threshold = time_to_next * i / (skip + 1)
             if elapsed_minutes >= threshold and self.state.skip_progress < i:
-                self.state.curr_stop_disp += 1
                 self.state.skip_progress = i
 
-    def draw_ptr(self, f_stops: List[Dict], dest_idx: int) -> None:
+    def draw_ptr(self, f_stops: List[Tuple[int, Dict]], dest_idx: int) -> None:
         """Draw the pointer/triangle indicating current position.
 
         Args:
-            f_stops: List of displayed stops
-            dest_idx: Index of destination station
+            f_stops: List of (global_index, stop) pairs in the visible window
+            dest_idx: Global index of destination station
         """
         x = self.x
         y = self.y
+        if not f_stops:
+            return
+        window_start = f_stops[0][0]
         ptr_color = self.contrast_color
-        ptr = (self.state.curr_stop_disp % self.per_line) * self.stops_w
-        line_num = self._get_line(self.state.curr_stop_disp)
+        local_disp = self.state.cursor_pos - window_start
+        # During a long-route window flip, a multi-station skip animation
+        # can leave cursor_pos behind in the cut-off zone (cursor_pos <
+        # window_start). Suppress the pointer rather than rendering it at
+        # a wrong column — the inner red dot at curr_stop still shows the
+        # actual train position. The cursor reappears as skip_progress
+        # ticks up and pulls cursor_pos back into the visible window.
+        if local_disp < 0 or local_disp >= len(f_stops):
+            return
+        ptr = (local_disp % self.per_line) * self.stops_w
+        line_num = self._get_line(local_disp)
         l_y = y + self.h_line * line_num + self.top_pad * (line_num - 1)
 
         if self.state.curr_stop != 0:
@@ -219,26 +226,28 @@ class LowerDisplay:
             draw_aapolygon(self.screen, PASSED_COLOR, [(i + 3, j) for (i, j) in points])
             draw_aapolygon(self.screen, ptr_color, points)
 
-    def draw_marks(self, f_stops: List[Dict], dest_idx: int) -> None:
+    def draw_marks(self, f_stops: List[Tuple[int, Dict]], dest_idx: int) -> None:
         """Draw station markers (circles and arrows).
 
         Args:
-            f_stops: List of displayed stops
-            dest_idx: Index of destination station
+            f_stops: List of (global_index, stop) pairs in the visible window
+            dest_idx: Global index of destination station
         """
         x = self.x
         y = self.y
+        window_start = f_stops[0][0] if f_stops else 0
 
-        for i, stop in enumerate(f_stops):
-            ptr = (i % self.per_line) * self.stops_w
-            line_num = self._get_line(i)
+        for gi, stop in f_stops:
+            local_i = gi - window_start
+            ptr = (local_i % self.per_line) * self.stops_w
+            line_num = self._get_line(local_i)
             l_y = y + self.h_line * line_num + self.top_pad * (line_num - 1)
             offset = self.stops_w // 2
             center_x = int(x + ptr + offset)
             center_y = int(l_y + self.bar_height / 2)
 
-            if i >= self.state.curr_stop_disp and i <= dest_idx:
-                if i == 0 and self.state.curr_stop_disp == 0:
+            if gi >= self.state.cursor_pos and gi <= dest_idx:
+                if gi == 0 and self.state.cursor_pos == 0:
                     # Starting station - small circle
                     radius = 5
                     pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, radius, PASSED_COLOR)
@@ -265,7 +274,7 @@ class LowerDisplay:
                     pygame.gfxdraw.aacircle(self.screen, center_x, center_y, radius, PASSED_COLOR)
 
                     # Current station - inner circle
-                    if i == self.state.curr_stop:
+                    if gi == self.state.curr_stop:
                         pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, radius - 2, CURRENT_COLOR)
                         pygame.gfxdraw.aacircle(self.screen, center_x, center_y, radius - 2, CURRENT_COLOR)
             else:
@@ -274,16 +283,17 @@ class LowerDisplay:
                 pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, radius, PASSED_COLOR)
                 pygame.gfxdraw.aacircle(self.screen, center_x, center_y, radius, PASSED_COLOR)
 
-    def draw_times(self, f_stops: List[Dict], dest_idx: int, current_time: float = 0.0) -> None:
+    def draw_times(self, f_stops: List[Tuple[int, Dict]], dest_idx: int, current_time: float = 0.0) -> None:
         """Draw travel times between stations.
 
         Args:
-            f_stops: List of displayed stops
-            dest_idx: Index of destination station
+            f_stops: List of (global_index, stop) pairs in the visible window
+            dest_idx: Global index of destination station
             current_time: Current timestamp for real-time countdown calculation
         """
         x = self.x
         y = self.y
+        window_start = f_stops[0][0] if f_stops else 0
         cumulative_time = 0
 
         # Calculate elapsed time since departure (in minutes based on TIME_SCALE)
@@ -298,15 +308,16 @@ class LowerDisplay:
         # Track if we've processed the first station ahead
         is_first_station = True
 
-        for i, stop in enumerate(f_stops):
-            if i == 0 and self.state.curr_stop_disp == 0:
+        for gi, stop in f_stops:
+            if gi == 0 and self.state.cursor_pos == 0:
                 continue
 
-            ptr = (i % self.per_line) * self.stops_w
-            line_num = self._get_line(i)
+            local_i = gi - window_start
+            ptr = (local_i % self.per_line) * self.stops_w
+            line_num = self._get_line(local_i)
             l_y = y + self.h_line * line_num + self.top_pad * (line_num - 1)
 
-            if i >= self.state.curr_stop_disp:
+            if gi >= self.state.cursor_pos:
                 t_w, t_h = self.font_time.size("0")
 
                 # Add travel time
@@ -334,7 +345,7 @@ class LowerDisplay:
                     self.screen.blit(time_img, (time_x, time_y))
 
                 # Draw "分" marker at line breaks and destination
-                if i == self.per_line - 1 or i == dest_idx:
+                if local_i == self.per_line - 1 or gi == dest_idx:
                     minute_w, minute_h = self.font_minute.size("分")
                     minute_y = int(l_y + (self.bar_height - minute_h) / 2)
 
@@ -372,6 +383,7 @@ class LowerDisplay:
         f_stops = self._get_stops_list_disp()
         x = self.x
         y = self.y
+        window_start = f_stops[0][0] if f_stops else 0
 
         # Clear background
         pygame.draw.rect(self.screen, WHITE_BG, pygame.Rect(0, int(y), S_WIDTH, S_HEIGHT - int(y)))
@@ -385,12 +397,13 @@ class LowerDisplay:
         self._update_skip_progress(current_time, f_stops)
 
         # Draw station bars
-        for i, stop in enumerate(f_stops):
-            ptr = (i % self.per_line) * self.stops_w
-            line_num = self._get_line(i)
+        for gi, stop in f_stops:
+            local_i = gi - window_start
+            ptr = (local_i % self.per_line) * self.stops_w
+            line_num = self._get_line(local_i)
             l_y = int(y + self.h_line * line_num + self.top_pad * (line_num - 1))
 
-            is_passed = i >= self.state.curr_stop_disp and i <= dest_idx
+            is_passed = gi >= self.state.cursor_pos and gi <= dest_idx
 
             if is_passed:
                 pygame.draw.rect(
@@ -398,7 +411,7 @@ class LowerDisplay:
                     self.color,
                     pygame.Rect(int(x + ptr), l_y, self.stops_w, self.bar_height),
                 )
-                text_color = INACTIVE_COLOR if (not stop.get("pa", []) and i != 0) else (0, 0, 0)
+                text_color = INACTIVE_COLOR if (not stop.get("pa", []) and gi != 0) else (0, 0, 0)
             else:
                 pygame.draw.rect(
                     self.screen,
@@ -423,44 +436,3 @@ class LowerDisplay:
         self.draw_times(f_stops, dest_idx, current_time)
 
         pygame.display.flip()
-
-    def increment_current_stop_display(self) -> None:
-        """Update which stop is highlighted."""
-        f_stops = self._get_stops_list_disp()
-
-        if not f_stops:
-            return
-
-        dest_idx = self._find_dest_index(f_stops)
-
-        if self.state.curr_stop_disp >= dest_idx or self.state.curr_stop_disp + 1 >= len(f_stops):
-            return
-
-        # If we're in the middle of a skip, complete it on 2nd PA
-        if self.state.skip > 0 and self.state.cnt_pa >= 1:
-            # Deduct time-based advancement from skip (may have already progressed)
-            remaining = self.state.skip - self.state.skip_progress
-            self.state.curr_stop_disp += remaining
-            self.state.skip = 0
-            self.state.time_to_next = 0
-            self.state.skip_progress = 0
-            return
-
-        # First PA at a new station (cnt_pa == 0): advance to next station
-        if self.state.cnt_pa == 0:
-            self.state.curr_stop_disp += 1
-
-            # Check if we landed on a passing station (no PA)
-            current = f_stops[self.state.curr_stop_disp]
-            if not current.get("pa", []):
-                # Count how many stations to skip
-                i = self.state.curr_stop_disp
-                while i < len(f_stops) and not f_stops[i].get("pa", []):
-                    i += 1
-                self.state.skip = i - self.state.curr_stop_disp
-                # Get time to next stopping station (from target station with PA)
-                target_stop = f_stops[i]
-                self.state.time_to_next = target_stop.get("time", 0)
-                # Reset skip progress for time-based animation
-                self.state.skip_progress = 0
-                # Keep curr_stop_disp at first passing station, complete on 2nd PA
