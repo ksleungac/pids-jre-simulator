@@ -61,13 +61,13 @@ class PASimulator:
         self.running = True
 
     def _load_route_data(self) -> None:
-        """Load route.json configuration and merge with stations.json data."""
+        """Load route.json configuration and merge with data/translations.json."""
         if self.route_data is None:
             json_path = os.path.join(self.work_dir, "route.json")
             with open(json_path, encoding="utf-8") as f:
                 self.route_data = json.load(f)
 
-        # Load stations.json if available (provides furigana, english names, etc.)
+        # Load translations.json (furigana, english names) for stop merging
         self.station_db = self._load_station_db()
 
         # Merge station database into stops

@@ -12,12 +12,12 @@ This document defines the JSON data formats used by the PA Simulator for route c
 project_root/
 ├── data/
 │   ├── translations.json        # Central translation database (furigana, english)
-│   └── train_types.json         # Train type English translations (with optional english_short)
+│   ├── train_types.json         # Train type English translations (with optional english_short)
+│   └── stations.json            # Station metadata (3-letter codes; more fields over time)
 └── audio/
-    ├── [line]/                  # Line name (e.g., chuo, keihin, saikyo)
-    │   ├── stations.json        # Line-specific station data (interchange, facilities, etc.)
-    │   └── [diagram]/           # Train diagram folder (e.g., 1349F, 759K)
-    │       └── route.json       # Route configuration
+    └── [line]/                  # Line name (e.g., chuo, keihin, saikyo)
+        └── [diagram]/           # Train diagram folder (e.g., 1349F, 759K)
+            └── route.json       # Route configuration
 ```
 
 ---
@@ -244,40 +244,39 @@ Train type English translations follow the same **modified Hepburn romanization 
 
 ---
 
-## stations.json Format (Line-Specific Data)
+## stations.json Format (Station Metadata)
 
-**Location:** `audio/[line]/stations.json`
+**Location:** `data/stations.json` (project root)
 
 ### Purpose
 
-Line-specific station data that is **not** related to translations:
-- Interchange lines
-- Station facilities (elevators, escalators)
-- Exit information
-- Future line-specific features
+Line-independent station metadata, keyed by Japanese station name. Shares the same key space as `translations.json` but separated by concern:
+- `translations.json` → display text (furigana, english)
+- `stations.json` → operational/physical facts (3-letter codes; future: transfer lines, platforms, etc.)
+
+A station has a single entry even if it appears on multiple routes (e.g., 秋葉原 is on both Yamanote and Keihin-Tohoku — one row).
 
 ### Structure
 
 ```json
 {
-    "JC01": {},
-    "JC02": {},
-    "name_蘇我": {}
+    "東京": {"code_3": "TYO"},
+    "秋葉原": {"code_3": "AKB"},
+    "武蔵小杉": {"code_3": "MKG"}
 }
 ```
 
-**Note:** Currently keys are placeholders for future line-specific data. Translation data has been moved to `data/translations.json`.
+### Fields
 
-### Key Format
+| Field | Description |
+|-------|-------------|
+| `code_3` | JR East 3-letter station code. Only 22 stations total have one — the rule is "3+ JR East systems converge" (with 浜松町 and 高輪ゲートウェイ as explicit exceptions). Absent on all other stations. |
 
-| Pattern | Use Case | Example |
-|---------|----------|---------|
-| `[Prefix][Number]` | Stations with official JR codes | `JC01`, `JK47`, `JA08` |
-| `name_駅名` | Stations without official codes | `name_蘇我`, `name_日進` |
+### Notes
 
-**Important:** These keys are for **line-specific data organization**, not translation lookup.
-
----
+- Not every station needs an entry. Only add rows for stations with metadata to record.
+- Stations without a 3-letter code simply omit the `code_3` key.
+- 3-letter Roman codes (`code_3`) are distinct from 2-character katakana telegraph codes (電略) — the latter is a separate internal JR system and is not stored here.
 
 ---
 
@@ -384,9 +383,9 @@ Stations with empty `pa: []` are skipped automatically (train passes through wit
 | `null` | Station has no official code (e.g., Kawagoe Line stations) |
 
 **Format:** `[Line Prefix][Number]` (e.g., `JC01`, `JK47`, `JA08`)
-- Line prefixes: JC (Chuo), JK (Keihin-Tohoku), JA (Saikyo), JE (Keiyo), JY (Yamanote)
+- Line prefixes: JC (Chuo), JK (Keihin-Tohoku), JA (Saikyo), JE (Keiyo), JY (Yamanote), JT (Tokaido)
 - No 3-letter suffixes in `sta_code` (those go in `sta` field only)
-- **Note:** `sta_code` is now used for line-specific data lookup in `audio/[line]/stations.json`, not for translations
+- **Note:** `sta_code` is route-local — used by `upper_lcd.py` to render the station code badge. Line-independent station metadata lives in `data/stations.json`.
 
 #### `sta_cut` Field
 
@@ -399,25 +398,25 @@ Stations with empty `pa: []` are skipped automatically (train passes through wit
 
 ## Supported Lines (as of 2026-03-03)
 
-All lines share the central `data/translations.json` for translations. Line-specific `stations.json` files are placeholders for future line-specific data.
+All lines share the central `data/translations.json` (display text) and `data/stations.json` (operational metadata).
 
-| Line | Code Prefix | stations.json Location |
-|------|-------------|------------------------|
-| Chuo Main (中央線) | JC | `audio/chuo/stations.json` |
-| Keihin-Tohoku (京浜東北) | JK | `audio/keihin/stations.json` |
-| Keiyo (京葉線) | JE | `audio/keiyo/stations.json` |
-| Saikyo (埼京線) | JA | `audio/saikyo/stations.json` |
-| Tokaido (東海道線) | JT | `audio/tokaido/stations.json` |
-| Yamanote (山手線) | JY | `audio/yamanote/stations.json` |
+| Line | Code Prefix |
+|------|-------------|
+| Chuo Main (中央線) | JC |
+| Keihin-Tohoku (京浜東北) | JK |
+| Keiyo (京葉線) | JE |
+| Saikyo (埼京線) | JA |
+| Tokaido (東海道線) | JT |
+| Yamanote (山手線) | JY |
 
 ---
 
 ## Data Conventions
 
-1. **Separation of translations and line-specific data:**
+1. **Separation of concerns across data files:**
    - `data/translations.json`: Central furigana/english translations (keyed by Japanese text)
    - `data/train_types.json`: Train type English translations (optional `english_short` for narrow boxes)
-   - `audio/[line]/stations.json`: Line-specific data (keyed by sta_code or name_)
+   - `data/stations.json`: Line-independent station metadata — 3-letter codes and future fields (keyed by Japanese station name)
 
 2. **Translation lookup:**
    - By station name: `"東京"` → `translations.json["東京"]`
@@ -452,13 +451,11 @@ Use this checklist when adding or modifying route data to ensure consistency.
 
 - [ ] **data/translations.json exists** and contains translations for all station names
 - [ ] **data/train_types.json exists** and contains translations for train types used in routes
-- [ ] **dest_furigana** is present in route.json (exactly once, at route level)
 - [ ] **sta_code** is present in every stop (value or `null`)
 - [ ] **sta_code format** is simple (e.g., `JC05`, not `JC05_SJK`)
 - [ ] **sta field** can have suffixes for audio files (e.g., `JC05_SJK`, `TYO`)
-- [ ] **stations.json keys** match sta_code values (for line-specific data)
-- [ ] **Name-based keys** (`name_駅名`) used for stations without official codes
-- [ ] **No duplicate keys** in JSON files (especially `dest_furigana`)
+- [ ] **data/stations.json** entries (if present) use raw Japanese station names as keys
+- [ ] **No duplicate keys** in JSON files
 - [ ] **PA tracks** are assigned to correct stations (do not renumber subsequent stations when modifying)
 - [ ] **Station names in route.json** have entries in `data/translations.json`
 - [ ] **Train types in route.json** have entries in `data/train_types.json` (optional, falls back to kanji)
@@ -508,46 +505,24 @@ suffix_pattern = re.compile(r'_[A-Z]{2,}$')  # e.g., _OSK, _SBY, _TYO
 def validate_line(line_name, prefix):
     print(f'\n=== {line_name.upper()} Line ===')
 
-    # Load line-specific stations.json
-    stations_file = f'audio/{line_name}/stations.json'
-    if not os.path.exists(stations_file):
-        print(f'  ERROR: stations.json missing!')
-        return
-
-    with open(stations_file, encoding='utf-8') as f:
-        stations_db = json.load(f)
-    print(f'  stations.json: OK ({len(stations_db)} entries)')
-
     # Get all route.json files for this line
     route_dir = f'audio/{line_name}'
     for root, dirs, files in os.walk(route_dir):
         for file in files:
             if file == 'route.json':
                 route_file = os.path.join(root, file)
-                validate_route(route_file, stations_db)
+                validate_route(route_file)
 
-def validate_route(route_file, stations_db):
+def validate_route(route_file):
     diag_name = os.path.basename(os.path.dirname(route_file))
     issues = []
 
-    with open(route_file, encoding='utf-8') as f:
-        content = f.read()
-
-    # Check for duplicate dest_furigana
-    dest_furigana_count = len(re.findall(r'"dest_furigana"', content))
-    if dest_furigana_count != 1:
-        issues.append(f'dest_furigana appears {dest_furigana_count} times (should be 1)')
-
-    # Parse JSON
     try:
-        data = json.loads(content)
+        with open(route_file, encoding='utf-8') as f:
+            data = json.load(f)
     except json.JSONDecodeError as e:
         print(f'  {diag_name}: JSON ERROR - {e}')
         return
-
-    # Check route-level fields
-    if 'dest_furigana' not in data:
-        issues.append('Missing dest_furigana at route level')
 
     # Check train type translation exists
     route_type = data.get('type', '')
@@ -597,27 +572,25 @@ Central translations.json: OK (120 entries)
 Train types train_types.json: OK (10 entries)
 
 === CHUO Line ===
-  stations.json: OK (24 entries)
   1654T: OK (32 stops)
   916H: OK (32 stops)
 
 === KEIHIN Line ===
-  stations.json: OK (46 entries)
   1275A: OK (46 stops)
   727B: OK (46 stops)
 
 === KEIYO Line ===
-  stations.json: OK (17 entries)
   780Y_1510Y: OK (17 stops)
 
 === SAIKYO Line ===
-  stations.json: OK (24 entries)
   1349F: OK (24 stops)
   759K: OK (24 stops)
 
 === TOKAIDO Line ===
-  stations.json: OK (21 entries)
   1865E: OK (21 stops)
+
+=== YAMANOTE Line ===
+  yamanote: OK (30 stops)
 
 Validation complete.
 ```
@@ -626,11 +599,8 @@ Validation complete.
 
 | Issue | Example | Fix |
 |-------|---------|-----|
-| Duplicate `dest_furigana` | Appears at top and bottom of file | Remove duplicate, keep only one |
 | sta_code with suffix | `"sta_code": "JC05_SJK"` | Change to `"sta_code": "JC05"` |
 | Missing sta_code | Stop has no `sta_code` field | Add `"sta_code": "JC05"` or `null` |
-| stations.json key mismatch | sta_code is `JA08`, key is `JA08_OSK` | Change key to `JA08` |
-| stations.json missing | No `audio/[line]/stations.json` | Create file with all stations |
 
 ---
 

@@ -9,3 +9,7 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Working material (local references, iteration screenshots)
+real/
+screenshot_*.png

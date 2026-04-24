@@ -1,34 +1,31 @@
-"""Standalone preview script for Upper LCD drawing logic.
-
-This script uses the new display system architecture (displays/)
-for testing the E235-1000 series Upper LCD with 3-mode cycling.
-
-Current Layout Zones (Upper LCD, height = 117px):
-┌─────────────────────────────────────────────────────────────┐
-│ [Train Type]  15:30                                         │  Top zone (0-35px)
-│ [Dest ゆき]   ║                                              │  Middle zone (35-50px) - color band
-│             ──┴──                                            │
-│            Prefix    Station Name                            │  Bottom zone (50-117px)
-└─────────────────────────────────────────────────────────────┘
+"""Standalone preview for the Upper LCD renderer (E235-1000 series).
 
 Usage:
-  uv run preview_upper_lcd.py                          # Interactive mode
-  uv run preview_upper_lcd.py --screenshot out.png     # Save screenshot and exit
+  uv run preview_upper_lcd.py                                     # interactive (MOCK data)
+  uv run preview_upper_lcd.py --route yamanote --stop 8 --pa 0    # interactive (real route)
   uv run preview_upper_lcd.py --screenshot out.png --mode english --stop 2 --pa 1
+
+Controls (interactive):
+  PageDown  next station       PageUp  next PA phase       ESC  quit
+
+--route accepts: a path to route.json, a directory containing one, or a shorthand
+like 'yamanote' / 'chuo/916H' (resolved under audio/).
 """
 
 import argparse
+import json
 import os
-import pygame
-import time
 import sys
+from pathlib import Path
 
-from displays.train_models.e235_1000 import UpperDisplay
+import pygame
+
 from displays.base import DisplayMode
-from displays.train_models.e235_1000.upper_lcd import S_WIDTH, S_HEIGHT, UPPER_HEIGHT
+from displays.train_models.e235_1000 import UpperDisplay
+from displays.train_models.e235_1000.upper_lcd import S_WIDTH, S_HEIGHT
 
 # =============================================================================
-# Mock Data (for preview - modify to test different scenarios)
+# Mock data (used when --route is not given)
 # =============================================================================
 
 MOCK_ROUTE_DATA = {
@@ -36,103 +33,128 @@ MOCK_ROUTE_DATA = {
     "type": "快速",
     "dest": "君津",
     "dest_furigana": "とうきょう",
-    "color": [0, 128, 0],  # Green for Yamanote
+    "color": [0, 128, 0],
     "type_color": [150, 40, 0],
 }
 
+# Mix of stations that have code_3 in data/stations.json (東京, 新橋, 品川,
+# 高輪ゲートウェイ) and stations that do not (有楽町, 久里浜) — good coverage
+# for verifying both badge layouts in one run.
 MOCK_STOPS = [
-    {
-        "name": "東京",
-        "furigana": "とうきょう",
-        "english": "Tōkyō",
-    },
-    {
-        "name": "有楽町",
-        "furigana": "ゆうらくちょう",
-        "english": "Yūrakuchō",
-    },
-    {
-        "name": "新橋",
-        "furigana": "しんばし",
-        "english": "Shimbashi",
-    },
-    {
-        "name": "品川",
-        "furigana": "しながわ",
-        "english": "Shinagawa",
-    },
-    {
-        "name": "高輪ゲートウェイ",
-        "furigana": "たかなわげーとうぇい",
-        "english": "Takanawa Gateway",
-    },
-    {
-        "name": "久里浜",
-        "furigana": "くりはま",
-        "english": "Kurihama",
-    },
+    {"name": "東京", "furigana": "とうきょう", "english": "Tōkyō", "sta_code": "JY03"},
+    {"name": "有楽町", "furigana": "ゆうらくちょう", "english": "Yūrakuchō", "sta_code": "JY02"},
+    {"name": "新橋", "furigana": "しんばし", "english": "Shimbashi", "sta_code": "JK29"},
+    {"name": "品川", "furigana": "しながわ", "english": "Shinagawa", "sta_code": "JO25"},
+    {"name": "高輪ゲートウェイ", "furigana": "たかなわげーとうぇい", "english": "Takanawa Gateway", "sta_code": "JY26"},
+    {"name": "久里浜", "furigana": "くりはま", "english": "Kurihama", "sta_code": "JO01"},
 ]
-
-MOCK_STATE = {
-    "curr_stop": 0,
-    "cnt_pa": 0,  # 0 = "次は", 1 = "まもなく", 2+ = "ただいま"
-}
 
 
 # =============================================================================
-# Main Preview Loop
+# Real route loading
+# =============================================================================
+
+MODE_MAP = {"kanji": DisplayMode.KANJI, "furigana": DisplayMode.FURIGANA, "english": DisplayMode.ENGLISH}
+PA_PREFIX_LABELS = ["次は", "まもなく", "ただいま"]
+
+
+def _resolve_route_path(spec: str) -> Path:
+    """Resolve a --route arg into an actual route.json path.
+
+    Accepts: a path, a directory containing route.json, or a shorthand like
+    'yamanote' / 'chuo/916H' (probed under audio/).
+    """
+    candidates = [
+        Path(spec),
+        Path(spec) / "route.json",
+        Path("audio") / spec,
+        Path("audio") / spec / "route.json",
+    ]
+    for c in candidates:
+        if c.is_file():
+            return c
+    for base in (Path(spec), Path("audio") / spec):
+        if base.is_dir():
+            matches = sorted(base.glob("*/route.json")) or sorted(base.glob("**/route.json"))
+            if matches:
+                return matches[0]
+    raise FileNotFoundError(f"Could not resolve --route {spec!r} to a route.json file")
+
+
+def load_real_route(spec: str):
+    """Load a real route.json and merge data/translations.json into each stop.
+
+    Thin subset of app.py's route loading — only what the Upper LCD needs.
+    """
+    route_path = _resolve_route_path(spec)
+    with open(route_path, encoding="utf-8") as f:
+        route_data = json.load(f)
+
+    trans_path = Path("data/translations.json")
+    translations = json.loads(trans_path.read_text(encoding="utf-8")) if trans_path.is_file() else {}
+
+    stops = []
+    for stop in route_data.get("stops", []):
+        merged = dict(stop)
+        name = stop.get("name", "")
+        if name in translations:
+            merged.setdefault("furigana", translations[name].get("furigana", ""))
+            merged.setdefault("english", translations[name].get("english", ""))
+        stops.append(merged)
+
+    print(f"[preview] Loaded {route_path}: route={route_data.get('route')!r}, {len(stops)} stops")
+    return route_data, stops
+
+
+# =============================================================================
+# Main
 # =============================================================================
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Upper LCD Preview (E235-1000)")
-    parser.add_argument("--screenshot", type=str, help="Save screenshot to file and exit")
-    parser.add_argument("--mode", type=str, choices=["kanji", "furigana", "english"], default=None, help="Force display mode (default: cycles)")
-    parser.add_argument("--stop", type=int, default=0, help="Station index (default: 0)")
-    parser.add_argument("--pa", type=int, default=0, help="PA count: 0=次は, 1=まもなく, 2=ただいま (default: 0)")
+    parser.add_argument("--screenshot", type=str, help="Save one frame to file and exit")
+    parser.add_argument("--mode", type=str, choices=list(MODE_MAP), default=None, help="Force display mode (default: cycles automatically)")
+    parser.add_argument("--stop", type=int, default=0, help="Initial station index (default: 0)")
+    parser.add_argument("--pa", type=int, default=0, help="PA phase: 0=次は/Next, 1=まもなく/Arriving, 2=ただいま/Now stopping (default: 0)")
+    parser.add_argument(
+        "--route",
+        type=str,
+        default=None,
+        help="Load a real route.json instead of MOCK_STOPS. " "Accepts a path, a directory, or a shorthand (e.g. 'yamanote', 'chuo/916H').",
+    )
     return parser.parse_args()
 
 
 def main():
-    """Run the preview loop for testing Upper LCD display."""
     args = parse_args()
 
-    # Use dummy video driver for headless screenshot mode
     if args.screenshot:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
 
     pygame.init()
     screen = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
-    pygame.display.set_caption("Upper LCD Preview (E235-1000) - Press: PageDown=next station, PageUp=next PA, ESC=quit")
+    pygame.display.set_caption("Upper LCD Preview (E235-1000) - PageDown=next station, PageUp=next PA, ESC=quit")
     clock = pygame.time.Clock()
 
-    # Initialize display using new architecture
-    display = UpperDisplay(screen, MOCK_ROUTE_DATA, MOCK_STOPS)
+    route_data, stops = load_real_route(args.route) if args.route else (MOCK_ROUTE_DATA, MOCK_STOPS)
+    display = UpperDisplay(screen, route_data, stops)
 
-    # Force mode if specified (temporarily enable all modes including English)
-    mode_map = {"kanji": DisplayMode.KANJI, "furigana": DisplayMode.FURIGANA, "english": DisplayMode.ENGLISH}
     if args.mode:
-        forced_mode = mode_map[args.mode]
-        # Enable all modes so forced mode works even if normally disabled
-        display.mode_displays[DisplayMode.ENGLISH] = display.english_display
-        display.mode_cycler.current_mode = forced_mode
-        display.mode_cycler.paused = True
+        display.mode_cycler.current_mode = MODE_MAP[args.mode]
+        display.mode_cycler.enabled = False
 
-    stop_idx = min(args.stop, len(MOCK_STOPS) - 1)
-    pa_count = args.pa
-    display.set_state(stop_idx, pa_count)
+    curr_stop = max(0, min(args.stop, len(stops) - 1))
+    cnt_pa = args.pa
+    display.set_state(curr_stop, cnt_pa)
 
     if args.screenshot:
-        # Render one frame and save
         display.update()
         display.draw()
         pygame.image.save(screen, args.screenshot)
         print(f"Screenshot saved to {args.screenshot}")
         pygame.quit()
         return
-
-    MOCK_STATE["curr_stop"] = stop_idx
-    MOCK_STATE["cnt_pa"] = pa_count
 
     running = True
     while running:
@@ -143,24 +165,17 @@ def main():
                 if event.key == pygame.K_ESCAPE:
                     running = False
                 elif event.key == pygame.K_PAGEDOWN:
-                    # Next station
-                    MOCK_STATE["curr_stop"] = (MOCK_STATE["curr_stop"] + 1) % len(MOCK_STOPS)
-                    MOCK_STATE["cnt_pa"] = 0
-                    display.set_state(MOCK_STATE["curr_stop"], MOCK_STATE["cnt_pa"])
-                    print(f"[DEBUG] Station: {MOCK_STOPS[MOCK_STATE['curr_stop']]['name']}")
+                    curr_stop = (curr_stop + 1) % len(stops)
+                    cnt_pa = 0
+                    display.set_state(curr_stop, cnt_pa)
+                    print(f"[DEBUG] Station: {stops[curr_stop]['name']}")
                 elif event.key == pygame.K_PAGEUP:
-                    # Next PA
-                    MOCK_STATE["cnt_pa"] = (MOCK_STATE["cnt_pa"] + 1) % 3
-                    display.set_state(MOCK_STATE["curr_stop"], MOCK_STATE["cnt_pa"])
-                    prefixes = ["次は", "まもなく", "ただいま"]
-                    print(f"[DEBUG] PA: {prefixes[MOCK_STATE['cnt_pa']]}")
+                    cnt_pa = (cnt_pa + 1) % 3
+                    display.set_state(curr_stop, cnt_pa)
+                    print(f"[DEBUG] PA: {PA_PREFIX_LABELS[cnt_pa]}")
 
-        # Update display (handles mode cycling internally)
         display.update()
-
-        # Draw display
         display.draw()
-
         pygame.display.flip()
         clock.tick(15)
 

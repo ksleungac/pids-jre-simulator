@@ -10,6 +10,25 @@ uv run main.py
 
 Build executable: use `/build` skill. Code review: use `/review-dirty` or `/review-plus-fix-relentlessly`.
 
+## Session Startup
+
+Before doing anything else:
+1. Read `memory/YYYY-MM-DD.md` (today and yesterday) for recent context
+2. Read [memory/MEMORY.md](memory/MEMORY.md) — long-term memory index
+3. Read [.claude/rules/preferences.md](.claude/rules/preferences.md) — user preferences
+
+## Memory (project-level, in-repo)
+
+This is a separate system from any auto-memory the host may provide. It lives in `memory/` and travels with the repo.
+
+- **Daily logs**: `memory/YYYY-MM-DD.md` — what happened, decisions, context for the day
+- **Curated index**: `memory/MEMORY.md` — one-line pointers to the daily logs worth keeping
+
+Rules:
+- Write it down. "Mental notes" do not survive session restarts; files do.
+- Capture WHY, not just WHAT. Git log already has what changed.
+- Use `/session-recap` at the end of a session to write the day's log and update the index.
+
 ## File Structure
 
 ```
@@ -22,7 +41,8 @@ pids_jre_simulator/
 │       └── lower_lcd.py               # Placeholder
 ├── data/
 │   ├── translations.json              # Station names (furigana, english)
-│   └── train_types.json               # Train type English translations
+│   ├── train_types.json               # Train type English translations
+│   └── stations.json                  # Station metadata, line-independent (3-letter codes; more fields later)
 └── audio/[line]/[diagram]/route.json
 ```
 
@@ -40,12 +60,13 @@ pids_jre_simulator/
 
 ## Key Features
 
-1. **Display Cycling** (2s each): KANJI → FURIGANA (ENGLISH disabled until fonts verified). Destination always kanji (IRL behavior).
+1. **Display Cycling** (2s each): KANJI → FURIGANA → ENGLISH. Destination always kanji (IRL behavior).
 2. **Modular Architecture**: Per-train-model displays (E235-1000, E231-500...). Mode renderers are self-contained.
 3. **Stop-Level Dest Override**: Circular routes (Yamanote) change destination mid-route.
 4. **Real-Time Countdown**: `TIME_SCALE=60` (60s = 1 travel minute), floor division, forces "1" on last PA.
 5. **Audio**: -15 LUFS normalization, double-buffered temp files.
 6. **Station Skip**: Time-based red arrow progression through passing stations.
+7. **Station Code Badge**: JY/03 framed square + optional 3-letter code (AKB, TYO, ...) for the 22 major JR East interchange stations. Code source: `data/stations.json` keyed by Japanese name.
 
 ## Controls
 

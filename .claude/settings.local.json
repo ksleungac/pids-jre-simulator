@@ -16,7 +16,13 @@
       "Bash(grep -r \"skill\\\\|Skill\" --include=*.py --include=*.md .)",
       "Bash(xargs -I {} sh -c \"echo \"\"=== {} ===\"\"; head -10 {}\")",
       "Bash(grep -r Agent --include=*.md --include=*.json --include=*.ts --include=*.js --include=*.py .)",
-      "Bash(find . -name \"*.md\" -exec grep -l \"Agent\" {})"
+      "Bash(find . -name \"*.md\" -exec grep -l \"Agent\" {})",
+      "Bash(cd:*)",
+      "WebFetch(domain:stackoverflow.com)",
+      "WebFetch(domain:superuser.com)",
+      "WebFetch(domain:www.reddit.com)",
+      "PowerShell(uv run *)",
+      "Bash(git diff *)"
     ],
     "deny": [
       "Read(~/.ssh/**)",

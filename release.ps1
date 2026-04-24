@@ -24,8 +24,7 @@ New-Item -ItemType Directory -Force -Path "dist-release\JRE-PA-Simulator\audio" 
 
 Copy-Item "dist\JRE-PA-Simulator.exe" "dist-release\JRE-PA-Simulator\"
 Copy-Item "fonts\*" "dist-release\JRE-PA-Simulator\fonts\"
-Copy-Item "data\translations.json" "dist-release\JRE-PA-Simulator\data\"
-Copy-Item "data\train_types.json" "dist-release\JRE-PA-Simulator\data\"
+Copy-Item "data\*.json" "dist-release\JRE-PA-Simulator\data\"
 
 # Create distribution zip
 Write-Host "`n[3/5] Creating distribution zip..." -ForegroundColor Yellow

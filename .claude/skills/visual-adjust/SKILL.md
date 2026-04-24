@@ -68,6 +68,40 @@ Present to user for feedback.
 - **Don't batch background tasks**: These shells can be flaky — run one screenshot
   at a time with `cd` prefix to avoid path issues
 
+## Reactive Layout Principle
+
+**Your eyes are not precise enough — write code so the user can fine-tune it.**
+
+When writing or adjusting layout code:
+
+1. **Extract all tuneable values into a labeled params block** at the top of the
+   method (or `__init__` for fonts). Group them visually so they're easy to find:
+   ```python
+   # --- Badge params (adjust freely) ---
+   badge_x    = 222
+   badge_w    = 68
+   ring_black = 7
+   text_gap   = -10
+   # -------------------------------------
+   ```
+
+2. **All positioning must derive from those params** — no magic numbers scattered
+   below. If the user changes `badge_w`, interior width, centering, and text
+   positions should all recompute automatically.
+
+3. **Font sizes** live in `__init__` (must be preloaded), but add a comment pointing
+   to the method so the user knows where to look. Layout in the draw method should
+   use `font.get_size()` / `surface.get_size()` to react to whatever size was set.
+
+4. **Do not add overflow guards** (e.g. `max(0, ...)`). If the user sets a font too
+   large for the container, they should see the overflow — that's their signal to
+   tune the value.
+
+5. **Discuss alignment approach before coding**: before writing a new element,
+   briefly describe the intended reactive behaviour (e.g. "text group centered
+   vertically in the white interior, both rows horizontally centered on the same
+   axis") and confirm with the user. Saves back-and-forth on the wrong layout model.
+
 ## Preview Script Reference
 
 ```bash

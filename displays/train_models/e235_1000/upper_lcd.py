@@ -7,6 +7,7 @@ E235-1000 series Upper LCD.
 import pygame
 import pygame.gfxdraw
 import json
+import re
 import time
 import sys
 from pathlib import Path
@@ -25,6 +26,7 @@ UPPER_HEIGHT = int(S_HEIGHT * 0.28)  # 117px
 # Colors
 DARK_BG = [25, 25, 25]
 WHITE_BG = [230, 230, 230]
+BADGE_TEXT = (15, 15, 15)  # intentionally darker than DARK_BG for text-on-white contrast
 
 
 # =============================================================================
@@ -336,7 +338,6 @@ class UpperDisplay:
         self.furigana_display = FuriganaDisplay(screen, route_data, stops)
         self.english_display = EnglishDisplay(screen, route_data, stops)
 
-        # Initialize mode cycler (ENGLISH disabled until fonts verified)
         self.mode_displays = {
             DisplayMode.KANJI: self.japanese_display,
             DisplayMode.FURIGANA: self.furigana_display,
@@ -344,11 +345,19 @@ class UpperDisplay:
         }
         self.mode_cycler = ModeCycler(self.mode_displays, default_mode=DisplayMode.KANJI)
 
+        # Station code badge fonts — sizes tunable here; layout auto-adjusts in _draw_station_code_badge
+        self.font_sta_code_prefix = pygame.font.Font("fonts/NeueFrutigerWorld-Bold.otf", 18)
+        self.font_sta_code_num = pygame.font.Font("fonts/NeueFrutigerWorld-Bold.otf", 22)
+        self.font_sta_code_3letter = pygame.font.Font("fonts/NeueFrutigerWorld-Bold.otf", 20)
+
         # Load translations (station names, destinations)
         self.translations = load_json_relative("data/translations.json")
 
         # Load train type translations
         self.train_types = load_json_relative("data/train_types.json")
+
+        # Load station metadata (3-letter codes, future fields)
+        self.stations = load_json_relative("data/stations.json")
 
         # Prefix mappings (inline - no need for separate JSON file)
         self.prefix_furigana = {
@@ -426,6 +435,97 @@ class UpperDisplay:
         else:
             return self.stops[self.curr_stop].get("name", "").replace(" ", "")
 
+    def _draw_station_code_badge(self) -> None:
+        """Draw station code badge (e.g. JO01, JY03) between color ribbon and station name.
+
+        If the station has a `code_3` entry in data/stations.json (3-letter Roman code,
+        e.g. AKB, SJK, TYO), the outer black rect extends upward to form a top band
+        showing the code above the framed JY/03 square.
+        """
+        if not self.stops or self.curr_stop >= len(self.stops):
+            return
+        sta_code = self.stops[self.curr_stop].get("sta_code")
+        if not sta_code:
+            return
+        m = re.match(r"([A-Za-z]+)(\d+)", sta_code)
+        if not m:
+            return
+        letters = m.group(1).upper()
+        number = m.group(2)
+
+        station_name = self.stops[self.curr_stop].get("name", "")
+        code_3 = self.stations.get(station_name, {}).get("code_3", "")
+
+        # --- Badge params (adjust freely) ---
+        badge_x = 222  # left edge
+        badge_w = 68  # total width
+        badge_h = 68  # total height (framed JY/03 portion only)
+        ring_black = 7  # outer black ring thickness
+        ring_color = 7  # route color ring thickness (green bottom aligns with color ribbon)
+        outer_radius = 8  # corner rounding of outer black frame
+        color_radius = 4  # corner rounding of color ring
+        interior_radius = (
+            0  # corner rounding of white interior (0 = square corners; raise if you shrink rings and see white corners poke past the color ring)
+        )
+        text_gap = 3  # px between prefix row bottom and number row top (visible-pixel gap)
+        prefix_x_offset = 1  # nudge prefix row right of center (real badge is slightly right-biased)
+        # --- code_3 band params (only used when station has a 3-letter code) ---
+        code_3_band_h = 12  # height of the top band added above the framed badge (smaller = black rect starts lower)
+        code_3_x_offset = 0  # nudge code_3 text horizontally (0 = centered on badge)
+        code_3_y_offset = 4  # nudge code_3 text vertically within band (positive = lower, closer to green ring)
+        # Font size lives in __init__ as self.font_sta_code_3letter — increase pt if the text should be bigger.
+        # -------------------------------------
+
+        badge_y = UPPER_HEIGHT - badge_h
+        inset = ring_black + ring_color
+
+        # Interior bounds (derived — don't edit these)
+        interior_x = badge_x + inset
+        interior_y = badge_y + inset
+        interior_w = badge_w - 2 * inset
+        interior_h = badge_h - 2 * inset
+        center_x = interior_x + interior_w // 2
+
+        # Outer black rect extends upward when code_3 is present
+        if code_3:
+            outer_y = badge_y - code_3_band_h
+            outer_h = badge_h + code_3_band_h
+        else:
+            outer_y = badge_y
+            outer_h = badge_h
+
+        pygame.draw.rect(self.screen, (0, 0, 0), pygame.Rect(badge_x, outer_y, badge_w, outer_h), 0, outer_radius)
+        pygame.draw.rect(
+            self.screen,
+            self.color,
+            pygame.Rect(badge_x + ring_black, badge_y + ring_black, badge_w - 2 * ring_black, badge_h - 2 * ring_black),
+            0,
+            color_radius,
+        )
+        pygame.draw.rect(self.screen, WHITE_BG, pygame.Rect(interior_x, interior_y, interior_w, interior_h), 0, interior_radius)
+
+        letter_surf = self.font_sta_code_prefix.render(letters, True, BADGE_TEXT)
+        num_surf = self.font_sta_code_num.render(number, True, BADGE_TEXT)
+        l_rect = letter_surf.get_bounding_rect()
+        n_rect = num_surf.get_bounding_rect()
+
+        total_h = l_rect.height + text_gap + n_rect.height
+        start_y = interior_y + (interior_h - total_h) // 2
+
+        self.screen.blit(letter_surf, (center_x + prefix_x_offset - l_rect.width // 2 - l_rect.x, start_y - l_rect.y))
+        num_y = start_y + l_rect.height + text_gap
+        self.screen.blit(num_surf, (center_x - n_rect.width // 2 - n_rect.x, num_y - n_rect.y))
+
+        # code_3 row — white text centered in the top band
+        if code_3:
+            code_3_surf = self.font_sta_code_3letter.render(code_3, True, WHITE_BG)
+            c_rect = code_3_surf.get_bounding_rect()
+            band_center_x = badge_x + badge_w // 2
+            band_center_y = outer_y + code_3_band_h // 2
+            code_3_x = band_center_x + code_3_x_offset - c_rect.width // 2 - c_rect.x
+            code_3_y = band_center_y + code_3_y_offset - c_rect.height // 2 - c_rect.y
+            self.screen.blit(code_3_surf, (code_3_x, code_3_y))
+
     def set_state(self, curr_stop: int, cnt_pa: int) -> None:
         """Update display state (current stop and PA count)."""
         self.curr_stop = curr_stop
@@ -465,6 +565,10 @@ class UpperDisplay:
 
         station_text = self._get_station_display()
         display.draw_station(station_text)
+
+        # Badge drawn last so the extended code_3 band renders on top of
+        # overlapping prefix/station DARK_BG rects.
+        self._draw_station_code_badge()
 
         if self.stops and self.curr_stop < len(self.stops):
             pa_tracks = self.stops[self.curr_stop].get("pa", [])

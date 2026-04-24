@@ -96,6 +96,23 @@
 - Implementation: Check stop-level `dest` first, fallback to route-level
 - Example: At 田町，show "東京・上野" instead of route-level "品川・東京"
 
+### Centering Text Across Fonts
+- Use `surface.get_bounding_rect()` — returns tight visible-pixel bounds
+- Do NOT use `font.get_size()` / `surface.get_size()` for tight centering — those include font leading, which varies significantly per font (e.g. Frutiger's leading is much larger than Helvetica's at the same pt size), breaking alignment when swapping fonts
+- Canonical example: `UpperDisplay._draw_station_code_badge` in `displays/train_models/e235_1000/upper_lcd.py` — centers two text rows (JY/03) of different sizes inside a small badge, reactive to any font choice
+
+### Station Code Badge (UpperDisplay)
+- `_draw_station_code_badge()` reads `sta_code` (per-stop, from route.json) → renders the framed JY/03 square
+- If the Japanese station name has a `code_3` entry in `data/stations.json`, the outer black rect extends UPWARD into a top band showing the 3-letter Roman code (white text, e.g. AKB/TYO)
+- All layout knobs live in the params block at the top of the method: `code_3_band_h`, `code_3_x_offset`, `code_3_y_offset`; font size in `__init__` as `self.font_sta_code_3letter`
+- **Draw order**: badge draws LAST in `UpperDisplay.draw()` (after prefix/station) so the extended top band is not clipped. The prefix DARK_BG rect and the badge share x=222 — earlier ordering painted over the top of the extension.
+
+### stations.json (Station Metadata)
+- Location: `data/stations.json` (project root). Keyed by raw Japanese station name — same key space as `translations.json`, separated by concern (translations = display text; stations = operational/physical facts).
+- Line-independent — one entry per station even when it appears on multiple lines (e.g. 秋葉原 on both Yamanote and Keihin-Tohoku).
+- **`code_3`** field (JR East 3-letter Roman code): exactly **22** stations total. Assignment rule is "3+ JR East systems converge" with two documented exceptions (浜松町, 高輪ゲートウェイ). The catalog is finite — do not hunt for codes on smaller stations; they use 2-character katakana telegraph codes (電略) which are a separate internal system and are NOT stored here.
+- Missing `code_3` → badge skips the top band (plain JY/03 rendering, unchanged from pre-feature behavior).
+
 ### Adding New Train Model
 1. Create `displays/train_models/{model_name}/` directory
 2. Copy and modify `upper_lcd.py` for fonts/positions
@@ -117,7 +134,7 @@
 - `data/translations.json`: All station names must have entries
 - `data/train_types.json`: Train types (optional, falls back to kanji)
 - `sta_code` in every stop (value or `null`)
-- `dest_furigana` at route level only (auto-lookup from translations)
+- `dest_furigana` is NOT stored in route.json — it's auto-looked-up from `translations.json[dest]` at load time
 
 ### Key Format Patterns
 | Pattern | Use Case | Example |
@@ -134,3 +151,4 @@
 4. **Multiple PA tracks**: Yellow hint square shown when `len(pa_tracks) > 1`
 5. **STA cut**: Seconds where melody stops and door chime begins
 6. **Distribution**: See `/build` skill for folder structure and build details
+7. **ModeCycler has `enabled`, NOT `paused`**: To freeze a forced mode (e.g. in preview scripts), set `cycler.enabled = False`. Assigning to `paused` silently creates a new attribute that `update()` never checks — the forced mode will un-freeze after the cycle interval elapses.
