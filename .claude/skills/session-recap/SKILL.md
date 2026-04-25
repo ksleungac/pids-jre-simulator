@@ -71,7 +71,8 @@ After user approval, update the appropriate files. **Each piece of information h
 | Lessons from past mistakes | `.claude/rules/critical_lessons.md` | anywhere else |
 | Build/distribution details, folder structure | `.claude/skills/build/SKILL.md` | CLAUDE.md, notes.md |
 | JSON field definitions, data format conventions | `DATA_FORMAT.md` | CLAUDE.md |
-| Display architecture details | `UPPER_DISPLAY_UPDATE.md` | CLAUDE.md |
+| Upper LCD architecture, conventions, gotchas | `UPPER_DISPLAY_UPDATE.md` | CLAUDE.md, notes.md |
+| Lower LCD architecture, conventions, gotchas | `LOWER_DISPLAY_UPDATE.md` | CLAUDE.md, notes.md |
 | Daily session logs | `memory/YYYY-MM-DD.md` | — |
 | Long-term memory index (pointers only) | `memory/MEMORY.md` | — |
 
@@ -82,6 +83,7 @@ After user approval, update the appropriate files. **Each piece of information h
 3. **Cross-reference, don't copy** — e.g., CLAUDE.md says "See `/build` skill" rather than repeating the folder tree.
 4. **MEMORY.md is an index** — one-line pointers to memory files. No content, no rules, no preferences.
 5. **When in doubt about placement**: implementation detail → `notes.md`, preference → `preferences.md`, build/release → `build/SKILL.md`.
+6. **Don't bloat one md.** If `notes.md` (or any single doc) is already large, distribute new content to its narrower-domain home: upper-LCD topic → `UPPER_DISPLAY_UPDATE.md`, lower-LCD topic → `LOWER_DISPLAY_UPDATE.md`, etc. `notes.md` is for cross-cutting patterns; display-specific quirks (rendering gotchas, draw-method subtleties, font metrics) belong with the display doc that already discusses those code paths. Reviewer false positives that recur within a specific module → that module's display doc, not a generic "review notes" pile.
 
 ---
 
@@ -107,7 +109,7 @@ After a session fixing the Yamanote line destination display:
 ## Session Learnings Summary
 
 ### Code Changes
-- display.py: _get_current_dest() method added, _draw_destination() modified
+- displays/train_models/e235_1000/upper_lcd.py: _get_current_dest() method added, draw_destination() modified
 - data/translations.json: 13 Yamanote entries added
 
 ### New Understandings
