@@ -3,6 +3,30 @@
         "furigana": "さいたましんとしん",
         "english": "Saitama-Shintoshin"
     },
+    "錦糸町": {
+        "furigana": "きんしちょう",
+        "english": "Kinshichō"
+    },
+    "船橋": {
+        "furigana": "ふなばし",
+        "english": "Funabashi"
+    },
+    "津田沼": {
+        "furigana": "つだぬま",
+        "english": "Tsudanuma"
+    },
+    "新日本橋": {
+        "furigana": "しんにほんばし",
+        "english": "Shin-Nihombashi"
+    },
+    "栗橋": {
+        "furigana": "くりはし",
+        "english": "Kurihashi"
+    },
+    "久里浜": {
+        "furigana": "くりはま",
+        "english": "Kurihama"
+    },
     "三鷹": {
         "furigana": "みたか",
         "english": "Mitaka"
@@ -736,5 +760,61 @@
     "宮原": {
         "furigana": "みやはら",
         "english": "Miyahara"
+    },
+    "馬喰町": {
+        "furigana": "ばくろちょう",
+        "english": "Bakurochō"
+    },
+    "新小岩": {
+        "furigana": "しんこいわ",
+        "english": "Shin-Koiwa"
+    },
+    "市川": {
+        "furigana": "いちかわ",
+        "english": "Ichikawa"
+    },
+    "稲毛": {
+        "furigana": "いなげ",
+        "english": "Inage"
+    },
+    "千葉": {
+        "furigana": "ちば",
+        "english": "Chiba"
+    },
+    "東千葉": {
+        "furigana": "ひがしちば",
+        "english": "Higashi-Chiba"
+    },
+    "都賀": {
+        "furigana": "つが",
+        "english": "Tsuga"
+    },
+    "四街道": {
+        "furigana": "よつかいどう",
+        "english": "Yotsukaidō"
+    },
+    "物井": {
+        "furigana": "ものい",
+        "english": "Monoi"
+    },
+    "佐倉": {
+        "furigana": "さくら",
+        "english": "Sakura"
+    },
+    "酒々井": {
+        "furigana": "しすい",
+        "english": "Shisui"
+    },
+    "成田": {
+        "furigana": "なりた",
+        "english": "Narita"
+    },
+    "空港第2ビル": {
+        "furigana": "くうこうだいにビル",
+        "english": "Narita Airport\nTerminal 2·3"
+    },
+    "成田空港": {
+        "furigana": "なりたくうこう",
+        "english": "Narita Airport\nTerminal 1"
     }
 }

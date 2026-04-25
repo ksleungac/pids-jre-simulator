@@ -326,24 +326,26 @@ Each stop in the `stops` array:
 | Value | Meaning |
 |-------|---------|
 | `[]` | No PA announcement - train doesn't stop OR first station |
-| `["tokyo_dep"]` | Single PA track using filename |
-| `["tokyo_dep", "shinagawa_arr"]` | Multiple PA tracks using filenames |
+| `["tokyo-dep"]` | Single PA track using filename |
+| `["tokyo-dep", "shinagawa-arr"]` | Multiple PA tracks using filenames |
 
 **PA Track Filename Convention:**
 
-The `pa` array contains **descriptive filenames** (without `.mp3` extension) that map directly to audio files in the `pa/` folder:
+The `pa` array contains filenames (without `.mp3` extension) that map directly to audio files in the `pa/` folder:
 
-- Track reference `"tokyo_dep"` → `audio/[line]/[diagram]/pa/tokyo_dep.mp3`
-- Allows meaningful names like `{station}_{dep|arr}` instead of sequential numbers
-- Common pattern:
-  - `{station}_dep` = Departure announcement (played after departing, announcing next station)
-  - `{station}_arr` = Arrival announcement (played when approaching station)
+- Track reference `"tokyo-dep"` → `audio/[line]/[diagram]/pa/tokyo-dep.mp3`
+- **Preferred convention (new lines):** descriptive `{station}-{dep|arr}` (lowercase, hyphen-separated, no macrons). Reference: `audio/sobu/1217F/`, `audio/takasaki/3922E/`. Pattern:
+  - `{prev-station}-dep` = Departure announcement (recorded after departing previous station, announcing next stop). Lives in *this* stop's `pa` array.
+  - `{this-station}-arr` = Arrival announcement (recorded approaching this station)
+  - Compound station names use additional hyphens: `shin-koiwa-dep`, `kita-ageo-arr`
+  - Terminus only has `{this}-arr`; first station has no PA at all
+- **Legacy convention (existing lines):** sequential numbers (`"1"`, `"2"`, …) — used by `audio/keiyo/`, `audio/chuo/`. Don't migrate; the renderer treats both identically.
 
 **Example:**
 ```json
 {
     "name": "品川",
-    "pa": ["shimbashi_dep", "shinagawa_arr"],  // shimbashi_dep.mp3, shinagawa_arr.mp3
+    "pa": ["shimbashi-dep", "shinagawa-arr"],  // shimbashi-dep.mp3, shinagawa-arr.mp3
     "sta": ["JT03_SGW"],
     "sta_cut": 17,
     "time": 5,
