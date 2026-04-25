@@ -8,10 +8,9 @@ import keyboard
 import time
 from typing import Dict, Any, Optional
 
-from constants import S_WIDTH, S_HEIGHT, FRAME_RATE, KEY_REPEAT_DELAY
+from constants import S_WIDTH, S_HEIGHT, FRAME_RATE, KEY_REPEAT_DELAY, TIME_SCALE
 from audio import AudioPlayer
-from display import LowerDisplay
-from displays.train_models.e235_1000 import UpperDisplay
+from displays.train_models.e235_1000 import UpperDisplay, LowerDisplay
 from utils import draw_text
 
 
@@ -41,6 +40,38 @@ class AppState:
         passes (or a PA-within-stop tick fires) until it catches up.
         """
         return self.curr_stop - max(0, self.skip - self.skip_progress)
+
+    def update_skip_progress(self, current_time: float) -> None:
+        """Advance ``skip_progress`` through passing stations based on elapsed time.
+
+        ``cursor_pos`` derives from ``curr_stop - (skip - skip_progress)`` —
+        bumping ``skip_progress`` here is what pulls the visual cursor forward.
+
+        Called from the main loop before each frame's draw. State-machine
+        logic; lives on AppState rather than the renderer so the lower
+        display can stay pure rendering (mirrors the upper).
+        """
+        if self.skip == 0:
+            return
+
+        # departure_time == 0.0 is the uninitialized sentinel (no skip in flight).
+        # current_time is always a real time.time() timestamp from the run loop;
+        # no need to guard for current_time <= 0.
+        if self.departure_time <= 0:
+            return
+
+        if self.time_to_next <= 0:
+            return
+
+        elapsed_minutes = (current_time - self.departure_time) / TIME_SCALE
+
+        # Skip stations divide the travel time into (skip + 1) segments.
+        # skip=1: 50% mark -> progress to first passing.
+        # skip=2: 33% / 67% marks -> first / second passing.
+        for i in range(1, self.skip + 1):
+            threshold = self.time_to_next * i / (self.skip + 1)
+            if elapsed_minutes >= threshold and self.skip_progress < i:
+                self.skip_progress = i
 
 
 class _SilentAudio:
@@ -87,7 +118,11 @@ class PASimulator:
         # Initialize components
         self.audio = _SilentAudio() if preview else AudioPlayer(work_dir, self.stops)
         self.upper = UpperDisplay(self.screen, self.route_data, self.stops)
-        self.lower = LowerDisplay(self.screen, self.route_data, self.state, self.stops)
+        # Lower shares the upper's mode_cycler — modes stay in lockstep, no
+        # parallel timer. set_state below binds the state reference; lower
+        # reads cursor_pos / skip / etc. live from it each frame.
+        self.lower = LowerDisplay(self.screen, self.route_data, self.stops, self.upper.mode_cycler)
+        self.lower.set_state(self.state)
 
         self.running = True
 
@@ -189,18 +224,25 @@ class PASimulator:
         # Draw initial state
         self.upper.set_state(self.state.curr_stop, self.state.cnt_pa)
         self.upper.draw()
-        self.lower.show_stops()
+        self.lower.draw()
+        pygame.display.flip()
 
         while self.running:
             self.clock.tick(FRAME_RATE)
             timestamp = time.time()
 
+            # Advance skip animation (was inside LowerDisplay; moved here so
+            # the display layer stays pure-rendering, mirroring upper).
+            self.state.update_skip_progress(timestamp)
+
             # Update and draw upper display
             self.upper.update(timestamp)
             self.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
 
-            # Update lower display with current time for real-time countdown
-            self.lower.show_stops(current_time=timestamp)
+            # Draw lower display with current time for real-time countdown
+            self.lower.draw(timestamp)
+
+            pygame.display.flip()
 
             # Handle input
             self._handle_input()
@@ -288,7 +330,14 @@ class PASimulator:
         def _has_pa(i: int) -> bool:
             return bool(self.stops[i].get("pa"))
 
-        if not _has_pa(target):
+        # Special case: target=0 IS the initial-boarding state. Most real routes
+        # have `pa: []` at stop 0 because no announcement has played yet (the
+        # train is sitting at the start). Don't roll away from it — that's
+        # exactly the state the user wants to preview. The lower LCD's special
+        # "yellow flag" rendering at curr_stop=0 is meant for this.
+        if target == 0:
+            pass
+        elif not _has_pa(target):
             step = 1 if direction >= 0 else -1
             scan = target
             while 0 <= scan < len(self.stops) and not _has_pa(scan):

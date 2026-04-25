@@ -33,20 +33,20 @@ Rules:
 
 ```
 pids_jre_simulator/
-├── main.py, app.py, audio.py, display.py (LowerDisplay), constants.py, utils.py
+├── main.py, app.py, audio.py, constants.py, utils.py
 ├── preview_display.py                 # Audio-free preview entry point — uses PASimulator(preview=True)
 ├── displays/                          # Modular display system
 │   ├── base.py                        # DisplayMode enum, ModeCycler
 │   └── train_models/e235_1000/
 │       ├── upper_lcd.py               # Japanese/Furigana/EnglishDisplay, UpperDisplay
-│       └── lower_lcd.py               # Placeholder
+│       └── lower_lcd.py               # Japanese/EnglishDisplay (placeholder), LowerDisplay
 ├── data/
 │   ├── translations.json              # Station names (furigana, english)
 │   ├── train_types.json               # Train type English translations
 │   └── stations.json                  # Station metadata, line-independent (3-letter codes; more fields later)
 └── audio/
     ├── [line]/[diagram]/route.json    # Real routes
-    └── mock/main/route.json           # Curated edge-case catalog for preview (not shipped)
+    └── _mock/main/route.json          # Curated edge-case catalog for preview (`_` prefix = not shipped)
 ```
 
 ## Module Responsibilities
@@ -56,8 +56,7 @@ pids_jre_simulator/
 | `constants.py` | S_WIDTH=730, S_HEIGHT=420, TIME_SCALE=60, FRAME_RATE=15 |
 | `utils.py` | draw_text, draw_text_given_width (even spacing), draw_aapolygon |
 | `audio.py` | AudioPlayer class, play_pa/sta, pause, is_playing |
-| `display.py` | LowerDisplay (legacy, still in use) |
-| `displays/` | UpperDisplay (E235-1000): set_state(), update(), draw() |
+| `displays/` | Modular per-train-model UpperDisplay + LowerDisplay (E235-1000): set_state(), update(), draw() |
 | `app.py` | PASimulator, AppState, translation loading, PA/STA handling |
 | `main.py` | Entry point, setup screen, error handling |
 
@@ -87,8 +86,9 @@ Yellow hint square = multiple PA tracks available.
 **Don't read these upfront — consult when needed:**
 
 - **Data/JSON** → Read [DATA_FORMAT.md](DATA_FORMAT.md) first
-- **Display/UI** → Read [UPPER_DISPLAY_UPDATE.md](UPPER_DISPLAY_UPDATE.md) first
-- **Audio/Diagram** → Read [AUDIO_SPLITTING_WORKFLOW.md](AUDIO_SPLITTING_WORKFLOW.md) first
+- **Upper LCD** → Read [UPPER_DISPLAY_UPDATE.md](UPPER_DISPLAY_UPDATE.md) first
+- **Lower LCD** → Read [LOWER_DISPLAY_UPDATE.md](LOWER_DISPLAY_UPDATE.md) first (sections marked **🔁 Shared with UPPER** are duplicated — keep in sync)
+- **Audio/Diagram** → Use `/split-audio` skill (PA + STA splitting, naming conventions, route.json updates)
 - **Code Patterns** → Read [.claude/rules/notes.md](.claude/rules/notes.md) — font loading, JSON paths, PyInstaller, station skip logic, long-route refresh, preview mode
-- **Testing / previewing** → `uv run preview_display.py` defaults to the mock catalog (`audio/mock/main`). Keys: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. See notes.md "Preview Mode" for `jump_to_stop` backward-rounding semantics.
+- **Testing / previewing** → `uv run preview_display.py` defaults to the mock catalog (`audio/_mock/main`). Keys: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. See notes.md "Preview Mode" for `jump_to_stop` backward-rounding semantics.
 - **Building/Releasing** → Use `/build` skill

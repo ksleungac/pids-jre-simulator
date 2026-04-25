@@ -60,11 +60,11 @@
 
 ### Station Skip Logic (LowerDisplay)
 - **Single source of truth**: `state.curr_stop` is the only stored "where is the train" index. The visual cursor on the lower LCD is derived: `state.cursor_pos = curr_stop - max(0, skip - skip_progress)`. When no skip is in flight (`skip == 0`), cursor_pos == curr_stop.
-- **Skip setup happens in `app._next_pa`'s "advance to next stop" branch** (not in `display.py`):
+- **Skip setup happens in `app._next_pa`'s "advance to next stop" branch** (not in the lower-LCD renderer):
   - Records `prev_stop = curr_stop`, advances `curr_stop` past passing stations to the next PA station.
   - Sets `skip = curr_stop - prev_stop - 1` (number of passing stations crossed), `skip_progress = 0`, `time_to_next = stops[curr_stop].time` if `skip > 0`.
   - First frame after this: cursor_pos = curr_stop − skip = first passing station. The cursor visibly steps onto it.
-- **Time-based progression**: `LowerDisplay._update_skip_progress` increments `skip_progress` at thresholds `time_to_next * i / (skip + 1)`. cursor_pos auto-advances because it's derived. No `curr_stop_disp` mutation.
+- **Time-based progression**: `AppState.update_skip_progress` increments `skip_progress` at thresholds `time_to_next * i / (skip + 1)`. cursor_pos auto-advances because it's derived. No `curr_stop_disp` mutation. Called from the main loop in `app.run()` *before* drawing each frame — keeps the lower display pure rendering (mirrors how the upper is structured).
 - **Catch-up at next PA tick**: `_next_pa`'s "next PA within current stop" branch zeros `skip`/`skip_progress`/`time_to_next` on every cnt_pa increment. Cursor snaps to curr_stop. Idempotent — no-op if skip was already 0.
 - **No leak class possible**: Because the "advance" branch *overwrites* skip from the gap (not appends), and the "within stop" branch unconditionally zeros it, single-PA-target leakage (the old bug) cannot recur. There is no separate "flush" path to remember.
 - **Inner circle**: Drawn at `curr_stop` (PA target) via `gi == self.state.curr_stop` in `draw_marks`. During skip animation cursor_pos lags behind by `skip - skip_progress` — intentional: pointer (red triangle) shows animation position, inner dot shows the actual PA target.
@@ -104,6 +104,12 @@
 - Implementation: Check stop-level `dest` first, fallback to route-level
 - Example: At 田町，show "東京・上野" instead of route-level "品川・東京"
 
+### English Station Name (E235-1000)
+- Font: `fonts/HelveticaNeue-Bold.otf` @ 75pt (the `.ttf` cut had macron artifacts at large sizes — gone)
+- Position: `name_x = int(S_WIDTH * 0.40) + 10` (10px right of the Japanese position to give breathing room from the JO/JY badge), `name_y = UPPER_HEIGHT - name_h` (2px lower than Japanese to match reference)
+- Each mode's `draw_station` owns a DARK_BG clear rect that covers its glyph box plus ~10px below for descender overflow. **Extend the rect downward only** — extending it upward into the prefix/clock band erases the clock.
+- JR PIDS uses uniform horizontal smoothscale (current `collapse=True` path) for long names — they do NOT swap to a separate condensed font cut. Don't introduce one.
+
 ### Centering Text Across Fonts
 - Use `surface.get_bounding_rect()` — returns tight visible-pixel bounds
 - Do NOT use `font.get_size()` / `surface.get_size()` for tight centering — those include font leading, which varies significantly per font (e.g. Frutiger's leading is much larger than Helvetica's at the same pt size), breaking alignment when swapping fonts
@@ -138,8 +144,9 @@
 `preview_display.py` is the thin entry point (~110 lines of CLI plumbing + screenshot mode). No duplicated state machine.
 
 ### Mock route
-- Path: `audio/mock/main/route.json`. Default when `--route` is omitted.
-- Curated 10-stop fictional line covering: code_3 badge presence/absence, PA-track counts 0/1/2/3, 1-station skip to single-PA target (reproduces the single-PA skip-flush bug), 2-station skip to multi-PA target (happy path), long-name wrap (高輪ゲートウェイ), compound destination (品川・高輪ゲートウェイ).
+- Path: `audio/_mock/main/route.json`. Default when `--route` is omitted. (`_` prefix on folder = preserved-but-not-shipped, applies to `_archive/` too.)
+- Curated 11-stop fictional line — reference stations integrated as test stations so each does double duty (logic test + visual font reference). Covers: code_3 badge presence/absence, PA-track counts 0/1/2/3, 1-station skip to single-PA target (reproduces the single-PA skip-flush bug), 2-station skip to multi-PA target (happy path), long-name wrap (高輪ゲートウェイ), compound destination (品川・高輪ゲートウェイ).
+- Stop indices used by `compare_fonts.py`: 0=東京 (Tokyo ref + multi-PA + TYO code_3), 1=新日本橋 (Shin-Nihombashi ref + 1-skip source), 3=錦糸町 (Kinshicho ref + 1-skip target → REPRO bug), 7=船橋 (Funabashi ref + 2-skip multi-PA target), 8=津田沼 (Tsudanuma ref + single-PA).
 - Lives as a real `route.json` file — not in-code constants. Loads via the same path as real routes. Edit freely to experiment.
 
 ### `jump_to_stop(target, direction=-1)`
