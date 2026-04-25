@@ -34,7 +34,7 @@ For each file, record which bucket it falls into:
 | Bucket | Paths | Notes |
 |--------|-------|-------|
 | **Data (shipped)** | `data/*.json`, `audio/**/route.json`, `audio/**/*.mp3`, `audio/*/stations.json` | User-facing data that ships in the distribution. |
-| **Data (harness)** | `audio/mock/**` | Preview/testing fixtures. Not shipped. Treat as Program for relatedness — a mock tweak alongside a code change is normal. |
+| **Data (harness)** | `audio/_*/**` | Preview/testing fixtures + archived recordings (`_mock/`, `_archive/`). Not shipped. Treat as Program for relatedness — a mock tweak alongside a code change is normal. |
 | **Program — code** | `*.py` (except `preview_*`), top-level config (`pyproject.toml`, `uv.lock`, `main.py`) | |
 | **Program — preview/harness** | `preview_*.py` | Testing tool, not shipped. |
 | **Program — tools** | `validate_*.py`, one-off scripts at project root | Dev/CI tools. Group with the change that introduced them. |

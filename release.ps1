@@ -105,7 +105,9 @@ if ($notesExistedBeforehand) {
         Write-Host "  Changelog range: full history (no prior tags)" -ForegroundColor DarkGray
     }
 
-    # Classify each commit: "Data" = every touched file is under data/ or audio/. Else "Program".
+    # Classify each commit: "Data" = every touched file is shipped data (under data/ or audio/,
+    # but NOT under audio/_*/ — those are harness/archive folders that don't ship to users).
+    # Anything else (code, docs, harness-only, mixed) → "Program".
     $dataLines = @()
     $programLines = @()
     $commits = @(git log $range --pretty=format:"%H|%s" --no-merges --reverse)
@@ -118,7 +120,9 @@ if ($notesExistedBeforehand) {
         if ($files.Count -eq 0) { continue }
         $isDataOnly = $true
         foreach ($f in $files) {
-            if ($f -notmatch '^(data/|audio/)') { $isDataOnly = $false; break }
+            $isShippedData = ($f -match '^data/' -and $f -notmatch '^data/_') `
+                          -or ($f -match '^audio/' -and $f -notmatch '^audio/_')
+            if (-not $isShippedData) { $isDataOnly = $false; break }
         }
         if ($isDataOnly) { $dataLines += "- $subject" }
         else             { $programLines += "- $subject" }

@@ -11,15 +11,15 @@
             "pa": ["1", "2"],
             "sta": [""],
             "sta_cut": 0,
-            "sta_code": "JM01"
+            "sta_code": "JO19"
         },
         {
-            "name": "神田",
+            "name": "新日本橋",
             "pa": ["1"],
             "sta": [""],
             "sta_cut": 0,
             "time": 2,
-            "sta_code": "JM02"
+            "sta_code": "JO20"
         },
         {
             "name": "秋葉原",
@@ -28,12 +28,12 @@
             "sta_code": "JM03"
         },
         {
-            "name": "御徒町",
+            "name": "錦糸町",
             "pa": ["1"],
             "sta": [""],
             "sta_cut": 0,
             "time": 6,
-            "sta_code": "JM04"
+            "sta_code": "JO22"
         },
         {
             "name": "上野",
@@ -56,12 +56,20 @@
             "sta_code": "JM07"
         },
         {
-            "name": "田端",
+            "name": "船橋",
             "pa": ["1", "2"],
             "sta": [""],
             "sta_cut": 0,
             "time": 10,
-            "sta_code": "JM08"
+            "sta_code": "JO25"
+        },
+        {
+            "name": "津田沼",
+            "pa": ["1"],
+            "sta": [""],
+            "sta_cut": 0,
+            "time": 4,
+            "sta_code": "JO26"
         },
         {
             "name": "高輪ゲートウェイ",

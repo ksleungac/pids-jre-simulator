@@ -171,6 +171,12 @@ Compress-Archive -Path "dist-release\JRE-PA-Simulator" -DestinationPath "dist-re
 - **Committing/pushing**: do not touch git.
 - **Version bumping**: this skill does not modify `pyproject.toml` or any other source. The version is a build-time label only.
 
+## `_*` folder convention (preserved-but-not-shipped)
+
+Folders prefixed with `_` under `audio/` (e.g. `audio/_mock/`, `audio/_archive/`) are preserved in the repo but **must not ship** to end users. Currently this is automatic — the whole `audio/` folder ships empty (junction broken at zip time, see Step 6) — so the rule is dormant. **If audio shipping is ever added** (e.g. a future "data pack" zip that includes real routes), the copy step must explicitly exclude `audio/_*/` to keep mock and archive out. Same convention applies to any future `data/_*.json` (none today).
+
+The smoke-test junction in Step 4 transparently includes `_*/` folders — that's intentional. The user can preview-test against the mock catalog from inside the staged folder.
+
 ## Release notes criteria (for when `release.ps1` eventually runs)
 
 Even though this skill doesn't generate notes, when you *do* help assemble them (pre-writing `release_notes.md` before the user runs `release.ps1`), apply this rule:
