@@ -16,6 +16,36 @@ from displays.base import DisplayMode, ModeCycler
 from displays.utils import draw_text, draw_text_given_width
 
 # =============================================================================
+# Region Map — E235-1000 upper LCD layout (descriptive)
+#
+# Each region has a declared "confinement" — the rectangle inside which
+# everything the region draws (bg fill AND glyphs) must visually land. Clear
+# rect is not special; it's just one of the things drawn for the region, same
+# rule applies. The convention is documented in UPPER_DISPLAY_UPDATE.md
+# "Element Clear-Background Convention".
+#
+# Coordinates are within the upper LCD area (y=0..UPPER_HEIGHT=117).
+# "Debug" tints come from _DEBUG_COLORS below — `--debug-grid` paints them so
+# violations (a region's drawing landing on a neighbor's tint) are visible.
+#
+# Region       Confinement (x, y, w, h)   Drawn by                    Debug
+# ----------   ------------------------   -------------------------   --------
+# upper_bg     (0, 0, 730, 117)           UpperDisplay.draw           gray
+# ribbon       (182, 0, 30, 110)          UpperDisplay.draw           — (route color)
+# train_type   (15, 8, 150, 31)           *Display.draw_train_type    — (WHITE_BG)
+# dest         (0, 50, 180, 67)           *Display.draw_destination   red    (incl. suffix area)
+# prefix       (222, 5, 300, 30)          *Display.draw_prefix        blue
+# clock        (570, 5, 80, 25)           *Display.draw_clock         yellow
+# station      (302, 35, 384, 82)         *Display.draw_station       purple (clear clamped; glyph surfaces
+#                                                                              may extend above via font leading,
+#                                                                              but visible caps stay at y≥35 —
+#                                                                              verified by probe across all 4 modes)
+# pa_hint      (710, 97, 20, 20)          UpperDisplay.draw           orange (yellow when len(pa)>1)
+# badge        (222, 49, 68, 68)          _draw_station_code_badge    — (route color, optional code_3 band extends up)
+# =============================================================================
+
+
+# =============================================================================
 # Constants (E235-1000 specific - shared across all modes)
 # =============================================================================
 
@@ -27,6 +57,51 @@ UPPER_HEIGHT = int(S_HEIGHT * 0.28)  # 117px
 DARK_BG = [25, 25, 25]
 WHITE_BG = [230, 230, 230]
 BADGE_TEXT = (15, 15, 15)  # intentionally darker than DARK_BG for text-on-white contrast
+
+
+# =============================================================================
+# Debug grid — makes region clear-rects visible by tinting their backgrounds.
+# Each draw method paints its DARK_BG clear via _bg("<region>") so flipping
+# DEBUG_GRID swaps every region's bg to a unique tint. Use to:
+#   - Spot clear-rect overlaps (one region's tint bleeds into another's bounds)
+#   - Spot under-cleared zones (dark untinted patches inside a region that
+#     should be fully painted)
+#   - Spot clipping (text/glyphs cut off at the boundary of a tinted region)
+# The dict literal also serves as the lightweight region manifest for upper
+# E235-1000 — keys here are the region names referenced in draw methods.
+# =============================================================================
+
+DEBUG_GRID: bool = False  # flipped by preview_display.py --debug-grid
+
+_DEBUG_COLORS = {
+    "upper_bg":   (80, 80, 80),    # neutral gray — baseline "no region claimed this pixel"
+    "dest":       (180, 40, 40),   # bright red
+    "prefix":     (40, 80, 200),   # bright blue
+    "clock":      (200, 170, 30),  # bright yellow
+    "station":    (140, 40, 170),  # bright magenta/purple
+    "pa_hint":    (220, 110, 0),   # bright orange
+    # Note: train_type is intentionally absent — its WHITE_BG box is already
+    # visually distinct from every other region's tint, so keep it WHITE_BG in
+    # debug mode too. The _bg("train_type", default=WHITE_BG) call resolves
+    # to WHITE_BG in both modes via the default-fallback path.
+}
+
+
+def _bg(region: str, default=None):
+    """Return the region's normal background color, or its debug tint when DEBUG_GRID is on.
+
+    Most regions clear to DARK_BG normally — pass no `default` and it'll use
+    DARK_BG. Some regions clear to a different baseline (e.g. train_type uses
+    WHITE_BG); pass `default=WHITE_BG` for those so normal-mode appearance is
+    preserved. Region keys must match _DEBUG_COLORS — adding a new region
+    means adding it here too, which keeps the manifest in sync with the draw
+    code by construction.
+    """
+    if default is None:
+        default = DARK_BG
+    if DEBUG_GRID:
+        return _DEBUG_COLORS.get(region, default)
+    return default
 
 
 # =============================================================================
@@ -80,7 +155,7 @@ class JapaneseDisplay:
     def draw_train_type(self, train_type: str, type_color: tuple) -> None:
         """Draw train type box."""
         box_x, box_y, box_w, box_h = 15, 8, 150, 31
-        pygame.draw.rect(self.screen, WHITE_BG, pygame.Rect(box_x, box_y, box_w, box_h), 0, 2)
+        pygame.draw.rect(self.screen, _bg("train_type", default=WHITE_BG), pygame.Rect(box_x, box_y, box_w, box_h), 0, 2)
         text_x, text_y = 15, 10
         if len(train_type) > 2:
             draw_text_given_width(text_x, text_y, box_w, self.font_type_bold, train_type, type_color, self.screen, collapse=True)
@@ -89,22 +164,26 @@ class JapaneseDisplay:
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
         """Draw destination with suffix (ゆき/方面)."""
-        dest_box_x, dest_box_y, dest_box_w, dest_box_h = 15, 50, 150, 35
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(dest_box_x, dest_box_y, dest_box_w, dest_box_h))
+        # Region clear — covers the full dest territory (text box + suffix
+        # below). Convention: every changeable element clears its full
+        # territory, not just its current glyph footprint.
+        pygame.draw.rect(self.screen, _bg("dest"), pygame.Rect(0, 50, 180, UPPER_HEIGHT - 50))
+
+        dest_box_x, dest_box_y, dest_box_w = 15, 50, 150
         draw_text_given_width(dest_box_x, dest_box_y, dest_box_w, self.font_dest, dest_text, WHITE_BG, self.screen, collapse=False, script="japanese")
 
         suffix = "方面" if route_name == "山手線" else "ゆき"
         t_w, t_h = self.font_suffix.size(suffix)
         suffix_x = int(S_WIDTH * 0.25) - t_w - 10
         suffix_y = UPPER_HEIGHT - t_h - 5
-        suffix_img = self.font_suffix.render(suffix, True, WHITE_BG, DARK_BG)
+        suffix_img = self.font_suffix.render(suffix, True, WHITE_BG, _bg("dest"))
         self.screen.blit(suffix_img, (suffix_x, suffix_y))
 
     def draw_prefix(self, prefix_text: str) -> None:
         """Draw prefix (次は/まもなく/ただいま)."""
         prefix_x, prefix_y = int(S_WIDTH * 0.25) + 40, 5
         prefix_w, prefix_h = 300, 30
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(prefix_x, prefix_y, prefix_w, prefix_h))
+        pygame.draw.rect(self.screen, _bg("prefix"), pygame.Rect(prefix_x, prefix_y, prefix_w, prefix_h))
         prefix_img = self.font_prefix.render(prefix_text, True, WHITE_BG)
         self.screen.blit(prefix_img, (prefix_x, prefix_y))
 
@@ -113,13 +192,22 @@ class JapaneseDisplay:
         if not station_text:
             return
 
-        name_x = int(S_WIDTH * 0.40)
-        max_width = S_WIDTH * 0.54
+        name_x = int(S_WIDTH * 0.40) + 10
+        max_width = S_WIDTH * 0.54 - 10
+        band_bottom_y = 35  # station's clear rect must not extend above this y (prefix/clock band)
 
         _, name_h = self.font_station.size(station_text)
-        name_y = UPPER_HEIGHT - name_h - 5
+        name_y = UPPER_HEIGHT - name_h - 5  # -5 leaves a small bottom margin
 
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(name_x, name_y, max_width, name_h + 5))
+        # Clear rect clamped to station's confinement on both ends. Glyphs blit at
+        # name_y may have a surface that extends above; the leading absorbs it so
+        # no visible pixel actually lands above band_bottom_y (verified by probe).
+        # The +5 below mirrors the -5 in name_y so clear_bot lands exactly at
+        # UPPER_HEIGHT after the min(...) clamp — covers any descender residue.
+        clear_top = max(name_y, band_bottom_y)
+        clear_bot = min(name_y + name_h + 5, UPPER_HEIGHT)
+        if clear_bot > clear_top:
+            pygame.draw.rect(self.screen, _bg("station"), pygame.Rect(name_x, clear_top, max_width, clear_bot - clear_top))
 
         draw_text_given_width(
             name_x, name_y, int(max_width), self.font_station, station_text, WHITE_BG, self.screen, collapse=False, script="japanese"
@@ -128,7 +216,7 @@ class JapaneseDisplay:
     def draw_clock(self, time_text: str) -> None:
         """Draw clock."""
         clock_x, clock_w, clock_h = S_WIDTH - 160, 80, 25
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(clock_x, 5, clock_w, clock_h))
+        pygame.draw.rect(self.screen, _bg("clock"), pygame.Rect(clock_x, 5, clock_w, clock_h))
         clock_img = self.font_clock.render(time_text, True, WHITE_BG)
         self.screen.blit(clock_img, (clock_x, 0))
 
@@ -164,7 +252,7 @@ class FuriganaDisplay:
     def draw_train_type(self, train_type: str, type_color: tuple) -> None:
         """Draw train type box."""
         box_x, box_y, box_w, box_h = 15, 8, 150, 31
-        pygame.draw.rect(self.screen, WHITE_BG, pygame.Rect(box_x, box_y, box_w, box_h), 0, 2)
+        pygame.draw.rect(self.screen, _bg("train_type", default=WHITE_BG), pygame.Rect(box_x, box_y, box_w, box_h), 0, 2)
         text_x, text_y = 15, 10
         if len(train_type) > 2:
             draw_text_given_width(text_x, text_y, box_w, self.font_type_bold, train_type, type_color, self.screen, collapse=True)
@@ -173,22 +261,24 @@ class FuriganaDisplay:
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
         """Draw destination with suffix - same as Japanese (kanji stays kanji)."""
-        dest_box_x, dest_box_y, dest_box_w, dest_box_h = 15, 50, 150, 35
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(dest_box_x, dest_box_y, dest_box_w, dest_box_h))
+        # Region clear — see JapaneseDisplay.draw_destination for the convention.
+        pygame.draw.rect(self.screen, _bg("dest"), pygame.Rect(0, 50, 180, UPPER_HEIGHT - 50))
+
+        dest_box_x, dest_box_y, dest_box_w = 15, 50, 150
         draw_text_given_width(dest_box_x, dest_box_y, dest_box_w, self.font_dest, dest_text, WHITE_BG, self.screen, collapse=False, script="japanese")
 
         suffix = "方面" if route_name == "山手線" else "ゆき"
         t_w, t_h = self.font_suffix.size(suffix)
         suffix_x = int(S_WIDTH * 0.25) - t_w - 10
         suffix_y = UPPER_HEIGHT - t_h - 5
-        suffix_img = self.font_suffix.render(suffix, True, WHITE_BG, DARK_BG)
+        suffix_img = self.font_suffix.render(suffix, True, WHITE_BG, _bg("dest"))
         self.screen.blit(suffix_img, (suffix_x, suffix_y))
 
     def draw_prefix(self, prefix_text: str) -> None:
         """Draw prefix (already converted to furigana by UpperDisplay manager)."""
         prefix_x, prefix_y = int(S_WIDTH * 0.25) + 40, 5
         prefix_w, prefix_h = 300, 30
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(prefix_x, prefix_y, prefix_w, prefix_h))
+        pygame.draw.rect(self.screen, _bg("prefix"), pygame.Rect(prefix_x, prefix_y, prefix_w, prefix_h))
         prefix_img = self.font_prefix.render(prefix_text, True, WHITE_BG)
         self.screen.blit(prefix_img, (prefix_x, prefix_y))
 
@@ -197,13 +287,19 @@ class FuriganaDisplay:
         if not station_text:
             return
 
-        name_x = int(S_WIDTH * 0.40)
-        max_width = S_WIDTH * 0.54
+        name_x = int(S_WIDTH * 0.40) + 10
+        max_width = S_WIDTH * 0.54 - 10
+        band_bottom_y = 35  # station's clear rect must not extend above this y (prefix/clock band)
 
         _, name_h = self.font_station.size(station_text)
-        name_y = UPPER_HEIGHT - name_h - 5
+        name_y = UPPER_HEIGHT - name_h - 5  # -5 leaves a small bottom margin (see JapaneseDisplay.draw_station)
 
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(name_x, name_y, max_width, name_h + 5))
+        # Clear rect clamped to station's confinement on both ends — see JapaneseDisplay.draw_station
+        # for full notes on the band_bottom clamp and the +5/-5 pairing.
+        clear_top = max(name_y, band_bottom_y)
+        clear_bot = min(name_y + name_h + 5, UPPER_HEIGHT)
+        if clear_bot > clear_top:
+            pygame.draw.rect(self.screen, _bg("station"), pygame.Rect(name_x, clear_top, max_width, clear_bot - clear_top))
 
         draw_text_given_width(
             name_x, name_y, int(max_width), self.font_station, station_text, WHITE_BG, self.screen, collapse=False, script="japanese"
@@ -212,7 +308,7 @@ class FuriganaDisplay:
     def draw_clock(self, time_text: str) -> None:
         """Draw clock."""
         clock_x, clock_w, clock_h = S_WIDTH - 160, 80, 25
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(clock_x, 5, clock_w, clock_h))
+        pygame.draw.rect(self.screen, _bg("clock"), pygame.Rect(clock_x, 5, clock_w, clock_h))
         clock_img = self.font_clock.render(time_text, True, WHITE_BG)
         self.screen.blit(clock_img, (clock_x, 0))
 
@@ -234,74 +330,162 @@ class EnglishDisplay:
         self.font_type_bold = pygame.font.Font("fonts/ShinGoPr6N-Heavy.otf", 26)
         self.font_type_bold.set_bold(True)
         self.font_type_bold.set_italic(True)
-        self.font_dest = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 25)
-        self.font_prefix = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 27)
+        self.font_dest = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 24)
         self.font_main_prefix = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 27)
-        self.font_station = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 75)
+        self.font_station = pygame.font.Font("fonts/HelveticaNeue-Bold.otf", 75)
+        # Used when station_text contains "\n" — see draw_station's 2-line branch.
+        # Smaller pt so two lines fit in the ~82px station area without colliding
+        # with the prefix band. Tune in concert with line_gap below.
+        self.font_station_2line = pygame.font.Font("fonts/HelveticaNeue-Bold.otf", 42)
         self.font_clock = pygame.font.Font("fonts/HelveticaNeue-Roman.otf", 26)
         self.font_suffix = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 20)
 
     def draw_train_type(self, train_type: str, type_color: tuple) -> None:
         """Draw train type box."""
         box_x, box_y, box_w, box_h = 15, 8, 150, 31
-        pygame.draw.rect(self.screen, WHITE_BG, pygame.Rect(box_x, box_y, box_w, box_h), 0, 2)
+        pygame.draw.rect(self.screen, _bg("train_type", default=WHITE_BG), pygame.Rect(box_x, box_y, box_w, box_h), 0, 2)
         draw_text_given_width(box_x, 10, box_w, self.font_type_bold, train_type, type_color, self.screen, collapse=True, script="latin")
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
         """Draw destination with 'for' label above."""
         dest_box_x, dest_box_w = 15, 150
         for_y = 50
-        dest_y = 67
+
+        # Region clear — covers the whole left dest column ("for" label + 1- or
+        # 2-line dest text). x stops at 180 (just left of the ribbon at x=182).
+        # Larger than the actual glyph footprint on purpose so debug-grid mode
+        # shows the dest territory clearly.
+        pygame.draw.rect(self.screen, _bg("dest"), pygame.Rect(0, for_y, 180, UPPER_HEIGHT - for_y))
 
         # Draw "for" label
-        for_img = self.font_suffix.render("for", True, (182, 182, 199), DARK_BG)
+        for_img = self.font_suffix.render("for", True, (182, 182, 199), _bg("dest"))
         self.screen.blit(for_img, (5, for_y))
 
         # Draw destination name
         _, for_h = self.font_suffix.size("for")
         if "\n" in dest_text:
+            # 2-line: lines left-aligned with "for" (x=5), breathing room below
+            # "for". Uses full-height pitch (font.get_height()) for natural
+            # inter-line spacing — *not* ascent-pitch (that's the station
+            # renderer's tighter stacking). Inter-line gap matters here because
+            # line 1 may contain descenders ("p" of "Airport", "g" of "Shinagawa")
+            # that would collide with line 2's caps under ascent-pitch.
+            two_line_x       = 5                  # align with "for" left edge
+            two_line_top_pad = 5                  # gap between "for" visible bottom and line 1 top
+            two_line_max_w   = 175                # extends to right edge of dest region (~180)
+            visible_for_bottom = for_y + self.font_suffix.get_ascent()
+            top_y = visible_for_bottom + two_line_top_pad
+            line_pitch = self.font_dest.get_height()  # full-height pitch — natural inter-line gap
             lines = dest_text.split("\n")
-            line_height = self.font_dest.get_height()
             for i, line in enumerate(lines):
-                y_pos = dest_y + i * line_height
-                draw_text_given_width(
-                    dest_box_x + 10, y_pos, dest_box_w - 10, self.font_dest, line, WHITE_BG, self.screen, collapse=True, script="latin"
-                )
+                y_pos = top_y + i * line_pitch
+                img = self.font_dest.render(line, True, WHITE_BG)
+                w = img.get_width()
+                if w > two_line_max_w:
+                    img = pygame.transform.smoothscale(img, (two_line_max_w, img.get_height()))
+                self.screen.blit(img, (two_line_x, y_pos))
         else:
             # Single line: vertically center between "for" bottom and UPPER_HEIGHT
+            text_x = dest_box_x + 10
+            text_max_w = dest_box_w - 10
             dest_h = self.font_dest.get_height()
             zone_top = for_y + for_h
             single_y = zone_top + (UPPER_HEIGHT - zone_top - dest_h) // 2 - 5
             draw_text_given_width(
-                dest_box_x + 10, single_y, dest_box_w - 10, self.font_dest, dest_text, WHITE_BG, self.screen, collapse=True, script="latin"
+                text_x, single_y, text_max_w, self.font_dest, dest_text, WHITE_BG, self.screen, collapse=True, script="latin"
             )
 
     def draw_prefix(self, prefix_text: str) -> None:
         """Draw English prefix (already translated by UpperDisplay manager)."""
         prefix_x, prefix_y = int(S_WIDTH * 0.25) + 40, 5
         prefix_w, prefix_h = 300, 30
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(prefix_x, prefix_y, prefix_w, prefix_h))
+        pygame.draw.rect(self.screen, _bg("prefix"), pygame.Rect(prefix_x, prefix_y, prefix_w, prefix_h))
         prefix_img = self.font_main_prefix.render(prefix_text, True, WHITE_BG)
         self.screen.blit(prefix_img, (prefix_x, prefix_y))
 
     def draw_station(self, station_text: str) -> None:
-        """Draw station name in English (Latin script, collapsed)."""
+        """Draw station name in English (Latin script).
+
+        Single-line: bottom-aligned, horizontally width-fit (smoothscale).
+        Two-line (when station_text contains "\\n"): smaller font, line 1
+        left-aligned, line 2 right-aligned, both bottom-aligned. Mirrors the
+        JR East PIDS treatment for stations like 成田空港 ("Narita Airport /
+        Terminal 1") and 空港第2ビル ("Narita Airport / Terminal 2·3").
+        """
         if not station_text:
             return
 
-        name_x = int(S_WIDTH * 0.40)
-        max_width = S_WIDTH * 0.54
+        # --- Station layout params ---
+        name_x             = int(S_WIDTH * 0.40) + 10
+        max_width          = int(S_WIDTH * 0.54 - 10)
+        clear_pad_y        = 10   # extra px below glyph box for descender + mode-cycle scrub
+        band_bottom_y      = 35   # bottom edge of the prefix/clock band — clear rect must not extend above this y
+                                  # (otherwise it clobbers "Now stopping at" / clock when station glyphs reach high)
+        # 2-line (used when station_text contains "\n"):
+        line_pitch_offset  = 0    # px adjustment to ascent-based pitch (-ve = even tighter, +ve = looser)
+        # -----------------------------
+
+        def _clear_rect(top_y_, bottom_y_):
+            """Clear between top_y_ and bottom_y_, clamped on BOTH ends so the
+            station's territory stays inside the upper LCD bounds and below the
+            prefix/clock band. Glyphs extending above the clamped top rely on
+            the full-upper clear at the start of UpperDisplay.draw() — no stale
+            residue. Bottom clamp prevents leaking into the lower display area
+            (which would overpaint anyway, but containment > defensive overlap)."""
+            t = max(top_y_, band_bottom_y)
+            b = min(bottom_y_, UPPER_HEIGHT)
+            h = b - t
+            if h > 0:
+                pygame.draw.rect(self.screen, _bg("station"), pygame.Rect(name_x, t, max_width, h))
+
+        if "\n" in station_text:
+            line1, line2 = station_text.split("\n", 1)
+            font = self.font_station_2line
+            font_h = font.get_height()
+            # Line pitch = ascent: line 2's top sits at line 1's baseline → tight
+            # stacking with no descender gap. Tune via line_pitch_offset.
+            line_pitch = font.get_ascent() + line_pitch_offset
+            total_h = line_pitch + font_h
+            top_y = UPPER_HEIGHT - total_h
+
+            _clear_rect(top_y, top_y + total_h + clear_pad_y)
+
+            # Line 1: left-aligned at name_x. Compress horizontally if natural
+            # width exceeds max_width — same defensive smoothscale the dest
+            # 2-line branch uses, so future long translations don't spill past
+            # the station area.
+            l1_img = font.render(line1, True, WHITE_BG)
+            l1_w = l1_img.get_width()
+            if l1_w > max_width:
+                l1_img = pygame.transform.smoothscale(l1_img, (max_width, l1_img.get_height()))
+                l1_w = max_width
+            self.screen.blit(l1_img, (name_x, top_y))
+
+            # Line 2: right-aligned at the right edge of the station area.
+            # Same width-clamp as line 1 — without it, a long translation
+            # would push the right-aligned blit x below name_x and spill
+            # leftward past the badge.
+            l2_img = font.render(line2, True, WHITE_BG)
+            l2_w = l2_img.get_width()
+            if l2_w > max_width:
+                l2_img = pygame.transform.smoothscale(l2_img, (max_width, l2_img.get_height()))
+                l2_w = max_width
+            l2_y = top_y + line_pitch
+            self.screen.blit(l2_img, (name_x + max_width - l2_w, l2_y))
+            return
 
         _, name_h = self.font_station.size(station_text)
-        # Bottom-aligned with small margin
-        name_y = UPPER_HEIGHT - name_h - 2
+        # Bottom-aligned, nudged down ~2px to match reference vertical placement
+        name_y = UPPER_HEIGHT - name_h
 
-        draw_text_given_width(name_x, name_y, int(max_width), self.font_station, station_text, WHITE_BG, self.screen, collapse=True, script="latin")
+        _clear_rect(name_y, name_y + name_h + clear_pad_y)
+
+        draw_text_given_width(name_x, name_y, max_width, self.font_station, station_text, WHITE_BG, self.screen, collapse=True, script="latin")
 
     def draw_clock(self, time_text: str) -> None:
         """Draw clock."""
         clock_x, clock_w, clock_h = S_WIDTH - 160, 80, 25
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(clock_x, 5, clock_w, clock_h))
+        pygame.draw.rect(self.screen, _bg("clock"), pygame.Rect(clock_x, 5, clock_w, clock_h))
         clock_img = self.font_clock.render(time_text, True, WHITE_BG)
         self.screen.blit(clock_img, (clock_x, 0))
 
@@ -549,7 +733,7 @@ class UpperDisplay:
 
         display = self.mode_cycler.get_current_display()
 
-        pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(0, 0, S_WIDTH, UPPER_HEIGHT))
+        pygame.draw.rect(self.screen, _bg("upper_bg"), pygame.Rect(0, 0, S_WIDTH, UPPER_HEIGHT))
         pygame.draw.rect(self.screen, self.color, pygame.Rect(int(S_WIDTH * 0.25), 0, 30, UPPER_HEIGHT - 7))
 
         train_type_text = self._get_train_type_display()
@@ -575,4 +759,4 @@ class UpperDisplay:
             if len(pa_tracks) > 1:
                 pygame.draw.rect(self.screen, (247, 225, 158), pygame.Rect(S_WIDTH - 20, UPPER_HEIGHT - 20, 20, 20))
             else:
-                pygame.draw.rect(self.screen, DARK_BG, pygame.Rect(S_WIDTH - 20, UPPER_HEIGHT - 20, 20, 20))
+                pygame.draw.rect(self.screen, _bg("pa_hint"), pygame.Rect(S_WIDTH - 20, UPPER_HEIGHT - 20, 20, 20))

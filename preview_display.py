@@ -5,7 +5,7 @@ plumbing — route loading, state machine, drawing, input handling — lives in
 app.py and is shared with the real application, so behavior can't drift.
 
 Usage:
-  uv run preview_display.py                                     # MOCK route (audio/mock/main)
+  uv run preview_display.py                                     # MOCK route (audio/_mock/main)
   uv run preview_display.py --route yamanote                    # real route by shorthand
   uv run preview_display.py --route chuo/916H --stop 6          # real route at a specific stop
   uv run preview_display.py --screenshot out.png --mode english --stop 2 --pa 1
@@ -33,7 +33,7 @@ import pygame
 from app import PASimulator
 from displays.base import DisplayMode
 
-DEFAULT_MOCK_ROUTE = "mock/main"
+DEFAULT_MOCK_ROUTE = "_mock/main"
 
 MODE_MAP = {
     "kanji": DisplayMode.KANJI,
@@ -46,7 +46,7 @@ def _resolve_work_dir(spec: str) -> str:
     """Resolve a --route arg into a work_dir (directory containing route.json).
 
     Accepts a path to route.json, a directory, or a shorthand like
-    'yamanote' / 'chuo/916H' / 'mock/main' (probed under audio/).
+    'yamanote' / 'chuo/916H' / '_mock/main' (probed under audio/).
     """
     candidates = [
         Path(spec),
@@ -77,7 +77,12 @@ def parse_args():
         "--route",
         type=str,
         default=DEFAULT_MOCK_ROUTE,
-        help=f"Route shorthand, path, or directory containing route.json. Default: {DEFAULT_MOCK_ROUTE!r} (audio/mock/main/route.json).",
+        help=f"Route shorthand, path, or directory containing route.json. Default: {DEFAULT_MOCK_ROUTE!r} (audio/_mock/main/route.json).",
+    )
+    parser.add_argument(
+        "--debug-grid",
+        action="store_true",
+        help="Tint each upper-LCD region's clear rect with a unique color so overlaps / under-clears / clipping are visible. Region keys: see _DEBUG_COLORS in displays/train_models/e235_1000/upper_lcd.py.",
     )
     return parser.parse_args()
 
@@ -87,6 +92,13 @@ def main():
 
     if args.screenshot:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
+
+    if args.debug_grid:
+        # Flip the upper LCD's debug-grid toggle. Module-level flag — must be
+        # set BEFORE pygame surfaces start rendering, but after the module
+        # imports cleanly.
+        from displays.train_models.e235_1000 import upper_lcd as _upper_lcd_mod
+        _upper_lcd_mod.DEBUG_GRID = True
 
     work_dir = _resolve_work_dir(args.route)
     print(f"[preview] work_dir={work_dir}")
@@ -109,7 +121,8 @@ def main():
         sim.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
         # current_time=0.0 freezes the lower-LCD countdown at full values for
         # a readable static snapshot.
-        sim.lower.show_stops(current_time=0.0)
+        sim.lower.draw(0.0)
+        pygame.display.flip()
         pygame.image.save(sim.screen, args.screenshot)
         print(f"Screenshot saved to {args.screenshot}")
         sim.cleanup()

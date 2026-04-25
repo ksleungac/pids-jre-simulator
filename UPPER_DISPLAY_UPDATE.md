@@ -1,8 +1,10 @@
 # Upper LCD Display System - Modular Architecture
 
-**Date:** 2026-03-14 (Updated)
+**Date:** 2026-04-25 (Updated)
 
 **Status:** COMPLETED & INTEGRATED
+
+> **Companion doc:** [LOWER_DISPLAY_UPDATE.md](LOWER_DISPLAY_UPDATE.md). Sections marked **🔁 Shared with LOWER** below are duplicated in both files — keep them in sync when editing.
 
 ---
 
@@ -149,7 +151,7 @@ class DisplayMode(IntEnum):
 | 4-6s | ENGLISH | Next | Tōkyō |
 | 6-8s | KANJI | 次は | 東京 |
 
-**Note:** English mode is currently disabled (as of 2026-03-14) until font loading is verified. Default mode is KANJI with KANJI → FURIGANA cycling.
+**Note:** All three modes are currently active in the upper. (English was temporarily disabled in 2026-03-14 during the font-loading migration, and re-enabled once `pygame.font.Font` file-path loading was confirmed working on non-English Windows locales.)
 
 **Graceful fallback:** If a station lacks furigana or English data, that mode is skipped in the cycle.
 
@@ -226,11 +228,11 @@ class UpperDisplay:
         self.furigana_display = FuriganaDisplay(screen, route_data, stops)
         self.english_display = EnglishDisplay(screen, route_data, stops)
 
-        # Initialize mode cycler (ENGLISH disabled until fonts verified)
+        # Initialize mode cycler (all three modes active)
         self.mode_cycler = ModeCycler({
             DisplayMode.KANJI: self.japanese_display,
             DisplayMode.FURIGANA: self.furigana_display,
-            # DisplayMode.ENGLISH: self.english_display,  # DISABLED
+            DisplayMode.ENGLISH: self.english_display,
         }, default_mode=DisplayMode.KANJI)
 
         # Load translations (uses sys.executable for exe compatibility)
@@ -263,25 +265,31 @@ class UpperDisplay:
 ### app.py
 
 ```python
-from displays.train_models.e235_1000 import UpperDisplay
-from display import LowerDisplay  # Old display.py until LowerDisplay is refactored
+from displays.train_models.e235_1000 import UpperDisplay, LowerDisplay
 
 class PASimulator:
     def __init__(self, work_dir: str, route_data: Optional[Dict] = None):
         # ...
         self.upper = UpperDisplay(self.screen, self.route_data, self.stops)
-        self.lower = LowerDisplay(self.screen, self.route_data, self.state, self.stops)
+        # Lower shares the upper's mode_cycler — modes stay in lockstep.
+        self.lower = LowerDisplay(self.screen, self.route_data, self.stops, self.upper.mode_cycler)
+        self.lower.set_state(self.state)
 
     def run(self) -> None:
         while self.running:
             timestamp = time.time()
 
+            # Advance skip animation (state-machine logic on AppState).
+            self.state.update_skip_progress(timestamp)
+
             # Update and draw upper display
             self.upper.update(timestamp)
             self.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
 
-            # Update lower display
-            self.lower.show_stops(current_time=timestamp)
+            # Draw lower display
+            self.lower.draw(timestamp)
+
+            pygame.display.flip()
 ```
 
 ### Key Changes from Legacy display.py
@@ -327,6 +335,70 @@ display.draw()
 
 ---
 
+## Element Clear-Background Convention
+
+Every upper-LCD region has a declared **confinement** — a rectangle inside which everything the region draws must visually land. The clear rect is not special; it's just one of the things drawn for the region (alongside glyphs, decorations). The same containment rule applies to all of them.
+
+### The principle
+
+> Anything a region draws — bg fill, glyph pixels, shapes — must visually stay inside that region's confinement.
+
+That's it. Clear rect ⊆ confinement. Glyph visible pixels ⊆ confinement. Period.
+
+### Why declare confinements at all
+
+- **Correctness**: every frame's `pygame.draw.rect` for a region's bg should respect this; otherwise it clobbers a neighbor's bg.
+- **Debug visibility**: with `--debug-grid` enabled, each region's clear paints in a region-specific tint (red dest, blue prefix, etc.). Anything one region draws that lands on a *neighbor's tint* is a containment violation, surfaced visually.
+- **Cross-mode parity**: the three mode renderers (Japanese / Furigana / English) share the same confinement per element. Internal content layout can differ; the boundary doesn't.
+
+### Two checks: D1 (cheap pre-check) and D2 (the rule)
+
+Pygame font surfaces have **leading** — empty (transparent) pixels above the visible glyph caps. Surface_top is at `blit_y`, but visible glyph caps appear `~10–15px below` for big fonts. This causes the two-check distinction:
+
+- **D1 (surface containment, analytical)**: `blit_y ≥ confinement.top`. If true, no pixel — visible or transparent — is rendered above confinement.top. Sufficient for compliance, no probing needed.
+- **D2 (visible-pixel containment, empirical)**: actual visible glyph caps land at y ≥ confinement.top. Requires probing or per-font knowledge of leading. Tighter — allows surfaces to extend above confinement *as long as the leading absorbs the overshoot* and no painted pixel actually crosses.
+
+**D2 is the rule.** D1 is a useful pre-check: if it passes, you're done. If D1 fails, that's a *signal to probe*, not an automatic violation — the leading might absorb the overshoot. **Pixel-perfect tuning often requires D2** (e.g., 78pt kanji surfaces extend into the prefix's y-range, but visible caps stay at y≥35 thanks to leading; D1 would forbid the IRL-accurate font size unnecessarily).
+
+### Probing methodology (gotcha)
+
+When pixel-probing a region's glyphs for containment, **isolate the region** so that neighboring regions' content can't masquerade as the target's:
+
+- Use a scenario where the neighbor is empty or short. For station containment vs prefix, test with the short "Next" prefix (x≤280) — that leaves x=302+ purely station territory. The long "Now stopping at" prefix overlaps station's x-range, and *its* text glyphs landing at y=20-something in the prefix-text overlap zone get mistaken for station glyphs.
+- Or probe at "exclusive x ranges" — for station, that's x=522–570 (between prefix right edge and clock left edge) and x=650–686 (right of clock). Any non-bg pixel in these strips at y<confinement.top must be the target region's drawing.
+- I (Claude) made the mistake once this session: probed at x=315–320 with PA=2, read the prefix's "Now stopping at" text pixels as if they were the station's "Narita Airport" line 1 caps, and reported a false D2 violation at 42pt. Don't repeat this.
+
+### Other rules
+
+- All three mode renderers clear the **same** confinement for the same element. Internal layout can differ per mode; the boundary doesn't.
+- Sub-text-bg parameters (e.g., `font.render(text, True, fg, bg)`) inside a region should pass `_bg("<same region>")` as `bg` so they don't punch holes in the tint when debug-grid is on.
+- A region's clear rect must not extend into a neighbor's confinement. The `station` clear is clamped to `band_bottom_y=35` (top) and `UPPER_HEIGHT=117` (bottom) for this reason — same clamp pattern duplicated in all three mode renderers' `draw_station`.
+
+### Pygame rendering gotchas (recurring review false positives)
+
+Two facts about pygame text rendering that look like bugs to a fresh reviewer:
+
+- **Transparent leading does NOT clobber.** `font.render(text, True, color)` (no bg arg) returns an SRCALPHA surface. Default `blit` alpha-blends; transparent leading pixels don't overwrite the destination. So a station-glyph surface starting above `band_bottom_y` is safe — the prefix text underneath survives in the leading strip.
+- **`font.get_height()` is smaller than folk wisdom suggests** — roughly `pt_size × 0.92` for both HelveticaNeue-Medium and ShinGoPr6N-Medium, NOT `pt_size × 1.2`. Probed examples: 24pt → 22, 78pt → 78. **Probe via `pygame.font.Font(...).get_height()` before claiming overflow.**
+
+### Current state (E235-1000 upper, post-2026-04-25)
+
+- All 4 station modes (Kanji 78pt, Furigana 78pt, English 1-line 75pt, English 2-line 42pt) comply with **D2**: visible glyph caps land at y≥35 in every mode.
+- All 4 station modes' **clear rects** are clamped to `(302, 35, 384, ≤82)` — they fit inside the declared station confinement.
+- The Region Map's `station = (302, 35, 384, 82)` entry is now truthful for both bg fills and visible glyphs, even though some modes' surface bounds (kanji `name_y=34`) technically extend 1px above pre-clamp. The clamp + leading absorption keep visible compliance.
+
+### Debug-grid mode
+
+`uv run preview_display.py --debug-grid` flips `DEBUG_GRID` in `upper_lcd.py` so every region's `_bg("<region>")` returns its assigned tint instead of `DARK_BG`. Keys live in `_DEBUG_COLORS`. Adding a new region: register key in `_DEBUG_COLORS` AND in the Region Map comment. Forgetting either keeps debug-grid silent on the new region.
+
+### Region map
+
+Bounds + drawn-by + debug color for every region live as a comment block at the top of `displays/train_models/e235_1000/upper_lcd.py`, alongside `_DEBUG_COLORS`. Per-train-model — different train models will have different layouts, so the map stays with the code, not in this doc.
+
+History note: Pre-2026-04-25, the English `draw_destination` had no clear rect at all, and Japanese/Furigana cleared only their narrow 150x35 text box. Bug only surfaced when 2-line station rendering revealed a similar clobbering issue elsewhere — prompted unifying the territory definitions across modes.
+
+---
+
 ## Design Decisions
 
 1. **Duplication OK:** Mode renderers may have ~90% similar code, but are separate for flexibility. Different trains may need different layouts.
@@ -354,7 +426,7 @@ display.draw()
 - `displays/train_models/__init__.py` - Factory registry
 - `displays/train_models/e235_1000/__init__.py` - Module exports
 - `displays/train_models/e235_1000/upper_lcd.py` - Upper LCD implementation
-- `displays/train_models/e235_1000/lower_lcd.py` - Lower LCD placeholder
+- `displays/train_models/e235_1000/lower_lcd.py` - Lower LCD implementation (see [LOWER_DISPLAY_UPDATE.md](LOWER_DISPLAY_UPDATE.md))
 
 **Data Files:**
 - `data/translations.json` - Station names (furigana, english)
@@ -365,7 +437,7 @@ display.draw()
 - `fonts/ShinGoPr6N-Heavy.otf` - Train type (bold/italic)
 - `fonts/HelveticaNeue-Roman.otf` - English clock, Roman text
 - `fonts/HelveticaNeue-Medium.otf` - English destinations, prefixes
-- `fonts/HelveticaNeueBold.ttf` - English station names (large)
+- `fonts/HelveticaNeue-Bold.otf` - English station names (large) — `.otf` (the older `.ttf` cut had macron artifacts at large sizes)
 
 **Preview Script:**
 - `preview_display.py` - Standalone preview for testing (uses new architecture)
@@ -425,6 +497,12 @@ python -c "from displays.train_models.e235_1000 import UpperDisplay; print('OK')
 ---
 
 ## Changes Log
+
+### 2026-04-25
+- **Lower LCD refactored** into `displays/train_models/e235_1000/lower_lcd.py` mirroring this architecture (see [LOWER_DISPLAY_UPDATE.md](LOWER_DISPLAY_UPDATE.md)). Legacy `display.py` deleted.
+- **English mode re-enabled** in upper (was temporarily disabled during the SysFont migration — file-path font loading verified, no fallback needed).
+- **`pygame.display.flip()`** moved out of the lower display into `app.run()` so both displays paint into the same frame.
+- **Integration section** updated to reflect the new `LowerDisplay` constructor signature (takes `mode_cycler` shared with upper) and the `state.update_skip_progress` step in the main loop.
 
 ### 2026-03-14
 - **Font loading fix:** Changed all `pygame.font.SysFont()` to `pygame.font.Font()` with direct file paths to fix crashes on non-English Windows systems (Chinese locale)
