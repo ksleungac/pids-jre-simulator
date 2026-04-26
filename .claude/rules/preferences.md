@@ -13,6 +13,7 @@
 
 ## Tooling Workflow
 - **Per-source ad-hoc scripts**, not maintained libraries: when format varies between batches (e.g., audio splitting where one source uses 3-timestamp format and another uses 2-timestamp), generate a fresh script per source. Don't try to unify into one master tool. Quoting the user: "the idea is to not have fixed script, my format is variable."
+- **Backup before any in-place destructive modification.** Before running tools that re-encode / overwrite / delete files in place (e.g. `trim_sta_silence.py`, manual `ffmpeg -filter_complex` splices, route.json multi-value patches), snapshot the target into `audio_src/<line>/<diagram>/` (gitignored) first. Mention the safety net in the pre-flight summary so the user knows the rollback path exists. Delete backups only after the by-ear / smoke-test gate passes. Pure relocations (`mv` to `_archive/`) don't need a separate backup — the move itself is reversible.
 
 ## Naming Conventions
 - Use "sta" terminology (not "departure_melody" or similar)

@@ -14,6 +14,18 @@ __pycache__/
 /real/
 screenshot_*.png
 
+# Audio cutting workspace — source mp3s + timestamps + per-route splitter scripts.
+# Local-only "in-progress" archive: keep around in case a cut/timing issue surfaces
+# later, but not committed (sources are big, recipe is reproducible from the script).
+/audio_src/
+
+# Audio workflow mid-products that may end up at project root or alongside operational
+# audio dirs: trim/splice backup snapshots, by-ear verifier results JSON. The skills
+# direct these into audio_src/ but defensive globs catch anything that escapes.
+*.bak
+*.bak/
+_sta_verify_*.json
+
 # Build artifacts
 /version_info.txt
 /release_notes.md
