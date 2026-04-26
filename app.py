@@ -118,6 +118,18 @@ class PASimulator:
         self.state = AppState()
         self.state.circular = 1 if (self.stops and self.stops[0].get("name") == self.stops[-1].get("name")) else 0
 
+        # Index of the route's destination within the stops list. For
+        # non-circular routes, this is where the train terminates — stops
+        # past this index (e.g. Keihin 727B's data extends from 磯子 to 大船
+        # for through-running reference) should NOT be advanced into.
+        # Circular routes intentionally don't use this — they have stop-level
+        # dest cycling and the loop-back branch in _next_pa, so a duplicate
+        # name match (first vs last station of a loop) here is harmless.
+        self.dest_stop_idx = next(
+            (i for i, s in enumerate(self.stops) if s.get("name") == self.dest),
+            len(self.stops) - 1,
+        )
+
         # Initialize components
         self.audio = _SilentAudio() if preview else AudioPlayer(work_dir, self.stops)
         self.upper = UpperDisplay(self.screen, self.route_data, self.stops)
@@ -370,6 +382,9 @@ class PASimulator:
     # CONTRACT: two branches (advance overwrites skip; within-stop zeroes it)
     # together prevent single-PA-target leakage. See DISPLAY.md §
     # "Station Skip Logic (full spec)" before restructuring either branch.
+    # CONTRACT: terminus_idx = dest_stop_idx for non-circular routes (NOT
+    # len(stops)-1). See DISPLAY.md § "Terminus (`dest_stop_idx`)". Route data
+    # may extend past dest for through-running reference (Keihin 727B 磯子→大船).
     def _next_pa(self) -> None:
         """Advance to next PA announcement."""
         # Don't advance if audio is already playing
@@ -384,16 +399,20 @@ class PASimulator:
 
         # Check if we've exhausted PA announcements for this stop
         if self.state.cnt_pa >= len(pa_tracks) - 1:
+            # Terminus = route dest for non-circular, last stop for circular.
+            # (Circular routes have stop-level dest cycling and rely on the
+            # loop-back branch below; the route-level dest isn't a terminus.)
+            terminus_idx = (len(self.stops) - 1) if self.state.circular == 1 else self.dest_stop_idx
             # Move to next stop
-            if self.state.curr_stop < len(self.stops) - 1:
+            if self.state.curr_stop < terminus_idx:
                 prev_stop = self.state.curr_stop
                 self.state.curr_stop += 1
                 # Skip stations with no PA — land curr_stop on the next PA station.
-                while self.state.curr_stop < len(self.stops) and not self.stops[self.state.curr_stop].get("pa", []):
+                while self.state.curr_stop <= terminus_idx and not self.stops[self.state.curr_stop].get("pa", []):
                     self.state.curr_stop += 1
 
-                if self.state.curr_stop >= len(self.stops):
-                    self.state.curr_stop = len(self.stops) - 1
+                if self.state.curr_stop > terminus_idx:
+                    self.state.curr_stop = terminus_idx
                     self.state.cnt_pa = max(0, len(pa_tracks) - 1)
                     return
 
