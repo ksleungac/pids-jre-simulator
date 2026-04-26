@@ -23,6 +23,7 @@ import pygame.gfxdraw
 from constants import (
     S_WIDTH,
     S_HEIGHT,
+    UPPER_HEIGHT,
     WHITE_BG,
     PASSED_COLOR,
     CURRENT_COLOR,
@@ -40,8 +41,10 @@ from utils import (
     draw_aapolygon,
     arrow_points,
     draw_stops_text,
+    draw_1col_text,
 )
 from displays.base import DisplayMode
+from displays.utils import draw_station_code_badge, draw_route_disclaimer, draw_continuity_arrow, draw_continuity_triangle
 
 
 # =============================================================================
@@ -70,6 +73,7 @@ class JapaneseDisplay:
         self.font_stops = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", FONT_STOPS_SIZE)
         self.font_time = pygame.font.Font("fonts/HelveticaNeue-Bold.otf", FONT_TIME_SIZE)
         self.font_minute = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", FONT_STOPS_MINUTE_SIZE)
+        self.font_disclaimer = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 10)
 
     def _calculate_layout(self) -> None:
         """Calculate station display layout based on route length."""
@@ -106,12 +110,20 @@ class JapaneseDisplay:
         """Get which line (1 or 2) a station index belongs to."""
         return 1 if i < self.per_line else 2
 
+    # CONTRACT: continuity[2] must be recomputed on every call — not just at the
+    # `remaining == STOPS_QUANTITY - 1` transition frame. See DISPLAY.md §
+    # "Long-Route Window Refresh". Stale leak rendered slot-2 chevrons past Ōfuna.
     def _get_stops_list_disp(self, curr_stop: int) -> List[Tuple[int, Dict]]:
         """Get the list of (global_index, stop) pairs currently visible.
 
         Every rendered cell carries its global index into ``self.stops`` so
         drawing code can compare directly against ``curr_stop`` / ``cursor_pos``
         without juggling a second "local" index space.
+
+        Side effect: keeps ``self.continuity[2]`` in sync with whether the
+        currently visible window reaches the route's last stop. Without this,
+        the slot-2 chevrons would render past the destination on long routes
+        once the window slides (e.g. Keihin Ofuna).
         """
         if len(self.stops) <= self.STOPS_QUANTITY:
             return list(enumerate(self.stops))
@@ -121,10 +133,17 @@ class JapaneseDisplay:
 
         remaining = len(self.stops) - curr_stop
         if 0 < remaining < self.STOPS_QUANTITY:
+            # Window has slid — visible window now includes the route's last
+            # stop. Suppress slot 2 (no continuity past dest) for non-circular
+            # routes.
             window_start = len(self.stops) - self.STOPS_QUANTITY
             f_stops = self.stops[window_start:]
-            if remaining == self.STOPS_QUANTITY - 1 and self.circular != 1:
-                self.continuity = [1, 1, 0]
+            if self.circular != 1:
+                self.continuity[2] = 0
+        elif self.circular != 1 and len(self.stops) > 28:
+            # Window hasn't slid yet (or user jumped back to an earlier stop):
+            # there IS more route past the visible window. Restore slot 2.
+            self.continuity[2] = 1
 
         return [(window_start + i, stop) for i, stop in enumerate(f_stops)]
 
@@ -174,10 +193,15 @@ class JapaneseDisplay:
                 arrow_points(int(x + ptr - offset), int(l_y - 2), w, self.bar_height + 4, 10),
             )
         else:
+            # curr_stop == 0 pentagon. Left edge follows the row-head bar
+            # extension (see show_stops `row_head_extra`) so the pentagon's
+            # left edge sits flush with the widened bar's left edge.
             overhang = 2
+            head_extra = 10  # keep in sync with row_head_extra in show_stops
+            left_x = x - head_extra
             points = [
-                (x, l_y - overhang),
-                (x, l_y + self.bar_height + overhang),
+                (left_x, l_y - overhang),
+                (left_x, l_y + self.bar_height + overhang),
                 (x + self.stops_w - 10, l_y + self.bar_height + overhang),
                 (x + self.stops_w - 2, l_y + self.bar_height / 2),
                 (x + self.stops_w - 10, l_y - overhang),
@@ -301,30 +325,44 @@ class JapaneseDisplay:
                     minute_w, minute_h = self.font_minute.size("分")
                     minute_y = int(l_y + (self.bar_height - minute_h) / 2)
 
+                    # Row-end cells widen the bar by `row_tail_extra` (see
+                    # show_stops). Shift the 分 marker right by the same amount
+                    # so it stays at the right edge of the widened bar. Mid-row
+                    # dest cells (Yamanote stop-level dest override) get no
+                    # widening, so no shift either.
+                    last_gi = f_stops[-1][0]
+                    is_row_end = local_i == self.per_line - 1 or gi == last_gi
+                    cell_extra = 10 if is_row_end else 0  # mirror show_stops `row_tail_extra`
+                    minute_x = int(x + ptr + self.stops_w + cell_extra)
+
+                    # White separator caps the bar's right edge when there's no
+                    # continuity tail. Suppress when this cell flows into the
+                    # continuity chevrons — bar should be visually continuous.
+                    is_continuity_tail = (
+                        (local_i == self.per_line - 1 and self.continuity[0])
+                        or (gi == last_gi and self.continuity[2])
+                    )
+
                     pygame.draw.rect(
                         self.screen,
                         self.color,
-                        pygame.Rect(
-                            int(x + ptr + self.stops_w),
-                            int(l_y),
-                            minute_w,
-                            self.bar_height,
-                        ),
+                        pygame.Rect(minute_x, int(l_y), minute_w, self.bar_height),
                     )
-                    pygame.draw.rect(
-                        self.screen,
-                        WHITE_BG,
-                        pygame.Rect(
-                            int(x + ptr + self.stops_w + minute_w - 3),
-                            int(l_y),
-                            3,
-                            self.bar_height,
-                        ),
-                    )
+                    if not is_continuity_tail:
+                        pygame.draw.rect(
+                            self.screen,
+                            WHITE_BG,
+                            pygame.Rect(minute_x + minute_w - 3, int(l_y), 3, self.bar_height),
+                        )
 
+                    # 分 character keeps its original position (no cell_extra shift) —
+                    # only the 分-marker bg rect follows the widened bar's right edge.
                     minute_img = self.font_minute.render("分", True, WHITE_BG)
                     self.screen.blit(minute_img, (int(x + ptr + self.stops_w * 0.85), minute_y))
 
+    # CONTRACT: row_head_extra / row_tail_extra magic numbers MUST stay in sync
+    # with draw_ptr's pentagon `head_extra` and draw_times' 分-marker `cell_extra`.
+    # See DISPLAY.md § "Row-end / row-head bar extension" — change one, change all.
     def show_stops(self, state, current_time: float = 0.0) -> None:
         """Render the full lower LCD frame for this mode.
 
@@ -354,28 +392,140 @@ class JapaneseDisplay:
         dest_idx = self._find_dest_index(f_stops, effective_dest)
         cursor_pos = state.cursor_pos
 
+        # --- Continuity-tail params (adjust freely) ---
+        # Last-in-row cells get a +row_tail_extra width bump (applies to row 1's
+        # last cell AND row 2's last visible cell, independent of continuity).
+        # Continuity adds chevrons on top of that when self.continuity[0]/[2] is
+        # set: bar (+row_tail_extra) → 分-area → triangle (bar's tapered tail)
+        # → gap → chevron 1 → gap → chevron 2. All in cell_color (active = route
+        # color, passed = INACTIVE_COLOR).
+        row_tail_extra = 10      # extra px on the bar cell at row-end positions (extends RIGHT)
+        row_head_extra = 10      # extra px on the bar cell at row-head positions (extends LEFT)
+        cont_tri_w = 8           # bar-tail triangle width (apex right) — matches red cursor's tip slope
+        cont_chev_n = 2          # number of chevrons after the triangle
+        cont_chev_w = 12         # chevron horizontal extent
+        cont_chev_stroke = 4     # chevron body thickness — tip-portion = w−stroke = 8 = tri_w,
+                                 # so triangle and chevron tips have the same slope (uniform pointiness).
+        cont_chev_gap = -4       # negative = chevron BBs OVERLAP. Combined with tip-portion = tri_w,
+                                 # this makes ALL three gaps (triangle→chev1, chev1→chev2, body+center)
+                                 # render as a uniform 4-px white margin.
+        # -----------------------------------------------
+
+        minute_w, _ = self.font_minute.size("分")
+        last_gi = f_stops[-1][0] if f_stops else -1
+
         for gi, stop in f_stops:
             local_i = gi - window_start
             ptr = (local_i % self.per_line) * self.stops_w
             line_num = self._get_line(local_i)
             l_y = int(y + self.h_line * line_num + self.top_pad * (line_num - 1))
 
-            is_passed = gi >= cursor_pos and gi <= dest_idx
+            is_active = gi >= cursor_pos and gi <= dest_idx
+            cell_color = self.color if is_active else INACTIVE_COLOR
 
-            if is_passed:
+            is_row1_head = local_i == 0
+            is_row2_head = local_i == self.per_line
+            is_row1_tail = local_i == self.per_line - 1
+            is_row2_tail = gi == last_gi
+            is_slot0 = is_row1_tail and self.continuity[0]
+            is_slot1 = is_row2_head and self.continuity[1]
+            is_slot2 = is_row2_tail and self.continuity[2]
+
+            # Bar extension applies to ALL row-end and row-head cells
+            # (independent of continuity). Continuity adds chevron tail / 'from'
+            # indicator on top.
+            left_extra = row_head_extra if (is_row1_head or is_row2_head) else 0
+            right_extra = row_tail_extra if (is_row1_tail or is_row2_tail) else 0
+            bar_x = x + ptr - left_extra
+            bar_w = self.stops_w + left_extra + right_extra
+
+            # Slot 1 cells extend the bar an extra cont_tri_w to the LEFT so
+            # the inward notch carve doesn't shrink the bar's visible width.
+            # Slot 0/2 add the equivalent on the right via the tail extension.
+            slot1_left_compensate = cont_tri_w if is_slot1 else 0
+            bar_x_eff = bar_x - slot1_left_compensate
+            bar_w_eff = bar_w + slot1_left_compensate
+
+            pygame.draw.rect(
+                self.screen,
+                cell_color,
+                pygame.Rect(int(bar_x_eff), l_y, bar_w_eff, self.bar_height),
+            )
+
+            # Slot 1 'from' indicator — line-2's first cell.
+            # Layout (left → right): chev1 → chev2 → bar with notched left edge.
+            # Drawing order: bar → notch (white over bar) → chevrons (cell_color
+            # over notch) so chev2's tip pokes into the notch's V-shape, exactly
+            # mirroring slot 0/2's chev1 nestling against the outward triangle's
+            # tip. All gaps render as uniform 4 px.
+            if is_slot1:
+                # White notch carved into the bar's (extended) left edge.
+                notch_points = [
+                    (bar_x_eff, l_y),
+                    (bar_x_eff, l_y + self.bar_height),
+                    (bar_x_eff + cont_tri_w, l_y + self.bar_height // 2),
+                ]
+                draw_aapolygon(self.screen, WHITE_BG, notch_points)
+
+                # Chevrons. chev2_x derived for 4-px uniform gap at top/bottom AND
+                # at the V-center: bar_x_eff − (chev2_x + stroke) = 4 → chev2_x =
+                # bar_x_eff − 8. Tip pokes 4 px past bar_x_eff (into notch zone),
+                # gets overdrawn in cell_color → visually nestles into the V.
+                chev_step = cont_chev_w + cont_chev_gap
+                chev2_x = bar_x_eff - cont_chev_stroke - 4  # 4 = visible top gap
+                chev1_x = chev2_x - chev_step
+                draw_continuity_arrow(
+                    self.screen,
+                    int(chev1_x),
+                    l_y,
+                    self.bar_height,
+                    cell_color,
+                    n_chevrons=cont_chev_n,
+                    chevron_w=cont_chev_w,
+                    chevron_stroke=cont_chev_stroke,
+                    chevron_gap=cont_chev_gap,
+                )
+
+            text_color = (0, 0, 0) if (is_active and (stop.get("pa", []) or gi == 0)) else INACTIVE_COLOR
+
+            # Slot 0 / 2 'to' indicator — extended bar tail + 分-area + triangle + chevrons.
+            # Slot 0: last cell of line 1; slot 2: last visible cell when window
+            # has slid.
+            if is_slot0 or is_slot2:
+                tail_x = x + ptr + self.stops_w + right_extra
+                # 分-area extension in cell_color. When the cell is passed,
+                # draw_times skips this cell so we paint the extension here to
+                # keep the bar continuous; when active, draw_times overdraws
+                # in route color (no visual difference).
                 pygame.draw.rect(
                     self.screen,
-                    self.color,
-                    pygame.Rect(int(x + ptr), l_y, self.stops_w, self.bar_height),
+                    cell_color,
+                    pygame.Rect(int(tail_x), l_y, minute_w, self.bar_height),
                 )
-                text_color = INACTIVE_COLOR if (not stop.get("pa", []) and gi != 0) else (0, 0, 0)
-            else:
-                pygame.draw.rect(
+                # Triangle — bar's tapered tail (continuous with the bar).
+                tri_x = tail_x + minute_w
+                draw_continuity_triangle(
                     self.screen,
-                    INACTIVE_COLOR,
-                    pygame.Rect(int(x + ptr), l_y, self.stops_w, self.bar_height),
+                    int(tri_x),
+                    l_y,
+                    self.bar_height,
+                    cell_color,
+                    tri_w=cont_tri_w,
                 )
-                text_color = INACTIVE_COLOR
+                # Chevrons — `chev_x` placed so the triangle→chev1 gap matches
+                # the chev1→chev2 gap (uniform 4-px white margin everywhere).
+                chev_x = tri_x + cont_tri_w + cont_chev_gap
+                draw_continuity_arrow(
+                    self.screen,
+                    int(chev_x),
+                    l_y,
+                    self.bar_height,
+                    cell_color,
+                    n_chevrons=cont_chev_n,
+                    chevron_w=cont_chev_w,
+                    chevron_stroke=cont_chev_stroke,
+                    chevron_gap=cont_chev_gap,
+                )
 
             draw_stops_text(
                 self.font_stops,
@@ -390,6 +540,579 @@ class JapaneseDisplay:
         self.draw_marks(f_stops, dest_idx, cursor_pos, curr_stop)
         self.draw_ptr(f_stops, dest_idx, cursor_pos, curr_stop)
         self.draw_times(f_stops, dest_idx, cursor_pos, current_time, state.departure_time, state.is_last_pa)
+
+        draw_route_disclaimer(self.screen, self.font_disclaimer, S_WIDTH - 8, S_HEIGHT - 4, (0, 0, 0))
+
+
+# =============================================================================
+# Japanese Display — 8-station zoomed-in view
+# =============================================================================
+
+
+class JapaneseEightStationDisplay:
+    """Lower LCD Japanese 8-station zoomed-in view for E235-1000.
+
+    Sliding-window route map showing the next 8 stations from curr_stop
+    with larger cells than the full-route view. Window logic:
+
+    - remaining > 8 → window = [curr_stop : curr_stop+8]; pointer locked
+      to leftmost cell. Window jumps forward as curr_stop advances.
+    - remaining ≤ 8 → window locks to last 8 stops (or all if total < 8);
+      pointer marches rightward inside this fixed window.
+
+    Vertical-kanji compression baseline: 4-character height. Names with
+    ≤4 kanji render uncompressed (stacked from the top); 5+ compress
+    proportionally to fit a 4-char-tall vertical band.
+
+    Per-cell station code badge (mini JO/JY framed square) is drawn under
+    each bar using `sta_code` from route.json.
+    """
+
+    VISIBLE_COUNT = 8
+    # Lock the window when only this many (or fewer) stations remain ahead.
+    # Set to VISIBLE_COUNT - 1 = 7 so the locked window has room for one
+    # already-passed cell on the train's left, providing context as the
+    # cursor marches across the remaining route.
+    LOCK_THRESHOLD = 7
+
+    def __init__(self, screen, route_data, stops):
+        self.screen = screen
+        self.route_data = route_data
+        self.stops = stops
+        self.dest = route_data.get("dest", "")
+        self.color = route_data.get("color", [255, 255, 255])
+        self.contrast_color = route_data.get("contrast_color", [224, 54, 37])
+
+        # --- Layout params (adjust freely) ---
+        # Top of the lower-LCD region (just below upper LCD)
+        self.top_y = UPPER_HEIGHT
+        # Side margin — reserves space at the bar's left and right ends for
+        # future continuity arrows (route-continues indicators).
+        self.side_margin = 44
+        # Cell geometry — 8 cells distributed across the inner width.
+        self.cells = min(self.VISIBLE_COUNT, len(stops))
+        inner_w = S_WIDTH - 2 * self.side_margin
+        self.stops_w = inner_w // self.VISIBLE_COUNT
+        self.x = (S_WIDTH - self.stops_w * self.cells) // 2
+        # Vertical band layout (top → bottom): top_pad → kanji label →
+        # gap → bar → gap → badge → bottom_pad
+        self.label_top_pad = 19  # 14 + 5px nudge to clear the upper LCD bottom edge
+        self.label_h_chars = 4  # 4-char-baseline (no compress for ≤4 chars)
+        self.label_font_size = 30  # bigger than full-route's 25 (cells are 2× wider)
+        self.label_bar_gap = 10
+        self.bar_height = 38
+        self.bar_badge_gap = 4  # gap between bar bottom and badge top
+        # Badge sized to roughly half the station circle (r=15, diameter 30).
+        # Square shape mirrors the upper-LCD badge ratio (which is 1:1).
+        self.badge_w = 22
+        self.badge_h = 22
+        # ------------------------------------
+
+        self.font_stops = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", self.label_font_size)
+        self.font_time = pygame.font.Font("fonts/HelveticaNeue-Bold.otf", FONT_TIME_SIZE + 7)
+        self.font_minute = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", FONT_STOPS_MINUTE_SIZE + 3)
+        # Badge fonts.
+        self.font_badge_prefix = pygame.font.Font("fonts/NeueFrutigerWorld-Bold.otf", 8)
+        self.font_badge_num = pygame.font.Font("fonts/NeueFrutigerWorld-Bold.otf", 11)
+        self.font_disclaimer = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 10)
+
+        # Derived band geometry (top_y of each row)
+        _, t_h = self.font_stops.size("東")
+        self._char_h = t_h
+        self.label_top_y = self.top_y + self.label_top_pad
+        self.label_box_h = self.label_h_chars * t_h
+        self.bar_y = self.label_top_y + self.label_box_h + self.label_bar_gap
+        self.badge_y = self.bar_y + self.bar_height + self.bar_badge_gap
+
+        self.circular = 1 if self.stops and self.stops[0].get("name") == self.stops[-1].get("name") else 0
+
+    # ------------------------------------------------------------------
+    # Window
+    # ------------------------------------------------------------------
+
+    # CONTRACT: window invariant — exactly 8 cells, three regimes (short / sliding / locked).
+    # See DISPLAY.md § "Window invariant — always exactly 8 cells" for the
+    # cursor-local-index table. Past regressions came from editing without consulting it.
+    def _get_window(self, curr_stop: int, cursor_pos: int) -> List[Tuple[int, Dict]]:
+        """Return (global_index, stop) pairs for the visible 8-cell window.
+
+        Always 8 cells: 1 already-passed cell + cursor + 6 ahead.
+
+        - len(stops) ≤ VISIBLE_COUNT → return everything (short-route case).
+        - curr_stop == 0 → no past cell available; window = [0..7].
+        - curr_stop > n-VISIBLE_COUNT → locked (keyed on curr_stop, not
+          cursor_pos, so the destination cell stays visible during a near-end
+          skip animation); window = [n-8 .. n-1]. Cursor marches rightward.
+        - otherwise → sliding, anchored on cursor_pos (NOT curr_stop) so the
+          visible cursor always has 1 past cell to its left even mid-skip
+          (when cursor_pos lags behind curr_stop). window = [cursor_pos-1 ..
+          cursor_pos+6]. Cursor sits at local index 1.
+
+        Anchoring sliding on cursor_pos means the window slides forward by
+        one cell at the moment cursor_pos catches up to curr_stop after a
+        skip animation — visible single-frame shift, but preserves the
+        "1 past cell always visible" contract per the docstring.
+        """
+        n = len(self.stops)
+        if n <= self.VISIBLE_COUNT:
+            return list(enumerate(self.stops))
+
+        if curr_stop == 0:
+            start = 0
+        elif curr_stop > n - self.VISIBLE_COUNT:
+            start = n - self.VISIBLE_COUNT
+        else:
+            start = cursor_pos - 1
+        return [(start + i, s) for i, s in enumerate(self.stops[start : start + self.VISIBLE_COUNT])]
+
+    def _find_dest_index(self, window: List[Tuple[int, Dict]], effective_dest: str) -> int:
+        """Global index of the effective destination within the visible window."""
+        for gi, stop in window:
+            if stop.get("name", "") == effective_dest:
+                return gi
+        return window[-1][0] if window else 0
+
+    # ------------------------------------------------------------------
+    # Vertical kanji label
+    # ------------------------------------------------------------------
+
+    def _draw_label(self, text: str, cell_x: int, color: Tuple[int, int, int]) -> None:
+        """Stack kanji vertically inside the label band.
+
+        Three cases mirror the full-route renderer's conventions:
+
+        1. Compound name with a space separator (Keihin's
+           "さいたま 新都心" case) — render two columns side-by-side, with
+           the FIRST half on the right and the SECOND half on the left
+           (Japanese top-to-bottom right-to-left reading order).
+
+        2. Single-character name (Keihin's "蕨", "鶯谷"-area entries) —
+           center the lone glyph vertically in the label box rather than
+           pinning it to the top.
+
+        3. Default — top+bottom aligned vertical stack via
+           `draw_1col_text`. 2-char names occupy the same vertical extent
+           as 4-char names; names with > `label_h_chars` chars compress
+           to fit.
+        """
+        if not text:
+            return
+
+        bottom_y = self.label_top_y + self.label_box_h
+
+        # Case 1: compound name (two columns, right-then-left reading order).
+        # IRL convention (see lcd_references/zoom_keihin_saitama.png):
+        #   - Both columns share a 3-character standard height. A 3-char
+        #     part renders uncompressed; a 4-char part (e.g. さいたま vs
+        #     the 3-char 新都心) auto-compresses to fit via `draw_1col_text`.
+        #     The compression is what visually signals that さいたま is the
+        #     "raised, denser" half of the compound.
+        #   - Right column (parts[0]) is TOP-anchored at `label_top_y` so it
+        #     lines up with single-column stops' tops.
+        #   - Left column (parts[1]) is BOTTOM-anchored at the label box's
+        #     bottom so it lines up with single-column stops' bottoms.
+        parts = text.split()
+        if len(parts) >= 2:
+            c_w, _ = self.font_stops.size(parts[0][0] if parts[0] else "東")
+            col_gap = 2  # px between the two columns
+            total_w = c_w * 2 + col_gap
+            block_left_x = cell_x + (self.stops_w - total_w) // 2
+            baseline_vs = 3 * self._char_h  # 3-char standard height
+            # Right top at label_top_y → bottom = label_top_y + baseline_vs.
+            right_bottom_y = self.label_top_y + baseline_vs
+            # Left bottom at label box bottom (= aligns with single-col bottoms).
+            left_bottom_y = self.label_top_y + self.label_box_h
+            # Right column reads FIRST (parts[0]); left column reads SECOND.
+            draw_1col_text(self.font_stops, parts[1], int(block_left_x), int(left_bottom_y), baseline_vs, color, self.screen)
+            draw_1col_text(self.font_stops, parts[0], int(block_left_x + c_w + col_gap), int(right_bottom_y), baseline_vs, color, self.screen)
+            return
+
+        # Case 2: single-character name — vertically center in the label box
+        if len(text) == 1:
+            char_w, char_h = self.font_stops.size(text)
+            char_x = cell_x + (self.stops_w - char_w) // 2
+            char_y = self.label_top_y + (self.label_box_h - char_h) // 2
+            img = self.font_stops.render(text, True, color)
+            self.screen.blit(img, (int(char_x), int(char_y)))
+            return
+
+        # Case 3: default — top+bottom aligned vertical stack
+        c_w, _ = self.font_stops.size(text[0])
+        glyph_x = cell_x + (self.stops_w - c_w) // 2
+        # `draw_1col_text` interprets `y` as the BOTTOM of the band:
+        # it positions chars from `y - vert_space` (top) downward.
+        draw_1col_text(self.font_stops, text, int(glyph_x), int(bottom_y), self.label_box_h, color, self.screen)
+
+    # ------------------------------------------------------------------
+    # Bar / pointer / marks / times
+    # ------------------------------------------------------------------
+
+    def _bar_y(self) -> int:
+        return self.bar_y
+
+    def draw_marks(
+        self,
+        window: List[Tuple[int, Dict]],
+        dest_idx: int,
+        cursor_pos: int,
+        curr_stop: int,
+    ) -> None:
+        """Draw station markers (circles for PA stations, arrows for passing)."""
+        if not window:
+            return
+        x = self.x
+        y = self._bar_y()
+        window_start = window[0][0]
+
+        for gi, stop in window:
+            local_i = gi - window_start
+            ptr = local_i * self.stops_w
+            offset = self.stops_w // 2
+            center_x = int(x + ptr + offset)
+            center_y = int(y + self.bar_height / 2)
+
+            if gi >= cursor_pos and gi <= dest_idx:
+                if gi == 0 and cursor_pos == 0:
+                    radius = 6
+                    pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, radius, PASSED_COLOR)
+                    pygame.gfxdraw.aacircle(self.screen, center_x, center_y, radius, PASSED_COLOR)
+                elif not stop.get("pa", []):
+                    # Passing-station chevron — horizontally centered in the cell so
+                    # it aligns with the vertical kanji label above (which is
+                    # centered too). Old `stops_w * 0.35` constant left it ~4px shy
+                    # of center for our 84-px-wide cells.
+                    arrow_w = 18
+                    arrow_pad_y = 5
+                    arrow_x = int(x + ptr + (self.stops_w - arrow_w) // 2)
+                    draw_aapolygon(
+                        self.screen,
+                        PASSED_COLOR,
+                        arrow_points(
+                            arrow_x,
+                            int(y + arrow_pad_y),
+                            arrow_w,
+                            self.bar_height - 2 * arrow_pad_y,
+                            8,
+                        ),
+                    )
+                else:
+                    radius = 15
+                    pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, radius, PASSED_COLOR)
+                    pygame.gfxdraw.aacircle(self.screen, center_x, center_y, radius, PASSED_COLOR)
+
+                    if gi == curr_stop:
+                        # Inner olive disc — sized as outer-radius minus a thin
+                        # white halo (was -3, bumped to -2 per reference).
+                        inner_r = radius - 2
+                        pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, inner_r, CURRENT_COLOR)
+                        pygame.gfxdraw.aacircle(self.screen, center_x, center_y, inner_r, CURRENT_COLOR)
+            else:
+                radius = 6
+                pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, radius, PASSED_COLOR)
+                pygame.gfxdraw.aacircle(self.screen, center_x, center_y, radius, PASSED_COLOR)
+
+    def draw_ptr(
+        self,
+        window: List[Tuple[int, Dict]],
+        cursor_pos: int,
+        curr_stop: int,
+    ) -> None:
+        """Red triangle pointer at cursor_pos's column inside the window."""
+        if not window:
+            return
+        x = self.x
+        y = self._bar_y()
+        window_start = window[0][0]
+        local_disp = cursor_pos - window_start
+        # During a multi-station skip animation, cursor_pos can lag before
+        # window_start (or past window end) — suppress rather than rendering
+        # at a wrong column. The inner red dot at curr_stop still shows the
+        # actual train position. Mirrors the full-route pointer's guard.
+        if local_disp < 0 or local_disp >= len(window):
+            return
+        ptr_x = local_disp * self.stops_w
+        ptr_color = self.contrast_color
+
+        if curr_stop != 0:
+            # --- Pointer params (adjust freely) ---
+            # See `arrow_points` docstring for what `stroke` actually controls
+            # (chevron BODY thickness — NOT line stroke).
+            inner_w = 32
+            inner_stroke = 20  # ratio 0.625 — less pointy than full-route's 0.545
+            inner_h_overshoot = 2  # protrudes 1px above and 1px below the bar
+            # Outer outline params — sized so the OUTER's tip-length matches the
+            # INNER's tip-length, otherwise the white halo reads thicker (more
+            # pointy) at the chevron's tip than along its body. Setting
+            # outer_stroke = inner_stroke + (outer_w - inner_w) keeps both tips
+            # at the same horizontal length: outer_w - outer_stroke == inner_w
+            # - inner_stroke. The outline sits centered around the inner so the
+            # halo is uniform (3 px on each side for a 6-px width delta).
+            outer_w_delta = 6  # outer is this much wider than inner overall
+            outer_w = inner_w + outer_w_delta
+            outer_stroke = inner_stroke + outer_w_delta
+            outer_x_offset = -outer_w_delta // 2  # center outer around inner
+            offset_factor = 0.4  # 0.5 = body centered on cell boundary; lower = more into cursor cell
+            # ---------------------------------------
+            offset = int(inner_w * offset_factor)
+            inner_y_off = -inner_h_overshoot // 2
+            inner_h = self.bar_height + inner_h_overshoot
+            draw_aapolygon(
+                self.screen,
+                PASSED_COLOR,
+                arrow_points(int(x + ptr_x - offset + outer_x_offset), int(y), outer_w, self.bar_height, outer_stroke),
+                5,
+            )
+            draw_aapolygon(
+                self.screen,
+                ptr_color,
+                arrow_points(int(x + ptr_x - offset), int(y + inner_y_off), inner_w, inner_h, inner_stroke),
+            )
+        else:
+            # Initial-stop pentagon: protrudes the same 1 px above + 1 px below
+            # the bar as the regular chevron cursor (`inner_h_overshoot // 2`),
+            # so heights match across stop=0 and mid-route frames.
+            overhang = 1
+            points = [
+                (x, y - overhang),
+                (x, y + self.bar_height + overhang),
+                (x + self.stops_w - 12, y + self.bar_height + overhang),
+                (x + self.stops_w - 2, y + self.bar_height / 2),
+                (x + self.stops_w - 12, y - overhang),
+            ]
+            draw_aapolygon(self.screen, PASSED_COLOR, [(i + 3, j) for (i, j) in points])
+            draw_aapolygon(self.screen, ptr_color, points)
+
+    def draw_times(
+        self,
+        window: List[Tuple[int, Dict]],
+        dest_idx: int,
+        cursor_pos: int,
+        current_time: float,
+        departure_time: float,
+        is_last_pa: bool,
+    ) -> None:
+        """Cumulative travel times — same algorithm as full-route view."""
+        if not window:
+            return
+        x = self.x
+        y = self._bar_y()
+        window_start = window[0][0]
+        cumulative_time = 0
+
+        elapsed_minutes = 0
+        if current_time > 0 and departure_time > 0:
+            elapsed_seconds = current_time - departure_time
+            elapsed_minutes = elapsed_seconds / TIME_SCALE
+
+        is_first_station = True
+
+        for gi, stop in window:
+            if gi == 0 and cursor_pos == 0:
+                continue
+            # Hide the time on the leftmost cell when it IS cursor_pos —
+            # the pointer occupies that space (reference convention). In the
+            # locked-window case where cursor_pos has marched past the
+            # leftmost, the cursor_pos cell still shows its countdown.
+            if gi == window_start and gi == cursor_pos:
+                continue
+
+            local_i = gi - window_start
+            ptr = local_i * self.stops_w
+
+            if cursor_pos <= gi <= dest_idx and "time" in stop:
+                t_w, t_h = self.font_time.size("0")
+
+                if is_first_station:
+                    if is_last_pa:
+                        cumulative_time = 1
+                    else:
+                        elapsed_full_minutes = int(elapsed_minutes)
+                        remaining_time = max(1, stop["time"] - elapsed_full_minutes)
+                        cumulative_time = remaining_time
+                    is_first_station = False
+                else:
+                    cumulative_time += stop["time"]
+
+                time_str = str(int(cumulative_time))
+                time_x = int(x + ptr + (self.stops_w - t_w * len(time_str)) / 2)
+                time_y = int(y + (self.bar_height - t_h) / 2)
+                time_img = self.font_time.render(time_str, True, DARK_BG)
+                self.screen.blit(time_img, (time_x, time_y))
+
+                # 分-marker — line-end (rightmost cell) or mid-window dest
+                if local_i == len(window) - 1 or gi == dest_idx:
+                    minute_w, minute_h = self.font_minute.size("分")
+                    minute_y = int(y + (self.bar_height - minute_h) / 2)
+
+                    pygame.draw.rect(
+                        self.screen,
+                        self.color,
+                        pygame.Rect(int(x + ptr + self.stops_w), int(y), minute_w, self.bar_height),
+                    )
+                    pygame.draw.rect(
+                        self.screen,
+                        WHITE_BG,
+                        pygame.Rect(int(x + ptr + self.stops_w + minute_w - 3), int(y), 3, self.bar_height),
+                    )
+
+                    minute_img = self.font_minute.render("分", True, WHITE_BG)
+                    self.screen.blit(minute_img, (int(x + ptr + self.stops_w * 0.85), minute_y))
+
+    # ------------------------------------------------------------------
+    # Continuation triangle (rightmost-cell-is-not-terminal indicator)
+    # ------------------------------------------------------------------
+    # NOTE: deliberately NOT called from `show_stops` yet. The user has an
+    # existing continuity-arrow helper in their full-route renderer that's
+    # known-buggy; this 8-station version is parked here as scaffolding
+    # until that helper is reviewed and the two implementations can be
+    # reconciled. Wire `self._draw_continuation_marker(window)` at the end
+    # of `show_stops`'s Pass 2 (after `draw_times`) once the design is
+    # finalised. Side margin (`self.side_margin = 44`) reserves the px the
+    # triangle will need on the right-hand end of the bar.
+
+    def _draw_continuation_marker(self, window: List[Tuple[int, Dict]]) -> None:
+        """Small right-pointing triangle past the 分 marker.
+
+        Drawn when the rightmost visible station is not the route's terminal —
+        signals "the route continues beyond this view." Colored in the route
+        color so it reads as a natural extension of the bar.
+        """
+        if not window:
+            return
+        last_gi = window[-1][0]
+        if last_gi >= len(self.stops) - 1:
+            return
+
+        # --- Continuation marker params (adjust freely) ---
+        triangle_w = 8
+        triangle_pad_x = 4  # gap after the 分 marker
+        triangle_pad_y = 6  # vertical inset within bar height
+        # ---------------------------------------------------
+
+        bar_right = self.x + self.cells * self.stops_w
+        minute_w, _ = self.font_minute.size("分")
+        # 分 marker extends `minute_w` past bar_right (see draw_times).
+        tip_left_x = bar_right + minute_w + triangle_pad_x
+        cy = self.bar_y + self.bar_height // 2
+        points = [
+            (tip_left_x, self.bar_y + triangle_pad_y),
+            (tip_left_x + triangle_w, cy),
+            (tip_left_x, self.bar_y + self.bar_height - triangle_pad_y),
+        ]
+        draw_aapolygon(self.screen, self.color, points)
+
+    # ------------------------------------------------------------------
+    # Per-cell station code badge
+    # ------------------------------------------------------------------
+
+    def _draw_badge(self, stop: Dict, cell_x: int) -> None:
+        """Mini JO/JY framed square below the station's bar.
+
+        Delegates to the shared `draw_station_code_badge` helper (also used
+        by the upper LCD). Per-cell sizing here is smaller; no `code_3` band
+        — 3-letter codes only ever surface in the upper LCD's prominent
+        single-station badge, never in the route-map row.
+
+        Past-station badges are NOT dimmed — IRL the badge keeps full route
+        color regardless of whether the train has passed it.
+        """
+        sta_code = stop.get("sta_code")
+        if not sta_code:
+            return
+
+        # --- Mini-badge params (adjust freely) ---
+        badge_w = self.badge_w
+        badge_h = self.badge_h
+        # Reference shows NO black outer ring on the per-cell badges — the
+        # route-color frame goes all the way to the badge edge. The shared
+        # `draw_station_code_badge` helper still draws a black rect under the
+        # color rect, but with `ring_black=0` the color rect covers it
+        # entirely (same size and position).
+        ring_black = 0
+        ring_color = 2  # route-color frame width (slightly thicker now that there's no black layer)
+        outer_radius = 2  # tighter corner rounding (was 3)
+        color_radius = 2
+        text_gap = 1  # gap between letters row and number row
+        text_y_offset = 0  # vertically centered in the interior
+        prefix_x_offset = 0  # center prefix (upper biases right by 1, not desirable here)
+        # ------------------------------------------
+
+        badge_x = cell_x + (self.stops_w - badge_w) // 2
+        draw_station_code_badge(
+            self.screen,
+            badge_x,
+            self.badge_y,
+            badge_w,
+            badge_h,
+            sta_code,
+            self.color,
+            self.font_badge_prefix,
+            self.font_badge_num,
+            ring_black=ring_black,
+            ring_color=ring_color,
+            outer_radius=outer_radius,
+            color_radius=color_radius,
+            text_gap=text_gap,
+            text_y_offset=text_y_offset,
+            prefix_x_offset=prefix_x_offset,
+        )
+
+    # ------------------------------------------------------------------
+    # Frame entry point
+    # ------------------------------------------------------------------
+
+    def show_stops(self, state, current_time: float = 0.0) -> None:
+        """Render the full lower LCD frame for the 8-station view."""
+        # Clear lower-LCD region
+        pygame.draw.rect(self.screen, WHITE_BG, pygame.Rect(0, self.top_y, S_WIDTH, S_HEIGHT - self.top_y))
+
+        if state.frame_mode == 0:
+            return
+
+        curr_stop = state.curr_stop
+        cursor_pos = state.cursor_pos
+        window = self._get_window(curr_stop, cursor_pos)
+
+        stop_dest = self.stops[curr_stop].get("dest") if 0 <= curr_stop < len(self.stops) else None
+        effective_dest = stop_dest or self.dest
+        dest_idx = self._find_dest_index(window, effective_dest)
+        window_start = window[0][0] if window else 0
+
+        # Pass 1: bars + labels + badges (per-cell rendering)
+        for gi, stop in window:
+            local_i = gi - window_start
+            cell_x = self.x + local_i * self.stops_w
+            l_y = self._bar_y()
+
+            is_active = gi >= cursor_pos and gi <= dest_idx
+
+            # Bar background
+            if is_active:
+                pygame.draw.rect(
+                    self.screen,
+                    self.color,
+                    pygame.Rect(cell_x, l_y, self.stops_w, self.bar_height),
+                )
+            else:
+                pygame.draw.rect(
+                    self.screen,
+                    INACTIVE_COLOR,
+                    pygame.Rect(cell_x, l_y, self.stops_w, self.bar_height),
+                )
+
+            # Vertical kanji label — black on active range, dim grey otherwise
+            label_color = (0, 0, 0) if is_active else INACTIVE_COLOR
+            self._draw_label(stop.get("name", ""), cell_x, label_color)
+
+            # Per-cell station code badge
+            self._draw_badge(stop, cell_x)
+
+        # Pass 2: marks, pointer, times (overlays on top of bars)
+        self.draw_marks(window, dest_idx, cursor_pos, curr_stop)
+        self.draw_ptr(window, cursor_pos, curr_stop)
+        self.draw_times(window, dest_idx, cursor_pos, current_time, state.departure_time, state.is_last_pa)
+
+        draw_route_disclaimer(self.screen, self.font_disclaimer, S_WIDTH - 8, S_HEIGHT - 4, (0, 0, 0))
 
 
 # =============================================================================
@@ -434,39 +1157,88 @@ class LowerDisplay:
     furigana the route map).
     """
 
+    # 24-second view cycle: 12s full-route ↔ 12s 8-station. Independent of
+    # the upper's language cycler — drives only Japanese modes. Locks to
+    # 8-station permanently once remaining stops ≤ 8.
+    VIEW_CYCLE_HALF_INTERVAL = 12.0
+
     def __init__(self, screen, route_data, stops, mode_cycler):
         self.screen = screen
         self.route_data = route_data
         self.stops = stops
 
         self.japanese_display = JapaneseDisplay(screen, route_data, stops)
+        self.japanese_eight_display = JapaneseEightStationDisplay(screen, route_data, stops)
         self.english_display = EnglishDisplay(screen, route_data, stops)
 
-        # ENGLISH intentionally not mapped while EnglishDisplay is a stub —
-        # `draw()`'s `.get(mode, self.japanese_display)` falls back so the
-        # lower stays Japanese even when the shared cycler is in ENGLISH.
-        # Re-enable by uncommenting the ENGLISH entry once implemented.
-        self.mode_displays = {
-            DisplayMode.KANJI: self.japanese_display,
-            DisplayMode.FURIGANA: self.japanese_display,
-            # DisplayMode.ENGLISH: self.english_display,
-        }
         self.mode_cycler = mode_cycler
-
         self._state = None
+
+        # View-cycle state (Japanese only)
+        self._view_last_toggle: float | None = None
+        self._is_eight_view = False  # start on full-route view
 
     def set_state(self, state) -> None:
         """Bind to an AppState instance. Subsequent draws read live state."""
         self._state = state
 
     def update(self, current_time: float = None) -> None:
-        """Mode cycling is driven by the upper (shared cycler), so no-op here."""
+        """Language cycling is driven by the upper (shared cycler), so no-op here.
+
+        The view cycle is ticked inside `draw()` instead — it depends on
+        live curr_stop (for the lock condition) and is cheaper to fold in.
+        """
         pass
 
+    def _should_lock_to_eight(self, curr_stop: int) -> bool:
+        """When remaining stops ≤ LOCK_THRESHOLD (=7), drop the full-route view permanently."""
+        return (len(self.stops) - curr_stop) <= JapaneseEightStationDisplay.LOCK_THRESHOLD
+
+    # CONTRACT: must be called UNCONDITIONALLY before language-mode dispatch.
+    # See DISPLAY.md § "View cycler (`LowerDisplay`)". Nesting in the KANJI/FURIGANA
+    # branch pauses the timer during ENGLISH; 24 s cadence drifts long.
+    def _tick_view_cycle(self, current_time: float) -> None:
+        """Toggle full ↔ 8-station every VIEW_CYCLE_HALF_INTERVAL seconds."""
+        if self._view_last_toggle is None:
+            self._view_last_toggle = current_time
+            return
+        if current_time - self._view_last_toggle >= self.VIEW_CYCLE_HALF_INTERVAL:
+            self._is_eight_view = not self._is_eight_view
+            self._view_last_toggle = current_time
+
+    def _pick_japanese_renderer(self):
+        """Pick which Japanese renderer to draw this frame.
+
+        Pure function of state: locked → 8-station; otherwise reads the
+        cycler boolean. The cycler is ticked separately in `draw()` so the
+        24 s cadence is independent of language mode.
+        """
+        if self._state is not None and self._should_lock_to_eight(self._state.curr_stop):
+            return self.japanese_eight_display
+        return self.japanese_eight_display if self._is_eight_view else self.japanese_display
+
     def draw(self, current_time: float = 0.0) -> None:
-        """Dispatch to the active mode's renderer."""
+        """Dispatch to the active mode's renderer.
+
+        Language mode (KANJI / FURIGANA / ENGLISH) → renderer family.
+        Within Japanese, the 24s view-cycler picks full-route vs 8-station.
+        ENGLISH falls back to the Japanese full-route while EnglishDisplay
+        is a stub.
+
+        The view-cycler timer ticks regardless of language mode so the 24 s
+        full ↔ 8-station cadence doesn't drift while the upper is in
+        ENGLISH (which would otherwise pause the timer for ~1/3 of every
+        upper-mode cycle).
+        """
         if self._state is None:
             return
+        # Tick view-cycle timer unconditionally; lock state suppresses the toggle.
+        if not self._should_lock_to_eight(self._state.curr_stop):
+            self._tick_view_cycle(current_time)
+
         mode = self.mode_cycler.get_current_mode()
-        display = self.mode_displays.get(mode, self.japanese_display)
-        display.show_stops(self._state, current_time)
+        if mode in (DisplayMode.KANJI, DisplayMode.FURIGANA):
+            renderer = self._pick_japanese_renderer()
+        else:
+            renderer = self.japanese_display
+        renderer.show_stops(self._state, current_time)
