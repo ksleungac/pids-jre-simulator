@@ -6,6 +6,14 @@ Japanese Train PA (Public Address) Simulator — JR East style train announcemen
 
 ---
 
+## Screenshots
+
+| Compact view | Skip animation | Full-route view |
+|---|---|---|
+| ![](docs/screenshots/01-keihin-tohoku-compact.png) | ![](docs/screenshots/02-sobu-skip-animation.png) | ![](docs/screenshots/03-sobu-full-route.png) |
+
+---
+
 ## Download
 
 From [**Releases**](https://github.com/ksleungac/pids-jre-simulator/releases/latest):
