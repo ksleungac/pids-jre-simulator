@@ -56,7 +56,7 @@ $versionInfo | Out-File -FilePath "version_info.txt" -Encoding ascii
 
 # Build executable
 Write-Host "`n[1/5] Building executable (embedding version $versionString)..." -ForegroundColor Yellow
-uv run pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean --noconfirm --version-file version_info.txt
+uv run --no-dev --group build pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean --noconfirm --version-file version_info.txt
 if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 
 # Create distribution folder structure
@@ -68,6 +68,11 @@ New-Item -ItemType Directory -Force -Path "dist-release\JRE-PA-Simulator\audio" 
 Copy-Item "dist\JRE-PA-Simulator.exe" "dist-release\JRE-PA-Simulator\"
 Copy-Item "fonts\*" "dist-release\JRE-PA-Simulator\fonts\"
 Copy-Item "data\*.json" "dist-release\JRE-PA-Simulator\data\"
+
+# Copy audio data — excluding `_*`-prefixed folders (preserved-but-not-shipped: _archive, _mock, etc.)
+Get-ChildItem -Path "audio" -Directory | Where-Object { $_.Name -notmatch '^_' } | ForEach-Object {
+    Copy-Item -Path $_.FullName -Destination "dist-release\JRE-PA-Simulator\audio" -Recurse -Force
+}
 
 # Create distribution zip
 Write-Host "`n[3/5] Creating distribution zip..." -ForegroundColor Yellow

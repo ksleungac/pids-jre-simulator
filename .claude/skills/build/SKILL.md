@@ -85,14 +85,16 @@ if (Test-Path $audioJunction) {
 }
 Remove-Item -Path "dist", "dist-release", "build" -Recurse -Force -ErrorAction SilentlyContinue
 
-uv run pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean --noconfirm --version-file version_info.txt
+uv run --no-dev --group build pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean --noconfirm --version-file version_info.txt
 ```
+
+`--no-dev --group build` isolates the build venv to **prod deps + pyinstaller only** — no `librosa` / `ffmpeg-python` / `black` / `pyright` visible to PyInstaller's static analysis. Defense-in-depth against accidental dev-dep bundling. The `build` dependency group is declared in `pyproject.toml`; if a future build step needs another tool (e.g. UPX), add it there.
 
 `--console` is required (notes.md: Windows console encoding — console window needed for error visibility on non-English Windows). If the build fails, surface the pyinstaller error verbatim and stop.
 
 ### Step 4 — Stage distribution folder (with audio junction for testing)
 
-The shipped zip does NOT include the `audio/` folder (user supplies audio separately per install). But we want the staged folder to be **immediately runnable** so the user can smoke-test without copying the exe to the working tree or duplicating gigabytes of audio. Solution: `audio/` is a **junction** pointing at the project's real `audio/`. At zip time, Step 6 breaks the junction and ships an empty directory.
+The shipped zip ships the audio folder populated with all real route data (excluding `audio/_*/` — preserved-but-not-shipped). During smoke-test we want the staged folder to be **immediately runnable** without first copying ~600 MB of audio, so we use a **junction**: `dist-release/JRE-PA-Simulator/audio` points at the project's real `audio/`. At zip time, Step 6 breaks the junction and replaces it with a real directory containing the shippable subset.
 
 ```powershell
 New-Item -ItemType Directory -Force -Path "dist-release\JRE-PA-Simulator\fonts" | Out-Null
@@ -111,7 +113,7 @@ New-Item -ItemType Junction -Path "dist-release\JRE-PA-Simulator\audio" -Target 
   - Works without admin rights (junctions ≠ symlinks on Windows).
   - The exe sees it as an ordinary `audio/` directory — `Path(sys.executable).parent / "audio" / ...` resolves through transparently.
   - Never `Remove-Item -Recurse` the staged folder without breaking the junction first (see Step 3's guard).
-  - `Compress-Archive` would follow the junction and include all audio — Step 6 breaks + replaces with empty dir before zipping.
+  - `Compress-Archive` follows the junction transparently. We still break + replace before zipping in Step 6 — both because we need to *exclude* `audio/_*/` from the shipped zip (the junction would pull them in) and because junctions inside zips are messy on extraction.
 
 ### Step 5 — Launch exe for user + HARD STOP for smoke test
 
@@ -139,9 +141,9 @@ Do NOT:
 
 Wait for an explicit "works / ok / ship it / zip it" from the user before Step 6.
 
-### Step 6 (ONLY after user confirms smoke test passed) — Break audio junction, then zip
+### Step 6 (ONLY after user confirms smoke test passed) — Break audio junction, copy shippable audio, then zip
 
-The staged `audio/` is a junction to the project's real `audio/`. `Compress-Archive` follows junctions — if we zipped now, the distribution would include hundreds of MB of audio the user is supposed to supply separately. Break the junction and replace with an empty directory first.
+The staged `audio/` is a junction to the project's real `audio/`. We need to break it and replace with a real directory containing only the line folders that ship — *excluding* `audio/_*/` (preserved-but-not-shipped: `_archive/`, `_mock/`).
 
 ```powershell
 # Break the audio junction (deletes the junction entry, NOT the target)
@@ -155,15 +157,22 @@ if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
 }
 New-Item -ItemType Directory -Force -Path $audioJunction | Out-Null
 
+# Copy each line folder under audio/ that is NOT `_`-prefixed (~600 MB at time of writing)
+Get-ChildItem -Path "audio" -Directory | Where-Object { $_.Name -notmatch '^_' } | ForEach-Object {
+    Copy-Item -Path $_.FullName -Destination $audioJunction -Recurse -Force
+}
+
 # Zip
 Compress-Archive -Path "dist-release\JRE-PA-Simulator" -DestinationPath "dist-release\JRE-PA-Simulator-v<VERSION>-distribution.zip" -Force
 ```
+
+The `_*` exclusion is critical: `_archive/` (working backups, Sobu reference recordings, etc.) and `_mock/` (preview-only test catalog) must never reach end users — those are repo-internal scaffolding.
 
 **Never** use `Remove-Item -Recurse -Force $audioJunction` — `Remove-Item` with `-Recurse` on a junction follows the reparse point and deletes the real audio directory. Use `[System.IO.Directory]::Delete(path, false)` instead, which removes only the junction entry.
 
 **Filename version**: always `v` + the normalized numeric+letter string (e.g. `v0.5.2`, `v0.5.2b`). If the user typed `v0.5.2`, strip their `v` first and re-add one — never produce `vv0.5.2`.
 
-**After zipping**: the staged folder now has an empty `audio/` directory, not the junction. If the user wants to keep testing, they can re-run `/build` (which re-creates the junction in Step 4) or manually `New-Item -ItemType Junction -Path ... -Target ...`. Mention this in the final report.
+**After zipping**: the staged folder now has a populated real `audio/` directory (~600 MB), not the junction. If the user wants to keep iterating with the staged folder against live audio edits, re-run `/build` to recreate the junction in Step 4. Mention zip size in the final report — typical ship: ~660 MB (exe + fonts + data + audio); GitHub release file limit is 2 GB so there's headroom.
 
 ## Out of scope
 
@@ -173,9 +182,9 @@ Compress-Archive -Path "dist-release\JRE-PA-Simulator" -DestinationPath "dist-re
 
 ## `_*` folder convention (preserved-but-not-shipped)
 
-Folders prefixed with `_` under `audio/` (e.g. `audio/_mock/`, `audio/_archive/`) are preserved in the repo but **must not ship** to end users. Currently this is automatic — the whole `audio/` folder ships empty (junction broken at zip time, see Step 6) — so the rule is dormant. **If audio shipping is ever added** (e.g. a future "data pack" zip that includes real routes), the copy step must explicitly exclude `audio/_*/` to keep mock and archive out. Same convention applies to any future `data/_*.json` (none today).
+Folders prefixed with `_` under `audio/` (e.g. `audio/_mock/`, `audio/_archive/`) are preserved in the repo but **must not ship** to end users. Step 6 explicitly enforces this via the `Where-Object { $_.Name -notmatch '^_' }` filter when copying line folders into the staged audio directory. Same convention applies to any future `data/_*.json` (none today; if added, update the `Copy-Item "data\*.json"` step in Step 4 to exclude them).
 
-The smoke-test junction in Step 4 transparently includes `_*/` folders — that's intentional. The user can preview-test against the mock catalog from inside the staged folder.
+The smoke-test junction in Step 4 transparently includes `_*/` folders — that's intentional. The user can preview-test against the mock catalog from inside the staged folder before the zip excludes them.
 
 ## Release notes criteria (for when `release.ps1` eventually runs)
 
@@ -183,7 +192,7 @@ Even though this skill doesn't generate notes, when you *do* help assemble them 
 
 > **Include a change in user-facing release notes iff the artifact it affects ships inside the distribution zip.**
 
-What ships: the exe, `fonts/`, `data/*.json`, `audio/**` (when present). Anything that lands in `dist-release/JRE-PA-Simulator/` qualifies.
+What ships: the exe, `fonts/`, `data/*.json`, `audio/**` (excluding `audio/_*/`). Anything that lands in `dist-release/JRE-PA-Simulator/` qualifies.
 
 What does **not** ship: `README*.md` (repo-only), `CLAUDE.md`, `.claude/**`, `.github/**`, `memory/**`, `pyproject.toml`, test/preview harnesses, the mock route catalog (`audio/mock/**`). Changes to these are invisible to end users of the exe → omit from notes.
 
