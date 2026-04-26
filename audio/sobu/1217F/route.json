@@ -1,7 +1,7 @@
 {
     "route": "総武快速線・成田線直通",
     "color": [22, 64, 152],
-    "contrast_color": [224, 54, 37],
+    "contrast_color": [116, 18, 34],
     "type_color": [22, 64, 152],
     "type": "快速",
     "dest": "成田空港",
@@ -11,7 +11,7 @@
             "pa": [],
             "sta": ["tokyo_4_jr-sh5-1"],
             "sta_code": "JO19",
-            "sta_cut": 16,
+            "sta_cut": 15.6,
             "time": 0
         },
         {
@@ -19,7 +19,7 @@
             "pa": ["tokyo-dep"],
             "sta": ["shin-nihombashi_2_hassha-beru"],
             "sta_code": "JO20",
-            "sta_cut": 12,
+            "sta_cut": 12.2,
             "time": 2
         },
         {
@@ -27,7 +27,7 @@
             "pa": ["shin-nihombashi-dep"],
             "sta": ["bakurocho_2_hassha-beru"],
             "sta_code": "JO21",
-            "sta_cut": 7,
+            "sta_cut": 6.2,
             "time": 2
         },
         {
@@ -35,7 +35,7 @@
             "pa": ["bakurocho-dep"],
             "sta": ["kinshicho_4_gota-del-vient"],
             "sta_code": "JO22",
-            "sta_cut": 31,
+            "sta_cut": 28.6,
             "time": 4
         },
         {
@@ -43,7 +43,7 @@
             "pa": ["kinshicho-dep", "shin-koiwa-arr"],
             "sta": ["shin-koiwa_4_gota-del-vient"],
             "sta_code": "JO23",
-            "sta_cut": 19,
+            "sta_cut": 16.6,
             "time": 4
         },
         {
@@ -51,7 +51,7 @@
             "pa": ["shin-koiwa-dep", "ichikawa-arr"],
             "sta": ["ichikawa_4_rakuraku-tetsudo-ryoko"],
             "sta_code": "JO24",
-            "sta_cut": 20,
+            "sta_cut": 17.3,
             "time": 5
         },
         {
@@ -59,7 +59,7 @@
             "pa": ["ichikawa-dep", "funabashi-arr"],
             "sta": ["funabashi_4_horidei"],
             "sta_code": "JO25",
-            "sta_cut": 23,
+            "sta_cut": 19.3,
             "time": 6
         },
         {
@@ -67,7 +67,7 @@
             "pa": ["funabashi-dep", "tsudanuma-arr"],
             "sta": ["tsudanuma_1_horidei"],
             "sta_code": "JO26",
-            "sta_cut": 21,
+            "sta_cut": 19.2,
             "time": 4
         },
         {
@@ -75,7 +75,7 @@
             "pa": ["tsudanuma-dep", "inage-arr"],
             "sta": ["inage_4_horidei"],
             "sta_code": "JO27",
-            "sta_cut": 13,
+            "sta_cut": 10.1,
             "time": 6
         },
         {
@@ -94,7 +94,7 @@
             "pa": ["chiba-dep", "tsuga-arr"],
             "sta": ["tsuga_2_gota-del-vient"],
             "sta_code": "JO30",
-            "sta_cut": 56,
+            "sta_cut": 55.3,
             "time": 4
         },
         {
@@ -102,7 +102,7 @@
             "pa": ["tsuga-dep", "yotsukaido-arr"],
             "sta": ["yotsukaido_2"],
             "sta_code": "JO31",
-            "sta_cut": 20,
+            "sta_cut": 20.0,
             "time": 4
         },
         {
@@ -110,7 +110,7 @@
             "pa": ["yotsukaido-dep", "monoi-arr"],
             "sta": ["monoi_1_gota-del-vient"],
             "sta_code": "JO32",
-            "sta_cut": 21,
+            "sta_cut": 19.5,
             "time": 4
         },
         {
@@ -118,7 +118,7 @@
             "pa": ["monoi-dep"],
             "sta": ["sakura_2_verde-rayo-v2"],
             "sta_code": "JO33",
-            "sta_cut": 37,
+            "sta_cut": 35.3,
             "time": 4
         },
         {
@@ -126,7 +126,7 @@
             "pa": ["sakura-dep", "shisui-arr"],
             "sta": ["shisui_gota-del-vient"],
             "sta_code": "JO34",
-            "sta_cut": 26,
+            "sta_cut": 25.5,
             "time": 6
         },
         {
@@ -134,7 +134,7 @@
             "pa": ["shisui-dep", "narita-arr"],
             "sta": ["narita_3_suito-koru"],
             "sta_code": "JO35",
-            "sta_cut": 33,
+            "sta_cut": 30.7,
             "time": 6
         },
         {
@@ -142,7 +142,7 @@
             "pa": ["narita-dep", "airport-terminal-2-arr"],
             "sta": ["airport-terminal-2_chaimu-3b4"],
             "sta_code": "JO36",
-            "sta_cut": 28,
+            "sta_cut": 27.3,
             "time": 9
         },
         {
