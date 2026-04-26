@@ -10,6 +10,15 @@ Usage:
   uv run preview_display.py --route chuo/916H --stop 6          # real route at a specific stop
   uv run preview_display.py --screenshot out.png --mode english --stop 2 --pa 1
 
+  # Force the lower LCD's 8-station zoomed view (skips the 24s cycle so the
+  # frame is always 8-station, useful for iterating layout at any curr_stop):
+  uv run preview_display.py --route sobu/1217F --stop 7 --lower-view eight
+  uv run preview_display.py --screenshot 8sta.png --route sobu/1217F --stop 7 \
+      --mode kanji --lower-view eight
+
+  # Force the full-route view permanently (skip 8-station alternation):
+  uv run preview_display.py --route sobu/1217F --lower-view full
+
 Interactive controls (forwarded to PASimulator._handle_input_preview):
   PageDown  next PA phase (advances to next stop when phases exhausted)
   PageUp    next STA melody (no-op in preview — audio is silent)
@@ -20,6 +29,11 @@ Interactive controls (forwarded to PASimulator._handle_input_preview):
 
 --route accepts: a path to route.json, a directory containing one, or a
 shorthand like 'yamanote' / 'chuo/916H' (resolved under audio/).
+
+--lower-view {full,eight,cycle} forces the lower LCD into a fixed view.
+Default 'cycle' alternates full ↔ 8-station every 12s. 'eight' or 'full'
+freeze the cycler on one view — handy for screenshots where you want a
+deterministic frame regardless of how long the preview has been running.
 """
 
 import argparse
@@ -84,6 +98,13 @@ def parse_args():
         action="store_true",
         help="Tint each upper-LCD region's clear rect with a unique color so overlaps / under-clears / clipping are visible. Region keys: see _DEBUG_COLORS in displays/train_models/e235_1000/upper_lcd.py.",
     )
+    parser.add_argument(
+        "--lower-view",
+        type=str,
+        choices=("full", "eight", "cycle"),
+        default="cycle",
+        help="Force lower-LCD view: 'full' = full-route, 'eight' = 8-station zoom, 'cycle' = normal 24s alternation (default).",
+    )
     return parser.parse_args()
 
 
@@ -114,6 +135,13 @@ def main():
     if args.mode:
         sim.upper.mode_cycler.current_mode = MODE_MAP[args.mode]
         sim.upper.mode_cycler.enabled = False
+
+    # Force lower-LCD view if requested. Setting both `_is_eight_view` and
+    # `_view_last_toggle = +inf` keeps the cycler frozen on whichever view
+    # we picked. Skipped for 'cycle' so the natural 24s alternation runs.
+    if args.lower_view != "cycle":
+        sim.lower._is_eight_view = (args.lower_view == "eight")
+        sim.lower._view_last_toggle = float("inf")
 
     if args.screenshot:
         timestamp = time.time()

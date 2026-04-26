@@ -119,17 +119,61 @@ def draw_aapolygon(
 
 
 def arrow_points(x: int, y: int, w: int, h: int, stroke: int) -> Tuple[Tuple[float, float], ...]:
-    """Generate arrow polygon points.
+    """Generate a 6-point chevron-arrow polygon (right-pointing).
+
+    The result describes a horizontally-pointing chevron: a thick "<" with
+    the tip at (x + w, y + h/2) and a notch carved into its left edge at
+    (x + w - stroke, y + h/2). The notch makes the shape readable as an
+    arrow rather than a triangle — the deeper the notch, the more the
+    chevron looks like an arrowhead-with-tail.
+
+    Geometry knobs:
+        w  — total width (left edge to tip).
+        h  — total height (top edge to bottom edge).
+        stroke — chevron BODY THICKNESS, **not** a typical line stroke.
+            Geometrically, `stroke` is the horizontal distance from the
+            outer-left edge of the body to where the slanted side begins
+            (and equivalently from the notch vertex to the tip).
+            - stroke == w / 2: notch is exactly centered → "fat" chevron,
+              equal-width body and tip portions.
+            - stroke ~ w * 0.55: full-route-pointer ratio; body slightly
+              wider than the tip portion.
+            - small stroke (e.g. w * 0.3): pointier, longer-tip arrow.
+            - stroke == w: degenerates to a thin line (no inside).
+            - stroke == 0: pure right-pointing triangle (no notch).
+
+    Scaling tips: to make the chevron larger WITHOUT changing its shape,
+    scale `w`, `h`, and `stroke` by the same factor. Bumping only `w`
+    makes the tip protrude → the chevron looks pointier even though it
+    got "bigger".
+
+    **Drawing a chevron with a uniform halo (filled inner + outline outer).**
+    Common pattern: render an inner filled chevron in the foreground color,
+    then a slightly larger outer chevron as an outline (`draw_aapolygon`
+    with `width > 0`) for a halo behind it. For the halo to read as the
+    same thickness along the body AND the tip, the outer's tip-length
+    must equal the inner's tip-length, i.e.
+        outer_w - outer_stroke == inner_w - inner_stroke
+    The simplest way to achieve this — and to keep the halo uniform on
+    every side — is:
+        delta = halo width  # halo thickness in px
+        outer_w      = inner_w      + delta
+        outer_stroke = inner_stroke + delta
+        outer_x      = inner_x - delta // 2  # centers outer around inner
+    A common pitfall: scaling `outer_w` by some delta but using a fixed
+    `outer_stroke` (or scaling stroke by a different delta). The body
+    halo will look right but the tip halo will read as a different
+    thickness — visible as the outline being more or less pointy than
+    the inner fill.
 
     Args:
-        x: X position
-        y: Y position
-        w: Width
-        h: Height
-        stroke: Stroke width
+        x, y: Top-left of the chevron's bounding box.
+        w, h: Bounding-box width and height.
+        stroke: Body thickness — see notes above.
 
     Returns:
-        Tuple of (x, y) points defining the arrow shape
+        Tuple of 6 (x, y) points suitable for `draw_aapolygon` (filled
+        polygon when `width=0`, outline-only chevron when `width>0`).
     """
     return ((x, y), (x + w - stroke, y + h / 2), (x, y + h), (x + stroke, y + h), (x + w, y + h / 2), (x + stroke, y))
 
@@ -145,11 +189,15 @@ def draw_1col_text(
 ) -> None:
     """Draw text vertically (one column).
 
+    Per-character horizontal centering: narrow glyphs (digits, katakana like
+    ビル) are centered relative to the widest character's column width so
+    mixed strings like "空港第2ビル" don't have stragglers off to the left.
+
     Args:
         font: Pygame font object
         text: Text to draw vertically
-        x: X position
-        y: Y position
+        x: X position (left edge of the column for the WIDEST char)
+        y: Y position (bottom of the column)
         vert_space: Vertical space to fill
         text_color: RGB color tuple
         screen: Pygame surface to draw on
@@ -168,10 +216,15 @@ def draw_1col_text(
         vr = vert_space / (length * t_h)
         vert_dist = vert_dist + (t_h - (t_h * vr)) / (length - 1) if length > 1 else vert_dist
 
+    char_widths = [font.size(c)[0] for c in text]
+    col_w = max(char_widths)
+
     for k, s in enumerate(text):
         y_pos = y - vert_space + vert_dist * k
-        img = draw_text(s, font, text_color, x, int(y_pos), v_ratio=vr)
-        screen.blit(img, (x, int(y_pos)))
+        char_w = char_widths[k]
+        x_pos = x + (col_w - char_w) // 2
+        img = draw_text(s, font, text_color, int(x_pos), int(y_pos), v_ratio=vr)
+        screen.blit(img, (int(x_pos), int(y_pos)))
 
 
 def draw_stops_text(
