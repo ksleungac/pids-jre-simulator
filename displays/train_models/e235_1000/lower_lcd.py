@@ -185,6 +185,9 @@ class JapaneseDisplay:
             draw_aapolygon(self.screen, PASSED_COLOR, [(i + 3, j) for (i, j) in points])
             draw_aapolygon(self.screen, ptr_color, points)
 
+    # CONTRACT: inner red dot at `curr_stop` (PA target); pointer at `cursor_pos`
+    # (lags during skip — intentional). See DISPLAY.md § "Station Skip Logic (full spec)".
+    # DON'T "fix" the divergence to make them match.
     def draw_marks(self, f_stops: List[Tuple[int, Dict]], dest_idx: int, cursor_pos: int, curr_stop: int) -> None:
         """Draw station markers (circles and arrows)."""
         if not f_stops:

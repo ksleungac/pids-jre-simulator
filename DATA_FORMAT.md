@@ -97,17 +97,12 @@ For routes that display multiple destinations (like 品川・東京), use the `&
 
 ### English Translation Convention (Hepburn Romanization)
 
-English translations use **modified Hepburn romanization with macrons** to indicate long vowels:
+English translations use **modified Hepburn romanization with macrons** to indicate long vowels. The convention itself (preloaded mental model — Tōkyō, Chūō, why Etchūjima not Ecchūjima) is in [CLAUDE.md](CLAUDE.md) "Mental Model → IRL display conventions". This section is the JSON-encoding side.
 
 | Long Vowel | Source | Example |
 |------------|--------|---------|
 | **ō** | おう, おお | 東京 → T**ō**ky**ō**, 大宮 → **Ō**miya |
 | **ū** | う, うう, うう | 越中島 → Etch**ū**jima |
-
-**Modified Hepburn notes:**
-- Macrons (¯) indicate long vowels
-- Some spellings follow IRL JR East usage (e.g., "Etchūjima" not "Ecchūjima")
-- Not all vowels get macrons - only true long vowels (e.g., Ebisu stays as-is)
 
 **Examples:**
 ```json
@@ -307,7 +302,7 @@ Each stop in the `stops` array:
     "pa": ["1", "2"],              // PA track numbers (empty array = no announcement)
     "sta": ["JC01", "JC01_ALT"],   // STA audio filename(s) without .mp3 extension
     "sta_code": "JC01",            // JR official station numbering code (or null)
-    "sta_cut": 10,                 // STA melody: seconds where melody stops & door chime starts
+    "sta_cut": 10,                 // STA melody: seconds where melody is cut and the closing-door announcement begins
     "time": 3                      // Travel time to next station (minutes, 0 for first station)
 }
 ```
@@ -340,6 +335,8 @@ The `pa` array contains filenames (without `.mp3` extension) that map directly t
   - Compound station names use additional hyphens: `shin-koiwa-dep`, `kita-ageo-arr`
   - Terminus only has `{this}-arr`; first station has no PA at all
 - **Legacy convention (existing lines):** sequential numbers (`"1"`, `"2"`, …) — used by `audio/keiyo/`, `audio/chuo/`. Don't migrate; the renderer treats both identically.
+
+**When modifying PA tracks on a numeric-convention line:** only change the affected stations. Don't renumber subsequent stations. Example: moving track `"1"` from Station B to Station A only changes those two stations' arrays — every later station keeps its existing numbers.
 
 **Example:**
 ```json
@@ -394,7 +391,7 @@ Stations with empty `pa: []` are skipped automatically (train passes through wit
 | Value | Meaning |
 |-------|---------|
 | `0` | No STA melody / full track plays |
-| `>0` | Seconds into STA track where melody **stops** and door chime begins |
+| `>0` | Seconds into STA track where melody is **cut** and the closing-door announcement (station-attendant voice, "ドアが閉まります") begins. Integer or one-decimal float (e.g. `15.6`) — runtime accepts float seconds. Use the extra precision when the music→voice gap is narrow and a 1 s rounding error would land in the wrong region. |
 
 ---
 

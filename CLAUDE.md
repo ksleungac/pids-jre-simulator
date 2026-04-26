@@ -10,6 +10,43 @@ uv run main.py
 
 Build executable (local test build): use `/build` skill. Cut a GitHub release: `.\release.ps1 v<version>` (tag first). Update READMEs / translations: use `/readme` skill. Code review: use `/review-dirty` or `/review-plus-fix-relentlessly`. Commit hygiene: use `/commit` skill.
 
+## Mental Model
+
+What this project is modeling. Keep this in head — it shapes every design decision. (Implementation details live in domain docs and are read on demand.)
+
+### Train family
+
+JR East runs multiple train series in commuter service: E233 (sub-series 0–8000), E235 (0 and 1000), and others. Each series has its own LCD look — drawings differ slightly, but the *element set* (clock, station name, route bar, mode cycling, badges, view alternation) is mostly shared. Adding a new model is largely re-skinning, not re-architecting.
+
+In the codebase, each train model lives under `displays/train_models/{model}/`. Heavy reuse across models is expected.
+
+### Per-model IRL line scope (in-spec vs best-effort)
+
+Every train series only runs on a fixed subset of JR East lines IRL — and real-world PIDS only ever displays data from those lines. The exact line↔series mappings are NOT memorized; ask or look up when scope matters for a design decision.
+
+The simulator accepts **any** route loaded into **any** train model — including routes the active model never serves IRL (Yamanote / Chuo / Keihin-Tōhoku used as long-route stress tests, the `_mock` catalog, future user-supplied routes). Reality only constrains the in-spec subset.
+
+| Route relative to active model | Behavior |
+|---|---|
+| **In-spec** (model's IRL lines) | Match real PIDS |
+| **Out-of-spec** | Best-effort (floors below) |
+
+- **Hard floor:** no crashes, no missing-key errors, no broken layouts. Cycling, skip animation, view alternation behave identically to in-spec routes.
+- **Soft floor:** long names truncate, missing translations fall back, odd stop counts use existing layout regimes.
+- **Not obligated:** IRL-accurate fidelity for a line the model never serves — there's no reference to match.
+
+When a specific line or series comes up in conversation, treat it as scope context for the active model — not a request to recite mappings.
+
+### IRL display conventions
+
+Behaviors true on real trains and mirrored by the simulator:
+
+- **Destination stays kanji even in furigana mode.** Only station name and prefix cycle. English mode uses "Bound for" + English destination.
+- **Stop-level destination override.** Circular routes (Yamanote) change the displayed destination as the train traverses the loop.
+- **Station code 3-letter Roman badge** for ~22 major interchange stations (AKB, TYO, …). Rule of thumb: "3+ JR East systems converge," with documented exceptions. Smaller stations use 2-character katakana telegraph codes (電略) — separate internal system, not modeled here.
+- **Compound destinations** like 品川・東京 use a `&` separator on real PIDS for the multi-line layout.
+- **English text uses modified Hepburn romanization with macrons** (Tōkyō, Chūō, Etchūjima). JSON-encoding details in [DATA_FORMAT.md](DATA_FORMAT.md).
+
 ## Session Startup
 
 Before doing anything else:
@@ -37,9 +74,10 @@ pids_jre_simulator/
 ├── preview_display.py                 # Audio-free preview entry point — uses PASimulator(preview=True)
 ├── displays/                          # Modular display system
 │   ├── base.py                        # DisplayMode enum, ModeCycler
+│   ├── utils.py                       # Shared helpers: draw_station_code_badge, draw_route_disclaimer, draw_text_given_width
 │   └── train_models/e235_1000/
 │       ├── upper_lcd.py               # Japanese/Furigana/EnglishDisplay, UpperDisplay
-│       └── lower_lcd.py               # Japanese/EnglishDisplay (placeholder), LowerDisplay
+│       └── lower_lcd.py               # JapaneseDisplay (full route) + JapaneseEightStationDisplay (8-station zoomed) + EnglishDisplay placeholder + LowerDisplay manager (24s view-cycler)
 ├── data/
 │   ├── translations.json              # Station names (furigana, english)
 │   ├── train_types.json               # Train type English translations
@@ -62,14 +100,15 @@ pids_jre_simulator/
 
 ## Key Features
 
-1. **Display Cycling** (2s each): KANJI → FURIGANA → ENGLISH. Destination always kanji (IRL behavior).
+1. **Display Cycling** (4s each, `STATION_DISPLAY_INTERVAL`): KANJI → FURIGANA → ENGLISH. Destination always kanji (IRL behavior).
 2. **Modular Architecture**: Per-train-model displays (E235-1000, E231-500...). Mode renderers are self-contained.
 3. **Stop-Level Dest Override**: Circular routes (Yamanote) change destination mid-route.
 4. **Real-Time Countdown**: `TIME_SCALE=60` (60s = 1 travel minute), floor division, forces "1" on last PA.
 5. **Audio**: -15 LUFS normalization, double-buffered temp files.
 6. **Station Skip**: Time-based red arrow progression through passing stations.
-7. **Station Code Badge**: JY/03 framed square + optional 3-letter code (AKB, TYO, ...) for the 22 major JR East interchange stations. Code source: `data/stations.json` keyed by Japanese name.
-8. **Single train-position index** (`app.py` `AppState`): `state.curr_stop` is the only stored "where is the train" index. The visual cursor `state.cursor_pos` is a derived property: `curr_stop - max(0, skip - skip_progress)`. During skip animation the cursor lags behind curr_stop and walks forward as `skip_progress` ticks up. All rendering uses global indices; rendering iterates `(global_idx, stop)` pairs from `_get_stops_list_disp()` and local column index appears only in pixel math.
+7. **Station Code Badge**: JY/03 framed square + optional 3-letter code (AKB, TYO, ...) for the ~22 major JR East interchange stations. Source: `data/stations.json`.
+8. **Lower-LCD view alternation**: 24 s cycle between full-route view and 8-station zoomed view, independent of upper's 4 s language cycler.
+9. **Single train-position index** (`app.py` `AppState`): `state.curr_stop` is the only stored position; `state.cursor_pos` is a derived property that lags behind during skip animation.
 
 ## Controls
 
@@ -85,10 +124,12 @@ Yellow hint square = multiple PA tracks available.
 
 **Don't read these upfront — consult when needed:**
 
-- **Data/JSON** → Read [DATA_FORMAT.md](DATA_FORMAT.md) first
-- **Upper LCD** → Read [UPPER_DISPLAY_UPDATE.md](UPPER_DISPLAY_UPDATE.md) first
-- **Lower LCD** → Read [LOWER_DISPLAY_UPDATE.md](LOWER_DISPLAY_UPDATE.md) first (sections marked **🔁 Shared with UPPER** are duplicated — keep in sync)
+- **Data/JSON** → [DATA_FORMAT.md](DATA_FORMAT.md) — `route.json` / `translations.json` / `stations.json` shapes, validation rules
+- **LCD displays** (upper or lower) → [DISPLAY.md](DISPLAY.md) — architecture, mode rendering, skip animation, layout gotchas, draw-method subtleties
+- **Real-world JR East context** → already in this doc's "Mental Model" section above (preloaded — keep it in head, don't re-read each session)
 - **Audio/Diagram** → Use `/split-audio` skill (PA + STA splitting, naming conventions, route.json updates)
-- **Code Patterns** → Read [.claude/rules/notes.md](.claude/rules/notes.md) — font loading, JSON paths, PyInstaller, station skip logic, long-route refresh, preview mode
+- **Cross-cutting code patterns** → [.claude/rules/notes.md](.claude/rules/notes.md) — font loading on Windows, PyInstaller paths, preview mode, countdown system. (Display gotchas live in DISPLAY.md, not here.)
 - **Testing / previewing** → `uv run preview_display.py` defaults to the mock catalog (`audio/_mock/main`). Keys: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. See notes.md "Preview Mode" for `jump_to_stop` backward-rounding semantics.
 - **Building/Releasing** → Use `/build` skill
+
+**Editing docs?** Check the placement table in [.claude/skills/session-recap/SKILL.md](.claude/skills/session-recap/SKILL.md) before writing — `notes.md` is for cross-cutting code only, not display or data work.

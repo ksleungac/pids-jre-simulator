@@ -60,30 +60,47 @@ Wait for the user to:
 
 After user approval, update the appropriate files. **Each piece of information has ONE home — never duplicate across files.**
 
+> **The placement table below applies *always*, not just at `/session-recap` time.** Whenever you (Claude) write or edit a doc *during* a session — not just at recap — consult this table first. `notes.md` is NOT the kitchen sink. Mental-model framing → `CLAUDE.md` (preloaded). Display gotcha → `DISPLAY.md`. JSON shape → `DATA_FORMAT.md`. Cross-cutting code pattern → `notes.md`. This rule is also restated in `preferences.md` so it's loaded at session startup.
+
+#### The preloaded vs progressive split
+
+A core organizing principle for placement decisions:
+
+- **Preloaded** = always in Claude's context (CLAUDE.md, the rules files, MEMORY.md). This is for things a human working on the project already has *in their head* — what the project is modeling, scope/policy, real-world conventions, working preferences, hard rules. Re-deriving them every session would be silly; humans don't context-switch back to "what is JR East" each time they touch the codebase.
+- **Progressive** = read on demand when working on that submodule (DISPLAY.md, DATA_FORMAT.md, etc.). This is implementation detail — draw-method gotchas, JSON field minutiae, layout invariants. Loading these every session bloats context with noise; loading them when actually editing the submodule lands them where they're needed.
+
+When deciding placement, ask: *would a human working on this project have this in their head, or would they look it up when they hit the relevant submodule?*
+
+- "What does the simulator model?" → in head → CLAUDE.md
+- "What's the in-spec scope for this train model?" → in head → CLAUDE.md
+- "How does the 8-station view's window invariant work?" → look up → DISPLAY.md
+- "What's the exact `pa` field encoding?" → look up → DATA_FORMAT.md
+
+The slim-CLAUDE rule applies to *implementation detail*, not framing. Mental-model content can grow CLAUDE.md modestly without violating the principle — that's what CLAUDE.md is for.
+
 #### Where things live (single source of truth)
 
 | What | Where | NOT in |
 |------|-------|--------|
-| Project overview, file structure, module table, key features, commands | `CLAUDE.md` | rules files |
-| Implementation patterns, code gotchas, edge cases, data validation | `.claude/rules/notes.md` | CLAUDE.md |
-| User preferences, collaboration style, naming conventions | `.claude/rules/preferences.md` | CLAUDE.md, MEMORY.md |
+| Project overview, file structure, module table, key features, controls, **mental model (project framing, train family, IRL line scope, in-spec/best-effort policy, IRL display conventions, Hepburn)** | `CLAUDE.md` | rules files, domain docs |
+| Cross-cutting code patterns (font loading, PyInstaller paths, preview mode, countdown) | `.claude/rules/notes.md` | CLAUDE.md, domain docs |
+| User preferences, collaboration style, naming conventions, doc-placement hygiene, contract-pointer convention | `.claude/rules/preferences.md` | CLAUDE.md, MEMORY.md |
 | Red lines, hard boundaries | `.claude/rules/redlines.md` | CLAUDE.md, MEMORY.md |
 | Lessons from past mistakes | `.claude/rules/critical_lessons.md` | anywhere else |
-| Build/distribution details, folder structure | `.claude/skills/build/SKILL.md` | CLAUDE.md, notes.md |
-| JSON field definitions, data format conventions | `DATA_FORMAT.md` | CLAUDE.md |
-| Upper LCD architecture, conventions, gotchas | `UPPER_DISPLAY_UPDATE.md` | CLAUDE.md, notes.md |
-| Lower LCD architecture, conventions, gotchas | `LOWER_DISPLAY_UPDATE.md` | CLAUDE.md, notes.md |
+| Build/distribution details, PyInstaller invocation, version metadata, junction handling | `.claude/skills/build/SKILL.md` | CLAUDE.md, notes.md |
+| JSON field definitions, validation rules, data format encoding (incl. Hepburn examples) | `DATA_FORMAT.md` | CLAUDE.md, notes.md |
+| LCD architecture, mode rendering, skip animation, layout gotchas, draw-method subtleties (upper AND lower) | `DISPLAY.md` | CLAUDE.md, notes.md |
 | Daily session logs | `memory/YYYY-MM-DD.md` | — |
 | Long-term memory index (pointers only) | `memory/MEMORY.md` | — |
 
 #### Rules for updating
 
-1. **Before writing, check if the info already exists** somewhere. Update in place, don't add a second copy.
-2. **CLAUDE.md stays slim** — it's a quick-reference entry point with pointers, not a knowledge dump. Only add to it if the info doesn't fit in any rules/skills file.
-3. **Cross-reference, don't copy** — e.g., CLAUDE.md says "See `/build` skill" rather than repeating the folder tree.
+1. **Before writing, check if the info already exists.** Update in place, don't add a second copy.
+2. **CLAUDE.md stays slim on implementation, generous on framing.** Mental-model content (what we're modeling, scope, conventions) belongs there *because* it's preloaded. Implementation details still go to domain docs.
+3. **Cross-reference, don't copy** — e.g., `DATA_FORMAT.md` says "see CLAUDE.md § Mental Model for the convention itself" rather than re-explaining it.
 4. **MEMORY.md is an index** — one-line pointers to memory files. No content, no rules, no preferences.
-5. **When in doubt about placement**: implementation detail → `notes.md`, preference → `preferences.md`, build/release → `build/SKILL.md`.
-6. **Don't bloat one md.** If `notes.md` (or any single doc) is already large, distribute new content to its narrower-domain home: upper-LCD topic → `UPPER_DISPLAY_UPDATE.md`, lower-LCD topic → `LOWER_DISPLAY_UPDATE.md`, etc. `notes.md` is for cross-cutting patterns; display-specific quirks (rendering gotchas, draw-method subtleties, font metrics) belong with the display doc that already discusses those code paths. Reviewer false positives that recur within a specific module → that module's display doc, not a generic "review notes" pile.
+5. **When in doubt about placement**: framing/IRL/scope → `CLAUDE.md` (Mental Model); display detail → `DISPLAY.md`; JSON shape → `DATA_FORMAT.md`; cross-cutting code → `notes.md`; preference → `preferences.md`; build/release → `build/SKILL.md`.
+6. **Don't bloat domain docs with framing, or CLAUDE.md with implementation.** They're complementary — preloaded framing + progressive detail. Each violation drives one of the failure modes that prompted this principle.
 
 ---
 
@@ -122,10 +139,10 @@ After a session fixing the Yamanote line destination display:
 - Black formatting should run via pre-commit hook, not manually
 
 ### Documentation Updates Needed
-- CLAUDE.md: Add stop-level dest override section, update known behaviors #10-11, add notes 15-19
+- CLAUDE.md: Update "Mental Model" if a new IRL convention or scope fact came up; add to Module Responsibilities / Key Features only if structural
 - DATA_FORMAT.md: Document compound destination format, expand stop-level override examples
-- UPPER_DISPLAY_UPDATE.md: Update architecture diagram if applicable
-- .claude/rules/notes.md: Add new edge case if discovered
+- DISPLAY.md: Update architecture diagram if applicable, document new mode-renderer subtleties
+- .claude/rules/notes.md: Add ONLY if the new fact is genuinely cross-cutting (font loading, PyInstaller, preview) — otherwise route to CLAUDE.md/DISPLAY/DATA_FORMAT
 - .claude/rules/preferences.md: Update if new preferences expressed
 - memory/YYYY-MM-DD.md: Log session highlights
 ```

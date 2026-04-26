@@ -18,11 +18,10 @@ from displays.utils import draw_text, draw_text_given_width
 # =============================================================================
 # Region Map — E235-1000 upper LCD layout (descriptive)
 #
-# Each region has a declared "confinement" — the rectangle inside which
-# everything the region draws (bg fill AND glyphs) must visually land. Clear
-# rect is not special; it's just one of the things drawn for the region, same
-# rule applies. The convention is documented in UPPER_DISPLAY_UPDATE.md
-# "Element Clear-Background Convention".
+# CONTRACT: every region must visually confine its drawing (clear bg + glyphs)
+# to its declared confinement rect below. See DISPLAY.md § "Element Clear-
+# Background Convention" — has D1/D2 distinction, probing methodology, and the
+# 2026-04-25 bug history (English draw_destination had no clear rect; bled).
 #
 # Coordinates are within the upper LCD area (y=0..UPPER_HEIGHT=117).
 # "Debug" tints come from _DEBUG_COLORS below — `--debug-grid` paints them so

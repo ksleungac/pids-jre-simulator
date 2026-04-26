@@ -41,6 +41,9 @@ class AppState:
         """
         return self.curr_stop - max(0, self.skip - self.skip_progress)
 
+    # CONTRACT: skip-animation state owner — renderer stays pure.
+    # See DISPLAY.md § "Station Skip Logic (full spec)".
+    # Wrong: mutating skip from the renderer. Right: bump skip_progress here; cursor_pos auto-derives.
     def update_skip_progress(self, current_time: float) -> None:
         """Advance ``skip_progress`` through passing stations based on elapsed time.
 
@@ -364,6 +367,9 @@ class PASimulator:
         self.state.departure_time = 0.0
         self.upper.set_state(target, 0)
 
+    # CONTRACT: two branches (advance overwrites skip; within-stop zeroes it)
+    # together prevent single-PA-target leakage. See DISPLAY.md §
+    # "Station Skip Logic (full spec)" before restructuring either branch.
     def _next_pa(self) -> None:
         """Advance to next PA announcement."""
         # Don't advance if audio is already playing

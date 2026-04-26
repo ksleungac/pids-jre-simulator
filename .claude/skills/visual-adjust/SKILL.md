@@ -61,7 +61,11 @@ see "Side-by-side composites" below.
 ## Rules
 
 - **One element at a time**: Don't adjust station name and destination simultaneously
-- **Clean up screenshots** as you go — delete old PNGs after user has seen them
+- **Never delete the latest iteration's screenshot.** The user reviews each frame after
+  it's saved — they need to be able to open it after the response ends. Only clean up
+  *older* screenshots once a *newer* one exists on disk for the same scenario. Pattern:
+  before each new screenshot, `rm screenshot_v<N-1>_*.png`; the freshly-rendered
+  `screenshot_v<N>_*.png` stays. Never end a turn with no recent screenshot present
 - **Show multiple examples**: After getting one station right, render 3-4 others
   (short names, long names, macrons) to verify it works broadly
 - **Self-iterate for pixel perfection**: When adjusting values (font size, position),
@@ -145,11 +149,14 @@ When writing or adjusting layout code:
 --stop <index>             # Station index (0-based)
 --pa <0|1|2>               # 0=次は/Next, 1=まもなく/Arriving at, 2=ただいま/Now stopping at
 --route <name|path>        # Route shorthand (e.g. yamanote, sobu/1217F) or path; default _mock/main
+--lower-view <full|eight|cycle>  # Force lower LCD view; default 'cycle' (24s alternation).
+                                 # 'eight' or 'full' freezes the view-cycler for deterministic frames.
 --debug-grid               # Tint each upper-LCD region's clear rect with a unique color
 
 # Examples
 uv run preview_display.py --screenshot out.png --mode english --stop 0 --pa 2
 uv run preview_display.py --screenshot out.png --mode kanji --stop 3 --pa 0
+uv run preview_display.py --screenshot 8sta.png --route sobu/1217F --stop 7 --lower-view eight
 uv run preview_display.py --debug-grid --route sobu/1217F --mode english --stop 18 --pa 2
 ```
 
@@ -161,7 +168,7 @@ When the work is about **region territory** (where an element's drawing should a
 - **Under-clears** — untinted patches *inside* what should be a fully-painted region mean the clear rect is smaller than the region's confinement
 - **Glyph escapes** — text/glyphs landing on top of a *neighboring* region's tint is a containment violation
 
-The principle: **anything a region draws (bg fill, glyphs, decorations) must visually stay inside that region's confinement.** Clear rect is not special — it's just one of the things drawn. Same rule for all of them. See `UPPER_DISPLAY_UPDATE.md` "Element Clear-Background Convention" for the full statement.
+The principle: **anything a region draws (bg fill, glyphs, decorations) must visually stay inside that region's confinement.** Clear rect is not special — it's just one of the things drawn. Same rule for all of them. See `DISPLAY.md` "Element Clear-Background Convention" for the full statement.
 
 ### Two checks: D1 (cheap) and D2 (real)
 
@@ -191,7 +198,7 @@ When pixel-probing for containment, **isolate the region** so neighbors' content
   glyph footprint. All three mode renderers (Japanese / Furigana / English) share the
   same territory for the same element. Adding a new region: register it in
   `_DEBUG_COLORS` AND the Region Map comment block at the top of the LCD module.
-  See `UPPER_DISPLAY_UPDATE.md` "Element Clear-Background Convention" for full rules,
+  See `DISPLAY.md` "Element Clear-Background Convention" for full rules,
   including the band-bottom clamp that prevents the station's tall 2-line variant
   from clobbering the prefix/clock above.
 - **Shell flakiness**: paths in this repo can vary between machines; rely on

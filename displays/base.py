@@ -18,6 +18,9 @@ class ModeCycler:
     Shared utility used by all train model displays.
     """
 
+    # CONTRACT: freeze a forced mode with `cycler.enabled = False`, NOT `paused`
+    # (silently creates a new attr; un-freezes on the next interval).
+    # See DISPLAY.md § "⚠️ Cycler.enabled vs Cycler.paused". Has bitten preview scripts.
     def __init__(self, mode_displays: dict, default_mode: DisplayMode = DisplayMode.ENGLISH):
         """
         Initialize mode cycler.
