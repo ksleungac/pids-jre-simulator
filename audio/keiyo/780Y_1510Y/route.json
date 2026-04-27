@@ -22,9 +22,9 @@
             "name": "蘇我",
             "pa": [],
             "sta": [
-                "1"
+                "soga"
             ],
-            "sta_cut": 20,
+            "sta_cut": 10.5,
             "time": 0,
             "sta_code": null
         },
@@ -35,9 +35,9 @@
                 "2"
             ],
             "sta": [
-                "JE17"
+                "chiba-minato"
             ],
-            "sta_cut": 18,
+            "sta_cut": 10.2,
             "time": 4,
             "sta_code": "JE17"
         },
@@ -48,9 +48,9 @@
                 "4"
             ],
             "sta": [
-                "JE16"
+                "inage-kaigan"
             ],
-            "sta_cut": 19,
+            "sta_cut": 11.1,
             "time": 4,
             "sta_code": "JE16"
         },
@@ -61,9 +61,9 @@
                 "6"
             ],
             "sta": [
-                "JE15"
+                "kemigawahama"
             ],
-            "sta_cut": 19,
+            "sta_cut": 11.5,
             "time": 3,
             "sta_code": "JE15"
         },
@@ -74,9 +74,9 @@
                 "8"
             ],
             "sta": [
-                "JE14"
+                "kaihin-makuhari"
             ],
-            "sta_cut": 31,
+            "sta_cut": 15.4,
             "time": 2,
             "sta_code": "JE14"
         },
@@ -87,9 +87,9 @@
                 "10"
             ],
             "sta": [
-                "JE12"
+                "shin-narashino"
             ],
-            "sta_cut": 16,
+            "sta_cut": 7.6,
             "time": 4,
             "sta_code": "JE12"
         },
@@ -100,9 +100,9 @@
                 "12"
             ],
             "sta": [
-                "JE11"
+                "minami-funabashi"
             ],
-            "sta_cut": 19,
+            "sta_cut": 11.9,
             "time": 3,
             "sta_code": "JE11"
         },
@@ -113,9 +113,9 @@
                 "14"
             ],
             "sta": [
-                "JE10"
+                "futamata-shimmachi"
             ],
-            "sta_cut": 19,
+            "sta_cut": 9.2,
             "time": 4,
             "sta_code": "JE10"
         },
@@ -126,9 +126,9 @@
                 "16"
             ],
             "sta": [
-                "JE09"
+                "ichikawa-shiohama"
             ],
-            "sta_cut": 21,
+            "sta_cut": 8.5,
             "time": 4,
             "sta_code": "JE09"
         },
@@ -139,9 +139,9 @@
                 "18"
             ],
             "sta": [
-                "JE08"
+                "shin-urayasu"
             ],
-            "sta_cut": 18,
+            "sta_cut": 7.5,
             "time": 2,
             "sta_code": "JE08"
         },
@@ -152,9 +152,9 @@
                 "20"
             ],
             "sta": [
-                "JE07"
+                "maihama_2_let-it-go"
             ],
-            "sta_cut": 18,
+            "sta_cut": 18.1,
             "time": 4,
             "sta_code": "JE07"
         },
@@ -165,9 +165,9 @@
                 "22"
             ],
             "sta": [
-                "JE06"
+                "kasai-rinkai-koen"
             ],
-            "sta_cut": 19,
+            "sta_cut": 10.9,
             "time": 3,
             "sta_code": "JE06"
         },
@@ -178,9 +178,9 @@
                 "24"
             ],
             "sta": [
-                "JE05"
+                "shin-kiba"
             ],
-            "sta_cut": 16,
+            "sta_cut": 9.3,
             "time": 3,
             "sta_code": "JE05"
         },
@@ -191,9 +191,9 @@
                 "26"
             ],
             "sta": [
-                "JE04"
+                "shiomi"
             ],
-            "sta_cut": 16,
+            "sta_cut": 11.1,
             "time": 3,
             "sta_code": "JE04"
         },
@@ -204,9 +204,9 @@
                 "28"
             ],
             "sta": [
-                "JE03"
+                "etchujima"
             ],
-            "sta_cut": 25,
+            "sta_cut": 24.1,
             "time": 3,
             "sta_code": "JE03"
         },
@@ -216,9 +216,9 @@
                 "29"
             ],
             "sta": [
-                "JE02"
+                "hatchobori"
             ],
-            "sta_cut": 25,
+            "sta_cut": 24.2,
             "time": 3,
             "sta_code": "JE02"
         },
@@ -228,9 +228,9 @@
                 "30"
             ],
             "sta": [
-                "JE01_TYO"
+                "tokyo"
             ],
-            "sta_cut": 25,
+            "sta_cut": 24.0,
             "time": 2,
             "sta_code": "JE01"
         }
