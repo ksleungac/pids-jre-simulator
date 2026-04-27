@@ -30,6 +30,13 @@ _sta_verify_*.json
 # Promote out of here when an experiment graduates into the standard workflow.
 /_experiments/
 
+# OCR calibration sources — full 2560×1440 desktop screenshots used by
+# data_tools/extract_ocr_assets.py to regenerate ocr_templates/. Local-only,
+# only present when re-extracting after the game HUD layout changes. The
+# committed runtime artifacts under ocr_templates/ are what's actually loaded
+# at runtime — these source PNGs are NOT a runtime dependency.
+/_ocr_calibration/
+
 # Build artifacts
 /version_info.txt
 /release_notes.md

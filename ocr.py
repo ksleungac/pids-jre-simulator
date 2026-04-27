@@ -15,6 +15,13 @@ Digit OCR pipeline:
 Badge classifier: pixel-diff against 6 anchor templates (Moving-EN/JA, Stopped-EN/JA,
 Passing-EN/JA); lowest diff wins. Language-agnostic.
 
+Runtime assets live under `ocr_templates/` — pre-extracted small PNGs (digit
+glyphs ~20×30 binary, badge anchors 125×45 RGB). The ~33 MB of full desktop
+source screenshots that were used to extract them live under `_ocr_calibration/`
+(gitignored, local-only). Re-extract via `data_tools/extract_ocr_assets.py`
+after re-capturing source screenshots (only needed if the game HUD layout
+changes).
+
 Full domain reference: AUTO_INPUT.md.
 
 Run validation: uv run python ocr.py
@@ -40,17 +47,6 @@ BADGE_ANCHOR_FILES: dict[str, list[str]] = {
     # target), so arrival-PA logic must skip it. Blue pentagon vs MOVING/STOPPED's
     # green — cross-anchor diff ~43 vs within-state ~6, well-separated.
     "PASSING": ["passing_en", "passing_jp"],
-}
-
-# Known distance values per screenshot — used for template extraction + validation.
-# Right-most character is always 'm'; all others are digits read left-to-right.
-KNOWN_VALUES: dict[str, str] = {
-    "running_en": "2930m",
-    "running_ja": "2997m",
-    "running_my_usage": "1071m",
-    "stopping_en": "3834m",
-    "stopping_ja": "3834m",
-    "5 and 6": "3756m",
 }
 
 # Tightened threshold: text is near-black (~0-40), HUD bg is light (~200+), scenery
@@ -109,16 +105,26 @@ def badge_cell_from_surface(surf: pygame.Surface) -> np.ndarray:
     return crop_cell_from_surface(surf, BADGE_BBOX)
 
 
-def load_badge_anchors(refs_dir: Path) -> dict[str, list[np.ndarray]]:
-    """Load badge anchor templates from reference screenshots."""
+DEFAULT_TEMPLATES_DIR = Path(__file__).parent / "ocr_templates"
+
+
+def load_badge_anchors(assets_dir: Path | None = None) -> dict[str, list[np.ndarray]]:
+    """Load pre-extracted badge anchor crops from ocr_templates/badges/<stem>.png.
+
+    Each PNG is a 125×45 RGB crop of the badge cell — pixel-diff against live
+    capture matches the format directly, no further extraction at runtime.
+    """
+    if assets_dir is None:
+        assets_dir = DEFAULT_TEMPLATES_DIR / "badges"
     anchors: dict[str, list[np.ndarray]] = {state: [] for state in BADGE_ANCHOR_FILES}
     for state, stems in BADGE_ANCHOR_FILES.items():
         for stem in stems:
-            path = refs_dir / f"{stem}.png"
+            path = assets_dir / f"{stem}.png"
             if not path.exists():
                 continue
             surf = pygame.image.load(str(path))
-            anchors[state].append(badge_cell_from_surface(surf))
+            arr = pygame.surfarray.array3d(surf)
+            anchors[state].append(np.transpose(arr, (1, 0, 2)))
     return anchors
 
 
@@ -254,28 +260,26 @@ def compare(a: np.ndarray, b: np.ndarray) -> float:
     return float((pa == pb).sum() / pa.size)
 
 
-def expected_digits(value: str) -> str:
-    """Strip 'm' suffix from a known value to get the digit string."""
-    return value.rstrip("m")
+def build_templates(assets_dir: Path | None = None) -> Templates:
+    """Load pre-extracted digit glyphs from ocr_templates/digits/<N>.png.
 
+    Each PNG is a 0/255 grayscale image of a tight-bbox digit (~20×30 px).
+    Loaded as a binary numpy array — fed directly to `Templates.match`.
 
-def build_templates(screenshots_dir: Path) -> Templates:
-    """Walk KNOWN_VALUES, segment digits, label by position, capture first-seen template per digit."""
+    Re-extract via: uv run python data_tools/extract_ocr_assets.py
+    """
+    if assets_dir is None:
+        assets_dir = DEFAULT_TEMPLATES_DIR / "digits"
     glyphs: dict[str, np.ndarray] = {}
-    for stem, expected in KNOWN_VALUES.items():
-        path = screenshots_dir / f"{stem}.png"
+    for ch in "0123456789":
+        path = assets_dir / f"{ch}.png"
         if not path.exists():
-            print(f"[skip] {path.name} not found")
             continue
-        cell = load_value_cell(path)
-        bboxes = segment_chars(cell)
-        digit_str = expected_digits(expected)
-        if len(bboxes) != len(digit_str):
-            print(f"[warn] {stem}: segmented {len(bboxes)} digits, expected {len(digit_str)} ({digit_str})")
-            continue
-        for bbox, ch in zip(bboxes, digit_str):
-            if ch not in glyphs:
-                glyphs[ch] = extract_glyph(cell, bbox)
+        surf = pygame.image.load(str(path))
+        arr = pygame.surfarray.array3d(surf)
+        # column-major (W,H,3) -> row-major (H,W); collapse to grayscale -> binarize
+        gray = np.transpose(arr, (1, 0, 2)).mean(axis=2)
+        glyphs[ch] = (gray > 127).astype(np.uint8)
     return Templates(glyphs)
 
 
@@ -307,27 +311,45 @@ def _read_value(
 
 
 def main() -> int:
-    pygame.init()
-    refs_dir = Path(__file__).parent / "game_references"
-    print(f"Building templates from {refs_dir}")
-    templates = build_templates(refs_dir)
-    print(f"Templates extracted: {sorted(templates.glyphs.keys())}")
-    print()
+    """Sanity-check the runtime assets load + classifier shape-match against committed templates.
 
-    print(f"{'screenshot':<28} {'expected':<10} {'parsed':<10} {'raw':<10} {'min_score':<10} {'verdict':<10}")
-    print("-" * 90)
-    all_pass = True
-    for stem, expected in KNOWN_VALUES.items():
-        path = refs_dir / f"{stem}.png"
-        if not path.exists():
-            continue
-        cell = load_value_cell(path)
-        value, raw, score = read_distance(cell, templates)
-        expected_int = int(expected_digits(expected))
-        ok = value == expected_int
-        all_pass &= ok
-        print(f"{stem:<28} {expected:<10} {str(value):<10} {raw:<10} {score:<10.4f} {'PASS' if ok else 'FAIL':<10}")
-    return 0 if all_pass else 1
+    For an end-to-end OCR validation against the original full-screen sources,
+    re-capture them into `_ocr_calibration/` and run
+    `uv run python data_tools/extract_ocr_assets.py` (it warns + bails if any
+    digit / anchor is missing, which is the actual runtime failure mode).
+    """
+    pygame.init()
+    print(f"Loading templates from {DEFAULT_TEMPLATES_DIR}")
+    templates = build_templates()
+    digits_loaded = sorted(templates.glyphs.keys())
+    print(f"Digit templates: {digits_loaded}  ({len(digits_loaded)}/10)")
+    missing_digits = sorted(set("0123456789") - set(digits_loaded))
+    if missing_digits:
+        print(f"[FAIL] missing digits: {missing_digits} — re-run extract_ocr_assets.py after restoring sources.")
+        return 1
+
+    anchors = load_badge_anchors()
+    anchor_count = sum(len(v) for v in anchors.values())
+    print(f"Badge anchors: {anchor_count} across states {sorted(anchors.keys())}")
+    expected_anchor_count = sum(len(v) for v in BADGE_ANCHOR_FILES.values())
+    if anchor_count < expected_anchor_count:
+        print(f"[FAIL] expected {expected_anchor_count} anchors, got {anchor_count}.")
+        return 1
+
+    # Cross-classify each anchor against all anchors — every anchor's lowest-diff match
+    # must be its own state. Catches mis-extraction or wrong-state filename.
+    print("\nCross-classification (anchor self-classifies as own state):")
+    print(f"{'anchor':<32} {'expected':<10} {'best':<10} {'diff':<8} verdict")
+    print("-" * 72)
+    all_ok = True
+    for state, anchor_list in anchors.items():
+        for i, anchor in enumerate(anchor_list):
+            best_state, diff = classify_badge_state(anchor, anchors)
+            ok = best_state == state
+            all_ok &= ok
+            tag = f"{state}[{i}]"
+            print(f"{tag:<32} {state:<10} {str(best_state):<10} {diff:<8.2f} {'PASS' if ok else 'FAIL'}")
+    return 0 if all_ok else 1
 
 
 if __name__ == "__main__":

@@ -54,3 +54,42 @@ AFTER:  "Let me first check what files actually exist"
 - Verify after completion
 
 **Measure twice, cut once.**
+
+---
+
+## ⚠️ CRITICAL: Runtime-required materials must be committed (or have a deterministic build path)
+
+**Date:** 2026-04-27
+
+### The Incident
+The `auto_input` OCR feature loaded its digit templates + badge anchors from `game_references/*.png` at AutoDriver startup. Those PNGs were ~33 MB of full desktop screenshots, and they were **never committed** — gitignored implicitly via being untracked, treated by the user as "dev references." The user deleted them between sessions thinking they were dev cruft. Auto-driver came up with zero templates → silent OCR failure on the live drive (warning logged, but feature unusable).
+
+### The Rule
+> **If your code reads a file at runtime, that file must either be (a) committed in the repo, or (b) deterministically regenerable from committed sources via a one-command build step. Never both "required at runtime" AND "named like dev material" AND "uncommitted."**
+
+The anti-pattern is: a file is *required at runtime*, lives under a *dev-named folder* (`game_references/`, `references/`, `samples/`, `examples/`), and is *not in git*. Each property alone is fine. Combined, the user can't tell the file's status from its name, deletes it, and the feature breaks silently.
+
+### Applies To
+- Template files, calibration data, pre-trained models, fixtures, asset bundles
+- Anything `path.exists() else continue` patterns that silently no-op when missing
+- Especially: data extracted/derived from much larger sources (the size disparity is what tempts you to leave the big sources uncommitted)
+
+### The Pattern (Use This Every Time)
+
+When a feature needs a non-code artifact at runtime:
+
+1. **Ask: should this artifact be committed?** Default yes.
+2. **If small (< few MB total)**: commit it. Put it under a name that signals "runtime input" not "dev material" — e.g. `<feature>_templates/`, `data/<feature>/`, NOT `references/` or `samples/`.
+3. **If large (> few MB)** OR derived from larger sources: commit the *derived small artifact*, leave the *source* gitignored. Add an extraction script (`data_tools/extract_<feature>_assets.py` or similar) that regenerates the artifact deterministically from sources. Document the source-folder location + how to recapture it.
+4. **Fail loudly** when the artifact is missing at runtime. Not `silently skip`, not `continue with degraded behavior`. Log a `FATAL` with the path expected and the regeneration command, and refuse to start.
+
+### Why This Matters
+- **Silent no-op on missing files is the worst-case behavior** — the feature looks like it loaded, then misbehaves at the worst moment (the live drive). A loud FATAL at startup would have caught this in seconds.
+- **Naming carries semantics.** "References" / "samples" / "examples" all imply optional / dev-only. Use names that match status: runtime input gets a runtime-input name.
+- **Two-part repos are normal** (committed binaries / data files alongside code). The mistake isn't having binary data; it's leaving that data in a "is this dev or runtime?" ambiguous state.
+
+### Concrete fix applied (this incident)
+- Source screenshots → `_ocr_calibration/` (gitignored, `_` prefix matches project local-only convention).
+- Extracted templates → `ocr_templates/digits/*.png` + `ocr_templates/badges/*.png` (committed, ~50 KB total).
+- Extraction script → `data_tools/extract_ocr_assets.py` (one-command regeneration when sources are recaptured).
+- AutoDriver now FATAL-exits with a helpful message if templates are missing.

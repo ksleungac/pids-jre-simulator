@@ -259,7 +259,6 @@ class AutoDriver:
     sim: "PASimulator"
     lead_m: int = DEFAULT_LEAD_M
     interval_s: int = SAMPLE_INTERVAL_S
-    refs_dir: Path = field(default_factory=lambda: Path(__file__).parent / "game_references")
 
     # Internal state — set by _run on thread start
     _detector: _Detector = field(init=False)
@@ -285,11 +284,17 @@ class AutoDriver:
 
     def _run(self) -> None:
         print("[AutoDriver] Loading OCR templates + badge anchors...")
-        templates = build_templates(self.refs_dir)
-        badge_anchors = load_badge_anchors(self.refs_dir)
+        templates = build_templates()
+        badge_anchors = load_badge_anchors()
         missing = set("0123456789") - templates.glyphs.keys()
         if missing:
-            print(f"[AutoDriver] WARNING: missing digit templates: {sorted(missing)}")
+            print(f"[AutoDriver] FATAL: missing digit templates: {sorted(missing)} — auto-driver disabled.")
+            print("[AutoDriver] Re-run `uv run python data_tools/extract_ocr_assets.py` to re-extract from _ocr_calibration/.")
+            return
+        if not any(badge_anchors.values()):
+            print("[AutoDriver] FATAL: no badge anchors loaded — auto-driver disabled.")
+            print("[AutoDriver] Re-run `uv run python data_tools/extract_ocr_assets.py` to re-extract from _ocr_calibration/.")
+            return
 
         print("[AutoDriver] Initializing dxcam...")
         camera = dxcam.create(output_color="BGRA")

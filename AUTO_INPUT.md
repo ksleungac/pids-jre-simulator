@@ -432,7 +432,10 @@ auto/manual key activity.
 | `ocr.py` | OCR pipeline + badge classifier; runnable for offline validation (`uv run python ocr.py`) |
 | `data_tools/capture_game.py` | Standalone observation/debug script (separate process, synthetic keystrokes, optional `--route` flag for PA-count check) |
 | `data_tools/test_dxcam.py` | Diagnostic — full-desktop dxcam capture + brightness check |
-| `game_references/*.png` | Labeled reference screenshots for template + badge anchor extraction |
+| `ocr_templates/digits/*.png` | **Runtime input** — 10 pre-extracted digit glyphs (~20×30 binary PNGs, ~1 KB each). Loaded by `ocr.build_templates()`. Committed. |
+| `ocr_templates/badges/*.png` | **Runtime input** — 6 pre-extracted badge cell crops (125×45 RGB PNGs, ~5 KB each). Loaded by `ocr.load_badge_anchors()`. Committed. |
+| `_ocr_calibration/*.png` | **Local-only** source screenshots (full 2560×1440 desktop captures, ~33 MB total). Gitignored. Only needed when re-extracting `ocr_templates/` after a game HUD layout change. |
+| `data_tools/extract_ocr_assets.py` | One-shot extractor: reads `_ocr_calibration/` source screenshots → writes `ocr_templates/`. Run after re-capturing sources, then commit the diff. |
 | `_experiments/live_captures/` | Saved HUD crops from prior live testing (gitignored — `_experiments/` itself is now an artifact-only folder; OCR + layout modules promoted to root) |
 | `fonts/ShinGoPr6N-Medium.otf` | Latin + CJK font used by debug panel for station names |
 
@@ -440,12 +443,12 @@ auto/manual key activity.
 
 If the game runs at a different resolution:
 
-1. Capture a screenshot in the target resolution with HUD visible (running mode + at-platform mode)
+1. Capture screenshots in the target resolution with HUD visible (running mode + at-platform mode + passing-through mode)
 2. Identify HUD position (top-right); update `HUD_BBOX` in `hud_layout.py`
 3. Crop HUD; identify cell positions within it; update `*_VALUE_BBOX` and `BADGE_BBOX`
-4. Extract new digit templates from labeled distance-value screenshots (`KNOWN_VALUES` in `ocr.py`)
-5. Save 6 badge anchor screenshots (Moving-EN, Moving-JA, Stopped-EN, Stopped-JA, Passing-EN, Passing-JA) into `game_references/` — note PASSING is the rapid-service "Pass" / "通過" blue pentagon (filenames `passing_en.png`, `passing_jp.png`)
-6. Run `uv run python ocr.py` to validate against references
+4. Save the 9 source screenshots into `_ocr_calibration/` (gitignored). Filenames must match the keys in `KNOWN_VALUES` (digits) + `BADGE_ANCHOR_FILES` (badges) — both live in `data_tools/extract_ocr_assets.py` and `ocr.py` respectively. PASSING is the rapid-service "Pass" / "通過" blue pentagon (filenames `passing_en.png`, `passing_jp.png`).
+5. Run `uv run python data_tools/extract_ocr_assets.py` — extracts digit glyphs + badge anchor crops into `ocr_templates/`.
+6. Run `uv run python ocr.py` to sanity-check the new templates load + cross-classify cleanly. Commit the `ocr_templates/` diff.
 
 Digit templates are resolution-specific because exact-pixel matching requires
 the same glyph dimensions. A future enhancement could resize templates by
