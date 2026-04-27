@@ -8,7 +8,7 @@ import keyboard
 import time
 from typing import Dict, Any, Optional
 
-from constants import FRAME_RATE, KEY_REPEAT_DELAY, TIME_SCALE
+from constants import DEBUG_PANEL_HEIGHT, FRAME_RATE, KEY_REPEAT_DELAY, TIME_SCALE
 from audio import AudioPlayer
 from displays.train_models.e235_1000 import UpperDisplay, LowerDisplay, S_WIDTH, S_HEIGHT
 from displays.utils import draw_text
@@ -97,7 +97,7 @@ class _SilentAudio:
 class PASimulator:
     """Main application class managing game loop and state."""
 
-    def __init__(self, work_dir: str, route_data: Optional[Dict] = None, preview: bool = False):
+    def __init__(self, work_dir: str, route_data: Optional[Dict] = None, preview: bool = False, auto_input: bool = False):
         """Initialize the PA Simulator.
 
         Args:
@@ -107,8 +107,14 @@ class PASimulator:
                 (used by preview_display.py — skips mixer init and win32gui
                 positioning, and routes key input through pygame events instead
                 of the global `keyboard` library).
+            auto_input: If True, allocate an extra DEBUG_PANEL_HEIGHT row above
+                the LCD for the auto-input debug panel. The LCD code is unchanged
+                — it draws to a sub-surface positioned below the panel and is
+                unaware of the offset. Populated by `auto_input.AutoDriver` via
+                `self.auto_input_status` dict.
         """
         self.preview = preview
+        self.auto_input = auto_input
         self.work_dir = work_dir
         self.route_data = route_data
         self._load_route_data()
@@ -140,6 +146,18 @@ class PASimulator:
         self.lower.set_state(self.state)
 
         self.running = True
+
+        # Set by an external auto-input driver (auto_input.AutoDriver running in a
+        # background thread) to request a PA fire from the main thread. The input
+        # loop checks this alongside keyboard.is_pressed("page down") and resets
+        # to False after firing — so auto-fires take the same code path as manual
+        # PageDown presses. See AUTO_INPUT.md.
+        self.pending_next_pa: bool = False
+
+        # Latest OCR readings + detector state, written by AutoDriver thread, read
+        # by the debug panel on the main thread. Atomic dict assignment in CPython.
+        # Empty dict means "no data yet" — the panel renders a placeholder.
+        self.auto_input_status: dict = {}
 
     def _load_route_data(self) -> None:
         """Load route.json configuration and merge with data/translations.json."""
@@ -218,12 +236,25 @@ class PASimulator:
         return merged
 
     def _init_pygame(self) -> None:
-        """Initialize pygame display."""
+        """Initialize pygame display.
+
+        When ``auto_input`` is True, the window is taller by ``DEBUG_PANEL_HEIGHT``
+        and ``self.screen`` is a sub-surface positioned below the panel area —
+        existing LCD code is oblivious to the offset. ``self.debug_surface`` is
+        the panel's own sub-surface (None when auto-input is off).
+        """
         pygame.init()
         if not self.preview:
             pygame.mixer.init()
         self.clock = pygame.time.Clock()
-        self.screen = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
+        panel_h = DEBUG_PANEL_HEIGHT if self.auto_input else 0
+        self.window = pygame.display.set_mode((S_WIDTH, S_HEIGHT + panel_h))
+        if self.auto_input:
+            self.debug_surface: Optional[pygame.Surface] = self.window.subsurface((0, 0, S_WIDTH, panel_h))
+            self.screen = self.window.subsurface((0, panel_h, S_WIDTH, S_HEIGHT))
+        else:
+            self.debug_surface = None
+            self.screen = self.window
         pygame.display.set_caption("PIDS Preview  —  PageDown=PA  PageUp=Mode  ←/→=Jump  ESC=Quit" if self.preview else "PA Simulator")
 
         if not self.preview:
@@ -240,6 +271,7 @@ class PASimulator:
         self.upper.set_state(self.state.curr_stop, self.state.cnt_pa)
         self.upper.draw()
         self.lower.draw()
+        self._render_panel()
         pygame.display.flip()
 
         while self.running:
@@ -257,6 +289,8 @@ class PASimulator:
             # Draw lower display with current time for real-time countdown
             self.lower.draw(timestamp)
 
+            self._render_panel()
+
             pygame.display.flip()
 
             # Handle input
@@ -269,6 +303,20 @@ class PASimulator:
 
         self.cleanup()
 
+    def _render_panel(self) -> None:
+        """Hand the debug sub-surface to the auto-input subsystem for rendering.
+
+        PASimulator owns the window allocation; the auto_input module owns all
+        panel rendering logic, layout, fonts, and color choices. The simulator
+        is a render target, nothing more. No-op when auto_input is off.
+        """
+        if not self.auto_input or self.debug_surface is None:
+            return
+        from auto_input import draw_debug_panel  # local import: avoid pulling dxcam when auto_input=False
+
+        draw_debug_panel(self.debug_surface, self.auto_input_status, self.state, self.stops)
+
+    # ──────────────────────────── input handling ────────────────────────────
     def _handle_input(self) -> None:
         """Dispatch input handling based on mode."""
         if self.preview:
@@ -277,9 +325,15 @@ class PASimulator:
             self._handle_input_main()
 
     def _handle_input_main(self) -> None:
-        """Real app: global keyboard polling via `keyboard` library."""
+        """Real app: global keyboard polling via `keyboard` library.
+
+        ``pending_next_pa`` is checked alongside the manual PageDown — an
+        auto-input driver running in a background thread sets it to fire a PA
+        through the same code path. See AUTO_INPUT.md.
+        """
         try:
-            if keyboard.is_pressed("page down"):
+            if keyboard.is_pressed("page down") or self.pending_next_pa:
+                self.pending_next_pa = False
                 self._next_pa()
                 pygame.time.wait(KEY_REPEAT_DELAY)
             elif keyboard.is_pressed("page_up"):

@@ -14,6 +14,26 @@ Build executable (local test build): use `/build` skill. Cut a GitHub release: `
 
 What this project is modeling. Keep this in head — it shapes every design decision. (Implementation details live in domain docs and are read on demand.)
 
+### Project origin & scope
+
+**Companion app for JRE Train Sim Real** — JR East's own train simulator. The game lacks PA + departure melodies for older routes; this fills that gap. Started as audio-only; the LCD grew incrementally as a "where am I" navigation aid. **Audio is the foundation; the LCD is navigation.**
+
+**Coverage is asymmetric by design:**
+- **Lines** — only build for routes the game does NOT already ship recordings for. Newer game routes (Sobu local, Yokosuka, future ones) have built-in PA → don't duplicate. The lines in `audio/` are old routes the game hasn't touched and likely won't.
+- **Diagrams** — the full-line diagram is the canonical entry per route. Other diagrams are only worth building if they have a **different stopping pattern** (rapid vs local, limited express, etc.). Same-pattern variants that only terminate earlier are not worth the work.
+
+**Distribution is lightly public** — released on GitHub + YouTube videos circulate, some railfans use it. **Fidelity bar is high:** elements iterate against IRL reference photos until they read pixel-correct (often 15+ revs per element). "Good enough" is rejected. See `/visual-adjust` and recent memory for the iteration patterns.
+
+### Direction of travel
+
+The project is in a **mature phase** — heavy architecture done, audio pipeline mature, visual fidelity high. Future work splits into:
+
+- **Steady state**: new train models (E235-0 Yamanote leaning next, then E231-500 / E233 series — re-skin work, not re-architecture) + display fidelity polish on the active model (ENGLISH lower-LCD still a stub, code_3 edge cases, continuity polish).
+- **Two speculative side-quests, both viable, competing for the same budget:**
+  - **Automation via game-window OCR** — `TSimApp.log` confirmed empty (no streaming position). OCR of the game's "next stop / remaining meters" HUD is the realistic path. Template-match against pre-extracted glyph sprites at ~5 Hz on a window-bound capture (NOT full-desktop screenshot, NOT tesseract) mitigates privacy + performance concerns. Game HUD has been stable across versions historically and unlikely to change → calibration is effectively one-time, not a recurring maintenance burden. Closes the original 3-year companion-app loop.
+  - **Distribution polish** — signed Windows installer, Mac build investigation, first-run smoothness for the lightly-public audience (~1800 video plays, real users).
+- **Not directions** (closed-off, don't re-propose): memory hooking the game's `*saf.dll` modules, decrypting SimDATA assets, audio fingerprinting, full-desktop OCR, tesseract-based OCR, scaling to lines the game already covers.
+
 ### Train family
 
 JR East runs multiple train series in commuter service: E233 (sub-series 0–8000), E235 (0 and 1000), and others. Each series has its own LCD look — drawings differ slightly, but the *element set* (clock, station name, route bar, mode cycling, badges, view alternation) is mostly shared. Adding a new model is largely re-skinning, not re-architecting.
@@ -129,7 +149,8 @@ Yellow hint square = multiple PA tracks available.
 - **Data/JSON** → [DATA_FORMAT.md](DATA_FORMAT.md) — `route.json` / `translations.json` / `stations.json` shapes, validation rules
 - **LCD displays** (upper or lower) → [DISPLAY.md](DISPLAY.md) — architecture, mode rendering, skip animation, layout gotchas, draw-method subtleties
 - **Real-world JR East context** → already in this doc's "Mental Model" section above (preloaded — keep it in head, don't re-read each session)
-- **Audio/Diagram** → Use `/split-audio` skill (PA + STA splitting, naming conventions, route.json updates)
+- **Audio/Diagram** → Use `/pa-make` skill (PA splitting + naming + route.json updates) or `/sta-make` skill (STA splitting + sta_cut validation + by-ear verifier)
+- **Auto-input / OCR / game-window capture** → [AUTO_INPUT.md](AUTO_INPUT.md) — companion module that reads JR EAST Train Sim's HUD via dxcam to fire PAs automatically. Lives in `auto_input.py` + `ocr.py` + `hud_layout.py` (in-process integration) and `data_tools/capture_game.py` (separate-process variant).
 - **Cross-cutting code patterns** → [.claude/rules/notes.md](.claude/rules/notes.md) — font loading on Windows, PyInstaller paths, preview mode, countdown system. (Display gotchas live in DISPLAY.md, not here.)
 - **Testing / previewing** → `uv run preview_display.py` defaults to the mock catalog (`audio/_mock/main`). Keys: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. See notes.md "Preview Mode" for `jump_to_stop` backward-rounding semantics.
 - **Building/Releasing** → Use `/build` skill

@@ -28,7 +28,7 @@ def main():
     screen = pygame.display.set_mode((730, 420))
     pygame.display.set_caption("PA Simulator - Route Selection")
 
-    # Run setup screen to select route
+    # Run setup screen to select route + OCR Auto-PA toggle/lead/interval
     setup = SetupScreen(screen)
     audio_dir = os.path.join(BASE_DIR, "audio")
     setup.scan_routes(audio_dir)
@@ -43,8 +43,15 @@ def main():
     pygame.display.quit()
 
     # Start simulator with selected configuration
+    auto_input = config.get("auto_input", False)
+    driver = None
     try:
-        sim = PASimulator(config["work_dir"], config["route_data"])
+        sim = PASimulator(config["work_dir"], config["route_data"], auto_input=auto_input)
+        if auto_input:
+            from auto_input import AutoDriver
+
+            driver = AutoDriver(sim, lead_m=config.get("lead_m", 900), interval_s=config.get("interval_s", 5))
+            driver.start()
         sim.run()
     except Exception as e:
         print(f"Error running simulator: {e}")
@@ -52,6 +59,8 @@ def main():
 
         traceback.print_exc()
     finally:
+        if driver is not None:
+            driver.stop()
         pygame.quit()
 
 

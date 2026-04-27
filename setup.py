@@ -21,20 +21,40 @@ class SetupScreen:
         self.selected_idx = 0
         self.scroll_offset = 0
         self.row_height = 50
-        # Calculate how many routes fit on screen (accounting for title and instructions)
-        available_height = screen.get_height() - 100  # 20px title + 20px top + 60px bottom
-        self.max_visible = max(5, available_height // self.row_height)
+        # Reserve ~60px below the route list for the OCR Auto-PA band, plus the usual
+        # title (50px) and instructions (50px). Route list shrinks from 6 to 5 visible
+        # rows on the default 420px-tall window.
+        available_height = screen.get_height() - 160
+        self.max_visible = max(3, available_height // self.row_height)
 
         # Fonts - load from fonts/ folder
         self.title_font = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 28)
         self.route_font = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 20)
         self.instruction_font = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 16)
+        self.control_font = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 14)
 
         # Colors
         self.bg_color = (30, 30, 30)
         self.text_color = (255, 255, 255)
         self.highlight_color = (116, 193, 30)
         self.dim_color = (150, 150, 150)
+        self.control_bg = (60, 60, 60)
+        self.control_dim = (90, 90, 90)
+
+        # OCR Auto-PA controls — defaults match the prior CLI defaults; user toggles
+        # per-launch (no persistence). Lead/interval clamped to the ranges below.
+        self.auto_input_enabled = False
+        self.lead_m = 900
+        self.interval_s = 5
+        self.lead_min, self.lead_max, self.lead_step = 500, 1500, 100
+        self.interval_min, self.interval_max, self.interval_step = 1, 10, 1
+
+        # Hit-test rects populated by _draw_auto_pa_band(); read by run() on click.
+        self._toggle_rect: pygame.Rect | None = None
+        self._lead_minus_rect: pygame.Rect | None = None
+        self._lead_plus_rect: pygame.Rect | None = None
+        self._interval_minus_rect: pygame.Rect | None = None
+        self._interval_plus_rect: pygame.Rect | None = None
 
     def scan_routes(self, base_dir: str = "audio") -> list:
         """Scan for available routes by finding route.json files.
@@ -167,6 +187,9 @@ class SetupScreen:
         if len(self.routes) > self.max_visible:
             self._draw_scrollbar()
 
+        # Draw the OCR Auto-PA controls band (toggle pill + lead/interval steppers)
+        self._draw_auto_pa_band()
+
         # Draw instructions (centered at bottom)
         instructions = "↑↓: 移動 (Navigate)  |  Enter: 決定 (Select)  |  ESC: キャンセル (Cancel)"
         inst_img = self.instruction_font.render(instructions, True, self.dim_color)
@@ -174,6 +197,89 @@ class SetupScreen:
         self.screen.blit(inst_img, (inst_x, self.screen.get_height() - 35))
 
         pygame.display.flip()
+
+    def _draw_auto_pa_band(self) -> None:
+        """Render OCR Auto-PA toggle pill + lead/interval steppers, sized to fit
+        between the route list and the bottom instruction row. All layout
+        magic numbers live in the tuneable-params block at the top of the body.
+        """
+        # ── tuneable params ────────────────────────────────────────────────────
+        band_y = self.screen.get_height() - 90  # band top
+        band_h = 40
+        side_pad = 20
+        gap = 18  # gap between pill and steppers
+        pill_w, pill_h = 170, 32
+        step_btn = 26  # +/- button size (square)
+        value_w = 56   # width reserved for "900m" / "5s" text
+        # ────────────────────────────────────────────────────────────────────────
+
+        cy = band_y + band_h // 2  # vertical center of band
+
+        # Toggle pill (left side)
+        pill_x = side_pad
+        pill_y = cy - pill_h // 2
+        self._toggle_rect = pygame.Rect(pill_x, pill_y, pill_w, pill_h)
+        pill_bg = self.highlight_color if self.auto_input_enabled else self.control_bg
+        pygame.draw.rect(self.screen, pill_bg, self._toggle_rect, border_radius=pill_h // 2)
+        # Status dot
+        dot_r = 6
+        dot_cx = pill_x + 14
+        dot_color = (255, 255, 255) if self.auto_input_enabled else (180, 180, 180)
+        pygame.draw.circle(self.screen, dot_color, (dot_cx, cy), dot_r)
+        # Label
+        label = f"OCR Auto-PA: {'ON' if self.auto_input_enabled else 'OFF'}"
+        label_img = self.control_font.render(label, True, self.text_color)
+        self.screen.blit(label_img, (dot_cx + dot_r + 6, cy - label_img.get_height() // 2))
+
+        # Steppers — only fully active when toggle is ON; dim labels when OFF for
+        # affordance, but clicks still work (lets user adjust before flipping ON).
+        text_color = self.text_color if self.auto_input_enabled else self.dim_color
+        btn_bg = self.control_bg if self.auto_input_enabled else self.control_dim
+
+        def draw_stepper(label_text: str, value_text: str, x: int) -> tuple[int, pygame.Rect, pygame.Rect]:
+            """Draw [Label: [-] value [+]] starting at x; return (right_edge, minus_rect, plus_rect)."""
+            lbl = self.control_font.render(label_text, True, text_color)
+            lbl_y = cy - lbl.get_height() // 2
+            self.screen.blit(lbl, (x, lbl_y))
+            cx = x + lbl.get_width() + 8
+            minus = pygame.Rect(cx, cy - step_btn // 2, step_btn, step_btn)
+            pygame.draw.rect(self.screen, btn_bg, minus, border_radius=4)
+            minus_glyph = self.control_font.render("−", True, self.text_color)
+            self.screen.blit(minus_glyph, (minus.centerx - minus_glyph.get_width() // 2, minus.centery - minus_glyph.get_height() // 2))
+            cx = minus.right + 4
+            val = self.control_font.render(value_text, True, text_color)
+            self.screen.blit(val, (cx + (value_w - val.get_width()) // 2, cy - val.get_height() // 2))
+            cx += value_w + 4
+            plus = pygame.Rect(cx, cy - step_btn // 2, step_btn, step_btn)
+            pygame.draw.rect(self.screen, btn_bg, plus, border_radius=4)
+            plus_glyph = self.control_font.render("+", True, self.text_color)
+            self.screen.blit(plus_glyph, (plus.centerx - plus_glyph.get_width() // 2, plus.centery - plus_glyph.get_height() // 2))
+            return plus.right, minus, plus
+
+        x = self._toggle_rect.right + gap
+        x, self._lead_minus_rect, self._lead_plus_rect = draw_stepper("Lead:", f"{self.lead_m}m", x)
+        x += gap
+        _, self._interval_minus_rect, self._interval_plus_rect = draw_stepper("Interval:", f"{self.interval_s}s", x)
+
+    def _handle_band_click(self, pos: tuple[int, int]) -> bool:
+        """Dispatch a mouse click to the OCR Auto-PA band. Returns True if any
+        control was hit (caller can stop propagation / suppress sound)."""
+        if self._toggle_rect and self._toggle_rect.collidepoint(pos):
+            self.auto_input_enabled = not self.auto_input_enabled
+            return True
+        if self._lead_minus_rect and self._lead_minus_rect.collidepoint(pos):
+            self.lead_m = max(self.lead_min, self.lead_m - self.lead_step)
+            return True
+        if self._lead_plus_rect and self._lead_plus_rect.collidepoint(pos):
+            self.lead_m = min(self.lead_max, self.lead_m + self.lead_step)
+            return True
+        if self._interval_minus_rect and self._interval_minus_rect.collidepoint(pos):
+            self.interval_s = max(self.interval_min, self.interval_s - self.interval_step)
+            return True
+        if self._interval_plus_rect and self._interval_plus_rect.collidepoint(pos):
+            self.interval_s = min(self.interval_max, self.interval_s + self.interval_step)
+            return True
+        return False
 
     def _draw_scrollbar(self) -> None:
         """Draw a scrollbar indicator on the right side."""
@@ -227,6 +333,9 @@ class SetupScreen:
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         return None
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        self._handle_band_click(event.pos)
+                        continue
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_ESCAPE:
                             return None
@@ -241,7 +350,13 @@ class SetupScreen:
                                 try:
                                     with open(os.path.join(selected["path"], "route.json"), encoding="utf-8") as f:
                                         route_data = json.load(f)
-                                    return {"work_dir": selected["path"], "route_data": route_data}
+                                    return {
+                                        "work_dir": selected["path"],
+                                        "route_data": route_data,
+                                        "auto_input": self.auto_input_enabled,
+                                        "lead_m": self.lead_m,
+                                        "interval_s": self.interval_s,
+                                    }
                                 except Exception as e:
                                     print(f"Error loading route data: {e}")
                                     return None

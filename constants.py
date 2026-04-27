@@ -48,3 +48,6 @@ TIME_SCALE = 60  # Real-time countdown
 SMALL_WIDTH = 400
 SMALL_HEIGHT = 200
 SMALL_Y = 100
+
+# Auto-input debug panel — shown above the LCD when --auto-input is enabled
+DEBUG_PANEL_HEIGHT = 80
