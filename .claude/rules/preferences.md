@@ -4,6 +4,8 @@
 - **Discussion-first approach**: Present findings/learnings before making documentation updates
 - User reviews and confirms understanding before changes are committed
 - **No auto-commit**: Never commit during session-recap or other tasks unless explicitly asked
+- **Skip-confirmation when explicitly signaled**: When the user says "push directly" / "skip my confirmation" at session-end commit time, bypass the /commit skill's per-file confirmation gate. Still split logically into one commit per concern (data line A, data line B, tooling, skill); still write meaningful messages; just don't pause for OK between commits or before push. Default behavior remains discussion-first.
+- **Commit the session-recap output too**: when running /session-recap at the end of a commit-and-push session, include the resulting `memory/YYYY-MM-DD.md` + `memory/MEMORY.md` updates in the same push (as a separate `docs(memory)` commit). Easy to forget; the user wants the recap on the remote alongside the work it describes.
 - **Discussion-first for data work specifically**: When splitting audio, importing route data, or adding any batch of files — present the parse + flag uncertainties + ask before generating splitter scripts or touching route.json. Format variance between sources is common and surprises are normal; don't assume "the format" exists.
 
 ## Data Modeling Philosophy
