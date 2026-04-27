@@ -218,14 +218,23 @@ class _Detector:
 
     def update(self, distance: Optional[int], speed: Optional[int], badge: Optional[str]) -> list[str]:
         events: list[str] = []
-        # Segment boundaries: STOPPED↔MOVING. PASSING transitions are silent — it's a
-        # transient sub-state of MOVING, not a new segment.
+        # Segment boundaries: STOPPED ↔ (MOVING | PASSING). Both MOVING and
+        # PASSING signal "the train is moving" — the OCR can mis-classify
+        # a normal MOVING segment as PASSING for many consecutive frames
+        # (live drive on Keiyo 2026-04-27 showed the ~80s run from 千葉みなと to
+        # 稲毛海岸 stuck at PASSING). If we only reset on STOPPED→MOVING, those
+        # mis-classified segments inherit fired-flags from the previous segment
+        # and skip both PAs entirely. Resetting on STOPPED→(MOVING|PASSING)
+        # makes the detector resilient to that misread mode.
+        # Mid-segment MOVING↔PASSING transitions remain silent — those are
+        # the legitimate "we're crossing a passing-through station" markers
+        # within an already-active segment.
         if badge is not None and self.prev_badge is not None and badge != self.prev_badge:
-            if self.prev_badge == "STOPPED" and badge == "MOVING":
+            if self.prev_badge == "STOPPED" and badge in ("MOVING", "PASSING"):
                 events.append("STOPPED->MOVING")
                 self.departure_fired = False
                 self.arrival_fired = False
-            elif self.prev_badge == "MOVING" and badge == "STOPPED":
+            elif self.prev_badge in ("MOVING", "PASSING") and badge == "STOPPED":
                 events.append("MOVING->STOPPED")
         # Departure: speed crossing 30 km/h upward — own-train speed, badge-independent.
         if speed is not None and self.prev_speed is not None:

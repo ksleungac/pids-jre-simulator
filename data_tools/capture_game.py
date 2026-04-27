@@ -133,17 +133,22 @@ class PaEventDetector:
 
     def update(self, distance: int | None, speed: int | None, badge: str | None) -> list[str]:
         events: list[str] = []
-        # Segment boundaries: STOPPED↔MOVING only. PASSING is a transient sub-state of MOVING
-        # (badge displays the next stopping station while crossing a passing-through station;
-        # HUD distance is to the passing station, not the stopping target).
+        # Segment boundaries: STOPPED ↔ (MOVING | PASSING). The OCR badge classifier
+        # can stick on PASSING for an entire normal MOVING segment (live drive
+        # 2026-04-27 on Keiyo 千葉みなと→稲毛海岸: ~80s of mis-classified PASSING).
+        # Resetting only on STOPPED→MOVING leaves segment-flags True from the
+        # previous segment, suppressing both PA fires. Resetting on
+        # STOPPED→(MOVING|PASSING) makes the detector tolerant to that misread.
+        # Mid-segment MOVING↔PASSING transitions remain silent (legitimate
+        # passing-station crossings inside an already-active segment).
         if badge is not None and self.prev_badge is not None and badge != self.prev_badge:
-            if self.prev_badge == "STOPPED" and badge == "MOVING":
+            if self.prev_badge == "STOPPED" and badge in ("MOVING", "PASSING"):
                 self.segment_idx = 0 if self.segment_idx is None else self.segment_idx + 1
                 events.append(f"BADGE_STOPPED->MOVING (segment {self.segment_idx}, reset flags)")
                 self.departure_fired = False
                 self.arrival_fired = False
                 self.segment_start_ts = time.time()
-            elif self.prev_badge == "MOVING" and badge == "STOPPED":
+            elif self.prev_badge in ("MOVING", "PASSING") and badge == "STOPPED":
                 events.append("BADGE_MOVING->STOPPED (arrived at platform)")
         if speed is not None and self.prev_speed is not None:
             if not self.departure_fired and self.prev_speed < SPEED_DEPARTURE_KMH <= speed:
