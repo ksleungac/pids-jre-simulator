@@ -8,10 +8,10 @@ import keyboard
 import time
 from typing import Dict, Any, Optional
 
-from constants import S_WIDTH, S_HEIGHT, FRAME_RATE, KEY_REPEAT_DELAY, TIME_SCALE
+from constants import FRAME_RATE, KEY_REPEAT_DELAY, TIME_SCALE
 from audio import AudioPlayer
-from displays.train_models.e235_1000 import UpperDisplay, LowerDisplay
-from utils import draw_text
+from displays.train_models.e235_1000 import UpperDisplay, LowerDisplay, S_WIDTH, S_HEIGHT
+from displays.utils import draw_text
 
 
 class AppState:

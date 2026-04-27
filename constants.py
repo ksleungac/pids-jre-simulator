@@ -1,19 +1,14 @@
-"""Constants for PA Simulator - Screen dimensions, colors, and shared sizes.
+"""Constants for PA Simulator - timing, audio, lower-LCD route-map sizes.
 
-Per-display sizes (font sizes, box positions) live inline in each LCD
-module's draw methods, not here — every LCD type owns its own module and
-can pick different sizes. Only constants shared by *multiple* modules
-(or by app/audio) belong here.
+Only values that are TRULY cross-model (shared by all train series) live
+here. Per-model values — including screen dimensions, since each train
+series has its own physical LCD aspect ratio — live in that model's
+package, e.g. ``displays/train_models/e235_1000/__init__.py``.
+
+Per-draw-method sizes (font sizes, box positions) live inline in each
+LCD module's draw methods (tuneable-params blocks), not here.
 """
 
-# Screen dimensions
-S_WIDTH = 730
-S_HEIGHT = 420
-UPPER_HEIGHT = int(S_HEIGHT * 0.28)
-
-# Background colors
-DARK_BG = [25, 25, 25]
-WHITE_BG = [230, 230, 230]
 LIGHT_GRAY = [240, 240, 240]
 
 # Station display colors (lower LCD route map)

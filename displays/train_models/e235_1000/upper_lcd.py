@@ -5,14 +5,13 @@ E235-1000 series Upper LCD.
 """
 
 import pygame
-import pygame.gfxdraw
 import json
 import time
 import sys
 from pathlib import Path
 
 from displays.base import DisplayMode, ModeCycler
-from displays.utils import draw_text, draw_text_given_width, draw_station_code_badge
+from displays.utils import draw_text_given_width, draw_station_code_badge
 
 # =============================================================================
 # Region Map — E235-1000 upper LCD layout (descriptive)
@@ -44,16 +43,18 @@ from displays.utils import draw_text, draw_text_given_width, draw_station_code_b
 
 
 # =============================================================================
-# Constants (E235-1000 specific - shared across all modes)
+# Per-model dimensions / palette — single source of truth lives in this
+# model's package __init__.py (so lower_lcd.py and app.py read the same
+# values without one LCD module being "the boss" over the other).
 # =============================================================================
 
-S_WIDTH = 730
-S_HEIGHT = 420
-UPPER_HEIGHT = int(S_HEIGHT * 0.28)  # 117px
-
-# Colors
-DARK_BG = [25, 25, 25]
-WHITE_BG = [230, 230, 230]
+from displays.train_models.e235_1000 import (
+    S_WIDTH,
+    S_HEIGHT,
+    UPPER_HEIGHT,
+    DARK_BG,
+    WHITE_BG,
+)
 
 
 # =============================================================================
@@ -223,91 +224,18 @@ class JapaneseDisplay:
 # =============================================================================
 
 
-class FuriganaDisplay:
+class FuriganaDisplay(JapaneseDisplay):
+    """Upper LCD Furigana rendering for E235-1000.
+
+    Inherits all draw methods from JapaneseDisplay — no rendering divergence
+    today. Furigana-specific text translation happens upstream in
+    UpperDisplay._get_*_display() before draw methods are called, so the
+    glyph-rendering code is identical between KANJI and FURIGANA modes.
+
+    Override individual draw_* methods here if/when furigana display
+    actually diverges (e.g. ruby-text layout, different font, smaller pt
+    for longer kana strings).
     """
-    Upper LCD Furigana rendering for E235-1000.
-
-    By default, behaves the same as JapaneseDisplay.
-    Override methods to customize furigana-specific behavior.
-    """
-
-    def __init__(self, screen, route_data, stops):
-        self.screen = screen
-        self.route_data = route_data
-        self.stops = stops
-
-        # E235-1000 specific fonts (shared across methods) - load from fonts/ folder
-        self.font_type_bold = pygame.font.Font("fonts/ShinGoPr6N-Heavy.otf", 26)
-        self.font_type_bold.set_bold(True)
-        self.font_type_bold.set_italic(True)
-        self.font_dest = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 35)
-        self.font_prefix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 25)
-        self.font_station = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 78)
-        self.font_clock = pygame.font.Font("fonts/HelveticaNeue-Roman.otf", 26)
-        self.font_suffix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 18)
-
-    def draw_train_type(self, train_type: str, type_color: tuple) -> None:
-        """Draw train type box."""
-        box_x, box_y, box_w, box_h = 15, 8, 150, 31
-        pygame.draw.rect(self.screen, _bg("train_type", default=WHITE_BG), pygame.Rect(box_x, box_y, box_w, box_h), 0, 2)
-        text_x, text_y = 15, 10
-        if len(train_type) > 2:
-            draw_text_given_width(text_x, text_y, box_w, self.font_type_bold, train_type, type_color, self.screen, collapse=True)
-        else:
-            draw_text_given_width(text_x, text_y, box_w, self.font_type_bold, train_type, type_color, self.screen)
-
-    def draw_destination(self, dest_text: str, route_name: str) -> None:
-        """Draw destination with suffix - same as Japanese (kanji stays kanji)."""
-        # Region clear — see JapaneseDisplay.draw_destination for the convention.
-        pygame.draw.rect(self.screen, _bg("dest"), pygame.Rect(0, 50, 180, UPPER_HEIGHT - 50))
-
-        dest_box_x, dest_box_y, dest_box_w = 15, 50, 150
-        draw_text_given_width(dest_box_x, dest_box_y, dest_box_w, self.font_dest, dest_text, WHITE_BG, self.screen, collapse=False, script="japanese")
-
-        suffix = "方面" if route_name == "山手線" else "ゆき"
-        t_w, t_h = self.font_suffix.size(suffix)
-        suffix_x = int(S_WIDTH * 0.25) - t_w - 10
-        suffix_y = UPPER_HEIGHT - t_h - 5
-        suffix_img = self.font_suffix.render(suffix, True, WHITE_BG, _bg("dest"))
-        self.screen.blit(suffix_img, (suffix_x, suffix_y))
-
-    def draw_prefix(self, prefix_text: str) -> None:
-        """Draw prefix (already converted to furigana by UpperDisplay manager)."""
-        prefix_x, prefix_y = int(S_WIDTH * 0.25) + 40, 5
-        prefix_w, prefix_h = 300, 30
-        pygame.draw.rect(self.screen, _bg("prefix"), pygame.Rect(prefix_x, prefix_y, prefix_w, prefix_h))
-        prefix_img = self.font_prefix.render(prefix_text, True, WHITE_BG)
-        self.screen.blit(prefix_img, (prefix_x, prefix_y))
-
-    def draw_station(self, station_text: str) -> None:
-        """Draw station name in furigana."""
-        if not station_text:
-            return
-
-        name_x = int(S_WIDTH * 0.40) + 10
-        max_width = S_WIDTH * 0.54 - 10
-        band_bottom_y = 35  # station's clear rect must not extend above this y (prefix/clock band)
-
-        _, name_h = self.font_station.size(station_text)
-        name_y = UPPER_HEIGHT - name_h - 5  # -5 leaves a small bottom margin (see JapaneseDisplay.draw_station)
-
-        # Clear rect clamped to station's confinement on both ends — see JapaneseDisplay.draw_station
-        # for full notes on the band_bottom clamp and the +5/-5 pairing.
-        clear_top = max(name_y, band_bottom_y)
-        clear_bot = min(name_y + name_h + 5, UPPER_HEIGHT)
-        if clear_bot > clear_top:
-            pygame.draw.rect(self.screen, _bg("station"), pygame.Rect(name_x, clear_top, max_width, clear_bot - clear_top))
-
-        draw_text_given_width(
-            name_x, name_y, int(max_width), self.font_station, station_text, WHITE_BG, self.screen, collapse=False, script="japanese"
-        )
-
-    def draw_clock(self, time_text: str) -> None:
-        """Draw clock."""
-        clock_x, clock_w, clock_h = S_WIDTH - 160, 80, 25
-        pygame.draw.rect(self.screen, _bg("clock"), pygame.Rect(clock_x, 5, clock_w, clock_h))
-        clock_img = self.font_clock.render(time_text, True, WHITE_BG)
-        self.screen.blit(clock_img, (clock_x, 0))
 
 
 # =============================================================================

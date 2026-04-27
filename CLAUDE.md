@@ -70,13 +70,14 @@ Rules:
 
 ```
 pids_jre_simulator/
-├── main.py, app.py, audio.py, constants.py, utils.py
+├── main.py, app.py, audio.py, constants.py
 ├── preview_display.py                 # Audio-free preview entry point — uses PASimulator(preview=True)
 ├── displays/                          # Modular display system
 │   ├── base.py                        # DisplayMode enum, ModeCycler
-│   ├── utils.py                       # Shared helpers: draw_station_code_badge, draw_route_disclaimer, draw_text_given_width
+│   ├── utils.py                       # ALL drawing primitives + display-domain helpers (draw_text, draw_aapolygon, arrow_points, draw_station_code_badge, draw_route_disclaimer, draw_continuity_*)
 │   └── train_models/e235_1000/
-│       ├── upper_lcd.py               # Japanese/Furigana/EnglishDisplay, UpperDisplay
+│       ├── __init__.py                # Per-model dimensions/palette: S_WIDTH, S_HEIGHT, UPPER_HEIGHT, DARK_BG, WHITE_BG (defined before class imports for partial-module safety)
+│       ├── upper_lcd.py               # JapaneseDisplay + FuriganaDisplay (inherits Japanese, no override) + EnglishDisplay + UpperDisplay manager
 │       └── lower_lcd.py               # JapaneseDisplay (full route) + JapaneseEightStationDisplay (8-station zoomed) + EnglishDisplay placeholder + LowerDisplay manager (24s view-cycler)
 ├── data/
 │   ├── translations.json              # Station names (furigana, english)
@@ -91,10 +92,11 @@ pids_jre_simulator/
 
 | Module | Responsibility |
 |--------|----------------|
-| `constants.py` | S_WIDTH=730, S_HEIGHT=420, TIME_SCALE=60, FRAME_RATE=15 |
-| `utils.py` | draw_text, draw_text_given_width (even spacing), draw_aapolygon |
+| `constants.py` | TRULY cross-model values only: TIME_SCALE=60, FRAME_RATE=15, audio loudness, lower-LCD route-map sizes, setup-screen palette. Per-model dimensions live with the model. |
+| `displays/utils.py` | Single home for drawing primitives (`draw_text`, `draw_text_given_width`, `draw_aapolygon`, `arrow_points`, `draw_1col_text`, `draw_stops_text`) + display-domain helpers (badges, continuity arrows, disclaimer). |
 | `audio.py` | AudioPlayer class, play_pa/sta, pause, is_playing |
 | `displays/` | Modular per-train-model UpperDisplay + LowerDisplay (E235-1000): set_state(), update(), draw() |
+| `displays/train_models/{model}/__init__.py` | Per-model manifest: dimensions, palette, exported display classes. Where each train series declares its physical LCD shape. |
 | `app.py` | PASimulator, AppState, translation loading, PA/STA handling |
 | `main.py` | Entry point, setup screen, error handling |
 
@@ -131,5 +133,6 @@ Yellow hint square = multiple PA tracks available.
 - **Cross-cutting code patterns** → [.claude/rules/notes.md](.claude/rules/notes.md) — font loading on Windows, PyInstaller paths, preview mode, countdown system. (Display gotchas live in DISPLAY.md, not here.)
 - **Testing / previewing** → `uv run preview_display.py` defaults to the mock catalog (`audio/_mock/main`). Keys: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. See notes.md "Preview Mode" for `jump_to_stop` backward-rounding semantics.
 - **Building/Releasing** → Use `/build` skill
+- **Codebase mess sweep** → Use `/vibe-check` skill (scan for duplicated logic, dead helpers, half-finished implementations, speculative architecture, stale comments — discussion-first, item-by-item, smoke-tests every fix). Distinct from `/review-dirty` (which reviews a single change for quality).
 
 **Editing docs?** Check the placement table in [.claude/skills/session-recap/SKILL.md](.claude/skills/session-recap/SKILL.md) before writing — `notes.md` is for cross-cutting code only, not display or data work.

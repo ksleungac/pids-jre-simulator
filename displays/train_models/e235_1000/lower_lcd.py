@@ -7,12 +7,14 @@ Modes share `ModeCycler` with the Upper LCD — when both modes are
 implemented for the lower, switching the upper into ENGLISH will pull the
 lower along in lockstep.
 
-**English mode is currently disabled** in the lower's mode_displays dict
-(EnglishDisplay is unimplemented — only a placeholder class exists). Until
-it's filled in, the lower stays in JapaneseDisplay regardless of the
-shared cycler's state — the upper still cycles freely through all three
-upper-display modes. To re-enable: uncomment the ENGLISH entry in
-`LowerDisplay.__init__` once `EnglishDisplay.show_stops` is implemented.
+**English mode is currently a placeholder.** `EnglishDisplay.show_stops`
+only clears the background — no romaji station labels yet. While that's
+the case, `LowerDisplay.draw()` routes ENGLISH to `japanese_display`
+(hardcoded fallback in the dispatch if/else), so the lower keeps showing
+kanji while the upper cycles freely through all three modes. To enable
+real English rendering: implement `EnglishDisplay.show_stops`, then
+change the ENGLISH branch in `LowerDisplay.draw()` to dispatch to
+`self.english_display` instead of `self.japanese_display`.
 """
 
 import math
@@ -21,10 +23,6 @@ import pygame
 import pygame.gfxdraw
 
 from constants import (
-    S_WIDTH,
-    S_HEIGHT,
-    UPPER_HEIGHT,
-    WHITE_BG,
     PASSED_COLOR,
     CURRENT_COLOR,
     INACTIVE_COLOR,
@@ -35,16 +33,25 @@ from constants import (
     STOPS_WIDTH,
     STOPS_PER_LINE,
     TIME_SCALE,
-    DARK_BG,
 )
-from utils import (
+from displays.train_models.e235_1000 import (
+    S_WIDTH,
+    S_HEIGHT,
+    UPPER_HEIGHT,
+    DARK_BG,
+    WHITE_BG,
+)
+from displays.base import DisplayMode
+from displays.utils import (
     draw_aapolygon,
     arrow_points,
     draw_stops_text,
     draw_1col_text,
+    draw_station_code_badge,
+    draw_route_disclaimer,
+    draw_continuity_arrow,
+    draw_continuity_triangle,
 )
-from displays.base import DisplayMode
-from displays.utils import draw_station_code_badge, draw_route_disclaimer, draw_continuity_arrow, draw_continuity_triangle
 
 
 # =============================================================================
@@ -747,9 +754,6 @@ class JapaneseEightStationDisplay:
     # Bar / pointer / marks / times
     # ------------------------------------------------------------------
 
-    def _bar_y(self) -> int:
-        return self.bar_y
-
     def draw_marks(
         self,
         window: List[Tuple[int, Dict]],
@@ -761,7 +765,7 @@ class JapaneseEightStationDisplay:
         if not window:
             return
         x = self.x
-        y = self._bar_y()
+        y = self.bar_y
         window_start = window[0][0]
 
         for gi, stop in window:
@@ -821,7 +825,7 @@ class JapaneseEightStationDisplay:
         if not window:
             return
         x = self.x
-        y = self._bar_y()
+        y = self.bar_y
         window_start = window[0][0]
         local_disp = cursor_pos - window_start
         # During a multi-station skip animation, cursor_pos can lag before
@@ -895,7 +899,7 @@ class JapaneseEightStationDisplay:
         if not window:
             return
         x = self.x
-        y = self._bar_y()
+        y = self.bar_y
         window_start = window[0][0]
         cumulative_time = 0
 
@@ -1082,7 +1086,7 @@ class JapaneseEightStationDisplay:
         for gi, stop in window:
             local_i = gi - window_start
             cell_x = self.x + local_i * self.stops_w
-            l_y = self._bar_y()
+            l_y = self.bar_y
 
             is_active = gi >= cursor_pos and gi <= dest_idx
 
@@ -1182,21 +1186,29 @@ class LowerDisplay:
         """Bind to an AppState instance. Subsequent draws read live state."""
         self._state = state
 
+    # NOTE: deliberately a no-op TODAY, but kept as scaffolding for a future
+    # split where the lower LCD owns its own mode cycler (e.g. lower cycles on
+    # a different cadence than upper, or freezes during certain states).
+    #
+    # Why no-op now: the cycler is SHARED with UpperDisplay (passed in via
+    # __init__) and ticked there. Calling cycler.update() here too would
+    # double-tick → KANJI→FURIGANA→ENGLISH cadence drops from 4 s to ~2 s.
+    # The view cycle is ticked inside `draw()` instead — it depends on live
+    # curr_stop (for the 8-station lock condition) and is cheaper to fold in.
+    #
+    # When to wire it in: if/when lower stops sharing upper.mode_cycler,
+    # construct an own ModeCycler in __init__ and tick it here.
     def update(self, current_time: float = None) -> None:
-        """Language cycling is driven by the upper (shared cycler), so no-op here.
-
-        The view cycle is ticked inside `draw()` instead — it depends on
-        live curr_stop (for the lock condition) and is cheaper to fold in.
-        """
         pass
 
     def _should_lock_to_eight(self, curr_stop: int) -> bool:
         """When remaining stops ≤ LOCK_THRESHOLD (=7), drop the full-route view permanently."""
         return (len(self.stops) - curr_stop) <= JapaneseEightStationDisplay.LOCK_THRESHOLD
 
-    # CONTRACT: must be called UNCONDITIONALLY before language-mode dispatch.
-    # See DISPLAY.md § "View cycler (`LowerDisplay`)". Nesting in the KANJI/FURIGANA
-    # branch pauses the timer during ENGLISH; 24 s cadence drifts long.
+    # CONTRACT: must be called BEFORE language-mode dispatch (not inside the
+    # KANJI/FURIGANA branch). The lock-state guard at the call site is separate.
+    # See DISPLAY.md § "View cycler (`LowerDisplay`)".
+    # Nesting in the language branch pauses the timer during ENGLISH; 24 s cadence drifts long.
     def _tick_view_cycle(self, current_time: float) -> None:
         """Toggle full ↔ 8-station every VIEW_CYCLE_HALF_INTERVAL seconds."""
         if self._view_last_toggle is None:
