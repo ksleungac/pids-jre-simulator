@@ -423,10 +423,10 @@ auto/manual key activity.
 
 | Path | Role |
 |---|---|
-| `auto_input.py` | **Primary** — `AutoDriver` class (in-process daemon thread) + `draw_debug_panel()` (panel render) + `_Detector` state machine. All auto-input logic lives here. |
+| `auto_input.py` | **Primary** — `AutoDriver` class (in-process daemon thread) + `draw_debug_panel()` (panel render) + `_Detector` state machine + `handle_panel_click()` dispatcher (in-panel buttons, currently the Report download). All auto-input logic lives here. |
 | `main.py` | Reads `auto_input` / `lead_m` / `interval_s` from the setup-screen config dict. Spawns `AutoDriver` when `auto_input=True` and passes the same flag to `PASimulator`. |
 | `setup.py` | OCR Auto-PA toggle pill + Lead/Interval steppers under the route list. `_handle_band_click` updates state; selected route's Enter returns config dict including the auto-input fields. |
-| `app.py` | `PASimulator`: allocates debug sub-surface in `_init_pygame`; `pending_next_pa` flag checked alongside keyboard in `_handle_input_main`; `auto_input_status` dict written by AutoDriver, read by `_render_panel()` which delegates to `auto_input.draw_debug_panel`. **No panel rendering logic lives in app.py.** |
+| `app.py` | `PASimulator`: allocates debug sub-surface in `_init_pygame`; `pending_next_pa` flag checked alongside keyboard in `_handle_input_main`; `auto_input_status` dict written by AutoDriver, read by `_render_panel()` which delegates to `auto_input.draw_debug_panel`. `MOUSEBUTTONDOWN` events landing in the panel area get forwarded to `auto_input.handle_panel_click`. `drive_log_path` attribute stashes the live JSONL path so the Report button can find it. **No panel rendering logic lives in app.py.** |
 | `constants.py` | `DEBUG_PANEL_HEIGHT = 80` |
 | `hud_layout.py` | HUD + cell bbox constants for 2560×1440 |
 | `ocr.py` | OCR pipeline + badge classifier; runnable for offline validation (`uv run python ocr.py`) |

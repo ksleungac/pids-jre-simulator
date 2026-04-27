@@ -225,6 +225,62 @@ def _blit_text(surf: pygame.Surface, font: pygame.font.Font, text: str, pos: tup
     return pos[0] + rendered.get_width()
 
 
+# ── Click-through-state for the in-panel buttons. Recomputed each draw call,
+# read by `handle_panel_click()` when the simulator forwards a MOUSEBUTTONDOWN.
+_report_button_rect: Optional[pygame.Rect] = None
+
+
+def _draw_report_button(surface: pygame.Surface, font: pygame.font.Font) -> None:
+    """Top-right pill-style button. Click triggers HTML drive-report rendering."""
+    global _report_button_rect
+    label = "Report ↓"
+    text = font.render(label, True, _TEXT_WHITE)
+    pad_x, pad_y = 12, 4
+    btn_w = text.get_width() + 2 * pad_x
+    btn_h = text.get_height() + 2 * pad_y
+    btn_x = surface.get_width() - btn_w - 8
+    btn_y = 4
+    btn_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+    pygame.draw.rect(surface, (52, 116, 145), btn_rect, border_radius=btn_h // 2)
+    surface.blit(text, (btn_x + pad_x, btn_y + pad_y))
+    _report_button_rect = btn_rect
+
+
+def _render_report_async(log_path: Path) -> None:
+    """Background-thread report generation so the simulator UI doesn't freeze.
+
+    `auto_input.py` lives at the project root, so `data_tools.plot_drive`
+    resolves via the standard sys.path that the launching `main.py` set up
+    — no per-call sys.path.insert needed (and previously accumulated
+    duplicate entries on every click).
+    """
+    try:
+        from data_tools.plot_drive import render_html_report, load_jsonl
+        out_path = Path(__file__).parent / f"{log_path.stem}.html"
+        meta, events, samples = load_jsonl(log_path)
+        render_html_report(meta, events, samples, 5, out_path)
+        print(f"[Drive recorder] Report saved -> {out_path}")
+    except Exception as e:
+        print(f"[Drive recorder] Report generation failed: {e}")
+
+
+def handle_panel_click(sim, pos: tuple[int, int]) -> bool:
+    """Dispatch a MOUSEBUTTONDOWN that landed inside the debug panel.
+
+    Returns True if a button absorbed the click (caller can stop propagating).
+    Today we only have one button (the Report download); easy to extend.
+    """
+    if _report_button_rect is None or not _report_button_rect.collidepoint(pos):
+        return False
+    log_path = getattr(sim, "drive_log_path", None)
+    if log_path is None:
+        print("[Drive recorder] No drive log open yet — wait for the AutoDriver to capture some samples.")
+        return True
+    print(f"[Drive recorder] Generating report from {log_path.name} ...")
+    threading.Thread(target=_render_report_async, args=(log_path,), daemon=True).start()
+    return True
+
+
 def draw_debug_panel(surface: pygame.Surface, status: dict, sim_state, stops: list) -> None:
     """Render the auto-input debug panel onto `surface`.
 
@@ -240,6 +296,10 @@ def draw_debug_panel(surface: pygame.Surface, status: dict, sim_state, stops: li
     """
     font = _get_panel_font()
     surface.fill(_PANEL_BG)
+
+    # Always-on Report button (top-right). Drawn even before first capture
+    # so the user can find it; clicking before any samples just logs a hint.
+    _draw_report_button(surface, font)
 
     if not status:
         _blit_text(surface, font, "[AUTO-INPUT]  waiting for first capture...", (8, 6), _TEXT_GRAY)
@@ -426,10 +486,13 @@ class AutoDriver:
         print(f"[AutoDriver] Started. Lead {self.lead_m}m, interval {self.interval_s}s.")
 
         # Open per-drive blackbox log (JSONL). One file per AutoDriver lifetime;
-        # each sample below appends a line + flushes for crash safety.
+        # each sample below appends a line + flushes for crash safety. Path is
+        # also stashed on the simulator so the debug-bar Report button can find
+        # the live log to render.
         log_file, log_path = _open_drive_log(self.sim)
         if log_path is not None:
             print(f"[AutoDriver] Recording drive log -> {log_path}")
+            self.sim.drive_log_path = log_path
 
         # Track previous-cycle badge for emitting transition events into the log.
         # Distinct from `self._detector.prev_badge` — that one drives PA-fire

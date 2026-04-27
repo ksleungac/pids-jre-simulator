@@ -3,6 +3,7 @@
 import os
 import json
 import pygame
+from pathlib import Path
 from win32 import win32gui
 import keyboard
 import time
@@ -159,6 +160,11 @@ class PASimulator:
         # Empty dict means "no data yet" — the panel renders a placeholder.
         self.auto_input_status: dict = {}
 
+        # Path to the live drive blackbox JSONL (set by AutoDriver when it opens
+        # a per-session log). Read by the debug-bar Report button to know which
+        # log to render an HTML drive report from.
+        self.drive_log_path: Optional[Path] = None
+
     def _load_route_data(self) -> None:
         """Load route.json configuration and merge with data/translations.json."""
         if self.route_data is None:
@@ -300,6 +306,19 @@ class PASimulator:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
+                elif (
+                    event.type == pygame.MOUSEBUTTONDOWN
+                    and event.button == 1
+                    and self.auto_input
+                    and self.debug_surface is not None
+                    and event.pos[1] < self.debug_surface.get_height()
+                ):
+                    # Click landed inside the debug panel area — forward to the
+                    # auto-input panel's click dispatcher (handles the Report
+                    # button + any future panel-resident widgets).
+                    from auto_input import handle_panel_click  # local import: defer dxcam pull
+
+                    handle_panel_click(self, event.pos)
 
         self.cleanup()
 
