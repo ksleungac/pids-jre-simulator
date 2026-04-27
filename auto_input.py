@@ -22,11 +22,13 @@ Usage (from `main.py`):
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, TextIO
 
 import dxcam
 import numpy as np
@@ -48,6 +50,117 @@ if TYPE_CHECKING:
 SAMPLE_INTERVAL_S = 5
 SPEED_DEPARTURE_KMH = 30
 DEFAULT_LEAD_M = 900
+
+# ─────────────────────────── drive recorder (blackbox) ────────────────────────
+# Per-drive JSONL log written by AutoDriver. Each file is one drive session.
+# Three record types (`_type` field discriminates):
+#
+#   _type=meta    — line 0, written once at session start. Route metadata + a
+#                   richer per-stop list (stops_here flag distinguishes PASSING
+#                   stations; english/furigana included for self-containment;
+#                   scheduled_time is the route.json "time" field passed through
+#                   verbatim — null for passing stations).
+#   _type=event   — emitted whenever the OCR badge transitions: arrival,
+#                   departure, passing_start, passing_end. Carries `curr_stop`
+#                   at the moment of transition. Plot tools read these directly
+#                   to place stop markers — no need to derive from sample stream.
+#   _type=sample  — one per OCR cycle (~5s). All OCR fields + sim state.
+#
+# Local-only (gitignored). Crash-safe: each line flushed immediately. Plot
+# generator (separate script — TODO) reads all three record types.
+RECORDINGS_DIR = Path(__file__).parent / "_recordings"
+
+
+def _build_stops_meta(sim) -> list[dict]:
+    """Per-stop dicts for the meta line. Self-contained — plot tool doesn't need
+    to re-load route.json. PASSING stations included in geographic order with
+    stops_here=False so the plot can mark them on the timeline.
+
+    `stops_here` discriminator: per project convention (DATA_FORMAT.md), passing
+    stations have NO `time` field while stopping stations always have one (even
+    `time: 0` for the start station). NOT `bool(pa)` — terminus / starting
+    stations may have empty `pa` but the train still stops there.
+    """
+    out = []
+    for s in sim.stops:
+        out.append({
+            "name": s.get("name", ""),
+            "english": s.get("english", ""),
+            "furigana": s.get("furigana", ""),
+            "stops_here": s.get("time") is not None,
+            "scheduled_time": s.get("time"),
+            "sta_code": s.get("sta_code"),
+        })
+    return out
+
+
+def _open_drive_log(sim) -> tuple[Optional[TextIO], Optional[Path]]:
+    """Open a fresh JSONL log for this drive session and write the meta header.
+
+    Returns (file_handle, path) or (None, None) if anything goes wrong.
+    Caller is responsible for closing the handle on shutdown.
+    """
+    try:
+        RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+        work_path = Path(sim.work_dir)
+        diagram = work_path.name or "unknown"
+        line = work_path.parent.name or "unknown"
+        ts_str = datetime.now().strftime("%Y%m%d-%H%M%S")
+        path = RECORDINGS_DIR / f"drive_{line}_{diagram}_{ts_str}.jsonl"
+        f = open(path, "w", encoding="utf-8")
+        meta = {
+            "_type": "meta",
+            "start_ts": time.time(),
+            "line": line,
+            "diagram": diagram,
+            "route": sim.route_data.get("route", ""),
+            "dest": sim.route_data.get("dest", ""),
+            "stops": _build_stops_meta(sim),
+        }
+        f.write(json.dumps(meta, ensure_ascii=False) + "\n")
+        f.flush()
+        return f, path
+    except Exception as e:
+        print(f"[AutoDriver] Could not open drive log: {e}")
+        return None, None
+
+
+def _write_sample(f: TextIO, sample: dict) -> None:
+    """Write one sample line + flush. Swallow errors so logging never crashes the capture loop."""
+    try:
+        f.write(json.dumps(sample, ensure_ascii=False) + "\n")
+        f.flush()
+    except Exception as e:
+        print(f"[AutoDriver] Drive-log write failed: {e}")
+
+
+def _write_event(f: TextIO, kind: str, curr_stop: int, ts: float) -> None:
+    """Write a transition event line. `kind` ∈ {arrival, departure, passing_start, passing_end}."""
+    try:
+        f.write(json.dumps({
+            "_type": "event",
+            "ts": ts,
+            "kind": kind,
+            "curr_stop": curr_stop,
+        }, ensure_ascii=False) + "\n")
+        f.flush()
+    except Exception as e:
+        print(f"[AutoDriver] Drive-log event write failed: {e}")
+
+
+def _badge_transition_kind(prev: Optional[str], curr: Optional[str]) -> Optional[str]:
+    """Map a badge state change to an event kind. Returns None if no event applies."""
+    if prev is None or curr is None or prev == curr:
+        return None
+    if prev == "STOPPED" and curr in ("MOVING", "PASSING"):
+        return "departure"
+    if prev in ("MOVING", "PASSING") and curr == "STOPPED":
+        return "arrival"
+    if prev == "MOVING" and curr == "PASSING":
+        return "passing_start"
+    if prev == "PASSING" and curr == "MOVING":
+        return "passing_end"
+    return None
 
 # ─────────────────────────── debug panel rendering ────────────────────────────
 # Panel logic is fully self-contained in this module — no imports from displays/,
@@ -312,57 +425,102 @@ class AutoDriver:
             return
         print(f"[AutoDriver] Started. Lead {self.lead_m}m, interval {self.interval_s}s.")
 
+        # Open per-drive blackbox log (JSONL). One file per AutoDriver lifetime;
+        # each sample below appends a line + flushes for crash safety.
+        log_file, log_path = _open_drive_log(self.sim)
+        if log_path is not None:
+            print(f"[AutoDriver] Recording drive log -> {log_path}")
+
+        # Track previous-cycle badge for emitting transition events into the log.
+        # Distinct from `self._detector.prev_badge` — that one drives PA-fire
+        # logic; this one drives the blackbox event stream.
+        prev_log_badge: Optional[str] = None
+
         # Snapshot initial state to recognize the first segment
         self._segment_start_stop = self.sim.state.curr_stop
 
-        while not self._stop_event.is_set():
-            try:
-                frame = None
-                for _ in range(5):
-                    frame = camera.grab()
-                    if frame is not None:
-                        break
-                    if self._stop_event.wait(0.2):
-                        return
-                if frame is None:
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    frame = None
+                    for _ in range(5):
+                        frame = camera.grab()
+                        if frame is not None:
+                            break
+                        if self._stop_event.wait(0.2):
+                            return
+                    if frame is None:
+                        self._stop_event.wait(self.interval_s)
+                        continue
+
+                    d_cell = _crop_cell(frame, HUD_BBOX, DISTANCE_VALUE_BBOX)
+                    s_cell = _crop_cell(frame, HUD_BBOX, SPEED_VALUE_BBOX)
+                    b_cell = _crop_cell(frame, HUD_BBOX, BADGE_BBOX)
+                    d_val, _, d_score = read_distance(d_cell, templates)
+                    s_val, _, s_score = read_speed(s_cell, templates)
+                    badge, b_diff = classify_badge_state(b_cell, badge_anchors)
+                    sample_ts = time.time()
+
+                    # Publish status to the simulator's debug panel (atomic dict swap).
+                    # Single-writer (this thread), single-reader (main thread) — no lock needed.
+                    self.sim.auto_input_status = {
+                        "badge": badge,
+                        "badge_diff": b_diff,
+                        "speed": s_val,
+                        "speed_score": s_score,
+                        "distance": d_val,
+                        "distance_score": d_score,
+                        "segment_start_stop": self._segment_start_stop,
+                        "departure_fired": self._detector.departure_fired,
+                        "arrival_fired": self._detector.arrival_fired,
+                        "ts": sample_ts,
+                    }
+
+                    if log_file is not None:
+                        # Emit a transition event BEFORE the sample so the plot
+                        # reader sees event-then-sample in chronological order.
+                        kind = _badge_transition_kind(prev_log_badge, badge)
+                        if kind is not None:
+                            _write_event(log_file, kind, self.sim.state.curr_stop, sample_ts)
+
+                        _write_sample(log_file, {
+                            "_type": "sample",
+                            "ts": sample_ts,
+                            "speed": s_val,
+                            "speed_score": s_score,
+                            "distance": d_val,
+                            "distance_score": d_score,
+                            "badge": badge,
+                            "badge_diff": b_diff,
+                            "curr_stop": self.sim.state.curr_stop,
+                            "cnt_pa": self.sim.state.cnt_pa,
+                            "departure_fired": self._detector.departure_fired,
+                            "arrival_fired": self._detector.arrival_fired,
+                            "segment_start_stop": self._segment_start_stop,
+                        })
+
+                    if badge is not None:
+                        prev_log_badge = badge
+
+                    ts = time.strftime("%H:%M:%S")
+                    d_str = f"{d_val:>5}m" if d_val is not None else "  ---"
+                    s_str = f"{s_val:>3}km/h" if s_val is not None else " --"
+                    b_str = badge or "?"
+                    print(f"[AD {ts}]  badge={b_str:<7}({b_diff:5.1f})  spd={s_str}  dst={d_str}  " f"sim:stop={self.sim.state.curr_stop} cnt_pa={self.sim.state.cnt_pa}")
+
+                    for ev in self._detector.update(d_val, s_val, badge):
+                        self._handle_event(ev)
+
                     self._stop_event.wait(self.interval_s)
-                    continue
-
-                d_cell = _crop_cell(frame, HUD_BBOX, DISTANCE_VALUE_BBOX)
-                s_cell = _crop_cell(frame, HUD_BBOX, SPEED_VALUE_BBOX)
-                b_cell = _crop_cell(frame, HUD_BBOX, BADGE_BBOX)
-                d_val, _, d_score = read_distance(d_cell, templates)
-                s_val, _, s_score = read_speed(s_cell, templates)
-                badge, b_diff = classify_badge_state(b_cell, badge_anchors)
-
-                # Publish status to the simulator's debug panel (atomic dict swap).
-                # Single-writer (this thread), single-reader (main thread) — no lock needed.
-                self.sim.auto_input_status = {
-                    "badge": badge,
-                    "badge_diff": b_diff,
-                    "speed": s_val,
-                    "speed_score": s_score,
-                    "distance": d_val,
-                    "distance_score": d_score,
-                    "segment_start_stop": self._segment_start_stop,
-                    "departure_fired": self._detector.departure_fired,
-                    "arrival_fired": self._detector.arrival_fired,
-                    "ts": time.time(),
-                }
-
-                ts = time.strftime("%H:%M:%S")
-                d_str = f"{d_val:>5}m" if d_val is not None else "  ---"
-                s_str = f"{s_val:>3}km/h" if s_val is not None else " --"
-                b_str = badge or "?"
-                print(f"[AD {ts}]  badge={b_str:<7}({b_diff:5.1f})  spd={s_str}  dst={d_str}  " f"sim:stop={self.sim.state.curr_stop} cnt_pa={self.sim.state.cnt_pa}")
-
-                for ev in self._detector.update(d_val, s_val, badge):
-                    self._handle_event(ev)
-
-                self._stop_event.wait(self.interval_s)
-            except Exception as e:
-                print(f"[AutoDriver] Error in capture loop: {e}")
-                self._stop_event.wait(self.interval_s)
+                except Exception as e:
+                    print(f"[AutoDriver] Error in capture loop: {e}")
+                    self._stop_event.wait(self.interval_s)
+        finally:
+            if log_file is not None:
+                try:
+                    log_file.close()
+                except Exception:
+                    pass
 
         print("[AutoDriver] Stopped.")
 

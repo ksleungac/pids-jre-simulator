@@ -37,6 +37,10 @@ _sta_verify_*.json
 # at runtime — these source PNGs are NOT a runtime dependency.
 /_ocr_calibration/
 
+# Drive recorder / OCR blackbox logs — JSONL per drive session, written by
+# the in-process auto-driver at runtime. Local-only; user-private telemetry.
+/_recordings/
+
 # Build artifacts
 /version_info.txt
 /release_notes.md

@@ -436,6 +436,7 @@ auto/manual key activity.
 | `ocr_templates/badges/*.png` | **Runtime input** — 6 pre-extracted badge cell crops (125×45 RGB PNGs, ~5 KB each). Loaded by `ocr.load_badge_anchors()`. Committed. |
 | `_ocr_calibration/*.png` | **Local-only** source screenshots (full 2560×1440 desktop captures, ~33 MB total). Gitignored. Only needed when re-extracting `ocr_templates/` after a game HUD layout change. |
 | `data_tools/extract_ocr_assets.py` | One-shot extractor: reads `_ocr_calibration/` source screenshots → writes `ocr_templates/`. Run after re-capturing sources, then commit the diff. |
+| `_recordings/drive_<line>_<diagram>_<TS>.jsonl` | **Blackbox / drive recorder log** — one file per AutoDriver lifetime. Line 0 is `_type: "meta"` (route/diagram/dest/stops); subsequent lines are `_type: "sample"` (one OCR cycle each). Written inside `auto_input.py`'s capture loop with per-line `flush()` for crash safety. Local-only / gitignored. Schema is locked — downstream plot generator depends on the layout. |
 | `_experiments/live_captures/` | Saved HUD crops from prior live testing (gitignored — `_experiments/` itself is now an artifact-only folder; OCR + layout modules promoted to root) |
 | `fonts/ShinGoPr6N-Medium.otf` | Latin + CJK font used by debug panel for station names |
 
