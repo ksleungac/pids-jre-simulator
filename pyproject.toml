@@ -26,6 +26,7 @@ dev = [
     "ffmpeg-python>=0.2.0",
     "librosa>=0.11.0",
     "nvidia-cublas-cu12>=12.9.2.10",
+    "plotly>=5.24.0",
     "nvidia-cudnn-cu12>=9.21.1.3",
     "pyright>=1.1.408",
 ]
