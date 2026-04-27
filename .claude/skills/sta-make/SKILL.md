@@ -61,7 +61,68 @@ Cross-PC note: because `audio_src/` is gitignored, switching machines for furthe
 
 ### Step 1 — Inspect
 
-`ls` the source folder. Read `sta_timestamps.txt`. Identify which timestamp format applies (3-timestamp explicit-end vs 2-timestamp implicit-end — see Conventions). If `split_sta*.py` already exists, read it — the user may have customized.
+`ls` the source folder. Read `sta_timestamps.txt` if present. Identify which timestamp format applies (3-timestamp explicit-end vs 2-timestamp implicit-end — see Conventions). If `split_sta*.py` already exists, read it — the user may have customized. **If there is no `sta_timestamps.txt`** (just a `sta_src.mp3` with multiple concatenated segments), continue to Step 1.5 to auto-detect boundaries.
+
+### Step 1.5 — Auto-detect segments (only when no `sta_timestamps.txt`)
+
+When the source contains multiple stations' STA recordings concatenated end-to-end (typical structure: music → mid-gap silence → voice fragment → tiny voice-break → voice fragment → between-segment silence → next music...), segment boundaries can be auto-detected. Each segment is one `[music | mid-gap | voice]` unit.
+
+**Algorithm.** Compute 50 ms RMS envelope. Find silence runs (< -42 dB, ≥ 0.5 s). Classify each silence by the duration of activity that follows it:
+
+- Followed by **> 6 s** of activity (music block): **between-segments boundary** (segment END)
+- Followed by **1.5–6 s** of activity (voice fragment): **mid-gap** (music → voice cut point)
+- Followed by **< 1.5 s** of activity: **voice-break within voice** (skip — typical closing-door announcements have a brief pause partway through)
+
+Each segment runs from one between-silence's END (or file start) to the next between-silence's START (or EOF). The mid-gap silence's start = `mid_cut`.
+
+```python
+import librosa, numpy as np
+from pathlib import Path
+
+SRC = Path("audio_src/<line>/<diagram>/sta_src.mp3")
+y, sr = librosa.load(SRC, sr=22050, mono=True)
+hop = int(sr * 0.05)
+rms_db = 20 * np.log10(librosa.feature.rms(y=y, hop_length=hop)[0] + 1e-10)
+times = np.arange(len(rms_db)) * 0.05
+
+SIL_THRESH = -42  # dB
+MIN_SIL = 0.5     # s
+
+in_sil = rms_db < SIL_THRESH
+runs, start = [], None
+for i, s in enumerate(in_sil):
+    if s and start is None: start = i
+    elif not s and start is not None:
+        runs.append((times[start], times[i-1])); start = None
+if start is not None:
+    runs.append((times[start], times[-1]))
+sils = [(s, e) for s, e in runs if (e-s) >= MIN_SIL]
+
+EOF = len(y) / sr
+segments, seg_start, mid_cut = [], sils[0][1], None  # active resumes after leading silence
+for i, (s, e) in enumerate(sils):
+    if i == 0: continue
+    next_active = (sils[i+1][0] if i+1 < len(sils) else EOF) - e
+    if next_active > 6:        # BETWEEN — segment ends here
+        segments.append((seg_start, mid_cut, s))
+        seg_start, mid_cut = e, None
+    elif next_active > 1.5:    # MID-GAP
+        mid_cut = s
+    # else: voice-break — skip
+if mid_cut is not None:        # final segment to EOF
+    segments.append((seg_start, mid_cut, EOF))
+
+for i, (s, c, e) in enumerate(segments, 1):
+    print(f"seg {i}: start={s:.2f} cut={c:.2f} end={e:.2f}  music={c-s:.2f}s voice={e-c:.2f}s")
+```
+
+**Surface to user before cutting** (Step 2 discussion still applies):
+
+- **Segment count** vs route's stop count. Off by 1 typically means the source includes a station this train doesn't stop at (e.g., a recently-opened station — keiyo's 幕張豊砂 case) — that segment goes to `_archive`.
+- **Duration outliers.** Music typically 7–15 s; voice 5–7 s. Music > 20 s may be an unusually elaborate melody (Tokyo-end of keiyo) OR two segments glued. Voice < 4 s is suspicious.
+- **Source order** — first segment → last segment direction along the route. Don't assume.
+
+Once user confirms mapping, generate `split_sta.py` using the auto-detected timestamps as `SEGMENTS`. Apply a **0.3 s pad on each side** of each segment when cutting (silence boundaries are tight to music/voice edges; pad gives `trim_sta_silence.py` lead/trail silence to normalize). Bake the pad into `sta_cut`: `sta_cut = mid_cut − (seg_start − PAD)`. Then continue to Step 4.
 
 ### Step 2 — Parse + discuss BEFORE acting
 
@@ -205,6 +266,88 @@ cp audio/<line>/<diagram>/route.json audio_src/<line>/<diagram>/route.json.bak
 
 Mention this safety net in your pre-flight summary so the user knows you have a rollback path. Delete `audio_src/<line>/<diagram>/sta.bak/` and `route.json.bak` only after the by-ear gate (Step 11) passes.
 
+### Step 7.5 — Splice source-recording artifacts (optional, only if pattern is present)
+
+Some source recordings include capture artifacts that the standard trim/validate pipeline can't clean up. Two patterns seen so far on the keiyo line:
+
+**Pattern A — KAK transient** (physical staff-machine cut captured in audio):
+
+Loud transient peaking near digital ceiling (-4 to -7 dB), brief (0.2–0.5 s), sits between music end and voice start.
+
+Only run this step if the user mentions it OR you spot the pattern: a single very loud short event near `sta_cut` on most files. Skip otherwise.
+
+**Detection.** For each file, find the loudest 25 ms peak in `[sta_cut − 1.5 s, sta_cut + 1.5 s]`. If peak amplitude ≥ -15 dB (vs. typical music -20 to -25 dB), it's a KAK. Walk outward from the peak using a 25 ms peak-amplitude envelope until amplitude drops below -25 dB; that defines the splice window. Reject results with width > 1.5 s — the walk escaped into music content.
+
+**Why raw peak amplitude, not RMS:** RMS averaging over 5–10 ms windows dilutes transient peaks down to -18 to -22 dB, indistinguishable from music. Use raw `max(|y|)` over a short window.
+
+**Detection script template:**
+
+```python
+import librosa, numpy as np, json
+from pathlib import Path
+
+route = json.loads(Path("audio/<line>/<diagram>/route.json").read_text(encoding="utf-8"))
+WIN_MS = 25; THRESH_PK_DB = -25; MIN_PEAK_DB = -15; MAX_WIDTH = 1.5; PAD = 0.03
+
+def peak_env(y, sr, win_ms):
+    win = int(sr * win_ms / 1000)
+    n = len(y) // win
+    return np.array([np.abs(y[i*win:(i+1)*win]).max() for i in range(n)]), win/sr
+
+splices = []
+for stop in route["stops"]:
+    for name in stop.get("sta", []):
+        cut = stop.get("sta_cut")
+        p = Path(f"audio/<line>/<diagram>/sta/{name}.mp3")
+        if cut is None or not p.exists(): continue
+        y, sr = librosa.load(p, sr=22050, mono=True)
+        env, dt = peak_env(y, sr, WIN_MS)
+        env_db = 20 * np.log10(env + 1e-10)
+        times = np.arange(len(env_db)) * dt
+        mask = (times >= max(0, cut - 1.5)) & (times <= min(len(y)/sr, cut + 1.5))
+        if not mask.any(): continue
+        idx = np.where(mask)[0]
+        peak_idx = idx[env_db[idx].argmax()]
+        if env_db[peak_idx] < MIN_PEAK_DB: continue  # no KAK
+        i_l, i_r = peak_idx, peak_idx
+        while i_l > 0 and env_db[i_l] > THRESH_PK_DB: i_l -= 1
+        while i_r < len(env_db)-1 and env_db[i_r] > THRESH_PK_DB: i_r += 1
+        kak_start = max(0, times[i_l] - PAD)
+        kak_end = min(len(y)/sr, times[i_r] + PAD)
+        if kak_end - kak_start > MAX_WIDTH: continue  # walk escaped
+        splices.append((name, round(kak_start, 3), round(kak_end, 3)))
+        print(f"{name}  peak={env_db[peak_idx]:.1f}dB  splice [{kak_start:.3f}, {kak_end:.3f}]  width={kak_end-kak_start:.2f}s")
+```
+
+**Surface to user before splicing.** Show each file's proposed splice range + peak dB. Files that don't trigger the threshold get reported as "no KAK detected" — they may still be valid (just no transient), or anomalous (wrong recording entirely). Wait for OK.
+
+**Splice + sta_cut adjustment.** Apply `ffmpeg -filter_complex` splice (same recipe as Step 12 — `atrim` + `concat`). For sta_cut adjustment per file:
+
+- `kak_end ≤ sta_cut` → shift sta_cut down by full splice width
+- `kak_start ≥ sta_cut` → no change (KAK was after the cut point)
+- `kak_start < sta_cut < kak_end` → snap sta_cut to `kak_start`
+
+Then proceed to Step 8 (trim) normally — the spliced files now have a clean music→silence→voice structure that trim_sta_silence + detect_sta_cut handle correctly.
+
+**Pattern B — "2nd-loop snippet"** (recording captured the start of a 2nd melody loop before the staff cut):
+
+Pattern: `music (1st loop) → tiny silence (~0.2 s, between-loops gap) → brief music pulse (0.1–0.7 s = start of 2nd loop) → silence (1–3 s) → voice`. The 2nd-loop pulse is real music, same melody, just truncated. If left in place, pressing PageUp during the 1st loop can land in the inter-loop silence and the simulator plays a confusing "music–silence–music(<0.5s)–silence–voice" sequence.
+
+Detection — *don't* try to do this algorithmically across a whole route; mid-loop pulses look just like voice fragments to amplitude detectors. Surface the pattern when the user reports it on a specific station, then probe that file's `[music_end, voice_start + 1 s]` window manually with finer-grained RMS (Step 12 recipe) to locate the snippet.
+
+Splice rule (handles both the snippet AND the long post-snippet silence in one pass):
+
+- `keep_until = music_1_end + 0.1 s` (just past full melody, before inter-loop silence/snippet)
+- `skip_until = voice_start − 1.0 s` (leaves ~1 s of silence before voice in the new file)
+- After splice, set `sta_cut = round(max(music_1_end, new_voice_start − 0.5), 1)`
+  where `new_voice_start = voice_start − (skip_until − keep_until)`
+
+Always preview after splicing — when the long post-snippet silence is genuinely long (>2 s like keiyo's tokyo-end stations), the resulting 1 s gap may still feel abrupt by-ear and the user may want to extend it. Use the verifier's interactive trim (Step 11) for fine adjustment.
+
+### Pattern C — duplicate intro / stutter / mid-music repeat
+
+Source recordings occasionally have a tiny stutter at the start (e.g., the first 0.1–0.3 s of music plays twice) or a fully-repeated melody (the entire melody plays twice back-to-back). These are fundamentally per-file issues — don't try to detect them. Hand off to the verifier's interactive trim (Step 11) and let the user nudge start/end markers by-ear.
+
 ### Step 8 — Trim silences (in-place, modifies files)
 
 Trims leading + trailing silence to ~0.2 s pads (lossless stream-copy) and the mid-file silence between music end and voice start to ~1 s (re-encodes, only when detection confidence is high and gap is in a sane range). With `--route`, patches route.json `sta_cut` values down by `lead_trim + mid_trim`.
@@ -235,10 +378,10 @@ PYTHONUTF8=1 uv run python data_tools/detect_sta_cut.py audio/<line>/<diagram>/s
 For each EARLY/LATE flag, **propose** the correction using the auto-set rule:
 
 ```
-sta_cut = round(max(music_end, voice_start - 0.2), 1)
+sta_cut = round(max(music_end, voice_start - 0.5), 1)
 ```
 
-(Sits 0.2 s pre-voice when the gap allows; falls back to `voice_start` when the gap is too narrow.)
+(Sits 0.5 s pre-voice when the gap allows; falls back to `voice_start` when the gap is too narrow.)
 
 Surface the diff (current → proposed, with the [`music_end`, `voice_start`] window) as a table. **Do not auto-apply** — wait for user confirmation. If detector confidence < 0.7 OR the proposal looks wrong relative to the user's hand-set value → **flag for re-listen** instead of proposing.
 
@@ -273,6 +416,22 @@ Per station, the script:
 3. Plays `[sta_cut − 3 s, EOF]` — gives 3 s of music tail, then the cut, then the voice. The cut transition is what you're listening for.
 
 The window has a clickable sidebar listing all STAs with their current verdict (`✓ ✗ ·`). Click any row to jump. Pass/Fail/Replay buttons + P/F/R keys. ↑/↓ navigates linearly. Q/Esc to quit.
+
+**Per-station notes** (✎ row above the seek bar): click or press **E** to add/edit a note (e.g. "look for double-loop at start", or a FAIL reason). Enter saves, Esc cancels. PASS auto-resolves the note (renders dim with strike-through). Notes persist in the results JSON across runs.
+
+**Cut-marker beep**: a short 880 Hz beep fires once per playback when the tail crosses sta_cut, marking the exact transition point so it's easy to hear whether the cut lands cleanly.
+
+**Interactive trim** (for files where the propose+splice pipeline can't cleanly fix the issue — e.g., per-file stutters, duplicate intros, idiosyncratic snippets):
+
+| Key | Action |
+|---|---|
+| `[` / `]` | start-trim ±0.1 s (Shift = ±0.01 s for fine) |
+| `,` / `.` | end-trim ±0.1 s (Shift = ±0.01 s) |
+| `R` | replay (preview the pending trim — head plays from `trim_start`, tail stops at `duration − end_trim`) |
+| `T` | apply trim — splices the file lossless via ffmpeg, shifts `sta_cut` by `−start_trim`, persists to route.json |
+| `Z` | reset pending trim |
+
+The trim regions show as red overlays on the seek bar. Status line below the bar previews the new duration and new `sta_cut`. Switching stations discards pending trim. Use this for any per-file issue that doesn't fit a generic detector — keiyo's shin-kiba "0.2 s stutter at start" was an example.
 
 **Single-station retest** when iterating on a fix:
 
@@ -318,7 +477,7 @@ ffmpeg -y -loglevel error -i audio/<line>/<diagram>/sta/<sta>.mp3 \
 mv <sta>.tmp.mp3 audio/<line>/<diagram>/sta/<sta>.mp3
 ```
 
-Where `keep_until = music_end + 0.5` and `skip_until = voice_start - 0.5` (uses the same arithmetic as `trim_middle_gap`). Then update `sta_cut` to `round(max(music_end, voice_start - 0.5 - 0.2), 1)` accounting for the splice. Re-run Steps 9 + 11 to confirm.
+Where `keep_until = music_end + 0.5` and `skip_until = voice_start - 0.5` (uses the same arithmetic as `trim_middle_gap`). Then update `sta_cut` to `round(max(music_end, voice_start - 0.5 - 0.5), 1)` accounting for the splice. Re-run Steps 9 + 11 to confirm.
 
 If the file is locked when `mv` runs ("Device or resource busy"), the verifier or another player is holding it — close it and retry.
 
@@ -390,7 +549,7 @@ For non-Japanese names: lowercase, spaces → hyphens, strip apostrophes/most pu
 
 `sta_cut` MUST satisfy `music_end <= sta_cut <= voice_start` — i.e. land inside the silence gap between the music's hard cut and the voice's first frame. Both error modes are unacceptable UX (see Step 9 above).
 
-`sta_cut` accepts integer or one-decimal float. Use the float precision when integer rounding would push outside the gap (common when the gap is < 1 s wide). The default auto-set strategy is `round(max(music_end, voice_start - 0.2), 1)`.
+`sta_cut` accepts integer or one-decimal float. Use the float precision when integer rounding would push outside the gap (common when the gap is < 1 s wide). The default auto-set strategy is `round(max(music_end, voice_start - 0.5), 1)`.
 
 ### Leading + trailing silence targets
 
@@ -423,6 +582,7 @@ Every STA file ships with **~0.2 s of silence at each end**:
 - **Don't create a metadata JSON sidecar.** The filename IS the metadata store. If `sta_meta.json` shows up, that's a previous experiment that should be removed.
 - **Front-half placeholders are fine.** When STA source covers only part of a route (e.g., from-某-station-onward), the unsplit stops keep their placeholder `sta` refs until the rest arrives. They'll fail `validate_data.py`'s file-existence check until then — that's expected.
 - **Detector zero-gap pattern → real gap is outside the search window.** When the detector returns `music_end == voice_start` with high confidence, that's NOT a genuinely tight transition — it's a false positive. Probe the waveform manually (Step 12) and run the manual mid-trim recipe.
+- **Source-recording transients (KAK).** Some lines (keiyo) have a loud physical-cut transient captured in the recording. If you spot a -4 to -7 dB peak near `sta_cut`, run Step 7.5 to splice it out before normal trim. Without splicing, the transient gets played at full volume during cut transitions — jarring UX. The detector also misclassifies the KAK's silence boundary as music_end, producing zero-gap false positives.
 - **Most stations flag EARLY immediately after `trim_sta_silence.py`** — expected, propose-then-apply fixes them. Don't try to "fix" the trim script's `total_shift` math; the propose-then-apply round trip is the design.
 
 ## Out of scope
