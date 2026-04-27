@@ -4,6 +4,8 @@
 - **Discussion-first approach**: Present findings/learnings before making documentation updates
 - User reviews and confirms understanding before changes are committed
 - **No auto-commit**: Never commit during session-recap or other tasks unless explicitly asked
+- **Skip-confirmation when explicitly signaled**: When the user says "push directly" / "skip my confirmation" at session-end commit time, bypass the /commit skill's per-file confirmation gate. Still split logically into one commit per concern (data line A, data line B, tooling, skill); still write meaningful messages; just don't pause for OK between commits or before push. Default behavior remains discussion-first.
+- **Commit the session-recap output too**: when running /session-recap at the end of a commit-and-push session, include the resulting `memory/YYYY-MM-DD.md` + `memory/MEMORY.md` updates in the same push (as a separate `docs(memory)` commit). Easy to forget; the user wants the recap on the remote alongside the work it describes.
 - **Discussion-first for data work specifically**: When splitting audio, importing route data, or adding any batch of files — present the parse + flag uncertainties + ask before generating splitter scripts or touching route.json. Format variance between sources is common and surprises are normal; don't assume "the format" exists.
 
 ## Data Modeling Philosophy
@@ -13,6 +15,7 @@
 
 ## Tooling Workflow
 - **Per-source ad-hoc scripts**, not maintained libraries: when format varies between batches (e.g., audio splitting where one source uses 3-timestamp format and another uses 2-timestamp), generate a fresh script per source. Don't try to unify into one master tool. Quoting the user: "the idea is to not have fixed script, my format is variable."
+- **Backup before any in-place destructive modification.** Before running tools that re-encode / overwrite / delete files in place (e.g. `trim_sta_silence.py`, manual `ffmpeg -filter_complex` splices, route.json multi-value patches), snapshot the target into `audio_src/<line>/<diagram>/` (gitignored) first. Mention the safety net in the pre-flight summary so the user knows the rollback path exists. Delete backups only after the by-ear / smoke-test gate passes. Pure relocations (`mv` to `_archive/`) don't need a separate backup — the move itself is reversible.
 
 ## Naming Conventions
 - Use "sta" terminology (not "departure_melody" or similar)

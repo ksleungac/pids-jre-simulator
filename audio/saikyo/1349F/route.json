@@ -1,70 +1,108 @@
 {
     "route": "埼京線・川越線",
-    "color": [46, 139, 87],
+    "color": [
+        46,
+        139,
+        87
+    ],
     "type": "快速",
     "dest": "川越",
     "stops": [
         {
             "name": "大崎",
             "pa": [],
-            "sta": ["JA08_OSK"],
-            "sta_cut": 10,
+            "sta": [
+                "JA08_OSK"
+            ],
+            "sta_cut": 9.0,
             "time": 0,
             "sta_code": "JA08"
         },
         {
             "name": "恵比寿",
-            "pa": ["1", "2"],
-            "sta": ["JA09_EBS"],
-            "sta_cut": 16,
+            "pa": [
+                "1",
+                "2"
+            ],
+            "sta": [
+                "JA09_EBS"
+            ],
+            "sta_cut": 16.0,
             "time": 3,
             "sta_code": "JA09"
         },
         {
             "name": "渋谷",
-            "pa": ["3", "4"],
-            "sta": ["JA10_SBY"],
-            "sta_cut": 9,
+            "pa": [
+                "3",
+                "4"
+            ],
+            "sta": [
+                "JA10_SBY"
+            ],
+            "sta_cut": 7.3,
             "time": 2,
             "sta_code": "JA10"
         },
         {
             "name": "新宿",
-            "pa": ["5", "6"],
-            "sta": ["JA11_SJK"],
-            "sta_cut": 10,
+            "pa": [
+                "5",
+                "6"
+            ],
+            "sta": [
+                "JA11_SJK"
+            ],
+            "sta_cut": 8.7,
             "time": 5,
             "sta_code": "JA11"
         },
         {
             "name": "池袋",
-            "pa": ["7", "8"],
-            "sta": ["JA12_IKB"],
-            "sta_cut": 20,
+            "pa": [
+                "7",
+                "8"
+            ],
+            "sta": [
+                "JA12_IKB"
+            ],
+            "sta_cut": 19.5,
             "time": 2,
             "sta_code": "JA12"
         },
         {
             "name": "板橋",
-            "pa": ["9"],
-            "sta": ["JA13"],
-            "sta_cut": 11,
+            "pa": [
+                "9"
+            ],
+            "sta": [
+                "JA13"
+            ],
+            "sta_cut": 11.1,
             "time": 3,
             "sta_code": "JA13"
         },
         {
             "name": "十条",
-            "pa": ["10"],
-            "sta": ["JA14"],
-            "sta_cut": 12,
+            "pa": [
+                "10"
+            ],
+            "sta": [
+                "JA14"
+            ],
+            "sta_cut": 11.1,
             "time": 2,
             "sta_code": "JA14"
         },
         {
             "name": "赤羽",
-            "pa": ["11"],
-            "sta": ["JA15_ABN"],
-            "sta_cut": 12,
+            "pa": [
+                "11"
+            ],
+            "sta": [
+                "JA15_ABN"
+            ],
+            "sta_cut": 11.1,
             "time": 3,
             "sta_code": "JA15"
         },
@@ -80,9 +118,14 @@
         },
         {
             "name": "戸田公園",
-            "pa": ["12", "13"],
-            "sta": ["JA18"],
-            "sta_cut": 10,
+            "pa": [
+                "12",
+                "13"
+            ],
+            "sta": [
+                "JA18"
+            ],
+            "sta_cut": 7.9,
             "time": 5,
             "sta_code": "JA18"
         },
@@ -98,89 +141,135 @@
         },
         {
             "name": "武蔵浦和",
-            "pa": ["14", "15"],
-            "sta": ["JA21"],
-            "sta_cut": 10,
+            "pa": [
+                "14",
+                "15"
+            ],
+            "sta": [
+                "JA21"
+            ],
+            "sta_cut": 8.0,
             "time": 5,
             "sta_code": "JA21"
         },
         {
             "name": "中浦和",
-            "pa": ["16"],
-            "sta": ["JA22"],
-            "sta_cut": 10,
+            "pa": [
+                "16"
+            ],
+            "sta": [
+                "JA22"
+            ],
+            "sta_cut": 7.8,
             "time": 2,
             "sta_code": "JA22"
         },
         {
             "name": "南与野",
-            "pa": ["17"],
-            "sta": ["JA23"],
-            "sta_cut": 10,
+            "pa": [
+                "17"
+            ],
+            "sta": [
+                "JA23"
+            ],
+            "sta_cut": 7.9,
             "time": 2,
             "sta_code": "JA23"
         },
         {
             "name": "与野本町",
-            "pa": ["18"],
-            "sta": ["JA24"],
-            "sta_cut": 15,
+            "pa": [
+                "18"
+            ],
+            "sta": [
+                "JA24"
+            ],
+            "sta_cut": 14.0,
             "time": 2,
             "sta_code": "JA24"
         },
         {
             "name": "北与野",
-            "pa": ["20"],
-            "sta": ["JA25"],
-            "sta_cut": 10,
+            "pa": [
+                "20"
+            ],
+            "sta": [
+                "JA25"
+            ],
+            "sta_cut": 8.2,
             "time": 2,
             "sta_code": "JA25"
         },
         {
             "name": "大宮",
-            "pa": ["21"],
-            "sta": ["JA26_OMY", "JA26_OMY_1"],
-            "sta_cut": 10,
+            "pa": [
+                "21"
+            ],
+            "sta": [
+                "JA26_OMY",
+                "JA26_OMY_1"
+            ],
+            "sta_cut": 7.7,
             "time": 3,
             "sta_code": "JA26"
         },
         {
             "name": "日進",
-            "pa": ["22", "23"],
-            "sta": ["20"],
-            "sta_cut": 10,
+            "pa": [
+                "22",
+                "23"
+            ],
+            "sta": [
+                "20"
+            ],
+            "sta_cut": 10.0,
             "time": 3,
             "sta_code": null
         },
         {
             "name": "西大宮",
-            "pa": ["24", "25"],
-            "sta": ["21"],
-            "sta_cut": 17,
+            "pa": [
+                "24",
+                "25"
+            ],
+            "sta": [
+                "21"
+            ],
+            "sta_cut": 16.2,
             "time": 3,
             "sta_code": null
         },
         {
             "name": "指扇",
-            "pa": ["26"],
-            "sta": ["22"],
-            "sta_cut": 10,
+            "pa": [
+                "26"
+            ],
+            "sta": [
+                "22"
+            ],
+            "sta_cut": 8.1,
             "time": 2,
             "sta_code": null
         },
         {
             "name": "南古谷",
-            "pa": ["27", "28"],
-            "sta": ["23"],
-            "sta_cut": 9,
+            "pa": [
+                "27",
+                "28"
+            ],
+            "sta": [
+                "23"
+            ],
+            "sta_cut": 8.4,
             "time": 5,
             "sta_code": null
         },
         {
             "name": "川越",
-            "pa": ["29", "30"],
-            "sta": ["24"],
-            "sta_cut": 11,
+            "pa": [
+                "29",
+                "30"
+            ],
             "time": 4,
             "sta_code": null
         }
