@@ -73,6 +73,7 @@ Before doing anything else:
 1. Read `memory/YYYY-MM-DD.md` (today and yesterday) for recent context
 2. Read [memory/MEMORY.md](memory/MEMORY.md) — long-term memory index
 3. Read [.claude/rules/preferences.md](.claude/rules/preferences.md) — user preferences
+4. Skim [TODO.md](TODO.md) — centralized backlog grouped by area (auto-input / display / distribution / housekeeping + closed-off paths)
 
 ## Memory (project-level, in-repo)
 
