@@ -145,10 +145,13 @@ def main() -> int:
             lead_trims[f.stem] = total_shift
 
     # patch route.json sta_cut values
+    # Parse + write JSON instead of regex-substituting text — handles compact
+    # AND multi-line list formats, single AND multi-element sta lists. Re-emits
+    # with indent=4 (matches the project convention; format may shift if input
+    # was compact, but both forms are valid JSON).
     if args.route and lead_trims:
-        text = args.route.read_text(encoding="utf-8")
         import json
-        route = json.loads(text)
+        route = json.loads(args.route.read_text(encoding="utf-8"))
         for stop in route["stops"]:
             for sta_name in stop.get("sta", []):
                 if sta_name in lead_trims and stop.get("sta_cut") is not None:
@@ -156,13 +159,12 @@ def main() -> int:
                     new = round(old - lead_trims[sta_name], 1)
                     if new == old:
                         continue
-                    pattern = (
-                        rf'("sta":\s*\["{re.escape(sta_name)}"\][^}}]*?"sta_cut":\s*){old}'
-                    )
-                    text, n = re.subn(pattern, rf"\g<1>{new}", text, count=1)
-                    if n == 1:
-                        print(f"  route.json: {sta_name} sta_cut {old} -> {new}")
-        args.route.write_text(text, encoding="utf-8")
+                    stop["sta_cut"] = new
+                    print(f"  route.json: {sta_name} sta_cut {old} -> {new}")
+                    break  # one shift per stop even if multi-variant sta
+        args.route.write_text(
+            json.dumps(route, ensure_ascii=False, indent=4) + "\n", encoding="utf-8"
+        )
 
     return 0
 
