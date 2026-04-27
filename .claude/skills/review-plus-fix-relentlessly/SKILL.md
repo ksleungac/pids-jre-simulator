@@ -19,6 +19,24 @@ This skill implements a Ralph loop pattern:
 
 This applies transitively: when you spawn the review-dirty subagent, that agent must also use PowerShell (its SKILL.md has the same directive baked in).
 
+## Scope rule (IMPORTANT — only review what you have working context for)
+
+**Only ask the reviewer about files that you (the main agent in this session) actually built, edited, or have working context for.** The dirty / untracked tree often contains unrelated work — files left behind by another Claude session, a parallel agent's WIP, the user's personal in-progress edits. You don't have the context to judge those correctly, and applying "fixes" to them based on a reviewer's surface read can corrupt someone else's in-flight work.
+
+When you scope each cycle's review:
+
+- **Include**: files you edited / created in this session, plus any closely-related files you touched (e.g. a doc you updated to describe code you wrote).
+- **Exclude** even if dirty:
+  - Untracked files you didn't create — they belong to someone else's workstream.
+  - Modified files where the changes pre-date this session and weren't yours.
+  - Anything in known artifact directories (`lcd_references/`, `_recordings/`, build outputs).
+  - Testing harnesses (`preview_*.py`) per project preferences.
+  - Anything the user has explicitly carved out earlier in the conversation.
+
+If the user explicitly says "review everything", surface findings on out-of-context files but **flag them as out-of-context and do NOT apply fixes** unless the user confirms file-by-file. Reviewer findings on code you don't own are still useful information, just not actionable by you alone.
+
+Concrete rule for the reviewer prompt: enumerate the in-scope files explicitly and list out-of-scope ones with a one-line "why excluded" each. Don't pass `git diff --name-only | xargs` style "review whatever's dirty" — that conflates your work with everyone else's.
+
 ## Workflow when invoked:
 
 ### Step 1: Initialize loop variables

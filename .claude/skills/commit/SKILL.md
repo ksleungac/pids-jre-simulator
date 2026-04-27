@@ -21,6 +21,20 @@ This skill runs right before the actual commit. It's a lightweight gate, not a r
 
 Run this **before** drafting the commit message — the outcome may change what's in scope for the commit.
 
+## Pre-flight check — has session-recap run?
+
+If this is the last commit of a coding session (e.g. the user is about to wrap up, has said "commit this and we're done", or the session has produced a meaningful chunk of new code/docs/learnings), check whether `/session-recap` has been run yet. Look for: a `memory/<today>.md` daily log file mentioning this session's work, or a recent `MEMORY.md` index entry pointing at it.
+
+If session-recap has NOT been run and the session has produced material worth capturing (new patterns, preferences expressed, debugging insights, doc updates), surface it before drafting the commit message:
+
+```
+Heads-up: I don't see a session-recap entry for today's work in memory/.
+Want me to run /session-recap first so the daily log + memory index are in
+the same commit set as the code, or skip and just commit?
+```
+
+Don't block. The user can say "skip"; some commits genuinely don't need a recap (one-line typo fix, isolated bugfix). But the prompt makes the choice deliberate rather than missed.
+
 ## Process
 
 ### Step 1 — Inventory changes
