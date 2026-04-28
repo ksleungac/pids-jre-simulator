@@ -71,6 +71,12 @@ class JapaneseDisplay:
         self.screen = screen
         self.route_data = route_data
         self.stops = stops
+        # Optional through-service pre-route prefix (e.g. Yokosuka→Tokyo before
+        # Sōbu/1217F's Tokyo→Narita). Display-only — sim never indexes into it.
+        # Pre-route cells render dim/passed regardless of train position.
+        self.pre_stops = route_data.get("pre_stops", [])
+        self.display_stops = self.pre_stops + self.stops
+        self.display_offset = len(self.pre_stops)
         self.dest = route_data.get("dest", "")
         self.color = route_data.get("color", [255, 255, 255])
         self.contrast_color = route_data.get("contrast_color", [224, 54, 37])
@@ -83,13 +89,19 @@ class JapaneseDisplay:
         self.font_disclaimer = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 10)
 
     def _calculate_layout(self) -> None:
-        """Calculate station display layout based on route length."""
-        num_stops = len(self.stops)
+        """Calculate station display layout based on route length.
 
-        if num_stops > 17 or num_stops % 2 == 0:
-            self.per_line = min(STOPS_PER_LINE, math.ceil(num_stops / 2))
+        Layout sizes against ``self.display_stops`` (pre_stops + stops) so a
+        through-service pre-route extends the visible journey naturally.
+        Circular detection stays on ``self.stops`` — pre_stops can't make a
+        non-circular route circular.
+        """
+        num_stops = len(self.display_stops)
+
+        if num_stops <= STOPS_PER_LINE:
+            self.per_line = num_stops
         else:
-            self.per_line = 17
+            self.per_line = min(STOPS_PER_LINE, math.ceil(num_stops / 2))
 
         self.stops_w = STOPS_WIDTH
         # Center to actual cell count drawn. For multi-line routes this equals
@@ -123,31 +135,46 @@ class JapaneseDisplay:
     def _get_stops_list_disp(self, curr_stop: int) -> List[Tuple[int, Dict]]:
         """Get the list of (global_index, stop) pairs currently visible.
 
-        Every rendered cell carries its global index into ``self.stops`` so
-        drawing code can compare directly against ``curr_stop`` / ``cursor_pos``
-        without juggling a second "local" index space.
+        ``curr_stop`` is the **display index** (sim's curr_stop + display_offset).
+        Every rendered cell carries its display-space global index so drawing
+        code can compare directly against display-shifted ``curr_stop`` /
+        ``cursor_pos`` without juggling a second "local" index space.
+
+        Operates on ``self.display_stops`` (pre_stops + stops) so a
+        through-service pre-route extends the visible journey naturally.
 
         Side effect: keeps ``self.continuity[2]`` in sync with whether the
         currently visible window reaches the route's last stop. Without this,
         the slot-2 chevrons would render past the destination on long routes
         once the window slides (e.g. Keihin Ofuna).
         """
-        if len(self.stops) <= self.STOPS_QUANTITY:
-            return list(enumerate(self.stops))
+        if len(self.display_stops) <= self.STOPS_QUANTITY:
+            return list(enumerate(self.display_stops))
 
         window_start = 0
-        f_stops = self.stops[: self.STOPS_QUANTITY]
+        f_stops = self.display_stops[: self.STOPS_QUANTITY]
 
-        remaining = len(self.stops) - curr_stop
-        if 0 < remaining < self.STOPS_QUANTITY:
+        # Flip rule: native long routes use early-flip ("remaining < QUANTITY"
+        # so the user sees the end approaching). Pre-stops routes use late-flip
+        # — keep window at start (so the through-service prefix remains visible)
+        # until the train is forced off the right edge of the first window.
+        # Without this distinction, sobu/1217F (37 cells, train enters at
+        # display idx 18) would flip at boot — hiding Kurihama..Tokyo from view.
+        if self.pre_stops:
+            should_flip = curr_stop > self.STOPS_QUANTITY - 1
+        else:
+            remaining = len(self.display_stops) - curr_stop
+            should_flip = 0 < remaining < self.STOPS_QUANTITY
+
+        if should_flip:
             # Window has slid — visible window now includes the route's last
             # stop. Suppress slot 2 (no continuity past dest) for non-circular
             # routes.
-            window_start = len(self.stops) - self.STOPS_QUANTITY
-            f_stops = self.stops[window_start:]
+            window_start = len(self.display_stops) - self.STOPS_QUANTITY
+            f_stops = self.display_stops[window_start:]
             if self.circular != 1:
                 self.continuity[2] = 0
-        elif self.circular != 1 and len(self.stops) > 28:
+        elif self.circular != 1 and len(self.display_stops) > 28:
             # Window hasn't slid yet (or user jumped back to an earlier stop):
             # there IS more route past the visible window. Restore slot 2.
             self.continuity[2] = 1
@@ -188,7 +215,11 @@ class JapaneseDisplay:
         window_start = f_stops[0][0]
         ptr_color = self.contrast_color
 
-        use_pentagon = at_station or curr_stop == 0
+        # `curr_stop == display_offset` is the boot fallback (active route's
+        # first cell, no left neighbor for chevron geometry on routes without
+        # pre_stops). Routes with pre_stops have left neighbors at boot, but
+        # at_station=True at boot still selects pentagon — same end result.
+        use_pentagon = at_station or curr_stop == self.display_offset
 
         # Pentagon anchors at curr_stop (the platform we're at). Chevron
         # anchors at cursor_pos (which can lag during skip animation).
@@ -303,9 +334,11 @@ class JapaneseDisplay:
             in_active_range = cursor_pos <= gi <= dest_idx
 
             if in_active_range:
-                if gi == 0 and cursor_pos == 0:
-                    # Boot pentagon at idx 0 — pentagon (drawn in draw_ptr)
-                    # paints over this cell. Skip drawing here entirely.
+                if gi == self.display_offset and cursor_pos == self.display_offset:
+                    # Boot pentagon at the active route's start cell — pentagon
+                    # (drawn in draw_ptr) paints over this cell. Skip drawing
+                    # here entirely. For routes without pre_stops, display_offset
+                    # is 0 so this matches the original "idx 0 boot" semantic.
                     continue
                 if not stop.get("pa", []):
                     arrow_offset = int(self.stops_w * 0.3)
@@ -479,7 +512,12 @@ class JapaneseDisplay:
                 and runs in the app loop before this method is called.
             current_time: Wall-clock timestamp for countdown calculation.
         """
-        f_stops = self._get_stops_list_disp(state.curr_stop)
+        # Display indices = sim indices + display_offset (= len(pre_stops)).
+        # Renderers operate in display-index space throughout.
+        curr_stop = state.curr_stop + self.display_offset
+        cursor_pos = state.cursor_pos + self.display_offset
+
+        f_stops = self._get_stops_list_disp(curr_stop)
         x = self.x
         y = self.y
         window_start = f_stops[0][0] if f_stops else 0
@@ -491,13 +529,14 @@ class JapaneseDisplay:
 
         # Resolve effective destination — stop-level override beats route-level
         # (matches UpperDisplay._get_current_dest). Yamanote's mid-loop dest
-        # cycling depends on this to keep the active bar range correct.
-        curr_stop = state.curr_stop
-        stop_dest = self.stops[curr_stop].get("dest") if 0 <= curr_stop < len(self.stops) else None
+        # cycling depends on this to keep the active bar range correct. Reads
+        # against sim's stops[] (not display_stops) since stop-level dest
+        # overrides only live on active stops.
+        sim_curr_stop = state.curr_stop
+        stop_dest = self.stops[sim_curr_stop].get("dest") if 0 <= sim_curr_stop < len(self.stops) else None
         effective_dest = stop_dest or self.dest
 
         dest_idx = self._find_dest_index(f_stops, effective_dest)
-        cursor_pos = state.cursor_pos
 
         # --- Continuity-tail params (adjust freely) ---
         # Last-in-row cells get a +row_tail_extra width bump (applies to row 1's
@@ -599,7 +638,7 @@ class JapaneseDisplay:
                     chevron_gap=cont_chev_gap,
                 )
 
-            text_color = (0, 0, 0) if (is_active and (stop.get("pa", []) or gi == 0)) else INACTIVE_COLOR
+            text_color = (0, 0, 0) if (is_active and (stop.get("pa", []) or gi == self.display_offset)) else INACTIVE_COLOR
 
             # Slot 0 / 2 'to' indicator — extended bar tail + 分-area + triangle + chevrons.
             # Slot 0: last cell of line 1; slot 2: last visible cell when window
@@ -692,6 +731,10 @@ class JapaneseEightStationDisplay:
         self.screen = screen
         self.route_data = route_data
         self.stops = stops
+        # Optional through-service pre-route prefix; see JapaneseDisplay above.
+        self.pre_stops = route_data.get("pre_stops", [])
+        self.display_stops = self.pre_stops + self.stops
+        self.display_offset = len(self.pre_stops)
         self.dest = route_data.get("dest", "")
         self.color = route_data.get("color", [255, 255, 255])
         self.contrast_color = route_data.get("contrast_color", [224, 54, 37])
@@ -703,7 +746,7 @@ class JapaneseEightStationDisplay:
         # future continuity arrows (route-continues indicators).
         self.side_margin = 44
         # Cell geometry — 8 cells distributed across the inner width.
-        self.cells = min(self.VISIBLE_COUNT, len(stops))
+        self.cells = min(self.VISIBLE_COUNT, len(self.display_stops))
         inner_w = S_WIDTH - 2 * self.side_margin
         self.stops_w = inner_w // self.VISIBLE_COUNT
         self.x = (S_WIDTH - self.stops_w * self.cells) // 2
@@ -766,9 +809,11 @@ class JapaneseEightStationDisplay:
         skip animation — visible single-frame shift, but preserves the
         "1 past cell always visible" contract per the docstring.
         """
-        n = len(self.stops)
+        # Operates in display-index space against display_stops (pre + active).
+        # `curr_stop` and `cursor_pos` are display-shifted by the caller.
+        n = len(self.display_stops)
         if n <= self.VISIBLE_COUNT:
-            return list(enumerate(self.stops))
+            return list(enumerate(self.display_stops))
 
         if curr_stop == 0:
             start = 0
@@ -776,7 +821,7 @@ class JapaneseEightStationDisplay:
             start = n - self.VISIBLE_COUNT
         else:
             start = cursor_pos - 1
-        return [(start + i, s) for i, s in enumerate(self.stops[start : start + self.VISIBLE_COUNT])]
+        return [(start + i, s) for i, s in enumerate(self.display_stops[start : start + self.VISIBLE_COUNT])]
 
     def _find_dest_index(self, window: List[Tuple[int, Dict]], effective_dest: str) -> int:
         """Global index of the effective destination within the visible window."""
@@ -882,7 +927,9 @@ class JapaneseEightStationDisplay:
             center_y = int(y + self.bar_height / 2)
 
             if gi >= cursor_pos and gi <= dest_idx:
-                if gi == 0 and cursor_pos == 0:
+                if gi == self.display_offset and cursor_pos == self.display_offset:
+                    # Boot at active route's first cell — pentagon (drawn in
+                    # draw_ptr) overdraws; small dot underneath for parity.
                     radius = 6
                     pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, radius, PASSED_COLOR)
                     pygame.gfxdraw.aacircle(self.screen, center_x, center_y, radius, PASSED_COLOR)
@@ -939,7 +986,11 @@ class JapaneseEightStationDisplay:
         y = self.bar_y
         window_start = window[0][0]
 
-        use_pentagon = at_station or curr_stop == 0
+        # Boot fallback: pentagon at active route's first cell. For routes
+        # without pre_stops, display_offset=0 so this matches the original
+        # `curr_stop == 0` semantic. With pre_stops, at_station=True at boot
+        # already selects pentagon — same end result.
+        use_pentagon = at_station or curr_stop == self.display_offset
         anchor = curr_stop if use_pentagon else cursor_pos
         local_disp = anchor - window_start
         # During a multi-station skip animation, cursor_pos can lag before
@@ -1125,6 +1176,12 @@ class JapaneseEightStationDisplay:
     # of `show_stops`'s Pass 2 (after `draw_times`) once the design is
     # finalised. Side margin (`self.side_margin = 44`) reserves the px the
     # triangle will need on the right-hand end of the bar.
+    #
+    # PRE_STOPS NOTE: when wiring this in, the early-return guard below
+    # currently compares against `len(self.stops)` (sim space). With pre_stops,
+    # `last_gi` comes from the window in DISPLAY space, so the comparison must
+    # be against `len(self.display_stops) - 1` instead — otherwise the marker
+    # silently never renders on pre_stops routes.
 
     def _draw_continuation_marker(self, window: List[Tuple[int, Dict]]) -> None:
         """Small right-pointing triangle past the 分 marker.
@@ -1225,11 +1282,14 @@ class JapaneseEightStationDisplay:
         if state.frame_mode == 0:
             return
 
-        curr_stop = state.curr_stop
-        cursor_pos = state.cursor_pos
+        # Display indices = sim indices + display_offset (= len(pre_stops)).
+        curr_stop = state.curr_stop + self.display_offset
+        cursor_pos = state.cursor_pos + self.display_offset
         window = self._get_window(curr_stop, cursor_pos)
 
-        stop_dest = self.stops[curr_stop].get("dest") if 0 <= curr_stop < len(self.stops) else None
+        # stop_dest reads from sim's stops[] (pre_stops can't override dest).
+        sim_curr_stop = state.curr_stop
+        stop_dest = self.stops[sim_curr_stop].get("dest") if 0 <= sim_curr_stop < len(self.stops) else None
         effective_dest = stop_dest or self.dest
         dest_idx = self._find_dest_index(window, effective_dest)
         window_start = window[0][0] if window else 0

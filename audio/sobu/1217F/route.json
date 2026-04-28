@@ -5,6 +5,26 @@
     "type_color": [22, 64, 152],
     "type": "快速",
     "dest": "成田空港",
+    "pre_stops": [
+        {"name": "久里浜",   "sta_code": "JO01"},
+        {"name": "衣笠",     "sta_code": "JO02"},
+        {"name": "横須賀",   "sta_code": "JO03"},
+        {"name": "田浦",     "sta_code": "JO04"},
+        {"name": "東逗子",   "sta_code": "JO05"},
+        {"name": "逗子",     "sta_code": "JO06"},
+        {"name": "鎌倉",     "sta_code": "JO07"},
+        {"name": "北鎌倉",   "sta_code": "JO08"},
+        {"name": "大船",     "sta_code": "JO09"},
+        {"name": "戸塚",     "sta_code": "JO10"},
+        {"name": "東戸塚",   "sta_code": "JO11"},
+        {"name": "保土ヶ谷", "sta_code": "JO12"},
+        {"name": "横浜",     "sta_code": "JO13"},
+        {"name": "新川崎",   "sta_code": "JO14"},
+        {"name": "武蔵小杉", "sta_code": "JO15"},
+        {"name": "西大井",   "sta_code": "JO16"},
+        {"name": "品川",     "sta_code": "JO17"},
+        {"name": "新橋",     "sta_code": "JO18"}
+    ],
     "stops": [
         {
             "name": "東京",
