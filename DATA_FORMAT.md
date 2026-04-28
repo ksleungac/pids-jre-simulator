@@ -4,20 +4,18 @@
 
 This document defines the JSON data formats used by the PA Simulator for route configurations and station databases.
 
+> **Editing this doc.** Before adding new content, scan for redundant or stale claims that the addition would duplicate or contradict — merge / remove first, then add. Domain docs are tightly maintained, not additive. See [principles.md § "Tighten before appending"](.claude/rules/principles.md).
+
 ---
 
 ## File Structure
 
 ```
-project_root/
-├── data/
-│   ├── translations.json        # Central translation database (furigana, english)
-│   ├── train_types.json         # Train type English translations (with optional english_short)
-│   └── stations.json            # Station metadata (3-letter codes; more fields over time)
-└── audio/
-    └── [line]/                  # Line folder (e.g., chuo, keihin, nambu, yamanote)
-        └── [diagram]/           # Train diagram folder (e.g., 1349F, 759K). Omit for single-diagram lines.
-            └── route.json       # Route configuration
+data/
+├── translations.json        # Central translation database (furigana, english)
+├── train_types.json         # Train type English translations (with optional english_short)
+└── stations.json            # Station metadata (3-letter codes; more fields over time)
+audio/[line]/[diagram]/route.json   # diagram folder may be omitted for single-diagram lines
 ```
 
 ---
@@ -62,12 +60,7 @@ Centralized translation lookup for **any Japanese text** used in the simulator:
 |---------|----------|---------|
 | `[Japanese text]` | Any Japanese text needing translation | `東京`, `新宿`, `次は` |
 
-**Important:** Keys are the **raw Japanese text** (kanji/kana), not station codes.
-
-### Lookup Rules (in app.py)
-
-1. **Direct lookup by Japanese text** (e.g., `"東京"` → `translations.json["東京"]`)
-2. No fallback needed - station name is always available from route.json
+**Important:** Keys are the **raw Japanese text** (kanji/kana), not station codes. App-side lookup is direct (`translations[name]`); no fallback layer.
 
 ### Value Fields
 
@@ -137,28 +130,7 @@ This allows displaying different destinations at different points along the rout
 - Destination always displays as kanji (no furigana cycling)
 - The `dest` value is looked up in `data/translations.json` for English display
 
-**Yamanote Line Example:**
-The Yamanote line uses stop-level `dest` overrides to show changing destinations as the train travels around the loop:
-
-| Station | Displayed Dest |
-|---------|----------------|
-| 大崎 (start) | 品川・東京 (route-level) |
-| 田町 | 東京・上野 |
-| 神田 | 上野・池袋 |
-| 鶯谷 | 池袋・新宿 |
-| 目白 | 新宿・渋谷 |
-| 代々木 | 渋谷・品川 |
-| 恵比寿 | 品川・東京 |
-
-This matches real-world behavior where the "bound for" destination changes based on current position.
-
-### Benefits of Centralized Design
-
-- **No duplication**: Station like 東京 appear once, even though used by multiple lines
-- **Separation of concerns**: Translations separate from line-specific data
-- **Easy maintenance**: Update translation in one place
-- **Extensible**: Can add any Japanese text, not just station names
-- **Destination furigana**: `dest` in route.json is automatically looked up in translations.json (no `dest_furigana` field needed)
+**Yamanote Line example:** route-level `dest` is `品川・東京`; stops sprinkle overrides (`田町` → `東京・上野`, `神田` → `上野・池袋`, …) so the displayed destination shifts as the train traverses the loop, matching real PIDS.
 
 ---
 
@@ -208,34 +180,9 @@ English translations for train type names (列車種別). Unlike stations, train
 
 ### english_short Fallback
 
-The `english_short` field is optional and used for narrow train type display boxes (150px wide on E235-1000):
+For narrow display boxes (e.g. E235-1000 type box, 150 px), resolution order is `english_short` → `english` → kanji. `中央特快` is the only current consumer (`Chūō Sp. Rapid` fits where `Chūō Special Rapid` overflows).
 
-1. Check for `english_short` first (if available)
-2. Fall back to `english` if `english_short` doesn't exist
-3. Fall back to Japanese kanji if neither exists
-
-**Example:**
-```json
-{
-    "中央特快": {
-        "english": "Chūō Special Rapid",
-        "english_short": "Chūō Sp. Rapid"
-    }
-}
-```
-
-- Full English (18 chars): "Chūō Special Rapid" - may not fit in narrow box
-- Short English (15 chars): "Chūō Sp. Rapid" - fits comfortably
-
-### English Translation Convention
-
-Train type English translations follow the same **modified Hepburn romanization with macrons** as station names:
-
-| Train Type | English | Notes |
-|------------|---------|-------|
-| 中央特快 | Chūō Special Rapid | "ō" for long vowel |
-| 通勤特快 | Commuter Special Rapid | No macrons needed |
-| 各駅停車 | Local | Standard translation |
+English translations follow the same Hepburn-with-macrons convention as station names — see translations.json section above.
 
 ---
 
@@ -288,9 +235,44 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
     "contrast_color": [R, G, B],   // Contrast color for pointers/highlights (optional, default: [224, 54, 37] JR red)
     "type_color": [R, G, B],       // Color for train type text (optional, default: black)
     "type": "列車種別",             // Train type (e.g., 快速，普通，各駅停車)
-    "dest": "終点"                  // Final destination (kanji) - furigana loaded from data/translations.json
+    "dest": "終点",                 // Final destination (kanji) - furigana loaded from data/translations.json
+    "pre_stops": [...]             // Optional. Through-service pre-route stations rendered as dim/passed
 }
 ```
+
+#### `pre_stops` Array (Through-Service Pre-Route) — Optional
+
+Stations the train traversed **before** the simulator's active route begins — typically a different line operationally through-running into this one (e.g. Yokosuka Line's 久里浜→東京 for a Sōbu Rapid 1217F service that the simulator models from Tokyo onwards).
+
+**Display-only.** The simulator never advances into `pre_stops` — these cells just render as already-passed history on the lower LCD route map. `stops[0]` remains the start of the simulated journey.
+
+```json
+{
+    "pre_stops": [
+        {"name": "横須賀",   "sta_code": "JO03"},
+        {"name": "田浦",     "sta_code": "JO04"},
+        ...
+        {"name": "新橋",     "sta_code": "JO18"}
+    ],
+    "stops": [
+        {"name": "東京",     "pa": [], "time": 0, "sta_code": "JO19", ...},
+        ...
+    ]
+}
+```
+
+**Required fields:** `name` (kanji) + `sta_code` (for the per-cell mini badge in the 8-station view).
+
+**Forbidden fields:** `pa` / `pa_at_station` / `sta` / `sta_cut` / `time` — pre-route stops are never simulated, these would be ignored. Keep them out to make intent explicit.
+
+**Render contract** (lower LCD, full-route + 8-station views):
+
+- Pre-route cells render in `INACTIVE_COLOR` regardless of train position — they're "always passed."
+- Window logic operates on `pre_stops + stops` combined. Long combined journeys (>28 cells) flip from a first-window view to a last-window view exactly once, same final shape as native long routes — but the trigger differs: native uses **early-flip** (when `remaining < STOPS_QUANTITY`); pre_stops routes use **late-flip** (when the train would scroll off the right edge of the first window). Late-flip keeps the through-service prefix visible at boot. See `_get_stops_list_disp` in `lower_lcd.py` for the branching.
+- App's `state.curr_stop` still indexes into `stops[]` (sim truth); display code shifts by `len(pre_stops)` internally.
+- Translations / furigana / English not required for pre-route stations — the lower LCD shows kanji only.
+
+**Out of scope (deferred):** display-range truncation. The combined frame currently shows `pre_stops + all of stops`, which can extend past the IRL displayed terminus (e.g. 1217F's IRL frame swaps at Chiba but the simulator's combined frame currently shows through to 成田空港). A `display_end` / range field is on the roadmap; track in conversation memory until a clear schema emerges.
 
 ### Stop-Level Fields
 
@@ -298,13 +280,13 @@ Each stop in the `stops` array:
 
 ```json
 {
-    "name": "駅名",                 // Station name (kanji)
-    "pa": ["1", "2"],              // Pre-arrival PA tracks (empty array = no announcement)
-    "pa_at_station": ["3"],        // Optional. At-platform PA tracks played after arrival
-    "sta": ["JC01", "JC01_ALT"],   // STA audio filename(s) without .mp3 extension
-    "sta_code": "JC01",            // JR official station numbering code (or null)
-    "sta_cut": 10,                 // STA melody: seconds where melody is cut and the closing-door announcement begins
-    "time": 3                      // Travel time INCOMING from the previous PA station (minutes; 0 for first station)
+    "name": "駅名",                       // Station name (kanji)
+    "pa": ["prev-dep", "this-arr"],      // Pre-arrival PA tracks (empty array = no announcement)
+    "pa_at_station": ["transfer-info"],  // Optional. At-platform PA tracks played after arrival
+    "sta": ["this_4_song-id"],           // STA audio filename(s) without .mp3 extension
+    "sta_code": "JC01",                  // JR official station numbering code (or null)
+    "sta_cut": 10,                       // STA melody: seconds where melody is cut and the closing-door announcement begins
+    "time": 3                            // Travel time INCOMING from the previous PA station (minutes; 0 for first station)
 }
 ```
 
@@ -405,11 +387,15 @@ The state machine consumes both lists and surfaces a separate "STOPPING at stati
 
 | Value | Meaning |
 |-------|---------|
-| *(field omitted)* | No STA melody — use this on passing stations and termini (no departure melody needed) |
+| *(field omitted)* | No STA melody — passing stations and arrival termini (the last stop, where the train doesn't depart again). An *origin* terminus DOES get `sta`, since the train departs from there. |
 | `["JC01"]` | Single STA audio file |
 | `["JC01", "JC01_1"]` | Multiple STA audio files (variants) |
 
-**Note:** The `sta` field contains actual audio filenames (without `.mp3`). It may include suffixes like `_OSK`, `_SBY`, `_TYO` for disambiguation. When a station has no STA melody, **omit the field entirely** rather than setting `[]` or `[""]`.
+**Note:** The `sta` field contains actual audio filenames (without `.mp3`). Two filename styles coexist (renderer treats both identically):
+- **Legacy** — `sta_code` plus optional disambiguation suffix (`JC01`, `JC01_OSK`, `JK47_OMY`).
+- **Slug** — `{station}_{platform}_{song-id}` (e.g. `tokyo_4_jr-sh5-1`, `kinshicho_4_gota-del-vient`). Filename is the metadata store; see `/sta-make` for the slug rules and song-id catalog.
+
+When a station has no STA melody, **omit the field entirely** rather than setting `[]` or `[""]`.
 
 #### `sta_code` Field (Station Numbering)
 
@@ -419,7 +405,7 @@ The state machine consumes both lists and surfaces a separate "STOPPING at stati
 | `null` | Station has no official code (e.g., Kawagoe Line stations) |
 
 **Format:** `[Line Prefix][Number]` (e.g., `JC01`, `JK47`, `JA08`)
-- Line prefixes: JC (Chuo), JK (Keihin-Tohoku), JA (Saikyo), JE (Keiyo), JY (Yamanote), JT (Tokaido), JN (Nambu), JJ (Joban), JU (Takasaki)
+- Line prefixes: JC (Chuo), JK (Keihin-Tohoku), JA (Saikyo), JE (Keiyo), JY (Yamanote), JT (Tokaido), JN (Nambu), JJ (Joban), JU (Takasaki), JO (Sōbu Rapid / Yokosuka)
 - No 3-letter suffixes in `sta_code` (those go in `sta` field only)
 - **Note:** `sta_code` is route-local — used by `upper_lcd.py` to render the station code badge. Line-independent station metadata lives in `data/stations.json`.
 
@@ -444,73 +430,28 @@ All lines share the central `data/translations.json` (display text) and `data/st
 | Keiyo (京葉線) | JE | `audio/keiyo/` |
 | Nambu (南武線) | JN | `audio/nambu/` |
 | Saikyo (埼京線) | JA | `audio/saikyo/` |
+| Sōbu Rapid / Yokosuka (総武快速・横須賀) | JO | `audio/sobu/` |
 | Takasaki (高崎線) | JU | `audio/takasaki/` |
 | Tokaido (東海道線) | JT | `audio/tokaido/` |
 | Yamanote (山手線) | JY | `audio/yamanote/` |
 
 ---
 
-## Data Conventions
+## Circular Routes
 
-1. **Separation of concerns across data files:**
-   - `data/translations.json`: Central furigana/english translations (keyed by Japanese text)
-   - `data/train_types.json`: Train type English translations (optional `english_short` for narrow boxes)
-   - `data/stations.json`: Line-independent station metadata — 3-letter codes and future fields (keyed by Japanese station name)
-
-2. **Translation lookup:**
-   - By station name: `"東京"` → `translations.json["東京"]`
-   - By train type: `"快速"` → `train_types.json["快速"]`
-
-3. **Empty values:**
-   - No PA at this stop: `"pa": []`
-   - No at-station PAs: **omit `pa_at_station` entirely** (not `[]`); the absence is the default
-   - No STA melody: **omit the `sta` field entirely** (not `[]` or `[""]`)
-   - No code: `"sta_code": null`
-
-4. **Travel time:**
-   - First station: `"time": 0`
-   - Other PA stations: minutes to next PA station (spans any intermediate passing stations)
-   - Passing stations (`pa: []`): **must NOT have a `time` field**
-
-5. **Circular routes:**
-   - First and last station have the same name
-   - Handled automatically by the simulator
-   - Example: Yamanote Line (大崎 appears twice in stops array)
-
-6. **Stop-level destination override:**
-   - Individual stops can have a `dest` field to override the route-level destination
-   - Useful for circular routes where destination changes based on current position
-   - The `dest` value is looked up in `data/translations.json` like station names
+First and last entries in `stops[]` share the same `name` (e.g. Yamanote: 大崎 appears twice). The simulator handles the wrap-around automatically — no special field needed.
 
 ---
 
-## Data Validation Checklist
+## Data Validation
 
-Use this checklist when adding or modifying route data to ensure consistency.
-
-### Manual Checklist
-
-- [ ] **data/translations.json exists** and contains translations for all station names
-- [ ] **data/train_types.json exists** and contains translations for train types used in routes
-- [ ] **sta_code** is present in every stop (value or `null`)
-- [ ] **sta_code format** is simple (e.g., `JC05`, not `JC05_SJK`)
-- [ ] **sta field** can have suffixes for audio files (e.g., `JC05_SJK`, `TYO`)
-- [ ] **data/stations.json** entries (if present) use raw Japanese station names as keys
-- [ ] **No duplicate keys** in JSON files
-- [ ] **PA tracks** are assigned to correct stations (do not renumber subsequent stations when modifying)
-- [ ] **Station names in route.json** have entries in `data/translations.json`
-- [ ] **Train types in route.json** have entries in `data/train_types.json` (optional, falls back to kanji)
-- [ ] **Passing stations** (`pa: []`) have NO `sta`, NO `sta_cut`, NO `time` fields
-
-### Automated Validation
-
-Run `validate_data.py` at the project root:
+Run `validate_data.py` from the project root:
 
 ```bash
 PYTHONUTF8=1 python validate_data.py
 ```
 
-Exits 0 if clean, 1 if issues found (usable as a pre-commit or CI gate). Checks performed:
+Exits 0 if clean, 1 if issues found (suitable for pre-commit / CI). Checks performed:
 
 - Every stop has `sta_code` (value or `null`); value has no `_XX` suffix
 - Every `name` has an entry in `data/translations.json`
@@ -521,47 +462,16 @@ Exits 0 if clean, 1 if issues found (usable as a pre-commit or CI gate). Checks 
 - Every file referenced by `pa` / `pa_at_station` / `sta` exists on disk (`pa/<name>.mp3`, `sta/<name>.mp3`)
 - `stations.json` `code_3` count matches the documented 22
 
-Issues are grouped by route with stop index + name. Add new checks by editing `validate_data.py` — don't re-embed them here.
+Issues are grouped by route with stop index + name. **Add new checks by editing `validate_data.py` — don't re-embed them here.**
 
-### Common Issues and Fixes
+### Things the validator can't catch (verify by eye)
 
-| Issue | Example | Fix |
-|-------|---------|-----|
-| sta_code with suffix | `"sta_code": "JC05_SJK"` | Change to `"sta_code": "JC05"` |
-| Missing sta_code | Stop has no `sta_code` field | Add `"sta_code": "JC05"` or `null` |
-| Passing station has `time`/`sta_cut` | `"pa": [], "sta_cut": 10` | Remove those fields (passing stations must not have them) |
-| Missing audio file | `sta/JK05.mp3 missing` | Add file, rename reference, or strip `sta` on passing stations |
+- Hepburn correctness in new translations (macrons on long vowels, spelling).
+- PA track mapping — that `tokyo-dep.mp3` is actually the announcement recorded *after* Tokyo and references the correct next stop. The validator only checks the file exists.
+- Slug song-id correctness for `sta` files — the slug is the metadata store; the validator can't tell `kinshicho_4_gota-del-vient` from `kinshicho_4_horidei`.
 
 ---
 
-## Windows Console Encoding Note
+## Windows console encoding
 
-When running validation scripts or Python commands that print Japanese characters on Windows, you may encounter encoding errors:
-
-```
-UnicodeEncodeError: 'charmap' codec can't encode characters
-```
-
-**Solution:** Set the `PYTHONUTF8` environment variable before running Python:
-
-```bash
-# Command Prompt
-set PYTHONUTF8=1
-python validate_data.py
-
-# PowerShell
-$env:PYTHONUTF8=1
-python validate_data.py
-
-# Git Bash
-PYTHONUTF8=1 python validate_data.py
-```
-
-Alternatively, add this to the top of your Python script:
-
-```python
-import sys
-sys.stdout.reconfigure(encoding='utf-8')  # Python 3.7+
-```
-
-**Note:** File I/O in this project already uses `encoding='utf-8'` explicitly, so the issue only affects console output.
+If `validate_data.py` (or any script printing Japanese) hits `UnicodeEncodeError: 'charmap'`, prefix with `PYTHONUTF8=1` (or `set` / `$env:` it in cmd / PowerShell). Project file I/O already passes `encoding='utf-8'`, so the issue is console output only.
