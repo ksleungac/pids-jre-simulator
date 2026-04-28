@@ -74,6 +74,8 @@ Wait for user to correct, add nuance, or override [promote-candidate] tags. Don'
 
 After approval, update only the files the user confirmed. Each piece of information has ONE home.
 
+**Before writing to a domain doc** (`DISPLAY.md` / `DATA_FORMAT.md` / `AUTO_INPUT.md`): re-read the `EDIT-CONTRACT` block at the top of the file. Confirm the addition isn't on the refuse list (history notes / code illustrations / speculative future / design-rationale prose / cross-doc duplication). Name the section you're merging into OR replacing — if neither, the addition is appending and probably belongs elsewhere (CLAUDE.md mental model / a skill / an inline `# CONTRACT:` / today's daily log). For additions > ~10 lines, present the diff to the user before writing.
+
 The daily log gets the full structured handoff (see "Daily log format" below) — `/distill-memory` reads it later to find recurring patterns across sessions.
 
 ---
@@ -112,7 +114,7 @@ Preloaded files (`CLAUDE.md`, `.claude/rules/*`) hold what humans keep in their 
    - **Preference-shaped, ambiguous** (passing remark, unclear permanence) → daily log `## Preferences (jot)` as `[log-only]`. Promote later via recurrence (≥2 distinct sessions) OR explicit forward framing in a future session.
 
    Cost of over-promotion is bloat; cost of under-promotion is one extra correction next session — strongly asymmetric. The asymmetric trap applies to the ambiguous middle, not to clearly rule-shaped or fact-shaped entries.
-2. **Before writing, check if the info already exists or has gone stale.** Update / remove in place, don't add a second copy, don't leave outdated content standing. Each domain doc carries an "Editing this doc" callout at its top with the same reminder. See [principles.md § "Tighten before appending"](../../rules/principles.md).
+2. **Before writing, check if the info already exists or has gone stale.** Update / remove in place, don't add a second copy, don't leave outdated content standing. Each domain doc carries an `EDIT-CONTRACT` block at its top with the concrete refuse-list and merge-or-replace requirement — re-read before writing. See [principles.md § "Tighten before appending"](../../rules/principles.md).
 3. **Cross-reference, don't copy.** E.g., `DATA_FORMAT.md` says "see CLAUDE.md § Mental Model" rather than re-explaining.
 4. **CLAUDE.md stays slim on implementation, generous on framing.** Mental-model content belongs there *because* it's preloaded. Implementation details go to domain docs.
 5. **MEMORY.md is an index.** One-line pointers to memory files only. No content, no rules.

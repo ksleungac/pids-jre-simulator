@@ -4,6 +4,23 @@ Modular per-train-model architecture for both Upper and Lower LCDs. Currently im
 
 This is the canonical display doc — covers shared infrastructure, upper LCD, lower LCD, and integration. Cross-cutting code contracts live inline at their code sites (font-loading at the first font init in [`upper_lcd.py`](displays/train_models/e235_1000/upper_lcd.py); countdown formula at `lower_lcd.py` `draw_times`; PyInstaller path resolution at `upper_lcd.py` `get_base_dir`). JSON shapes are in [DATA_FORMAT.md](DATA_FORMAT.md).
 
+> **EDIT-CONTRACT** — what this doc holds, what it refuses.
+>
+> **Holds:** schema reference, gotchas, invariants — implementation specifics looked up when editing the relevant submodule.
+>
+> **Refuses:**
+> - History notes / change logs (`### 2026-03-14`, "pre-X behavior", "Key Changes from legacy …") — `git log` has this
+> - Code-snippet illustrations of how a class looks — link `file:line` instead
+> - Speculative future sections ("When X is implemented, …") — defer until needed
+> - Design-discussion rationale (multi-paragraph framings of *why* a model exists) — the rule lives here; the rationale lives in `memory/YYYY-MM-DD.md`
+> - Facts already in [CLAUDE.md](CLAUDE.md) mental model / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
+>
+> **Before adding:** name the section your edit merges into OR the content it replaces. If neither — you're appending, which is the failure mode this contract fights.
+>
+> **Additions > ~10 lines:** present the diff to the user first. Heavy additions get gated, not auto-applied.
+>
+> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](.claude/rules/principles.md).
+
 ---
 
 ## Architecture
@@ -179,6 +196,16 @@ Yamanote-style routes have the same station name at idx 0 and idx N. The duplica
 
 Skip animation lives in `_advance_to_next_stop`. Entering STOPPING and cycling pa_at_station do not touch skip state — by the time STOPPING is entered, the train has already arrived (skip is whatever the previous advance left it at, with skip_progress catching up to skip via `update_skip_progress`). Within-pa branch zeros skip on every press as a defensive catch-up. See "Station Skip Logic (full spec)" under Lower LCD for the full contract.
 
+### Edge cases & guards
+
+**Audio-playing guard.** `_next_pa` early-returns when `audio.is_playing()` — both manual PageDown and `pending_next_pa` from auto-driver are dropped while audio plays. `jump_to_stop` does NOT honor this guard; instead it calls `audio.pause()` itself before mutating state, so callers (preview ←/→, click-to-jump) get a clean handoff without doing their own pause.
+
+**`cnt_pa` is dead during STOPPING.** Naturally-entered STOPPING (via `_next_in_approaching`'s "pa exhausted" branch) leaves `cnt_pa` at `len(pa)-1`. `jump_to_stop`-entered STOPPING forces `cnt_pa=0`. Both render "ただいま X" because `at_station` overrides the prefix mapping. `cnt_pa` is not read again until `_advance_to_next_stop` resets it to `0` on exit.
+
+**Terminus (non-circular).** `STOPPING@dest_stop_idx` is a stable end-state — pressing PageDown falls through `_advance_to_next_stop`'s final `else: return` (neither `curr_stop < terminus_idx` nor `circular == 1` is true). Silent no-op, no state change.
+
+**`pa=[]` with non-empty `pa_at_station`.** `_is_stopping` accepts either non-empty, so advance lands such a stop in APPROACHING with `cnt_pa=0`, then calls `audio.play_pa(curr_stop, 0)` which silently returns at `audio.py:73` (`pa_index >= len(pa_tracks)`). Display flashes "次は X" with no audio for one press until the user presses again to enter STOPPING. No known route data hits this today, but `_has_pa` tolerates it.
+
 ---
 
 ## Code Style Conventions
@@ -189,25 +216,7 @@ Skip animation lives in `_advance_to_next_stop`. Entering STOPPING and cycling p
 
 ### Mode Renderer Design
 
-Each mode renderer (`JapaneseDisplay`, `FuriganaDisplay`, `EnglishDisplay`) is **self-contained**: owns its fonts, layout, and full set of draw methods. ~90% similarity across renderers is acceptable — different train models may need to diverge freely without reaching into the wrong layer.
-
-```python
-class JapaneseDisplay:
-    def __init__(self, screen, route_data, stops):
-        # Fonts shared (defined once in __init__)
-        self.font_type_bold = pygame.font.Font("fonts/ShinGoPr6N-Heavy.otf", 26)
-        self.font_type_bold.set_bold(True)
-        self.font_type_bold.set_italic(True)
-        self.font_dest = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 35)
-        self.font_station = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 78)
-        # ...
-
-    def draw_station(self, station_text: str) -> None:
-        # Position constants inline (not shared)
-        name_x = int(S_WIDTH * 0.40)
-        max_width = S_WIDTH * 0.54
-        # ...
-```
+Each mode renderer (`JapaneseDisplay`, `FuriganaDisplay`, `EnglishDisplay`) is **self-contained**: owns its fonts, layout, and full set of draw methods. ~90% similarity across renderers is acceptable — different train models may need to diverge freely without reaching into the wrong layer. Canonical shape: `JapaneseDisplay` in `upper_lcd.py` (fonts loaded once in `__init__`, position constants inline per draw method).
 
 ### Centering Text Across Fonts
 
@@ -221,29 +230,6 @@ For **horizontal centering inside a fixed-width cell** (e.g. passing-station che
 
 ## Upper LCD
 
-### Manager Class
-
-```python
-class UpperDisplay:
-    def __init__(self, screen, route_data, stops):
-        self.japanese_display = JapaneseDisplay(screen, route_data, stops)
-        self.furigana_display = FuriganaDisplay(screen, route_data, stops)
-        self.english_display = EnglishDisplay(screen, route_data, stops)
-
-        self.mode_cycler = ModeCycler({
-            DisplayMode.KANJI:    self.japanese_display,
-            DisplayMode.FURIGANA: self.furigana_display,
-            DisplayMode.ENGLISH: self.english_display,
-        }, default_mode=DisplayMode.KANJI)
-
-        self.translations = load_json_relative("data/translations.json")
-        self.train_types = load_json_relative("data/train_types.json")
-
-    def set_state(self, curr_stop: int, cnt_pa: int, at_station: bool = False) -> None: ...
-    def update(self, current_time: float = None) -> None: ...
-    def draw(self, current_time_str: str = None) -> None: ...
-```
-
 ### Destination Behavior
 
 - **Always kanji** in KANJI/FURIGANA modes (no cycling to furigana — IRL behavior).
@@ -256,7 +242,6 @@ Used by circular routes (Yamanote) to show changing destinations. Implementation
 
 - Check stop-level `dest` first; fallback to route-level `dest`.
 - The `dest` value is read from the current stop when drawing the upper display.
-- Always displays as kanji (no furigana cycling).
 - The kanji `dest` is looked up in `data/translations.json` for English mode rendering.
 - Example: at 田町, show "東京・上野" instead of route-level "品川・東京".
 
@@ -339,8 +324,6 @@ Two facts about pygame text rendering that look like bugs to a fresh reviewer:
 
 Bounds + drawn-by + debug color for every region live as a comment block at the top of `displays/train_models/e235_1000/upper_lcd.py`, alongside `_DEBUG_COLORS`. Per-train-model — different models will have different layouts, so the map stays with the code, not in this doc.
 
-History note: Pre-2026-04-25, the English `draw_destination` had no clear rect at all, and Japanese/Furigana cleared only their narrow 150x35 text box. Bug only surfaced when 2-line station rendering revealed a similar clobbering issue elsewhere — prompted unifying the territory definitions across modes.
-
 ---
 
 ## Lower LCD
@@ -374,21 +357,7 @@ Lower's font sizes are *shared across mode renderers* (live in `constants.py`) b
 
 ### State Injection & Skip Animation
 
-The lower needs more per-frame state than the upper (cursor_pos, skip, skip_progress, time_to_next, departure_time, frame_mode, is_last_pa). API mirrors upper's `set_state` / `update` / `draw`, but stores an AppState reference rather than copying fields:
-
-```python
-class LowerDisplay:
-    def set_state(self, state):       # binds AppState reference
-        self._state = state
-
-    def update(self, current_time):   # cycler is shared with upper, no-op here
-        pass
-
-    def draw(self, current_time):     # dispatches to active mode's renderer
-        ...
-```
-
-`set_state` is called once at app startup; subsequent draws read live state from the bound reference.
+The lower needs more per-frame state than the upper (cursor_pos, skip, skip_progress, time_to_next, departure_time, frame_mode, is_last_pa). API mirrors upper's `set_state` / `update` / `draw`, but `set_state` binds an AppState reference rather than copying fields. Called once at app startup; subsequent draws read live state from the bound reference. `update(current_time)` is a no-op (the cycler is shared with upper); `draw(current_time)` dispatches to whichever mode renderer the cycler points at.
 
 ### Station Skip Logic (full spec)
 
@@ -410,17 +379,14 @@ class LowerDisplay:
 
 **State fields**: `skip`, `skip_progress`, `time_to_next` — three integers fully describe the animation. `cursor_pos` is a property on `AppState`, not stored.
 
-#### Skip animation runs through the renderer in pure-read mode
+**Call order in `app.run()`** — renderer stays pure-read so a future English lower won't need to re-implement skip:
 
 ```python
-# In app.run()
 self.state.update_skip_progress(timestamp)
 self.upper.update(timestamp); self.upper.draw(...)
 self.lower.draw(timestamp)
 pygame.display.flip()
 ```
-
-The renderer never mutates state. A future English lower-display will not need to re-implement the skip animation.
 
 ### Layout / Centering
 
@@ -428,11 +394,13 @@ The renderer never mutates state. A future English lower-display will not need t
 
 | Stop count | per_line | Lines | Notes |
 |---|---|---|---|
-| `> 17` or even | `min(14, ⌈n/2⌉)` | 2 | Most real routes |
-| ≤ 17 and odd | 17 | 1 | Mock route, future short single-line variants |
-| `> 28` | as above | 2 + window slide | Yamanote (30), Chuo (32), Keihin (46) |
+| ≤ 14 | `num_stops` | 1 | Mock (11). Single row, centered |
+| 15 to 28 | `⌈n/2⌉` | 2 | Keiyo (17→9+8), Sōbu/Jōban (19→10+9), Tōkaidō (21→11+10), Saikyō/Takasaki (24→12+12), Nambu (26→13+13) |
+| > 28 | 14 | 2 + window flip | Yamanote (30), Chūō (32), Keihin-Tōhoku (46) |
 
-**Centering fix (2026-04-25):** the row x-offset uses `min(per_line, num_stops)`, not `per_line` alone, so single-line routes with `num_stops < per_line` (e.g. mock at 11 stops with `per_line=17`) center to actual content width instead of leaning left under a per_line-wide bounding box. Multi-line layouts unaffected.
+**E235-1000 IRL is 14-per-line.** The previous "≤17 odd → single row of 17" fallback was a one-time concession to keep Keiyō (17 stops) on a single line even though that exceeds the real LCD's 14-cell-per-row layout. With the per-train-model split in place, the active model now honors its IRL grid; out-of-spec routes (Keiyō isn't an E235-1000 line) wrap to 2 rows under the best-effort policy. See [CLAUDE.md](CLAUDE.md) "Mental Model → Per-model IRL line scope".
+
+**Centering fix (2026-04-25):** the row x-offset uses `min(per_line, num_stops)`, not `per_line` alone. Under the post-2026-04-28 rule `per_line ≤ num_stops` always, so the `min()` is defensive — kept for code safety.
 
 ### Long-Route Window Refresh
 
@@ -627,56 +595,11 @@ The function takes a single `x` (left edge of the widest char's column) and comp
 
 The `stroke` parameter is the chevron's **body thickness**, NOT a typical line stroke. To resize without changing shape: scale `w`, `h`, AND `stroke` by the same factor. Bumping only `w` makes the chevron pointier (longer tip, same body). See "Pointer chevron — uniform halo recipe" above for the inner/outer halo math, plus the full docstring in `utils.py`.
 
-### Future: Element Clear-Background Convention
-
-When the lower LCD grows past its single route-map region (e.g. when English mode is implemented and lower needs to differentiate Japanese label box vs English label box), it'll adopt the same convention as the upper LCD: per-region `_DEBUG_COLORS` + `_bg()` helper + Region Map comment block at the top of `lower_lcd.py`. The convention itself is documented above under "Upper LCD → Element Clear-Background Convention" — same rules for both displays, including the D1/D2 distinction and probing methodology.
-
 ---
 
 ## Integration with Main Application
 
-```python
-from displays.train_models.e235_1000 import UpperDisplay, LowerDisplay
-
-class PASimulator:
-    def __init__(self, work_dir, route_data=None, preview=False):
-        ...
-        self.upper = UpperDisplay(self.screen, self.route_data, self.stops)
-        # Lower shares the upper's mode_cycler — modes stay in lockstep.
-        self.lower = LowerDisplay(self.screen, self.route_data, self.stops, self.upper.mode_cycler)
-        self.lower.set_state(self.state)
-
-    def run(self):
-        # Initial draw
-        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=self.state.at_station)
-        self.upper.draw()
-        self.lower.draw()
-        pygame.display.flip()
-
-        while self.running:
-            timestamp = time.time()
-
-            # Advance skip animation (state-machine logic on AppState).
-            self.state.update_skip_progress(timestamp)
-
-            self.upper.update(timestamp)
-            self.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
-            self.lower.draw(timestamp)
-
-            pygame.display.flip()
-            self._handle_input()
-```
-
-### Key Changes from Legacy `display.py`
-
-| Old | New |
-|---|---|
-| `LowerDisplay(screen, route_data, app_state, stops)` | `LowerDisplay(screen, route_data, stops, mode_cycler)` + `.set_state(state)` |
-| `lower.show_stops(current_time)` | `lower.draw(current_time)` |
-| `_update_skip_progress` mutates `state.skip_progress` | `AppState.update_skip_progress(current_time)` (state owns the mutation) |
-| `pygame.display.flip()` inside `show_stops` | Lifted into `app.run()` after both displays draw |
-| Old `draw_init()` / `draw_clock(timestamp)` / `draw_current_station()` | `set_state()` + `update(timestamp)` + `draw(time_str)` |
-| One class, one mode | Per-mode renderers + Manager class |
+Wired in `app.py` `PASimulator.__init__` (creates `upper` + `lower`, passes the upper's `mode_cycler` to the lower so modes stay in lockstep, calls `lower.set_state(self.state)`) and `PASimulator.run` (per-frame call order: `state.update_skip_progress(timestamp)` → `upper.update` + `upper.draw` → `lower.draw` → `pygame.display.flip()`).
 
 ---
 
@@ -713,28 +636,6 @@ display.draw()
 
 ---
 
-## Distribution
-
-See `/build` skill. Folder layout (alongside the exe at runtime):
-
-```
-your-folder/
-├── JRE-PA-Simulator.exe
-├── fonts/
-├── data/
-│   ├── translations.json
-│   ├── train_types.json
-│   └── stations.json
-└── audio/
-    ├── chuo/
-    ├── yamanote/
-    └── ...
-```
-
-`fonts/` and `data/` must ship; `audio/` is supplied by the user. Build details (PyInstaller flags, version metadata, junction handling) live in the `/build` skill itself.
-
----
-
 ## Testing
 
 ```bash
@@ -768,56 +669,6 @@ Preview-mode swap inventory is documented at `PASimulator.__init__`'s ``preview`
 
 1. **Duplication OK.** Mode renderers may have ~90% similar code, but stay separate for flexibility. Different trains may need different layouts.
 2. **No shared mode renderers across train models.** E235-1000's `JapaneseDisplay` is independent from a future E231-500's `JapaneseDisplay`.
-3. **Position constants inlined; fonts shared.** Positions are method-specific; fonts are model-specific.
-4. **Destination always kanji.** In KANJI/FURIGANA modes, destination doesn't cycle (IRL behavior).
-5. **English suffix becomes prefix.** "Bound for" before the destination in ENGLISH mode.
-6. **Centralized translations.** All displays load from `data/translations.json` and `data/train_types.json`.
-7. **Shared cycler upper↔lower.** Single source of truth for mode timing.
-8. **Pure-rendering split.** Skip-progress mutation lives on `AppState`, not the renderer.
-9. **English placeholder over English-disabled-in-cycler.** Keeps the upper cycling freely; the lower's local fallback handles its own incompleteness.
-10. **Centering uses actual cell count, not per_line.** Single-line short routes render centered.
-11. **`constants.py` for cross-module values only.** Per-LCD-module sizes/positions/fonts live inline; only values genuinely consumed by ≥ 2 modules go in `constants.py`.
-
----
-
-## Changes Log
-
-### 2026-04-26
-- Merged `UPPER_DISPLAY_UPDATE.md` + `LOWER_DISPLAY_UPDATE.md` into this single `DISPLAY.md`. Display-specific gotchas previously in `notes.md` (English Station Name, Centering Across Fonts, Station Code Badge, Skip Logic, Long-Route Refresh, `draw_1col_text`, `arrow_points`) folded in here as their canonical home.
-- New "Mental Model" section added to [CLAUDE.md](CLAUDE.md) for train-family scope and best-effort policy (preloaded — humans don't re-derive "what this project is" each session). REALWORLD.md, briefly introduced earlier the same day, was collapsed into CLAUDE.md once the preloaded-vs-progressive split was articulated.
-- **8-station window: sliding case now keyed on `cursor_pos` instead of `curr_stop`.** Fixes the "past cell vanishes mid-skip" bug — during a passing-station skip animation, `cursor_pos` lags behind `curr_stop`, so anchoring the window on `curr_stop` put the visible cursor at local index 0 with zero past context. Lock case stays keyed on `curr_stop` to preserve destination visibility during near-end skips. See "Window invariant" table above for the full rationale.
-- 8-station pointer chevron: `offset_factor` 0.3 → 0.4. Body now sits ~15% in past cell, ~24% in cursor cell (was ~11% / ~28%) — slightly more centered on the cell boundary while keeping a mild bias toward the cursor cell.
-- **Continuity arrows on full-route view**: 3 slots (row-1 tail "to", row-2 head "from", last-visible-when-slid "to"). Slot 0/2 = bar→triangle→2 chevrons; slot 1 = 2 chevrons + bar with WHITE_BG inverse-triangle notch carved into bar's left edge. Color inherits from cell (`self.color` when active, `INACTIVE_COLOR` when passed); no threshold checks. Tip-portion uniformity: `tri_w == cont_chev_w − cont_chev_stroke == 8` makes all three gaps render as a uniform 4-px white margin everywhere. Slot 1 bar is extended `+cont_tri_w` to the left to compensate for the notch carve. New helpers `draw_continuity_arrow` / `draw_continuity_triangle` in `displays/utils.py`.
-- **Row-end / row-head bar extension**: every row-tail cell gets `+row_tail_extra = 10` px on the right; every row-head cell gets `+row_head_extra = 10` px on the left. Independent of continuity. `draw_times` 分-marker shift and `draw_ptr` curr_stop=0 pentagon left edge mirror these constants — change one, change all three (foot-gun documented in DISPLAY.md "Row-end / row-head bar extension" table).
-- **`continuity[2]` state-leak fix** in `_get_stops_list_disp`: now recomputed on every call based on whether the visible window includes the route's last stop (not just at the `remaining == STOPS_QUANTITY - 1` transition frame). Caused slot-2 chevrons to render past Keihin's destination Ōfuna once the window had slid further forward.
-- **Dest as terminus** in `app._next_pa`: non-circular routes terminate at `self.dest_stop_idx` (resolved at init by name-matching `self.dest`), not `len(self.stops) - 1`. Some route data extends past the operational dest for through-running reference (e.g. Keihin 727B's stops continue 41..45 from 磯子 to 大船). Fixed PageDown advancing into 新杉田 → … → 大船.
-
-### 2026-04-25 (lower 8-station view + lower refactor)
-- New `JapaneseEightStationDisplay` — 8-cell zoomed-in route map with sliding (1 past + cursor + 6 ahead) / locked (last 8 stops) windowing.
-- New 24s view-cycler on `LowerDisplay` (12s full ↔ 12s 8-station). Locks permanently to 8-station once `remaining ≤ 7`. Timer hoisted to `LowerDisplay.draw()` so it doesn't drift while the upper is in ENGLISH.
-- Compound-name two-column layout (right reads first, 3-char baseline) and single-char vertical centering.
-- New shared helpers in `displays/utils.py`: `draw_station_code_badge` (extracted from upper, now also used for 8-station per-cell mini badges) and `draw_route_disclaimer`.
-- Per-char horizontal centering fix in `utils.py` `draw_1col_text` for mixed-script names like `空港第2ビル`.
-- `arrow_points` docstring extended with the chevron-with-uniform-halo recipe.
-- `_draw_continuation_marker` defined but deliberately uncalled (deferred until the user's existing buggy full-route helper is reviewed).
-- Lower LCD refactored from monolithic `display.py` (deleted) into modular `lower_lcd.py` with `JapaneseDisplay` + `EnglishDisplay` placeholder + `LowerDisplay` manager.
-- Skip-progress mutation moved from renderer onto `AppState.update_skip_progress`. Renderer is now pure rendering.
-- Shared `mode_cycler` with upper (constructor arg).
-- `pygame.display.flip()` lifted out of renderer into `app.run()`.
-- Single-line layout centering bug fixed (`min(per_line, num_stops)`).
-- English mapping disabled in lower's `mode_displays` dict; falls back to Japanese until implemented.
-- English mode re-enabled in upper (was temporarily disabled during the SysFont migration — file-path font loading verified, no fallback needed).
-- `preview_display.py` got a `--lower-view {full,eight,cycle}` flag for forcing a deterministic frame.
-
-### 2026-03-14
-- **Font loading fix:** changed all `pygame.font.SysFont()` to `pygame.font.Font()` with direct file paths to fix crashes on non-English Windows systems (Chinese locale).
-- **JSON loading fix:** updated `load_json_relative()` to use `sys.executable` instead of `__file__` for PyInstaller exe compatibility.
-- Build command updated from `--windowed` to `--console` for error visibility.
-
-### 2026-03-11
-- Initial modular architecture implementation.
-- 3-mode display cycling (KANJI → FURIGANA → ENGLISH).
-- Integration with main application.
 
 ---
 

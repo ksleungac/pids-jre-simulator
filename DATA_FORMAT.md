@@ -4,7 +4,22 @@
 
 This document defines the JSON data formats used by the PA Simulator for route configurations and station databases.
 
-> **Editing this doc.** Before adding new content, scan for redundant or stale claims that the addition would duplicate or contradict — merge / remove first, then add. Domain docs are tightly maintained, not additive. See [principles.md § "Tighten before appending"](.claude/rules/principles.md).
+> **EDIT-CONTRACT** — what this doc holds, what it refuses.
+>
+> **Holds:** schema reference, gotchas, invariants — implementation specifics looked up when editing the relevant submodule.
+>
+> **Refuses:**
+> - History notes / change logs (`### 2026-03-14`, "pre-X behavior", "Key Changes from legacy …") — `git log` has this
+> - Code-snippet illustrations of how a class looks — link `file:line` instead
+> - Speculative future sections ("When X is implemented, …") — defer until needed
+> - Design-discussion rationale (multi-paragraph framings of *why* a model exists) — the rule lives here; the rationale lives in `memory/YYYY-MM-DD.md`
+> - Facts already in [CLAUDE.md](CLAUDE.md) mental model / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
+>
+> **Before adding:** name the section your edit merges into OR the content it replaces. If neither — you're appending, which is the failure mode this contract fights.
+>
+> **Additions > ~10 lines:** present the diff to the user first. Heavy additions get gated, not auto-applied.
+>
+> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](.claude/rules/principles.md).
 
 ---
 
@@ -122,13 +137,7 @@ Routes can override the route-level `dest` at individual stops using the `dest` 
 }
 ```
 
-This allows displaying different destinations at different points along the route (useful for circular lines like Yamanote).
-
-**Implementation behavior:**
-- The `dest` value is read from the current stop when drawing the upper display
-- If no stop-level `dest` exists, falls back to route-level `dest`
-- Destination always displays as kanji (no furigana cycling)
-- The `dest` value is looked up in `data/translations.json` for English display
+This allows displaying different destinations at different points along the route (useful for circular lines like Yamanote). Display semantics (fallback rule, kanji-only, translation lookup) live in [DISPLAY.md § Stop-Level Destination Override](DISPLAY.md).
 
 **Yamanote Line example:** route-level `dest` is `品川・東京`; stops sprinkle overrides (`田町` → `東京・上野`, `神田` → `上野・池袋`, …) so the displayed destination shifts as the train traverses the loop, matching real PIDS.
 
@@ -290,13 +299,7 @@ Each stop in the `stops` array:
 }
 ```
 
-**Note:** The `time` field is the scheduled **incoming** travel time — minutes from the previous PA station's departure to this stop's arrival. Displayed on the lower LCD with real-time countdown:
-- Countdown starts when train departs (first PA of segment)
-- Display shows `time - elapsed_minutes` (floor division, only decrements when full minute passes)
-- Minimum display value is "1" (never shows 0)
-- On last PA of current station, display forces to "1" (arriving now)
-- During STOPPING (`at_station=True`), the cursor cell's time is NOT rendered — incoming travel is over. Cumulative for downstream cells starts fresh from `stops[curr_stop+1]["time"]`. See [DISPLAY.md](DISPLAY.md) § "Unified State Machine".
-- Configurable via `TIME_SCALE` constant (60 = real-time, lower = faster)
+**Note:** The `time` field is the scheduled **incoming** travel time — minutes from the previous PA station's departure to this stop's arrival. Display semantics (countdown formula, floor division, forced "1" on last PA, STOPPING blanking, `TIME_SCALE` constant) live at the inline `# CONTRACT:` on `displays/train_models/e235_1000/lower_lcd.py` `draw_times` per [CLAUDE.md](CLAUDE.md). State-machine interaction is in [DISPLAY.md § Unified State Machine](DISPLAY.md).
 
 **Convention rationale:** the field is anchored on the destination station, not the source — `stops[N].time` answers "how long does it take to reach N?" (= travel from N−1 → N), not "how long until I leave N?". Verified via Tokaido 1865E: 新橋.time=2 matches IRL 東京→新橋 (~2 min), 品川.time=5 matches 新橋→品川 (~5 min). 東京.time=0 because there's no previous station.
 

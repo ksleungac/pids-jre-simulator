@@ -66,6 +66,11 @@ Behaviors true on real trains and mirrored by the simulator:
 - **Station code 3-letter Roman badge** for ~22 major interchange stations (AKB, TYO, …). Rule of thumb: "3+ JR East systems converge," with documented exceptions. Smaller stations use 2-character katakana telegraph codes (電略) — separate internal system, not modeled here.
 - **Compound destinations** like 品川・東京 use a `&` separator on real PIDS for the multi-line layout.
 - **English text uses modified Hepburn romanization with macrons** (Tōkyō, Chūō, Etchūjima). JSON-encoding details in [DATA_FORMAT.md](DATA_FORMAT.md).
+- **Through-service combined frame.** Trains that physically through-run from another line (e.g. Yokosuka Line→Sōbu Rapid: 久里浜→東京→千葉) display the combined journey on one LCD frame, with pre-route stations rendered dim/passed. At major continuation junctions (e.g. Chiba for Sōbu Rapid yielding to Sōtobō / Narita Line) the frame swaps to the next line's view — modeled via `pre_stops` in route.json; frame-swap-at-junction is deferred. See [DATA_FORMAT.md § "pre_stops Array"](DATA_FORMAT.md).
+
+### App state machine
+
+Each stop advances through three press-driven sub-states: **APPROACHING_EARLY** ("次は X") → **APPROACHING_FINAL** ("まもなく X", final entry in `pa[]`) → **STOPPING** ("ただいま X", at platform) → next stop's APPROACHING_EARLY. PageDown drives transitions; `jump_to_stop` lands in STOPPING@target. Full transition spec + edge cases in [DISPLAY.md § Unified State Machine](DISPLAY.md); `AppState` field semantics in the inline `# CONTRACT:` on the class in `app.py`.
 
 ## Session Startup
 
@@ -156,5 +161,6 @@ Yellow hint square = multiple PA tracks available.
 - **Testing / previewing** → `uv run preview_display.py` defaults to the mock catalog (see [`audio/_mock/main/README.md`](audio/_mock/main/README.md) for stop layout). Keys: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. `jump_to_stop` backward-rounding semantics are documented in its docstring at `app.py` `PASimulator.jump_to_stop`. Preview-mode swap inventory (audio, input, mixer, window) is at `PASimulator.__init__`'s ``preview`` parameter.
 - **Building/Releasing** → Use `/build` skill
 - **Codebase mess sweep** → Use `/vibe-check` skill (scan for duplicated logic, dead helpers, half-finished implementations, speculative architecture, stale comments — discussion-first, item-by-item, smoke-tests every fix). Distinct from `/review-dirty` (which reviews a single change for quality).
+- **Doc bloat sweep** → Use `/distill-docs` skill (scan DISPLAY.md / DATA_FORMAT.md / AUTO_INPUT.md for accumulated bloat the write-time `EDIT-CONTRACT` gate misses — history notes, code-snippet illustrations, speculative future sections, design-rationale prose, cross-doc duplication, cumulative staleness — discussion-first, item-by-item). Pairs with the `EDIT-CONTRACT` block at the top of each domain doc.
 
 **Editing docs?** Check the placement table in [.claude/skills/session-recap/SKILL.md](.claude/skills/session-recap/SKILL.md) before writing — pick the narrowest-domain home (CLAUDE.md framing / DISPLAY.md gotcha / DATA_FORMAT.md schema / inline code contract / skill).

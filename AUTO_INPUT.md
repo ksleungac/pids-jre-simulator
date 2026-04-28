@@ -4,53 +4,22 @@ Companion module that automates PA-firing in the simulator by reading the JR EAS
 Train Simulator game's HUD via screen capture. Removes the need to press PageDown
 manually during normal driving.
 
-## Status (as of 2026-04-27)
-
-**PASSING badge** (rapid-service passing-through stations, "Pass" / "通過", blue
-pentagon) recognized in addition to MOVING/STOPPED. Arrival-PA logic suppresses
-firing while badge==PASSING (HUD distance during PASSING is to the passing-through
-station, not the next stopping target). On PASSING→MOVING the level-test arrival
-check correctly fires even if distance is already < lead.
-
-**Two working integrations:**
-
-- **(1b) Separate-process auto-driver** — `data_tools/capture_game.py`. Synthesizes
-  PageDown via `keyboard` library. **Live-validated end-to-end** on Keihin-Tōhoku
-  727B Omiya→Kanda full route — flawless. Use `--route audio/<line>/<diagram>` to
-  enable PA-count check.
-- **(1a) In-process auto-driver** — `auto_input.py` `AutoDriver` class spawned
-  from `main.py` when the **OCR Auto-PA** toggle is enabled on the setup screen.
-  Runs in daemon thread, sets `PASimulator.pending_next_pa = True` at fire-time
-  (same code path as manual PageDown — no synthetic keystrokes, no parallel
-  route loading, no segment counter parallel to `state.curr_stop`). **Compiles
-  + renders cleanly. NOT yet live-validated** — Omiya→Kanda was on 1b. First
-  task next session: live-test 1a.
-
-**Debug panel (1a only)** — when OCR Auto-PA is enabled at the setup screen, an
-80px panel renders above the LCD showing badge state, speed/distance with
-confidence-color encoding, fired flags, and "between A → B" / "stopped at A"
-state. Architecturally separated from LCD code (see "Debug panel" section below).
-
-```bash
-# Run the in-process integration. Toggle OCR Auto-PA on the setup screen,
-# adjust Lead (default 900m, ±100m steps) and Interval (default 5s, ±1s) as
-# needed, then select a route with Enter to launch.
-uv run main.py
-
-# Run the standalone observation/debug script
-uv run python data_tools/capture_game.py --route audio/sobu/1217F
-```
-
-Manual-press precedence is implicit in 1a: the auto-driver inspects
-`sim.state.curr_stop` and `sim.state.cnt_pa` directly each cycle. If you press
-PageDown manually before an auto-fire, simulator state advances; the auto-driver
-detects mismatch and skips its own fire. In 1b this is via global keyboard hooks
-+ self-press timestamp guard.
-
-Future work (in priority order): live-validate 1a (Omiya→Kanda equivalent),
-dynamic 900/1200m threshold from per-stop PA durations, multi-PA queue
-auto-advance, multi-resolution support, separate-window debug panel (today
-shares window with LCD via sub-surfaces).
+> **EDIT-CONTRACT** — what this doc holds, what it refuses.
+>
+> **Holds:** schema reference, gotchas, invariants — implementation specifics looked up when editing the relevant submodule.
+>
+> **Refuses:**
+> - History notes / change logs (`### 2026-03-14`, "pre-X behavior", "Key Changes from legacy …") — `git log` has this
+> - Code-snippet illustrations of how a class looks — link `file:line` instead
+> - Speculative future sections ("When X is implemented, …") — defer until needed
+> - Design-discussion rationale (multi-paragraph framings of *why* a model exists) — the rule lives here; the rationale lives in `memory/YYYY-MM-DD.md`
+> - Facts already in [CLAUDE.md](CLAUDE.md) mental model / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
+>
+> **Before adding:** name the section your edit merges into OR the content it replaces. If neither — you're appending, which is the failure mode this contract fights.
+>
+> **Additions > ~10 lines:** present the diff to the user first. Heavy additions get gated, not auto-applied.
+>
+> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](.claude/rules/principles.md).
 
 ## Mental model
 
@@ -62,6 +31,132 @@ state machine (`AppState`, `_next_pa`, `state.curr_stop`) is the source of truth
 This split keeps fidelity work (LCD rendering, route data, audio cuts) decoupled from
 input automation. The auto-driver can be disabled and the simulator behaves exactly
 as today, with manual PageDown control.
+
+**Two integrations.** Both live in this repo and share the OCR + state-machine
+implementation:
+
+- **In-process** (`auto_input.py` `AutoDriver`) — spawned from `main.py` when
+  the **OCR Auto-PA** toggle is enabled on the setup screen. Runs in a daemon
+  thread and sets `PASimulator.pending_next_pa = True` at fire-time, same code
+  path as manual PageDown. Manual-press precedence is implicit: the driver
+  inspects `sim.state.curr_stop` / `sim.state.cnt_pa` each cycle and skips its
+  fire on mismatch. Includes the in-window debug panel.
+- **Separate-process** (`data_tools/capture_game.py`) — standalone diagnostic
+  script. Synthesizes PageDown via the `keyboard` library and uses a
+  self-press timestamp guard for manual-press precedence. No debug panel.
+
+## State machine layering
+
+The auto-driver subsystem involves three distinct state machines. They align in
+normal flow but diverge after manual user action — keeping them separate in
+vocabulary prevents the wrong fix landing in the wrong layer.
+
+### Layer 1 — App (sim's own state machine)
+
+State on `AppState` (`curr_stop`, `cnt_pa`, `cnt_pa_at_station`, `at_station`).
+Exists whether the auto-driver is enabled or not. Three press-driven sub-states
+per stop: `APPROACHING_EARLY` → `APPROACHING_FINAL` → `STOPPING`. Spec in
+[DISPLAY.md § Unified State Machine](DISPLAY.md); mental-model summary in
+[CLAUDE.md § App state machine](CLAUDE.md). The auto-driver triggers transitions
+by setting `pending_next_pa=True`, same code path as manual PageDown.
+
+### Layer 2 — AutoDriver belief
+
+Per-segment flag set on the `_Detector` instance: `_segment_start_stop`,
+`departure_observed`, `arrival_observed`, `at_station_observed`. The auto-driver's belief
+about which segment the App layer is mid-way through and which fires it has
+already dispatched. Lives across samples; all flags reset on
+`BADGE_STOPPED→(MOVING|PASSING)` (segment boundary).
+
+### Layer 3 — AutoDriver's inferred game state
+
+What the auto-driver thinks the IRL game train is doing — expressed as one of
+five canonical named states + a sentinel:
+
+| Canonical name | Game-side meaning |
+|---|---|
+| `STOPPING_FRESH` | At platform, no in-segment arrival was observed (boot, post-click, or arrival trigger missed by OCR). State 1. |
+| `APPROACHING_BEFORE_DEP` | In-transit, dep-trigger not yet observed in this segment. State 2. |
+| `APPROACHING_AFTER_DEP` | In-transit, dep-trigger observed, arr-trigger not yet observed. State 3. |
+| `MOVING_AFTER_ARR` | In-transit, arr-trigger observed, decelerating to platform. State 4. |
+| `STOPPING_AFTER_ARR` | At platform, arr-trigger observed in this segment. State 5. |
+| `UNKNOWN` | OCR FAIL or insufficient context. Sentinel. |
+
+**Naming-collision note.** Layer 1 also uses `STOPPING` / `APPROACHING_EARLY` /
+`APPROACHING_FINAL` semantically. Layer 3 names always carry a suffix (`_FRESH`,
+`_BEFORE_DEP`, ...) to keep them distinguishable in code and design discussion.
+Never use bare `STOPPING` / `APPROACHING_*` for Layer 3.
+
+These are **inference outputs**, not direct OCR reads. Inputs:
+
+- **Raw OCR observations**: `badge_read ∈ {STOPPED, MOVING, PASSING}`,
+  `speed_read`, `distance_read` — single-sample reads of the game HUD.
+- **Layer 2 cache** (per-segment): `departure_observed`, `arrival_observed`,
+  `at_station_observed`. Necessary because OCR alone doesn't distinguish e.g.
+  `APPROACHING_BEFORE_DEP` from `APPROACHING_AFTER_DEP` — both show
+  `badge∈{MOVING,PASSING}`; the cache disambiguates. The flags semantically
+  record "we observed the trigger condition this segment," not "we dispatched
+  a fire" — the dispatcher's mismatch-skip is a separate concern.
+
+**Streaming inference truth table** (per-sample, with cache):
+
+| `badge` | `arrival_observed` | `departure_observed` | → state |
+|---|---|---|---|
+| `STOPPED` | False | * | `STOPPING_FRESH` |
+| `STOPPED` | True | * | `STOPPING_AFTER_ARR` |
+| `MOVING` or `PASSING` | True | * | `MOVING_AFTER_ARR` |
+| `MOVING` or `PASSING` | False | True | `APPROACHING_AFTER_DEP` |
+| `MOVING` or `PASSING` | False | False | `APPROACHING_BEFORE_DEP` |
+| `None` | * | * | `UNKNOWN` |
+
+(`at_station_observed` doesn't appear — it gates dispatch of FIRE_AT_STATION, not
+the inferred state.)
+
+**Entry-point inference** (no Layer 2 cache; toggle-ON, click reanchor):
+substitute `distance ≤ lead` for `arrival_observed`. `STOPPING_FRESH` ≡
+`STOPPING_AFTER_ARR` (collapsed at entry — functionally identical anchoring).
+`APPROACHING_BEFORE_DEP` lumped into `APPROACHING_AFTER_DEP` (the brief
+acceleration window is functionally equivalent at entry).
+
+The inference function is pluggable; future cross-attribute hardening enriches
+it without changing the named-state vocabulary.
+
+**Vocabulary discipline.** In design conversations and code comments: say
+*"AutoDriver thinks the game is in `STOPPING_FRESH`"* — not *"badge is
+STOPPED."* The badge is one input to the inference; the inferred game state
+is what the design reasons about. They are not the same thing — if OCR
+misclassifies the badge for a frame, the inferred state may stay correct (the
+inference can refuse to commit on a single bad sample). Likewise, the inferred
+state can be wrong even when every OCR read is correct, if the inference
+function is naive (e.g. trusting `badge==STOPPED` while speed is still 40
+km/h). The vocabulary separation is what lets us harden inference without
+re-litigating design conclusions that depend on the named state.
+
+### Layer interaction
+
+Normal flow:
+
+```
+Layer 3 observation → event → Layer 2 dispatch (mismatch-skip) → pending_next_pa
+                                                                    ↓
+                                                         Layer 1 advance via _next_pa
+```
+
+Layer 2 follows Layer 3. Layer 1 follows Layer 2. The reverse direction —
+Layer 1 drifting from Layer 2 due to user action — is reconciled via dispatcher
+mismatch-skip + flag reset on next `BADGE_STOPPED→(MOVING|PASSING)`.
+
+### When layers diverge
+
+| Cause | Effect | Reconciled by |
+|---|---|---|
+| Manual PageDown | Layer 1 advances by one press; Layer 2 unchanged | Dispatcher mismatch-skip on next event; full flag reset on next `STOPPED→(MOVING\|PASSING)` |
+| Click-jump on lower LCD | Layer 1 jumps to STOPPING@target; Layer 2 unchanged | Mismatch-skip for small drift; multi-stop drift waits for next `STOPPED→(MOVING\|PASSING)` reset (or explicit re-anchor flow if implemented) |
+| Auto-driver toggled ON mid-drive | Layer 1 is whatever the user advanced to; Layer 2 has no belief yet | Entry-point flow probes Layer 3, anchors Layer 2 to match the detected segment context |
+
+Layer 3 stays accurate at all times — it observes the game, not the sim.
+Reconciling Layer 1 ↔ Layer 2 is what mismatch-skip and the entry-point flow
+exist to do.
 
 ## Architecture
 
@@ -259,43 +354,33 @@ Lives in `data_tools/capture_game.py` (1b) + `auto_input.py` `_Detector` (1a, ke
 
 ### State vocabulary
 
-The state machine encodes 5 logical states the train moves through during one segment cycle:
+The state machine works in the Layer 3 named-state vocabulary — see "State machine layering" above for the canonical names + inference truth table. The 5 states (`STOPPING_FRESH`, `APPROACHING_BEFORE_DEP`, `APPROACHING_AFTER_DEP`, `MOVING_AFTER_ARR`, `STOPPING_AFTER_ARR`) + `UNKNOWN` sentinel describe the autodriver's inferred view of where the IRL game train is in its segment cycle. They map onto the per-sample event emissions below.
 
-1. **STOPPING at station** — at platform, ready for next departure cycle.
-2. **MOVING/PASSING (before departure PA)** — speed > 0, dep PA hasn't fired yet.
-3. **MOVING/PASSING (after departure PA / before arrival PA)** — dep PA fired, in transit.
-4. **MOVING (after arrival PA)** — arr PA fired, approaching/at platform.
-5. **STOPPING (next station)** — arrived; same anchor as state 1 from a probe-only POV.
-
-These are the **logical states** — the autodriver's semantic conclusions about the train. They are encoded implicitly in `_Detector` via `(prev_badge, departure_fired, arrival_fired)` flag combos; the state names are the design vocabulary, the flag combos are the implementation.
-
-**Distinct from logical states**: raw OCR observations — `badge_read ∈ {STOPPED, MOVING, PASSING}`, `speed_read`, `distance_read`. The mapping observation→state is an **inference function**. Today it's mostly 1:1 (`badge=STOPPED → state 1/5`), with speed disambiguating state 2 (`spd<30`) from state 3 (`spd≥30`). Future cross-attribute hardening will enrich this function with multi-attribute consensus — without changing the rest of the state machine.
-
-**When designing flows that interact with the state machine** (entry-point, resync, click-to-jump): use the 5 named states; treat observation→state inference as a pluggable function. Don't conflate "badge says X" with "state is X" in vocabulary or anchor logic — the separation matters for hardening.
+**When designing flows that interact with the state machine** (entry-point, resync, click-to-jump): say *"AutoDriver thinks the game is in `STOPPING_FRESH`"*, not *"badge is STOPPED."* The badge is one input to the inference; the inferred state is what the design reasons about. The separation matters for hardening — and avoids design conclusions accidentally over-trusting a single OCR attribute.
 
 ### Events
 
 | Event | Trigger | Effect |
 |---|---|---|
-| `BADGE_STOPPED→MOVING` | badge transition | New segment begins; reset all three fired-flags + segment_start_ts |
+| `BADGE_STOPPED→MOVING` | badge transition | New segment begins; reset all three observed-flags + segment_start_ts |
 | `BADGE_MOVING→STOPPED` | badge transition | Train just arrived at platform (logged only — see `FIRE_AT_STATION`) |
-| `SPEED_UP_30` | speed crossed 30 km/h upward AND `departure_fired=False` | Fire departure PA, set `departure_fired=True` |
-| `DIST_DOWN_<lead>` | `badge==MOVING` AND `distance ≤ arrival_lead_m` AND `arrival_fired=False` | Fire arrival PA, set `arrival_fired=True` |
-| `FIRE_AT_STATION` | `badge==STOPPED` AND `arrival_fired=True` AND `at_station_fired=False` | Fire the silent press that flips sim into STOPPING (sets `state.at_station=True`); set `at_station_fired=True` |
+| `SPEED_UP_30` | speed crossed 30 km/h upward AND `departure_observed=False` | Fire departure PA, set `departure_observed=True` |
+| `DIST_DOWN_<lead>` | `badge==MOVING` AND `distance ≤ arrival_lead_m` AND `arrival_observed=False` | Fire arrival PA, set `arrival_observed=True` |
+| `FIRE_AT_STATION` | `badge==STOPPED` AND `arrival_observed=True` AND `at_station_observed=False` | Fire the silent press that flips sim into STOPPING (sets `state.at_station=True`); set `at_station_observed=True` |
 
 `arrival_lead_m` defaults to **900m**. For 1a, adjust on the setup-screen Lead
 stepper (range 500–1500, ±100m) before launching. For 1b, override with `--lead`
 on the `data_tools/capture_game.py` invocation. Use 1200m for transfer-heavy
 lines (Tokyo, Shinjuku scenarios).
 
-**Per-segment fired flags** prevent double-firing within a single segment when
+**Per-segment observed flags** prevent double-firing within a single segment when
 OCR misreads transiently flip a threshold-crossing condition (e.g. a speed misread
 as `7` between two real `>30` reads would fire `SPEED_UP_30` twice without the
-flag). All three flags (`departure_fired`, `arrival_fired`, `at_station_fired`)
+flag). All three flags (`departure_observed`, `arrival_observed`, `at_station_observed`)
 reset on `BADGE_STOPPED→MOVING`. PASSING transitions do NOT reset flags — PASSING
 is a transient sub-state of MOVING within a segment, not a new segment.
 
-**`at_station_fired` is gated on `arrival_fired`** so it only triggers in this
+**`at_station_observed` is gated on `arrival_observed`** so it only triggers in this
 segment's stopping moment. Without that gate, the level test would fire on the
 first capture cycle (train parked at session start with `badge==STOPPED`) and
 desync the simulator before the first real drive begins. Pa-empty stops still
@@ -305,7 +390,7 @@ APPROACHING→STOPPING transition is silent regardless of pa contents.
 ### Arrival is a level test, not a downward crossing
 
 The arrival trigger fires whenever `badge==MOVING AND distance ≤ arrival_lead_m`,
-gated by the per-segment `arrival_fired` flag. It does **not** require a
+gated by the per-segment `arrival_observed` flag. It does **not** require a
 downward-crossing of the threshold.
 
 This matters because of PASSING. While the badge reads PASSING, HUD distance is
@@ -376,8 +461,8 @@ Confidence color encoding:
 | **Orange** | < 0.75; diff > 15 |
 | **Gray** | None / OCR FAIL |
 
-`dep✓ arr·` flags reflect `auto_input_status["departure_fired"]` and
-`auto_input_status["arrival_fired"]` — the per-segment fired flags reset on
+`dep✓ arr·` flags reflect `auto_input_status["departure_observed"]` and
+`auto_input_status["arrival_observed"]` — the per-segment observed flags reset on
 `BADGE_STOPPED→MOVING` transitions.
 
 State line uses simulator's `state.curr_stop` + the captured `segment_start_stop`
@@ -402,9 +487,10 @@ models with different LCD widths are added, panel follows automatically.
     "distance": int | None,         # meters
     "distance_score": float,
     "segment_start_stop": int,      # sim.state.curr_stop snapshot at last STOPPED→MOVING
-    "departure_fired": bool,
-    "arrival_fired": bool,
-    "at_station_fired": bool,       # set when the silent STOPPING-entry press has fired
+    "departure_observed": bool,
+    "arrival_observed": bool,
+    "at_station_observed": bool,       # set when the silent STOPPING-entry press has fired
+    "inferred_state": str,             # canonical Layer 3 state name (see § "Layer 3" truth table)
     "ts": float,                    # time.time() of capture
 }
 ```
@@ -429,6 +515,16 @@ boundary is crossed.
 
 ## Usage
 
+**In-process integration** (the default path):
+
+```bash
+# Toggle OCR Auto-PA on the setup screen, adjust Lead (default 900m, ±100m
+# steps) and Interval (default 5s, ±1s), then select a route with Enter.
+uv run main.py
+```
+
+**Separate-process script** (diagnostic / observation):
+
 ```bash
 # Default — 900m arrival threshold, 5s sample interval, fires synthetic PageDowns
 uv run python data_tools/capture_game.py
@@ -439,8 +535,8 @@ uv run python data_tools/capture_game.py --lead 1200
 # Debug / observation mode — log OCR + events but don't send keystrokes
 uv run python data_tools/capture_game.py --no-fire
 
-# Tighter / looser sampling
-uv run python data_tools/capture_game.py --interval 3
+# Pass --route to enable PA-count cross-check
+uv run python data_tools/capture_game.py --route audio/sobu/1217F
 ```
 
 Stop with Ctrl+C. The script prints one line per sample (badge state, speed,
@@ -492,82 +588,6 @@ scaling factor, but pixel-perfect matching is more reliable.
 - **No station-name OCR**: auto-driver doesn't validate which station the user is at; it trusts simulator's `state.curr_stop`. If they desync, manual PageDown is the recovery.
 - **Game DRM**: irrelevant to the OCR pipeline (works on legit + cracked installs identically since dxcam reads GPU output regardless of game's startup path).
 
-## Calibration insights worth remembering
-
-- **PrintWindow returns black for DirectX games.** Even with `PW_RENDERFULLCONTENT`. Same for BitBlt-from-desktop. dxcam (DXGI Output Duplication) is the only path that works reliably.
-- **`output_color="BGRA"`** in dxcam is native; `"RGB"` requires opencv-python.
-- **Set DPI awareness** before any window measurement: `ctypes.windll.shcore.SetProcessDpiAwareness(2)`. At 2560×1440 + DPI scaling, omitting this misaligns coordinates.
-- **HUD text varies in pixel-population** by anti-aliasing. Fixed binarization threshold (70) is more stable than Otsu, which gets confused by 3-population distributions (text + bg + scenery bleed-through).
-- **Decimal point detection by shape** (small bbox in bottom half of text band) is more robust than gap-based heuristics. Speed values like `110.7` have inter-`1` gaps of ~18px, exceeding any reasonable digit-gap threshold; only decimal-stop reliably catches the integer/decimal boundary.
-- **Right-most green pixel test failed** as a badge state discriminator — both Next/Stopping pentagons are identical shapes. Pixel-diff against text-content anchors is what works.
-
-## Validation history
-
-- **2026-04-26 evening (Phase 1)**: dxcam capture pipeline; distance OCR (HUD bbox calibration, digit segmentation, template matching, scenery-bleed handling, gap filter, m-stroke filter); validated against 6 reference screenshots + live drive (24 distance reads through one full station segment, all correct).
-- **2026-04-26 evening (Phase 2)**: speed OCR (decimal-place stripping, gap tuning); badge classifier (4-anchor pixel-diff); event state machine with per-segment fired-flags; validated against multi-station live drive (2 segments, all transitions detected correctly).
-- **2026-04-26 late evening (Phase 3)**: speed OCR robustness — decimal-point detection (replaces gap heuristic for boundary), gap relaxation for narrow-digit kerning; validated on 17 live frames spanning 0–120+ km/h.
-- **2026-04-27 (Phase 4)**: PASSING badge added (rapid-service "Pass" / "通過" blue pentagon); classifier expanded from 4 to 6 anchors. Arrival logic switched from downward-crossing to level test gated on `badge==MOVING` so post-PASSING under-threshold cases fire correctly. OCR + layout modules promoted from `_experiments/` to project root. Auto-input toggle + Lead/Interval steppers moved from CLI flags to setup screen. Offline OCR validation 6/6 PASS; detector scenarios cover normal segment, mid-segment PASSING, post-PASSING already-under-threshold, double-fire prevention, STOPPED gate.
-
-## Future enhancements
-
-Priority-ordered for next session pickup:
-
-- [ ] **Live-validate the in-process integration (1a).** Both 1a and 1b are
-  feature-complete and compile/render cleanly. **1b is the only path live-tested
-  end-to-end** (Keihin 727B Omiya→Kanda flawless). 1a should behave identically
-  but needs a real drive to confirm. Run `uv run main.py`, toggle OCR Auto-PA on
-  the setup screen, then drive a scenario and verify PAs auto-fire at correct
-  moments, debug panel updates, manual PageDown still overrides.
-- [ ] **Dynamic arrival threshold**: per-stop 1200m vs 900m based on whether the
-  stop's last PA is "significantly longer" than the route's average PA duration
-  (transfer guides are characteristically longer). User's exact words:
-  *"if it's significantly longer than the average length of other PA, then it's
-  a long arriving PA, if no please go and have the most fun"*. In-process
-  driver has direct access to `sim.stops` + can probe audio durations via
-  `mutagen` or `soundfile` — no extra `--route` flag needed. Currently uses the
-  static Lead value chosen on the setup screen.
-- [ ] **Multi-PA queue auto-advance**: simulator's `_next_pa()` plays one PA per
-  invocation. For multi-PA stops (transfer hubs with 3+ PAs), only the first
-  arrival PA fires automatically; user manually fires the rest with PageDown.
-  Auto-advance would either fire multiple `pending_next_pa` flags spaced by PA
-  audio durations, or have the simulator auto-chain when configured.
-- [ ] **Multi-resolution support**: bboxes + digit templates are pixel-fixed at
-  2560×1440. Other resolutions need full recalibration. Future: proportional
-  layout + template scaling.
-- [ ] **Separate-window debug panel**: today the panel shares the LCD's pygame
-  window via sub-surfaces (no overlap, but same window). User has flagged
-  preference for further decoupling — possible via `pygame._sdl2.video.Window`
-  for a fully separate OS window. Not a blocker; deferred.
-- [ ] **STA auto-fire**: not modeled. STA is IRL-manual (station master, not
-  driver), per user spec. Plumbing for synthetic PageUp + user-press monitoring
-  exists in 1b if needed later.
-
-See `data_tools/capture_game.py` and `auto_input.py` for inline notes on the
-existing integration semantics.
-
-## For next-session Claude (zero-context pickup)
-
-If you're picking this up cold, the **highest-value task** is live-validating
-the in-process integration. Steps:
-
-1. Read this doc + `memory/2026-04-27.md` for full context.
-2. Verify offline OCR still passes: `uv run python ocr.py` (should
-   show 6/6 PASS).
-3. Boot the simulator (`uv run main.py`), toggle OCR Auto-PA on the setup
-   screen (defaults Lead 900m / Interval 5s — change via the steppers if needed),
-   then select a route. Game must be running fullscreen at 2560×1440 with HUD
-   visible at top-right.
-4. Drive 2 stations on Keihin-Tōhoku 727B (already validated route on 1b).
-   Confirm:
-   - Debug panel renders all 3 lines correctly
-   - Speed/distance values track HUD readings
-   - `dep✓` lights up when speed crosses 30 km/h after a `STOPPED→MOVING`
-   - `arr✓` lights up when distance crosses 900m descending
-   - `state:` line shows correct "between A → B" / "stopped at A"
-   - Manual PageDown overrides cleanly (auto skips its own fire)
-5. If anything misbehaves, paste the terminal log + a panel screenshot. The 1b
-   path (`data_tools/capture_game.py`) is the comparison baseline — it's known
-   working.
-
-After live-validation, the natural next bite is **dynamic 900/1200m threshold**
-per the user's "remaining last PA length" spec.
+Pending design (entry-point flow), validation history, calibration insights /
+guardrails, and the priority-ordered backlog all live in
+[WIP_autodriver.md](WIP_autodriver.md).
