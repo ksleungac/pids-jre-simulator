@@ -97,6 +97,9 @@ def main():
             for track in stop.get("pa") or []:
                 if track and not (pa_dir / f"{track}.mp3").exists():
                     issues.append((rel, f"[{i}] {stop.get('name')}: pa/{track}.mp3 missing"))
+            for track in stop.get("pa_at_station") or []:
+                if track and not (pa_dir / f"{track}.mp3").exists():
+                    issues.append((rel, f"[{i}] {stop.get('name')}: pa/{track}.mp3 (at-station) missing"))
             for track in stop.get("sta") or []:
                 if track and not (sta_dir / f"{track}.mp3").exists():
                     issues.append((rel, f"[{i}] {stop.get('name')}: sta/{track}.mp3 missing"))

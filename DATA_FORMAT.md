@@ -299,20 +299,24 @@ Each stop in the `stops` array:
 ```json
 {
     "name": "駅名",                 // Station name (kanji)
-    "pa": ["1", "2"],              // PA track numbers (empty array = no announcement)
+    "pa": ["1", "2"],              // Pre-arrival PA tracks (empty array = no announcement)
+    "pa_at_station": ["3"],        // Optional. At-platform PA tracks played after arrival
     "sta": ["JC01", "JC01_ALT"],   // STA audio filename(s) without .mp3 extension
     "sta_code": "JC01",            // JR official station numbering code (or null)
     "sta_cut": 10,                 // STA melody: seconds where melody is cut and the closing-door announcement begins
-    "time": 3                      // Travel time to next station (minutes, 0 for first station)
+    "time": 3                      // Travel time INCOMING from the previous PA station (minutes; 0 for first station)
 }
 ```
 
-**Note:** The `time` field represents the scheduled travel time in minutes. The lower LCD displays this value with real-time countdown:
+**Note:** The `time` field is the scheduled **incoming** travel time — minutes from the previous PA station's departure to this stop's arrival. Displayed on the lower LCD with real-time countdown:
 - Countdown starts when train departs (first PA of segment)
 - Display shows `time - elapsed_minutes` (floor division, only decrements when full minute passes)
 - Minimum display value is "1" (never shows 0)
 - On last PA of current station, display forces to "1" (arriving now)
+- During STOPPING (`at_station=True`), the cursor cell's time is NOT rendered — incoming travel is over. Cumulative for downstream cells starts fresh from `stops[curr_stop+1]["time"]`. See [DISPLAY.md](DISPLAY.md) § "Unified State Machine".
 - Configurable via `TIME_SCALE` constant (60 = real-time, lower = faster)
+
+**Convention rationale:** the field is anchored on the destination station, not the source — `stops[N].time` answers "how long does it take to reach N?" (= travel from N−1 → N), not "how long until I leave N?". Verified via Tokaido 1865E: 新橋.time=2 matches IRL 東京→新橋 (~2 min), 品川.time=5 matches 新橋→品川 (~5 min). 東京.time=0 because there's no previous station.
 
 ### Field Details
 
@@ -363,6 +367,39 @@ Stations with empty `pa: []` are skipped automatically (train passes through wit
     // NO "time" — countdown derived from next PA station
 }
 ```
+
+#### `pa_at_station` Array (At-Station Announcements) — Optional
+
+Optional list of PA tracks that play **while the train is stopped at the platform**, after the pre-arrival announcements have finished. Defaults to absent / empty (typical stops have none).
+
+Semantic split:
+
+- **`pa`** — pre-arrival sequence (dep-from-prev, this-arr): plays while the train is moving toward this stop.
+- **`pa_at_station`** — at-platform sequence (transfer info, connection notices, etc.): plays after the train has come to rest.
+
+| Value | Meaning |
+|-------|---------|
+| *(field omitted)* or `[]` | No at-station PAs — default for typical 2-PA stops |
+| `["transfer-info"]` | Single at-station track |
+| `["transfer-info", "connection-notice"]` | Multiple at-station tracks |
+
+**Filename convention:** same as `pa`. Slugs resolve to `pa/<slug>.mp3` — both lists share the single `pa/` folder.
+
+**Example** (Tokaido 1865E 国府津 — junction with the Gotemba Line, with extra at-platform announcements):
+
+```json
+{
+    "name": "国府津",
+    "pa": ["25", "26"],
+    "pa_at_station": ["27", "28"],
+    "sta": ["JT14"],
+    "sta_cut": 18,
+    "time": 6,
+    "sta_code": "JT14"
+}
+```
+
+The state machine consumes both lists and surfaces a separate "STOPPING at station" display state during `pa_at_station` playback. Display-side semantics live in [DISPLAY.md](DISPLAY.md); state-machine flow lives at `app.py` `PASimulator._next_pa`.
 
 #### `sta` Array (STA Melodies)
 
@@ -426,6 +463,7 @@ All lines share the central `data/translations.json` (display text) and `data/st
 
 3. **Empty values:**
    - No PA at this stop: `"pa": []`
+   - No at-station PAs: **omit `pa_at_station` entirely** (not `[]`); the absence is the default
    - No STA melody: **omit the `sta` field entirely** (not `[]` or `[""]`)
    - No code: `"sta_code": null`
 
@@ -480,7 +518,7 @@ Exits 0 if clean, 1 if issues found (usable as a pre-commit or CI gate). Checks 
 - Route-level `type` has an entry in `data/train_types.json`
 - Passing stations (`pa: []`, non-first) have NO `sta`, NO `sta_cut`, NO `time`
 - First station has `time: 0`
-- Every file referenced by `pa` / `sta` exists on disk (`pa/<name>.mp3`, `sta/<name>.mp3`)
+- Every file referenced by `pa` / `pa_at_station` / `sta` exists on disk (`pa/<name>.mp3`, `sta/<name>.mp3`)
 - `stations.json` `code_3` count matches the documented 22
 
 Issues are grouped by route with stop index + name. Add new checks by editing `validate_data.py` — don't re-embed them here.

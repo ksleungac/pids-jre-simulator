@@ -82,6 +82,26 @@ class AudioPlayer:
         except (IndexError, KeyError) as e:
             print(f"PA playback error: {e}")
 
+    def play_pa_at_station(self, stop_index: int, idx: int) -> None:
+        """Load and play an at-station PA track.
+
+        Mirrors play_pa but reads from stop['pa_at_station']. Both lists share
+        the pa/ folder (slugs resolve to pa/<slug>.mp3).
+        """
+        try:
+            tracks = self.stops[stop_index].get("pa_at_station", [])
+            if not tracks or idx >= len(tracks):
+                return
+
+            track_name = tracks[idx]
+            if not track_name:
+                return
+
+            track_path = os.path.join(self.pa_dir, track_name + ".mp3")
+            self._load_and_play(track_path)
+        except (IndexError, KeyError) as e:
+            print(f"PA-at-station playback error: {e}")
+
     def play_sta(self, stop_index: int, sta_index: int, cut_position: float = 0) -> None:
         """Load and play departure melody (sta = station melody).
 

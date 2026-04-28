@@ -166,15 +166,34 @@ class JapaneseDisplay:
                 return gi
         return f_stops[-1][0] if f_stops else 0
 
-    def draw_ptr(self, f_stops: List[Tuple[int, Dict]], dest_idx: int, cursor_pos: int, curr_stop: int) -> None:
-        """Draw the pointer/triangle indicating current position."""
+    def draw_ptr(self, f_stops: List[Tuple[int, Dict]], dest_idx: int, cursor_pos: int, curr_stop: int, at_station: bool = False) -> None:
+        """Draw the pointer/marker indicating current position.
+
+        Two pointer shapes:
+          - **Pentagon** (red filled, with small light dot inside) at
+            ``curr_stop``'s cell when ``at_station=True`` OR ``curr_stop == 0``.
+            The STOPPING marker — train is parked at this platform.
+          - **Chevron** (red arrow + halo) at ``cursor_pos`` when in
+            APPROACHING. The directional pointer that leads through skip
+            animation.
+
+        ``curr_stop == 0`` is included with the pentagon path defensively —
+        the chevron geometry has no left neighbor to anchor against at idx 0,
+        so the boot fallback uses the same shape.
+        """
         x = self.x
         y = self.y
         if not f_stops:
             return
         window_start = f_stops[0][0]
         ptr_color = self.contrast_color
-        local_disp = cursor_pos - window_start
+
+        use_pentagon = at_station or curr_stop == 0
+
+        # Pentagon anchors at curr_stop (the platform we're at). Chevron
+        # anchors at cursor_pos (which can lag during skip animation).
+        anchor = curr_stop if use_pentagon else cursor_pos
+        local_disp = anchor - window_start
         # During a long-route window flip, a multi-station skip animation
         # can leave cursor_pos behind in the cut-off zone. Suppress the
         # pointer rather than rendering it at a wrong column — the inner
@@ -185,7 +204,47 @@ class JapaneseDisplay:
         line_num = self._get_line(local_disp)
         l_y = y + self.h_line * line_num + self.top_pad * (line_num - 1)
 
-        if curr_stop != 0:
+        if use_pentagon:
+            # --- Pentagon params (adjust freely) ---
+            overhang = 2
+            head_extra = 10           # left bar-extension at row-head positions
+            shift_x = -3              # nudge entire pentagon horizontally (negative = left;
+                                      # tunes how far the apex pokes into the next cell)
+            rect_right_offset = 0     # rectangle's right edge offset from cell's right (before shift_x)
+            triangle_depth = 8        # apex extends this far past the rectangle's right edge —
+                                      # controls pointiness (independent of rectangle width)
+            dot_radius = 5            # interior light dot
+            halo_offset = 3           # gray halo offset (drop-shadow style)
+            # ----------------------------------------
+
+            cell_left = x + ptr
+            cell_right = cell_left + self.stops_w
+            # Row-head cells widen the bar by row_head_extra to the LEFT.
+            # The pentagon mirrors that so its left edge sits flush.
+            is_row_head = (local_disp % self.per_line) == 0
+            left_extra = head_extra if is_row_head else 0
+            left_x = cell_left - left_extra + shift_x
+
+            rect_right_x = cell_right + rect_right_offset + shift_x
+            apex_x = rect_right_x + triangle_depth
+
+            points = [
+                (left_x, l_y - overhang),
+                (left_x, l_y + self.bar_height + overhang),
+                (rect_right_x, l_y + self.bar_height + overhang),
+                (apex_x, l_y + self.bar_height / 2),
+                (rect_right_x, l_y - overhang),
+            ]
+            draw_aapolygon(self.screen, PASSED_COLOR, [(i + halo_offset, j) for (i, j) in points])
+            draw_aapolygon(self.screen, ptr_color, points)
+
+            # Small light dot — centered on cell (not on rectangle), so the
+            # marker stays where the cell's natural decoration would be.
+            cell_cx = int(cell_left + self.stops_w // 2)
+            cell_cy = int(l_y + self.bar_height / 2)
+            pygame.gfxdraw.filled_circle(self.screen, cell_cx, cell_cy, dot_radius, PASSED_COLOR)
+            pygame.gfxdraw.aacircle(self.screen, cell_cx, cell_cy, dot_radius, PASSED_COLOR)
+        else:
             w = 18
             offset = int(w * 0.8)
             draw_aapolygon(
@@ -199,33 +258,32 @@ class JapaneseDisplay:
                 ptr_color,
                 arrow_points(int(x + ptr - offset), int(l_y - 2), w, self.bar_height + 4, 10),
             )
-        else:
-            # curr_stop == 0 pentagon. Left edge follows the row-head bar
-            # extension (see show_stops `row_head_extra`) so the pentagon's
-            # left edge sits flush with the widened bar's left edge.
-            overhang = 2
-            head_extra = 10  # keep in sync with row_head_extra in show_stops
-            left_x = x - head_extra
-            points = [
-                (left_x, l_y - overhang),
-                (left_x, l_y + self.bar_height + overhang),
-                (x + self.stops_w - 10, l_y + self.bar_height + overhang),
-                (x + self.stops_w - 2, l_y + self.bar_height / 2),
-                (x + self.stops_w - 10, l_y - overhang),
-            ]
-            draw_aapolygon(self.screen, PASSED_COLOR, [(i + 3, j) for (i, j) in points])
-            draw_aapolygon(self.screen, ptr_color, points)
 
     # CONTRACT: inner red dot at `curr_stop` (PA target); pointer at `cursor_pos`
     # (lags during skip — intentional). See DISPLAY.md § "Station Skip Logic (full spec)".
     # DON'T "fix" the divergence to make them match.
     def draw_marks(self, f_stops: List[Tuple[int, Dict]], dest_idx: int, cursor_pos: int, curr_stop: int) -> None:
-        """Draw station markers (circles and arrows)."""
+        """Draw station markers (circles and arrows).
+
+        Cell decorations: passing-station chevron (no pa), small light dot for
+        passed cells (gi < cursor_pos), or active-cell ring with optional inner
+        red disk at curr_stop. The STOPPING-cell decoration (pentagon + small
+        dot) is drawn by ``draw_ptr`` — pentagon overdraws whatever this method
+        paints at the curr_stop cell, so no special-case skip is needed here.
+        """
         if not f_stops:
             return
         x = self.x
         y = self.y
         window_start = f_stops[0][0]
+
+        # --- Mark sizing (adjust freely) ---
+        small_dot_radius = 5  # passed-style + boot pentagon interior
+        active_ring_radius = 11  # outer ring on active stops
+        inner_disk_inset = 2  # active_ring_radius - inner = visible ring thickness
+        passing_arrow_w = 14  # passing-station chevron width
+        passing_arrow_stroke = 6  # chevron body thickness
+        # ------------------------------------
 
         for gi, stop in f_stops:
             local_i = gi - window_start
@@ -236,12 +294,14 @@ class JapaneseDisplay:
             center_x = int(x + ptr + offset)
             center_y = int(l_y + self.bar_height / 2)
 
-            if gi >= cursor_pos and gi <= dest_idx:
+            in_active_range = cursor_pos <= gi <= dest_idx
+
+            if in_active_range:
                 if gi == 0 and cursor_pos == 0:
-                    radius = 5
-                    pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, radius, PASSED_COLOR)
-                    pygame.gfxdraw.aacircle(self.screen, center_x, center_y, radius, PASSED_COLOR)
-                elif not stop.get("pa", []):
+                    # Boot pentagon at idx 0 — pentagon (drawn in draw_ptr)
+                    # paints over this cell. Skip drawing here entirely.
+                    continue
+                if not stop.get("pa", []):
                     arrow_offset = int(self.stops_w * 0.3)
                     draw_aapolygon(
                         self.screen,
@@ -249,25 +309,25 @@ class JapaneseDisplay:
                         arrow_points(
                             int(x + ptr + arrow_offset),
                             int(l_y + 4),
-                            14,
+                            passing_arrow_w,
                             self.bar_height - 8,
-                            6,
+                            passing_arrow_stroke,
                         ),
                     )
                 else:
-                    radius = 11
-                    pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, radius, PASSED_COLOR)
-                    pygame.gfxdraw.aacircle(self.screen, center_x, center_y, radius, PASSED_COLOR)
+                    pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, active_ring_radius, PASSED_COLOR)
+                    pygame.gfxdraw.aacircle(self.screen, center_x, center_y, active_ring_radius, PASSED_COLOR)
 
                     # Inner red dot marks the actual PA target — stays at
                     # curr_stop even while the cursor lags during a skip.
+                    # (When at_station=True, the pentagon overdraws this — fine.)
                     if gi == curr_stop:
-                        pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, radius - 2, CURRENT_COLOR)
-                        pygame.gfxdraw.aacircle(self.screen, center_x, center_y, radius - 2, CURRENT_COLOR)
+                        inner_radius = active_ring_radius - inner_disk_inset
+                        pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, inner_radius, CURRENT_COLOR)
+                        pygame.gfxdraw.aacircle(self.screen, center_x, center_y, inner_radius, CURRENT_COLOR)
             else:
-                radius = 5
-                pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, radius, PASSED_COLOR)
-                pygame.gfxdraw.aacircle(self.screen, center_x, center_y, radius, PASSED_COLOR)
+                pygame.gfxdraw.filled_circle(self.screen, center_x, center_y, small_dot_radius, PASSED_COLOR)
+                pygame.gfxdraw.aacircle(self.screen, center_x, center_y, small_dot_radius, PASSED_COLOR)
 
     def draw_times(
         self,
@@ -277,6 +337,8 @@ class JapaneseDisplay:
         current_time: float,
         departure_time: float,
         is_last_pa: bool,
+        at_station: bool = False,
+        curr_stop: int = 0,
     ) -> None:
         """Draw travel times between stations.
 
@@ -315,6 +377,13 @@ class JapaneseDisplay:
         for gi, stop in f_stops:
             if gi == 0 and cursor_pos == 0:
                 continue
+            if at_station and gi == curr_stop:
+                # We're at the platform — the time number here would represent
+                # incoming travel that already finished (= 0 useful). Skip the
+                # whole render block. Subsequent cells render as if cursor were
+                # one cell to the right (cumulative starts fresh from the next
+                # leg out, no carry-over of stops[curr_stop]["time"]).
+                continue
 
             local_i = gi - window_start
             ptr = (local_i % self.per_line) * self.stops_w
@@ -329,7 +398,13 @@ class JapaneseDisplay:
                 t_w, t_h = self.font_time.size("0")
 
                 if is_first_station:
-                    if is_last_pa:
+                    if at_station:
+                        # First rendered cell after STOPPING@curr_stop: show
+                        # static stops[gi]["time"] (= leg from platform to here).
+                        # No countdown (we haven't departed; departure_time is
+                        # stale from the previous segment).
+                        cumulative_time = stop["time"]
+                    elif is_last_pa:
                         cumulative_time = 1
                     else:
                         elapsed_full_minutes = int(elapsed_minutes)
@@ -564,8 +639,8 @@ class JapaneseDisplay:
             )
 
         self.draw_marks(f_stops, dest_idx, cursor_pos, curr_stop)
-        self.draw_ptr(f_stops, dest_idx, cursor_pos, curr_stop)
-        self.draw_times(f_stops, dest_idx, cursor_pos, current_time, state.departure_time, state.is_last_pa)
+        self.draw_ptr(f_stops, dest_idx, cursor_pos, curr_stop, state.at_station)
+        self.draw_times(f_stops, dest_idx, cursor_pos, current_time, state.departure_time, state.is_last_pa, state.at_station, curr_stop)
 
         draw_route_disclaimer(self.screen, self.font_disclaimer, S_WIDTH - 8, S_HEIGHT - 4, (0, 0, 0))
 
@@ -839,14 +914,22 @@ class JapaneseEightStationDisplay:
         window: List[Tuple[int, Dict]],
         cursor_pos: int,
         curr_stop: int,
+        at_station: bool = False,
     ) -> None:
-        """Red triangle pointer at cursor_pos's column inside the window."""
+        """Red triangle/pentagon pointer at cursor_pos (or curr_stop in STOPPING).
+
+        Mirrors the full-route view's two-shape dispatch: pentagon when
+        ``at_station`` OR ``curr_stop == 0``, chevron otherwise.
+        """
         if not window:
             return
         x = self.x
         y = self.bar_y
         window_start = window[0][0]
-        local_disp = cursor_pos - window_start
+
+        use_pentagon = at_station or curr_stop == 0
+        anchor = curr_stop if use_pentagon else cursor_pos
+        local_disp = anchor - window_start
         # During a multi-station skip animation, cursor_pos can lag before
         # window_start (or past window end) — suppress rather than rendering
         # at a wrong column. The inner red dot at curr_stop still shows the
@@ -856,7 +939,7 @@ class JapaneseEightStationDisplay:
         ptr_x = local_disp * self.stops_w
         ptr_color = self.contrast_color
 
-        if curr_stop != 0:
+        if not use_pentagon:
             # --- Pointer params (adjust freely) ---
             # See `arrow_points` docstring for what `stroke` actually controls
             # (chevron BODY thickness — NOT line stroke).
@@ -891,19 +974,40 @@ class JapaneseEightStationDisplay:
                 arrow_points(int(x + ptr_x - offset), int(y + inner_y_off), inner_w, inner_h, inner_stroke),
             )
         else:
-            # Initial-stop pentagon: protrudes the same 1 px above + 1 px below
-            # the bar as the regular chevron cursor (`inner_h_overshoot // 2`),
-            # so heights match across stop=0 and mid-route frames.
-            overhang = 1
+            # STOPPING pentagon — drawn at curr_stop's cell. Generalized from
+            # the original boot-state pentagon at curr_stop=0 (when the
+            # chevron has no left neighbor to anchor against).
+            # --- Pentagon params (adjust freely) ---
+            overhang = 1            # protrudes above/below bar (matches chevron's inner_h_overshoot // 2)
+            shift_x = -3            # nudge left (matches full-route convention)
+            rect_right_offset = 0   # rectangle's right edge offset from cell border
+            triangle_depth = 10     # apex extends past rect_right_x by this much
+            dot_radius = 6          # interior light dot (matches passed-style dot at curr_stop=0)
+            halo_offset = 3         # gray drop-shadow offset
+            # ---------------------------------------
+
+            cell_left = x + ptr_x
+            cell_right = cell_left + self.stops_w
+            left_x = cell_left + shift_x
+            rect_right_x = cell_right + rect_right_offset + shift_x
+            apex_x = rect_right_x + triangle_depth
+
             points = [
-                (x, y - overhang),
-                (x, y + self.bar_height + overhang),
-                (x + self.stops_w - 12, y + self.bar_height + overhang),
-                (x + self.stops_w - 2, y + self.bar_height / 2),
-                (x + self.stops_w - 12, y - overhang),
+                (left_x, y - overhang),
+                (left_x, y + self.bar_height + overhang),
+                (rect_right_x, y + self.bar_height + overhang),
+                (apex_x, y + self.bar_height / 2),
+                (rect_right_x, y - overhang),
             ]
-            draw_aapolygon(self.screen, PASSED_COLOR, [(i + 3, j) for (i, j) in points])
+            draw_aapolygon(self.screen, PASSED_COLOR, [(i + halo_offset, j) for (i, j) in points])
             draw_aapolygon(self.screen, ptr_color, points)
+
+            # Small light dot inside pentagon — drawn AFTER the pentagon
+            # so it's visible on top of the red fill.
+            cell_cx = int(cell_left + self.stops_w // 2)
+            cell_cy = int(y + self.bar_height / 2)
+            pygame.gfxdraw.filled_circle(self.screen, cell_cx, cell_cy, dot_radius, PASSED_COLOR)
+            pygame.gfxdraw.aacircle(self.screen, cell_cx, cell_cy, dot_radius, PASSED_COLOR)
 
     def draw_times(
         self,
@@ -913,8 +1017,17 @@ class JapaneseEightStationDisplay:
         current_time: float,
         departure_time: float,
         is_last_pa: bool,
+        at_station: bool = False,
+        curr_stop: int = 0,
     ) -> None:
-        """Cumulative travel times — same algorithm as full-route view."""
+        """Cumulative travel times — same algorithm as full-route view.
+
+        STOPPING behavior: skip rendering at gi=curr_stop (we're at the
+        platform — incoming time is no longer meaningful), and shift the
+        cumulative so the next cell shows time-from-platform-to-itself
+        (= stops[curr_stop+1]["time"]) instead of carrying the now-stale
+        leg into curr_stop.
+        """
         if not window:
             return
         x = self.x
@@ -932,6 +1045,8 @@ class JapaneseEightStationDisplay:
         for gi, stop in window:
             if gi == 0 and cursor_pos == 0:
                 continue
+            if at_station and gi == curr_stop:
+                continue
             # Hide the time on the leftmost cell when it IS cursor_pos —
             # the pointer occupies that space (reference convention). In the
             # locked-window case where cursor_pos has marched past the
@@ -946,7 +1061,10 @@ class JapaneseEightStationDisplay:
                 t_w, t_h = self.font_time.size("0")
 
                 if is_first_station:
-                    if is_last_pa:
+                    if at_station:
+                        # First rendered cell after STOPPING — static time.
+                        cumulative_time = stop["time"]
+                    elif is_last_pa:
                         cumulative_time = 1
                     else:
                         elapsed_full_minutes = int(elapsed_minutes)
@@ -1132,8 +1250,8 @@ class JapaneseEightStationDisplay:
 
         # Pass 2: marks, pointer, times (overlays on top of bars)
         self.draw_marks(window, dest_idx, cursor_pos, curr_stop)
-        self.draw_ptr(window, cursor_pos, curr_stop)
-        self.draw_times(window, dest_idx, cursor_pos, current_time, state.departure_time, state.is_last_pa)
+        self.draw_ptr(window, cursor_pos, curr_stop, state.at_station)
+        self.draw_times(window, dest_idx, cursor_pos, current_time, state.departure_time, state.is_last_pa, state.at_station, curr_stop)
 
         draw_route_disclaimer(self.screen, self.font_disclaimer, S_WIDTH - 8, S_HEIGHT - 4, (0, 0, 0))
 

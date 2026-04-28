@@ -31,6 +31,13 @@ class AppState:
         # Time-based skip progression. cursor_pos derives from these.
         self.time_to_next = 0  # Time from current to next stopping station
         self.skip_progress = 0  # Passing-station ticks completed (0..skip)
+        # STOPPING state — train is at the platform (between arrival and next departure).
+        # Boots True so curr_stop=0 starts in STOPPING (the train is parked at the start
+        # platform, no advance-into has happened). cnt_pa_at_station = -1 means "no
+        # at-station PA played yet, next press plays pa_at_station[0]" — mirrors how
+        # cnt_pa=0 means "pa[0] just played" (so -1 is the pre-first sentinel).
+        self.at_station = True
+        self.cnt_pa_at_station = -1
 
     @property
     def cursor_pos(self) -> int:
@@ -87,6 +94,7 @@ class _SilentAudio:
     """
 
     def play_pa(self, *args, **kwargs) -> None: ...
+    def play_pa_at_station(self, *args, **kwargs) -> None: ...
     def play_sta(self, *args, **kwargs) -> None: ...
     def pause(self) -> None: ...
     def is_playing(self) -> bool:
@@ -283,8 +291,9 @@ class PASimulator:
 
     def run(self) -> None:
         """Main game loop."""
-        # Draw initial state
-        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa)
+        # Draw initial state — boot lands in STOPPING@curr_stop=0 by default
+        # (see AppState.__init__). Prefix reads "ただいま <start station>".
+        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=self.state.at_station)
         self.upper.draw()
         self.lower.draw()
         self._render_panel()
@@ -426,7 +435,10 @@ class PASimulator:
         target = max(0, min(target, len(self.stops) - 1))
 
         def _has_pa(i: int) -> bool:
-            return bool(self.stops[i].get("pa"))
+            # A stop is a valid landing target if it has either a pre-arrival
+            # sequence (pa) or an at-station sequence (pa_at_station). Stops
+            # with both empty are passing stations and should be rolled past.
+            return bool(self.stops[i].get("pa")) or bool(self.stops[i].get("pa_at_station"))
 
         # Special case: target=0 IS the initial-boarding state. Most real routes
         # have `pa: []` at stop 0 because no announcement has played yet (the
@@ -452,92 +464,128 @@ class PASimulator:
                     target = scan
                 # else: no stop with PA anywhere — stay on clamped target.
 
+        # Lands in STOPPING@target — the unified model treats jump as
+        # "I'm at platform X." Next press cycles pa_at_station (or advances
+        # if empty). See DISPLAY.md § "Unified State Machine".
         self.state.curr_stop = target
         self.state.cnt_pa = 0
+        self.state.cnt_pa_at_station = -1
+        self.state.at_station = True
         self.state.cnt_sta = 0
         self.state.skip = 0
         self.state.skip_progress = 0
         self.state.time_to_next = 0
         self.state.is_last_pa = False
         self.state.departure_time = 0.0
-        self.upper.set_state(target, 0)
+        self.upper.set_state(target, 0, at_station=True)
 
-    # CONTRACT: two branches (advance overwrites skip; within-stop zeroes it)
-    # together prevent single-PA-target leakage. See DISPLAY.md §
-    # "Station Skip Logic (full spec)" before restructuring either branch.
+    # CONTRACT: unified state machine cycles APPROACHING -> STOPPING -> APPROACHING.
+    # See DISPLAY.md § "Unified State Machine" — entry to STOPPING is a no-audio
+    # press; exit from STOPPING is the advance press that plays the next stop's pa[0].
     # CONTRACT: terminus_idx = dest_stop_idx for non-circular routes (NOT
     # len(stops)-1). See DISPLAY.md § "Terminus (`dest_stop_idx`)". Route data
     # may extend past dest for through-running reference (Keihin 727B 磯子→大船).
     def _next_pa(self) -> None:
-        """Advance to next PA announcement."""
-        # Don't advance if audio is already playing
+        """Advance the state machine by one press."""
         if self.audio.is_playing():
             return
-
         if not self.stops:
             return
 
-        current_stop_data = self.stops[self.state.curr_stop]
-        pa_tracks = current_stop_data.get("pa", [])
-
-        # Check if we've exhausted PA announcements for this stop
-        if self.state.cnt_pa >= len(pa_tracks) - 1:
-            # Terminus = route dest for non-circular, last stop for circular.
-            # (Circular routes have stop-level dest cycling and rely on the
-            # loop-back branch below; the route-level dest isn't a terminus.)
-            terminus_idx = (len(self.stops) - 1) if self.state.circular == 1 else self.dest_stop_idx
-            # Move to next stop
-            if self.state.curr_stop < terminus_idx:
-                prev_stop = self.state.curr_stop
-                self.state.curr_stop += 1
-                # Skip stations with no PA — land curr_stop on the next PA station.
-                while self.state.curr_stop <= terminus_idx and not self.stops[self.state.curr_stop].get("pa", []):
-                    self.state.curr_stop += 1
-
-                if self.state.curr_stop > terminus_idx:
-                    self.state.curr_stop = terminus_idx
-                    self.state.cnt_pa = max(0, len(pa_tracks) - 1)
-                    return
-
-                # Set up the skip animation. cursor_pos starts at
-                # (curr_stop - skip), so it appears on the first passing
-                # station and walks forward as skip_progress ticks up.
-                self.state.skip = self.state.curr_stop - prev_stop - 1
-                self.state.skip_progress = 0
-                self.state.time_to_next = self.stops[self.state.curr_stop].get("time", 0) if self.state.skip > 0 else 0
-                self.state.cnt_pa = 0
-                self.state.is_last_pa = False
-                self.state.departure_time = time.time()
-            elif self.state.circular == 1:
-                # Loop back to start for circular routes
-                self.state.curr_stop = 0
-                self.state.cnt_pa = 0
-                self.state.is_last_pa = False
-                self.state.skip = 0
-                self.state.skip_progress = 0
-                self.state.time_to_next = 0
-                self.state.departure_time = time.time()
-            else:
-                # End of route
-                self.state.cnt_pa = max(0, len(pa_tracks) - 1)
-                return
-
-            self.state.cnt_sta = 0
-            self.audio.play_pa(self.state.curr_stop, self.state.cnt_pa)
-            self.upper.set_state(self.state.curr_stop, self.state.cnt_pa)
-            self.upper.draw()
+        if self.state.at_station:
+            self._next_in_stopping()
         else:
-            # Next PA within current stop. Catches the cursor up if a skip
-            # animation was still mid-flight (e.g., user clicked PageDown
-            # faster than the time threshold).
+            self._next_in_approaching()
+
+    def _next_in_stopping(self) -> None:
+        """Press while at_station=True.
+
+        Plays the next pa_at_station entry if available; otherwise the press
+        becomes the advance press that exits STOPPING and lands in APPROACHING
+        at the next stop.
+        """
+        pa_at_st = self.stops[self.state.curr_stop].get("pa_at_station", [])
+        if self.state.cnt_pa_at_station + 1 < len(pa_at_st):
+            self.state.cnt_pa_at_station += 1
+            self.audio.play_pa_at_station(self.state.curr_stop, self.state.cnt_pa_at_station)
+            # Display stays "ただいま X" — no set_state needed.
+            return
+        self._advance_to_next_stop()
+
+    def _next_in_approaching(self) -> None:
+        """Press while at_station=False.
+
+        Plays the next pa entry if available; otherwise the press enters
+        STOPPING (no audio, prefix flips to "ただいま").
+        """
+        pa_tracks = self.stops[self.state.curr_stop].get("pa", [])
+        if self.state.cnt_pa < len(pa_tracks) - 1:
+            # Within-pa: catches the cursor up if a skip animation was still
+            # mid-flight (e.g., user pressed PageDown faster than the time
+            # threshold). Skip-zeroing is what prevents single-PA-target leakage.
             self.state.cnt_pa += 1
             self.state.is_last_pa = self.state.cnt_pa >= len(pa_tracks) - 1
             self.state.skip = 0
             self.state.skip_progress = 0
             self.state.time_to_next = 0
             self.audio.play_pa(self.state.curr_stop, self.state.cnt_pa)
-            self.upper.set_state(self.state.curr_stop, self.state.cnt_pa)
+            self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=False)
             self.upper.draw()
+            return
+        # pa exhausted — enter STOPPING (no audio).
+        self.state.at_station = True
+        self.state.cnt_pa_at_station = -1
+        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=True)
+        self.upper.draw()
+
+    def _advance_to_next_stop(self) -> None:
+        """Exit STOPPING@curr_stop and advance to the next stopping station.
+
+        Plays pa[0] of the new stop and lands in APPROACHING. Sets up skip
+        animation if passing stations were crossed. Circular routes loop from
+        idx N (= last duplicate of start) directly to idx 1 — the duplicate
+        idx 0 is just a structural marker for circularity, not a state to visit.
+        """
+        terminus_idx = (len(self.stops) - 1) if self.state.circular == 1 else self.dest_stop_idx
+
+        def _is_stopping(stop) -> bool:
+            return bool(stop.get("pa")) or bool(stop.get("pa_at_station"))
+
+        if self.state.curr_stop < terminus_idx:
+            prev_stop = self.state.curr_stop
+            self.state.curr_stop += 1
+            while self.state.curr_stop <= terminus_idx and not _is_stopping(self.stops[self.state.curr_stop]):
+                self.state.curr_stop += 1
+            if self.state.curr_stop > terminus_idx:
+                # No more stopping stations within terminus — clamp and remain at terminus.
+                self.state.curr_stop = terminus_idx
+                return
+            # cursor_pos starts at (curr_stop - skip), so it appears on the
+            # first passing station and walks forward as skip_progress ticks up.
+            self.state.skip = self.state.curr_stop - prev_stop - 1
+            self.state.skip_progress = 0
+            self.state.time_to_next = self.stops[self.state.curr_stop].get("time", 0) if self.state.skip > 0 else 0
+        elif self.state.circular == 1:
+            # Loop-back: skip the duplicate idx 0 (same name as last stop).
+            self.state.curr_stop = 1
+            while self.state.curr_stop < len(self.stops) and not _is_stopping(self.stops[self.state.curr_stop]):
+                self.state.curr_stop += 1
+            self.state.skip = 0
+            self.state.skip_progress = 0
+            self.state.time_to_next = 0
+        else:
+            # Non-circular at terminus — no advance possible. Stay in STOPPING.
+            return
+
+        self.state.cnt_pa = 0
+        self.state.cnt_pa_at_station = -1
+        self.state.at_station = False
+        self.state.is_last_pa = False
+        self.state.departure_time = time.time()
+        self.state.cnt_sta = 0
+        self.audio.play_pa(self.state.curr_stop, 0)
+        self.upper.set_state(self.state.curr_stop, 0, at_station=False)
+        self.upper.draw()
 
     def _next_sta(self) -> None:
         """Play next station melody.

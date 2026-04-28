@@ -88,7 +88,13 @@ def parse_args():
     parser.add_argument("--screenshot", type=str, help="Save one frame to file and exit")
     parser.add_argument("--mode", type=str, choices=list(MODE_MAP), default=None, help="Force display mode (default: cycles automatically)")
     parser.add_argument("--stop", type=int, default=0, help="Initial station index (default: 0)")
-    parser.add_argument("--pa", type=int, default=0, help="PA phase: 0=次は/Next, 1=まもなく/Arriving, 2=ただいま/Now stopping (default: 0)")
+    parser.add_argument(
+        "--pa",
+        type=int,
+        default=None,
+        help="Force PA phase: 0=次は/Next, 1=まもなく/Arriving, 2=ただいま/Now stopping (STOPPING). "
+        "Default: leave STOPPING state from jump_to_stop (= 2).",
+    )
     parser.add_argument(
         "--route",
         type=str,
@@ -128,10 +134,20 @@ def main():
 
     sim = PASimulator(work_dir, preview=True)
 
-    # Initial position + PA phase
+    # Initial position. jump_to_stop lands in STOPPING@target (at_station=True,
+    # cnt_pa=0). --pa overrides that into a different prefix state for visual
+    # iteration: 0=次は, 1=まもなく, 2=ただいま (STOPPING). Omitted leaves the
+    # natural STOPPING landing.
     sim.jump_to_stop(args.stop)
-    sim.state.cnt_pa = max(0, min(args.pa, 2))
-    sim.upper.set_state(sim.state.curr_stop, sim.state.cnt_pa)
+    if args.pa is not None:
+        forced = max(0, min(args.pa, 2))
+        if forced == 2:
+            sim.state.at_station = True
+            sim.state.cnt_pa = 0
+        else:
+            sim.state.at_station = False
+            sim.state.cnt_pa = forced
+    sim.upper.set_state(sim.state.curr_stop, sim.state.cnt_pa, at_station=sim.state.at_station)
 
     # Force display mode if requested
     if args.mode:

@@ -254,7 +254,25 @@ for one frame. The state machine handles this via flag-resets only on transition
 
 ## State machine — `PaEventDetector`
 
-Lives in `data_tools/capture_game.py` (1b) + `auto_input.py` `_Detector` (1a, kept in sync). Tracks distance + speed + badge across samples, emits PA-fire event names on transitions:
+Lives in `data_tools/capture_game.py` (1b) + `auto_input.py` `_Detector` (1a, kept in sync). Tracks distance + speed + badge across samples, emits PA-fire event names on transitions.
+
+### State vocabulary
+
+The state machine encodes 5 logical states the train moves through during one segment cycle:
+
+1. **STOPPING at station** — at platform, ready for next departure cycle.
+2. **MOVING/PASSING (before departure PA)** — speed > 0, dep PA hasn't fired yet.
+3. **MOVING/PASSING (after departure PA / before arrival PA)** — dep PA fired, in transit.
+4. **MOVING (after arrival PA)** — arr PA fired, approaching/at platform.
+5. **STOPPING (next station)** — arrived; same anchor as state 1 from a probe-only POV.
+
+These are the **logical states** — the autodriver's semantic conclusions about the train. They are encoded implicitly in `_Detector` via `(prev_badge, departure_fired, arrival_fired)` flag combos; the state names are the design vocabulary, the flag combos are the implementation.
+
+**Distinct from logical states**: raw OCR observations — `badge_read ∈ {STOPPED, MOVING, PASSING}`, `speed_read`, `distance_read`. The mapping observation→state is an **inference function**. Today it's mostly 1:1 (`badge=STOPPED → state 1/5`), with speed disambiguating state 2 (`spd<30`) from state 3 (`spd≥30`). Future cross-attribute hardening will enrich this function with multi-attribute consensus — without changing the rest of the state machine.
+
+**When designing flows that interact with the state machine** (entry-point, resync, click-to-jump): use the 5 named states; treat observation→state inference as a pluggable function. Don't conflate "badge says X" with "state is X" in vocabulary or anchor logic — the separation matters for hardening.
+
+### Events
 
 | Event | Trigger | Effect |
 |---|---|---|

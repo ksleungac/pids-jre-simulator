@@ -29,6 +29,13 @@ When splitting audio, importing route data, or adding any batch of files — pre
 
 **How to apply:** Inspect the source first, surface the parse + uncertainties, get sign-off, then write the per-source ad-hoc script.
 
+### Verify before claiming
+Before claiming "X is a bug" or "X works like Y" in existing code, verify by reading the actual call sites and tracing state transitions. Don't infer from partial context, and don't propose a "fix" without that trace.
+
+**Why:** During the 2026-04-28 click-to-jump design discussion, I claimed `jump_to_stop`'s `cnt_pa = 0` skipped `pa[0]` and proposed changing it to `cnt_pa = -1`. The user pushed back: *"not my original design?"* Verification (reading `audio/sobu/1217F/route.json` + `upper_lcd.py:629-639`) showed `pa[0] = "{prev}-dep"`, `pa[1] = "{this}-arr"`, and `cnt_pa = 0` correctly lands the display in "次は X" mode for the click semantic "heading toward X." The proposed `-1` would have introduced a foreign sentinel value never used anywhere in active code. User: *"next time when you discuss with me do not just guess on convention."*
+
+**How to apply:** When proposing a fix to existing code, the bar is "I have read the relevant call sites + traced the state transitions," not "this looks wrong." When uncertain about a convention, say so explicitly and verify before taking a position. The user's "original design" is a strong prior — assume it's coherent until the trace says otherwise.
+
 ---
 
 ## Data modeling

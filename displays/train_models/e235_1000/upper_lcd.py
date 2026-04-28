@@ -626,17 +626,30 @@ class UpperDisplay:
             code_3_y_offset=code_3_y_offset,
         )
 
-    def set_state(self, curr_stop: int, cnt_pa: int) -> None:
-        """Update display state (current stop and PA count)."""
+    def set_state(self, curr_stop: int, cnt_pa: int, at_station: bool = False) -> None:
+        """Update display state (current stop, PA count, STOPPING flag).
+
+        Prefix mapping:
+            at_station=True  -> "ただいま" (train is at the platform)
+            cnt_pa == 0      -> "次は"     (heading toward this stop)
+            cnt_pa >= 1      -> "まもなく" (approaching — covers single-arr and
+                                            any future multi-stage approach pa)
+
+        ``at_station=True`` is the ONLY path to "ただいま" — the old
+        ``cnt_pa >= 2`` fallback was a pre-migration hack for at-platform
+        announcements that have since moved to ``pa_at_station``. Reviving it
+        would re-introduce the wrong-stop ambiguity (display says "ただいま X"
+        but the pa[2+] audio actually refers to the previous stop's platform).
+        """
         self.curr_stop = curr_stop
         self.cnt_pa = cnt_pa
 
-        if cnt_pa == 0:
-            self.prefix_text = "次は"
-        elif cnt_pa == 1:
-            self.prefix_text = "まもなく"
-        else:
+        if at_station:
             self.prefix_text = "ただいま"
+        elif cnt_pa == 0:
+            self.prefix_text = "次は"
+        else:
+            self.prefix_text = "まもなく"
 
     def update(self, current_time: float = None) -> None:
         """Update mode cycling."""

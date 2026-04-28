@@ -130,6 +130,55 @@ ModeCycler has `enabled`, **not** `paused`. To freeze a forced mode (e.g. in pre
 
 ---
 
+## Unified State Machine
+
+Every stop follows a two-sub-state cycle: APPROACHING (`at_station=False`) → STOPPING (`at_station=True`) → next stop's APPROACHING → ...
+
+State lives on `AppState` (`at_station: bool`, `cnt_pa: int`, `cnt_pa_at_station: int`). Transitions all happen in `app.py` `_next_pa` and its helpers `_next_in_approaching` / `_next_in_stopping` / `_advance_to_next_stop`.
+
+### Press flow per stop
+
+| Sub-state | Press behavior | Audio |
+|---|---|---|
+| `at_station=False`, `cnt_pa < len(pa)-1` | Within-pa: `cnt_pa += 1`, play next | `pa[cnt_pa]` |
+| `at_station=False`, pa exhausted | **Enter STOPPING**, prefix flips to "ただいま" | none |
+| `at_station=True`, more `pa_at_station` left | In-STOPPING: `cnt_pa_at_station += 1`, play next | `pa_at_station[cnt_pa_at_station]` |
+| `at_station=True`, `pa_at_station` exhausted | **Exit via advance**, lands in APPROACHING@next | next stop's `pa[0]` |
+
+Press counts to fully traverse a stop (advance-into → STOPPING → advance-out): 1-PA stop = 3 presses, 2-PA stop = 4 presses, stop with N pa_at_station entries = `len(pa) + 1 + N + 1` presses.
+
+### Boot state
+
+`AppState.__init__` defaults to `at_station=True`, `cnt_pa_at_station=-1`. So `curr_stop=0` boots into STOPPING — the train is parked at the start platform, no advance-into has happened. First press either plays `pa_at_station[0]` (if non-empty) or advances directly to idx 1.
+
+### Prefix mapping
+
+`UpperDisplay.set_state(curr_stop, cnt_pa, at_station)` resolves prefix as:
+
+| State | Prefix (KANJI) | Furigana | English |
+|---|---|---|---|
+| `at_station=True` | ただいま | ただいま | Now stopping at |
+| `cnt_pa == 0` | 次は | つぎは | Next |
+| `cnt_pa >= 1` | まもなく | まもなく | Arriving at |
+
+`at_station=True` is the **only** path to "ただいま" — overrides cnt_pa-based mapping. The pre-migration `cnt_pa >= 2 → ただいま` fallback was removed because it preserved a wrong-stop ambiguity (display said "ただいま X" while the audio at pa[2+] referred to the previous stop's platform). All at-platform PAs now belong in `pa_at_station`; pa[2+] would be a third pre-arrival announcement (rare; still "まもなく").
+
+### `jump_to_stop` semantic
+
+Click-to-jump (preview ←/→, future click-to-jump on lower LCD) lands in STOPPING@target. Mental model: clicking a station cell means "I'm at platform X." Next press cycles `pa_at_station` or advances, matching the rest of STOPPING. Implementation in `app.py` `jump_to_stop` — sets `at_station=True`, resets `cnt_pa_at_station=-1`, plus all the existing housekeeping (skip, departure_time, cnt_sta).
+
+`_has_pa` predicate (used by `jump_to_stop`'s passing-station roll) accepts a stop with non-empty `pa` OR non-empty `pa_at_station` as a valid landing target. Stops with both empty are treated as passing stations and rolled past.
+
+### Circular loop-back
+
+Yamanote-style routes have the same station name at idx 0 and idx N. The duplicate idx 0 is a structural marker for circularity, not a state to visit mid-loop. `_advance_to_next_stop`'s loop-back branch jumps `idx N → idx 1` directly, plays `pa[0]` of the new stop, and lands in APPROACHING. (Pre-unified-model code reset to idx 0 with no audio; that 2-press hop collapsed into 1 press here.)
+
+### Skip animation
+
+Skip animation lives in `_advance_to_next_stop`. Entering STOPPING and cycling pa_at_station do not touch skip state — by the time STOPPING is entered, the train has already arrived (skip is whatever the previous advance left it at, with skip_progress catching up to skip via `update_skip_progress`). Within-pa branch zeros skip on every press as a defensive catch-up. See "Station Skip Logic (full spec)" under Lower LCD for the full contract.
+
+---
+
 ## Code Style Conventions
 
 - **Position constants are inlined** as local variables in each draw method (e.g. `box_x, box_y = 15, 8`). Different train models may need different layouts; keeping positions per-method makes that explicit.
