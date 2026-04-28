@@ -21,11 +21,30 @@ This skill runs right before the actual commit. It's a lightweight gate, not a r
 
 Run this **before** drafting the commit message — the outcome may change what's in scope for the commit.
 
-## Pre-flight check — has session-recap run?
+## Pre-flight (must hold before drafting the commit message)
 
-If this is the last commit of a coding session (e.g. the user is about to wrap up, has said "commit this and we're done", or the session has produced a meaningful chunk of new code/docs/learnings), check whether `/session-recap` has been run yet. Look for: a `memory/<today>.md` daily log file mentioning this session's work, or a recent `MEMORY.md` index entry pointing at it.
+Three checks the model owes the user before any commit:
 
-If session-recap has NOT been run and the session has produced material worth capturing (new patterns, preferences expressed, debugging insights, doc updates), surface it before drafting the commit message:
+### 1. Smoke test of the change (model's gate)
+
+Invoke the modified code path at least once, observe expected output:
+
+- **Backend code:** function returns X, "loaded N templates," CLI prints expected lines, etc. ("It compiles" / "type-check passed" is correctness, not feature-correctness — does not count.)
+- **UI/display:** dev server started, feature exercised in window, no regression in adjacent features.
+- **Data:** ran `validate_data.py` / route playback / by-ear pass for STA.
+- **Or independent review:** `/review-dirty` or `/review-plus-fix-relentlessly` produced clean output.
+
+### 2. User verification (user's gate)
+
+Surface the smoke-test result to the user — *concrete output, not "I tested it"* (e.g. "ran auto_input, console shows 'loaded 10 digit templates + 6 badges' — does this match what you expect?"). **Wait for explicit confirmation** before drafting the commit message.
+
+The model passes the smoke-test on whether the code does *something coherent*; only the user can judge whether the visible behavior matches the ask. Skipping this is what caused the OCR-template incident (see `.claude/rules/critical_lessons.md` § "Runtime-required materials must be committed") — code ran, model called it done, user discovered the silent no-op only later.
+
+### 3. Has session-recap run?
+
+If this is the last commit of a coding session (e.g. the user is about to wrap up, has said "commit this and we're done", or the session has produced a meaningful chunk of new code/docs/learnings), check whether `/session-recap` has been run. Look for: a `memory/<today>.md` daily log file mentioning this session's work, or a recent `MEMORY.md` index entry pointing at it.
+
+If recap has NOT been run and the session has produced material worth capturing (new patterns, preferences expressed, debugging insights, doc updates), surface it:
 
 ```
 Heads-up: I don't see a session-recap entry for today's work in memory/.
@@ -33,7 +52,11 @@ Want me to run /session-recap first so the daily log + memory index are in
 the same commit set as the code, or skip and just commit?
 ```
 
-Don't block. The user can say "skip"; some commits genuinely don't need a recap (one-line typo fix, isolated bugfix). But the prompt makes the choice deliberate rather than missed.
+### Skip clause (applies to all three)
+
+The user explicitly waives a check ("trivial, just commit", typo fix, doc-only change). Default is no-skip; a waiver applies only to the commit it was given for, not session-wide.
+
+If any check is missing and the user hasn't waived it, surface the gap *before* drafting the commit message — fixing it after the message is drafted is wasted work.
 
 ## Process
 
@@ -86,6 +109,8 @@ Red flags (stop and ask the user):
 
 Check the repo's commit style first: `git log --oneline -10`. Match the convention (e.g. `feat:`, `refactor:`, `chore(data):`).
 
+**Honesty check for bulk additions.** When the commit touches many files, the subject + body must describe what's actually there — not just the smallest file or most exciting line. A commit titled "Add stations.json" that also drops 40 audio files is misleading future-you (real incident, 2026-03-01: keiyo bulk drop sat undetected ~8 weeks before Phase B verification surfaced mixed/wrong audio content). Subject names the largest/most consequential change; body enumerates the rest with rough counts ("+17 STA files for 蘇我→東京", "+1 stations.json"). If the changeset spans truly unrelated concerns, that's a Step-4 red flag → split it.
+
 If flags were raised, print the review **plus a draft commit message** (the user usually wants both in one round-trip, not two):
 
 ```
@@ -126,7 +151,7 @@ If no flags were raised, still show the proposed commit message and ask for conf
 
 After the user chooses:
 - Adjust the staging area accordingly (`git add <specific-files>` / `git restore --staged <file>`). **Never** `git add -A` / `git add .` — this commit skill exists specifically because blind staging is how unrelated changes sneak in.
-- Run `git commit -m "$(cat <<'EOF' ... EOF)"` with the approved message. Include the `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>` trailer.
+- Run `CLAUDE_COMMIT_VIA_SKILL=1 git commit -m "$(cat <<'EOF' ... EOF)"` with the approved message. Include the `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>` trailer. The `CLAUDE_COMMIT_VIA_SKILL=1` env-var prefix is **mandatory** — the project's `PreToolUse` hook in `.claude/settings.json` denies any `git commit` that doesn't carry this marker, on the assumption it skipped the /commit gate. The env var has no functional effect on git; it's purely a marker the hook recognizes by command-prefix shape.
 - Verify with `git status --short` — the unrelated files should still be unstaged/untracked. If any disappeared, investigate before running more commits.
 
 If the user chose a multi-commit split, loop: commit the first group, verify, then re-run this skill on the remainder before the next commit.

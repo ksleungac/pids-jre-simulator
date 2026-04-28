@@ -2,7 +2,7 @@
 
 Modular per-train-model architecture for both Upper and Lower LCDs. Currently implements **E235-1000**; built to extend to other JR East series with heavy code reuse. Train-family scope and in-spec/best-effort policy live in [CLAUDE.md](CLAUDE.md) "Mental Model" (preloaded — should already be in head).
 
-This is the canonical display doc — covers shared infrastructure, upper LCD, lower LCD, and integration. Implementation patterns shared across the project (font loading, preview mode, etc.) are in [`.claude/rules/notes.md`](.claude/rules/notes.md). JSON shapes are in [DATA_FORMAT.md](DATA_FORMAT.md).
+This is the canonical display doc — covers shared infrastructure, upper LCD, lower LCD, and integration. Cross-cutting code contracts live inline at their code sites (font-loading at the first font init in [`upper_lcd.py`](displays/train_models/e235_1000/upper_lcd.py); countdown formula at `lower_lcd.py` `draw_times`; PyInstaller path resolution at `upper_lcd.py` `get_base_dir`). JSON shapes are in [DATA_FORMAT.md](DATA_FORMAT.md).
 
 ---
 
@@ -95,6 +95,20 @@ This keeps modes in lockstep without a parallel timer (no drift, no re-tick). Wh
 | 8–12s | ENGLISH | Next | Tōkyō |
 
 **Graceful fallback:** if a station lacks furigana or English data, that mode is skipped in the cycle.
+
+### Stop data keys vs DisplayMode enum
+
+These look interchangeable but aren't. Stop data is a plain dict (merged from `route.json` + `data/translations.json`) — keys are **strings**: `"name"`, `"english"`, `"furigana"`. `DisplayMode` is an internal **enum** tracking which mode is active. They never appear together in the same lookup.
+
+```python
+# CORRECT — string key for data lookup
+station = self.stops[self.curr_stop].get("english", "")
+
+# WRONG — enum value cannot key a stop dict
+station = self.stops[self.curr_stop].get(DisplayMode.ENGLISH, "")  # always returns ""
+```
+
+Naming alignment between `"english"` (data) and `DisplayMode.ENGLISH` (state) is intentional but bridging happens at the manager layer (`UpperDisplay`/`LowerDisplay`), not via direct lookup.
 
 ### Mode Mapping (Lower-Specific)
 
@@ -695,7 +709,7 @@ uv run preview_display.py --lower-view {full,eight,cycle}
 - Long-route window flip (Keihin-Tōhoku, Chuo): cursor pos stays correct as window slides.
 - Centering: mock route (11 stops) renders with equal margins; multi-line routes unchanged.
 
-Preview-mode internals (`PASimulator(preview=True)`, `jump_to_stop` semantics, mock route) are documented in [`.claude/rules/notes.md`](.claude/rules/notes.md).
+Preview-mode swap inventory is documented at `PASimulator.__init__`'s ``preview`` parameter in `app.py`. `jump_to_stop` semantics live in its docstring at `app.py` `PASimulator.jump_to_stop`. Mock-route stop layout is in [`audio/_mock/main/README.md`](audio/_mock/main/README.md).
 
 ---
 
@@ -761,5 +775,7 @@ Preview-mode internals (`PASimulator(preview=True)`, `jump_to_stop` semantics, m
 - [CLAUDE.md](CLAUDE.md) — project overview, module table, controls, "When Working On…" pointers
 - [CLAUDE.md](CLAUDE.md) "Mental Model" — train-family scope, IRL line scope per model, best-effort policy, Hepburn convention (preloaded)
 - [DATA_FORMAT.md](DATA_FORMAT.md) — `translations.json` / `train_types.json` / `stations.json` / `route.json` shapes, validation rules
-- [.claude/rules/notes.md](.claude/rules/notes.md) — cross-cutting code patterns (font loading on Windows, PyInstaller paths, preview mode)
 - `displays/base.py` — `DisplayMode` enum, `ModeCycler`
+- `app.py` `PASimulator.__init__` ``preview`` parameter — preview-mode swap inventory
+- `displays/train_models/e235_1000/upper_lcd.py` `get_base_dir` — PyInstaller path resolution contract
+- `displays/train_models/e235_1000/lower_lcd.py` `draw_times` — countdown formula contract

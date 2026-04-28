@@ -81,7 +81,7 @@ while [[ $ISSUES_FOUND == "true" && $CYCLE_COUNT -lt $MAX_CYCLES ]]; do
     # 1. Read the reviewer feedback carefully
     # 2. Examine the current git diff to understand what needs fixing
     # 3. Use the Edit tool to fix ONLY the issues mentioned in feedback
-    # 4. Follow repository style and preferences from rules/notes.md
+    # 4. Follow repository style and values from .claude/rules/principles.md + .claude/rules/conventions.md and inline `# CONTRACT:` blocks at the relevant code sites
     # 5. Test changes before considering them complete
     # 6. Stage changes (git add ...) when ready for next review cycle
 

@@ -105,9 +105,19 @@ class PASimulator:
             work_dir: Directory containing the route.json and audio folders
             route_data: Optional pre-loaded route data dictionary
             preview: If True, run with silent audio and pygame-event input
-                (used by preview_display.py — skips mixer init and win32gui
-                positioning, and routes key input through pygame events instead
-                of the global `keyboard` library).
+                (used by preview_display.py). Swap inventory:
+                  - ``AudioPlayer`` → ``_SilentAudio`` (no-op stub above; PA/STA
+                    methods exist but play nothing).
+                  - ``keyboard``-library polling → ``_handle_input_preview``
+                    (pygame.KEYDOWN events, dispatched in the run loop).
+                  - ``pygame.mixer.init()`` skipped in ``_init_pygame`` (no
+                    audio device touched).
+                  - ``win32gui.SetWindowPos`` skipped in ``_init_pygame`` (the
+                    hard-pinned position is real-app-only; preview uses pygame
+                    default placement).
+                Everything else — route loading, ``_next_pa`` / ``_next_sta``,
+                state machine, draw loop — is shared with the real app, so
+                state-machine fixes apply to preview without porting.
             auto_input: If True, allocate an extra DEBUG_PANEL_HEIGHT row above
                 the LCD for the auto-input debug panel. The LCD code is unchanged
                 — it draws to a sub-surface positioned below the panel and is

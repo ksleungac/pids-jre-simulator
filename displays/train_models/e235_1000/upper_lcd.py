@@ -108,12 +108,25 @@ def _bg(region: str, default=None):
 
 
 def get_base_dir() -> Path:
-    """Get base directory - works for both dev and PyInstaller exe."""
+    """Get base directory — resolves data paths in dev AND in PyInstaller exe.
+
+    PyInstaller one-file mode extracts the bundle into a temp folder
+    (``_MEIxxxxx``), and ``__file__`` points there — NOT next to the user's
+    exe where ``data/`` and ``audio/`` live. Using ``__file__`` would silently
+    miss every JSON load at runtime. ``sys.executable`` resolves to the exe
+    location, which IS where the shipped folders sit.
+
+    The 4-parent climb in the dev branch corresponds to this file's location:
+    ``displays/train_models/e235_1000/upper_lcd.py`` → project root. If this
+    file moves, that count needs to update.
+
+    TODO: this helper is structurally a project-wide utility but currently
+    lives in a per-train-model file. When E231-500 / E233 train models land,
+    move it to ``utils.py`` and re-import from there. Keep the same contract.
+    """
     if getattr(sys, "frozen", False):
-        # Running as compiled exe - use exe directory
         return Path(sys.executable).parent
     else:
-        # Running as script - go up 4 levels from this file
         return Path(__file__).parent.parent.parent.parent
 
 
@@ -140,6 +153,10 @@ class JapaneseDisplay:
         self.route_data = route_data
         self.stops = stops
 
+        # CONTRACT: load fonts from file paths only — never `pygame.font.SysFont()`.
+        # SysFont scans the Windows font registry, which fails on Chinese/Japanese
+        # locale Windows with `TypeError: expected str, bytes or os.PathLike object,
+        # not int`. All fonts in this project ship in fonts/ and load via Font(path).
         # E235-1000 specific fonts (shared across methods) - load from fonts/ folder
         self.font_type_bold = pygame.font.Font("fonts/ShinGoPr6N-Heavy.otf", 26)
         self.font_type_bold.set_bold(True)

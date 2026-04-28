@@ -278,7 +278,26 @@ class JapaneseDisplay:
         departure_time: float,
         is_last_pa: bool,
     ) -> None:
-        """Draw travel times between stations."""
+        """Draw travel times between stations.
+
+        CONTRACT (countdown formula). For the *first* time-cell from the
+        cursor, the displayed minutes count down in real time:
+        ``remaining = max(1, stop["time"] - int(elapsed_minutes))`` where
+        ``elapsed_minutes = (now - departure_time) / TIME_SCALE``. Subsequent
+        cells are cumulative additions of static ``stop["time"]`` values
+        (they don't tick — only the first cell does).
+
+        - ``TIME_SCALE = 60`` means 60 real seconds = 1 travel minute (real-
+          time mode). See constants.py for the scale knob.
+        - ``int(elapsed_minutes)`` is intentional integer truncation, so the
+          display only decrements after a *full* travel-minute has elapsed.
+        - ``max(1, ...)`` clamps to 1 — the display never shows 0.
+        - ``is_last_pa`` shortcuts the formula to a hard 1 (arriving now).
+        - ``departure_time = 0.0`` is the uninitialized sentinel (set on stop
+          advance in app.py); the ``if current_time > 0 and departure_time > 0``
+          guard freezes ``elapsed_minutes`` at 0 until the first real advance,
+          which is why preview mode boots into a frozen countdown.
+        """
         if not f_stops:
             return
         x = self.x

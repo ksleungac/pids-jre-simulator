@@ -90,7 +90,7 @@ uv run --no-dev --group build pyinstaller --onefile --console --name "JRE-PA-Sim
 
 `--no-dev --group build` isolates the build venv to **prod deps + pyinstaller only** — no `librosa` / `ffmpeg-python` / `black` / `pyright` visible to PyInstaller's static analysis. Defense-in-depth against accidental dev-dep bundling. The `build` dependency group is declared in `pyproject.toml`; if a future build step needs another tool (e.g. UPX), add it there.
 
-`--console` is required (notes.md: Windows console encoding — console window needed for error visibility on non-English Windows). If the build fails, surface the pyinstaller error verbatim and stop.
+`--console` is required — a console window is needed for error visibility on non-English Windows (where Japanese stdout requires `PYTHONUTF8=1` or `sys.stdout.reconfigure('utf-8')`, and silent crashes are otherwise invisible). If the build fails, surface the pyinstaller error verbatim and stop.
 
 ### Step 4 — Stage distribution folder (with audio junction for testing)
 
@@ -202,6 +202,6 @@ Mixed commits (one commit touches both shipped and repo-only paths): report only
 
 ## Why these choices
 
-- **Version in metadata, not filename**: keeps the exe name stable (`JRE-PA-Simulator.exe`) so the `fonts/` + `data/` folder layout from notes.md stays canonical and any external scripts/shortcuts don't break per release. Version is discoverable via Windows' native Properties dialog.
+- **Version in metadata, not filename**: keeps the exe name stable (`JRE-PA-Simulator.exe`) so the `fonts/` + `data/` folder layout stays canonical and any external scripts/shortcuts don't break per release. Version is discoverable via Windows' native Properties dialog.
 - **Build stops before zipping**: user has explicitly preferred "let me test the exe first" — zipping is trivial to run on confirmation and prevents wasting disk on untested builds.
 - **Ask for version, never guess**: a wrong version silently embedded in a shipped exe is worse than a 2-second round trip to ask.

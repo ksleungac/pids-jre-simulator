@@ -10,141 +10,173 @@ triggers:
 
 ## Purpose
 
-At the end of a coding session, capture not just *what* changed, but *why* - including:
-- New understandings about the codebase
-- User preferences discovered during the session
-- Behavioral patterns that should be documented
-- Data format conventions established
+Capture **what was learned**, not what was changed. `git diff` / `git log` already cover the latter. The recap captures:
+
+- New understandings about the codebase (mental-model shifts, why-decisions)
+- User preferences expressed during the session
+- Behavioral patterns or data conventions established
+
+**Capture vs codify is two different operations.** Match the entry's shape to its home:
+
+- **Rule-shaped** (articulates an implicit pattern just-named, or user uses forward-framing language: "always / never / from now on") → direct to `principles.md` / `conventions.md` / skill / inline `# CONTRACT:`. No log-only step.
+- **Fact-shaped** (IRL convention, library quirk, domain truth) → direct to CLAUDE.md mental model / domain doc / inline comment. No log-only step.
+- **Preference-shaped, ambiguous** (passing remark, unclear whether the user means "this once" or "always") → daily log `## Preferences (jot)` as `[log-only]`. Promote later via recurrence or explicit framing.
+
+A future `/distill-memory` pass surfaces patterns from accumulated `[log-only]` entries — that's the safety net for the ambiguous middle, not the universal route.
 
 ## Process
 
-### Step 1: Review Session Changes
+### Step 1 — Discuss learnings
 
-First, scan what was modified:
-- Check git diff for changed files
-- Identify code logic changes vs. documentation changes
-- Note any new constants, functions, or data entries added
-
-### Step 2: Discuss Learnings (CRITICAL)
-
-Before updating any documentation, present a summary:
+Skip code-change inventory (git covers it). Present this:
 
 ```
 ## Session Learnings Summary
 
-### Code Changes
-- [List key files/functions modified]
-
 ### New Understandings
-- [What behavioral patterns were discovered?]
-- [What "why" decisions were made, not just "what"?]
+- [What "why" decision was made? What mental-model shift happened?]
+- [What behavioral pattern was discovered?]
 
-### Preferences Learned
-- [User preferences about code style, architecture, etc.]
-- [Project conventions established or reinforced]
+### Preferences expressed (ambiguous middle only)
+- [log-only] topic:<noun> — "verbatim quote" — context: one-liner
+- [promote-candidate] topic:<noun> — "verbatim quote" — context: one-liner
 
-### Documentation Updates Needed
-- CLAUDE.md: [sections to update]
-- DATA_FORMAT.md: [sections to update]
+  This section is ONLY for preference-shaped entries — passing remarks
+  where permanence is unclear. Rule-shaped findings (implicit-pattern
+  articulations, decision-shaping rules) and fact-shaped findings (IRL
+  conventions, library quirks, domain truths) go straight to their home
+  under "Documentation updates" below — no log-only detour.
+
+  Within this section: default [log-only]. Use [promote-candidate] only
+  when (a) user used "always / never / from now on / in the future"
+  framing this session, OR (b) the same topic has surfaced in earlier
+  daily logs (grep for the topic to check).
+
+### Documentation updates
+- CLAUDE.md: only if mental-model shift
+- DATA_FORMAT.md / DISPLAY.md: only if schema/architecture genuinely changed
+- principles.md / conventions.md: ONLY for confirmed [promote-candidate]
+- memory/YYYY-MM-DD.md: everything else (prose + the tagged Preferences section)
 ```
 
-### Step 3: User Review
+### Step 2 — User reviews and confirms
 
-Wait for the user to:
-- Confirm the learnings are accurate
-- Add context or nuance you may have missed
-- Suggest additional items to document
-- Correct any misunderstandings
+Wait for user to correct, add nuance, or override [promote-candidate] tags. Don't update anything until they sign off.
 
-### Step 4: Update Documentation
+### Step 3 — Update files
 
-After user approval, update the appropriate files. **Each piece of information has ONE home — never duplicate across files.**
+After approval, update only the files the user confirmed. Each piece of information has ONE home.
 
-> **The placement table below applies *always*, not just at `/session-recap` time.** Whenever you (Claude) write or edit a doc *during* a session — not just at recap — consult this table first. `notes.md` is NOT the kitchen sink. Mental-model framing → `CLAUDE.md` (preloaded). Display gotcha → `DISPLAY.md`. JSON shape → `DATA_FORMAT.md`. Cross-cutting code pattern → `notes.md`. This rule is also restated in `preferences.md` so it's loaded at session startup.
+The daily log gets the full structured handoff (see "Daily log format" below) — `/distill-memory` reads it later to find recurring patterns across sessions.
 
-#### The preloaded vs progressive split
+---
 
-A core organizing principle for placement decisions:
+## Where things live (single source of truth)
 
-- **Preloaded** = always in Claude's context (CLAUDE.md, the rules files, MEMORY.md). This is for things a human working on the project already has *in their head* — what the project is modeling, scope/policy, real-world conventions, working preferences, hard rules. Re-deriving them every session would be silly; humans don't context-switch back to "what is JR East" each time they touch the codebase.
-- **Progressive** = read on demand when working on that submodule (DISPLAY.md, DATA_FORMAT.md, etc.). This is implementation detail — draw-method gotchas, JSON field minutiae, layout invariants. Loading these every session bloats context with noise; loading them when actually editing the submodule lands them where they're needed.
-
-When deciding placement, ask: *would a human working on this project have this in their head, or would they look it up when they hit the relevant submodule?*
-
-- "What does the simulator model?" → in head → CLAUDE.md
-- "What's the in-spec scope for this train model?" → in head → CLAUDE.md
-- "How does the 8-station view's window invariant work?" → look up → DISPLAY.md
-- "What's the exact `pa` field encoding?" → look up → DATA_FORMAT.md
-
-The slim-CLAUDE rule applies to *implementation detail*, not framing. Mental-model content can grow CLAUDE.md modestly without violating the principle — that's what CLAUDE.md is for.
-
-#### Where things live (single source of truth)
+This table applies *always*, not only at recap time. Whenever you write or edit a doc *during* a session, consult it first.
 
 | What | Where | NOT in |
 |------|-------|--------|
 | Project overview, file structure, module table, key features, controls, **mental model (project framing, train family, IRL line scope, in-spec/best-effort policy, IRL display conventions, Hepburn)** | `CLAUDE.md` | rules files, domain docs |
-| Cross-cutting code patterns (font loading, PyInstaller paths, preview mode, countdown) | `.claude/rules/notes.md` | CLAUDE.md, domain docs |
-| User preferences, collaboration style, naming conventions, doc-placement hygiene, contract-pointer convention | `.claude/rules/preferences.md` | CLAUDE.md, MEMORY.md |
+| Cross-cutting code contracts (font-loading rule, PyInstaller path resolution, countdown formula, preview-mode swap inventory) | inline `# CONTRACT:` block at the code site | rules files, domain docs (cross-reference instead) |
+| Mock route stop layout, test-station roles, schema gotchas | `audio/_mock/main/README.md` | rules files, domain docs |
+| Values that shape judgment (discussion-first, pragmatic-over-perfect, filename-as-store, backup-before-destructive, doc-placement strategy) | `.claude/rules/principles.md` | CLAUDE.md, MEMORY.md |
+| Project-local style, naming, tooling (sta terminology, .otf only, Black, tuneable-params, Contract Pointers convention) | `.claude/rules/conventions.md` | CLAUDE.md, MEMORY.md |
 | Red lines, hard boundaries | `.claude/rules/redlines.md` | CLAUDE.md, MEMORY.md |
 | Lessons from past mistakes | `.claude/rules/critical_lessons.md` | anywhere else |
-| Build/distribution details, PyInstaller invocation, version metadata, junction handling | `.claude/skills/build/SKILL.md` | CLAUDE.md, notes.md |
-| JSON field definitions, validation rules, data format encoding (incl. Hepburn examples) | `DATA_FORMAT.md` | CLAUDE.md, notes.md |
-| LCD architecture, mode rendering, skip animation, layout gotchas, draw-method subtleties (upper AND lower) | `DISPLAY.md` | CLAUDE.md, notes.md |
-| Daily session logs | `memory/YYYY-MM-DD.md` | — |
-| Long-term memory index (pointers only) | `memory/MEMORY.md` | — |
+| Build/distribution details, PyInstaller invocation, version metadata, junction handling | `.claude/skills/build/SKILL.md` | CLAUDE.md, inline comments |
+| JSON field definitions, validation rules, data format encoding | `DATA_FORMAT.md` | CLAUDE.md, inline comments |
+| LCD architecture, mode rendering, skip animation, layout gotchas | `DISPLAY.md` | CLAUDE.md, inline comments |
+| Daily session logs (prose + structured Preferences section) | `memory/YYYY-MM-DD.md` | — |
+| Long-term memory index (one-line pointers only) | `memory/MEMORY.md` | — |
 
-#### Rules for updating
+### Preloaded vs progressive
 
-1. **Before writing, check if the info already exists.** Update in place, don't add a second copy.
-2. **CLAUDE.md stays slim on implementation, generous on framing.** Mental-model content (what we're modeling, scope, conventions) belongs there *because* it's preloaded. Implementation details still go to domain docs.
-3. **Cross-reference, don't copy** — e.g., `DATA_FORMAT.md` says "see CLAUDE.md § Mental Model for the convention itself" rather than re-explaining it.
-4. **MEMORY.md is an index** — one-line pointers to memory files. No content, no rules, no preferences.
-5. **When in doubt about placement**: framing/IRL/scope → `CLAUDE.md` (Mental Model); display detail → `DISPLAY.md`; JSON shape → `DATA_FORMAT.md`; cross-cutting code → `notes.md`; preference → `preferences.md`; build/release → `build/SKILL.md`.
-6. **Don't bloat domain docs with framing, or CLAUDE.md with implementation.** They're complementary — preloaded framing + progressive detail. Each violation drives one of the failure modes that prompted this principle.
+Preloaded files (`CLAUDE.md`, `.claude/rules/*`) hold what humans keep in their head. Progressive files (`DISPLAY.md`, `DATA_FORMAT.md`, etc.) hold implementation detail read on demand. Ask: *would someone working on this project have it in their head, or look it up when they hit the relevant submodule?* The slim-CLAUDE rule applies to *implementation*, not framing — mental model can grow CLAUDE.md modestly.
 
 ---
 
-## Important Notes
+## Rules
 
-1. **Don't auto-update** - Always discuss learnings first. The user's context matters more than code archaeology.
+1. **Match the entry's shape to its home — don't universally default to log-only.**
+   - **Rule-shaped** (articulates an implicit pattern, or forward-framing "always / never / from now on") → direct to `principles.md` / `conventions.md` / skill / inline `# CONTRACT:`. No log-only step.
+   - **Fact-shaped** (IRL convention, library quirk, domain truth) → direct to CLAUDE.md mental model / domain doc / inline. No log-only step.
+   - **Preference-shaped, ambiguous** (passing remark, unclear permanence) → daily log `## Preferences (jot)` as `[log-only]`. Promote later via recurrence (≥2 distinct sessions) OR explicit forward framing in a future session.
 
-2. **Capture "why" not just "what"** - Code changes show what was modified, but the conversation reveals why it was done that way.
-
-3. **Preferences matter** - If the user expressed a preference (e.g., "hard-coding is fine", "don't over-engineer"), note it for future sessions.
-
-4. **Be specific** - Instead of "fixed display bug", write "Destination always displays as kanji (no furigana cycling) to match IRL behavior".
-
-5. **No duplication** - If you find yourself writing the same fact in two places, stop and pick the one canonical home from the table above.
+   Cost of over-promotion is bloat; cost of under-promotion is one extra correction next session — strongly asymmetric. The asymmetric trap applies to the ambiguous middle, not to clearly rule-shaped or fact-shaped entries.
+2. **Before writing, check if the info already exists.** Update in place, don't add a second copy.
+3. **Cross-reference, don't copy.** E.g., `DATA_FORMAT.md` says "see CLAUDE.md § Mental Model" rather than re-explaining.
+4. **CLAUDE.md stays slim on implementation, generous on framing.** Mental-model content belongs there *because* it's preloaded. Implementation details go to domain docs.
+5. **MEMORY.md is an index.** One-line pointers to memory files only. No content, no rules.
+6. **Be specific.** "Fixed display bug" → "Destination always displays as kanji (no furigana cycling) to match IRL behavior."
 
 ---
 
-## Example Output
+## Daily log format (`memory/YYYY-MM-DD.md`)
 
-After a session fixing the Yamanote line destination display:
+The daily log is mostly free-form prose for context (debugging notes, why-decisions, narrative), plus **one structured section** that `/distill-memory` will parse:
+
+```markdown
+# 2026-04-28
+
+## Session: <one-line summary>
+
+[Free-form prose — what was tried, what worked, dead ends, why-decisions, etc.]
+
+## Preferences (jot)
+
+- [log-only] topic:doc-placement — "the placement table is the canonical source" — context: said while clarifying which doc owns code contracts
+- [promote-candidate] topic:commit-flow — "always smoke-test before commit" — context: after silent OCR-template no-op incident; user used "always" framing
+```
+
+### Structured-section conventions
+
+Each entry is one line, format:
+
+```
+- [<tag>] topic:<short-noun> — "<verbatim quote>" — context: <one-liner>
+```
+
+- **Tags** evolve over the rule's lifetime:
+  - `[log-only]` — default; session-recap writes this for one-shot observations
+  - `[promote-candidate]` — session-recap flags this for distill-review
+  - `[promoted]` — `/distill-memory` (after user accepts) updates the daily-log entry to this; signals "rule now lives in principles.md / conventions.md, don't re-propose"
+  - `[rejected]` — `/distill-memory` (after user declines) updates to this; signals "considered and not promoted, stop re-surfacing"
+- **Topic** is a short kebab-case noun (`audio-format`, `doc-placement`, `commit-flow`, `review-scope`, `ui-iteration`). Reuse existing topics where possible — distill clusters by topic. Don't enforce a closed vocabulary, but lean toward consistency.
+- **Verbatim quote** when available; paraphrase otherwise. The user's voice is what makes the principle stick.
+- **Context** is one short line — what was happening when the user said it. Helps disambiguate during distill review.
+
+### Why this format
+
+- Bounded structured section (`## Preferences (jot)`) is easy to grep across all daily logs without parsing prose.
+- One-line entries are scannable in a long-running pass.
+- Tag evolution (`[log-only]` → `[promote-candidate]` → `[promoted]` / `[rejected]`) gives `/distill-memory` a way to know what's already been decided, so monthly passes don't re-propose rejected ones.
+- Free-form prose stays free-form for the parts that aren't preferences (debugging narrative, mental-model notes) — those don't need structure.
+
+---
+
+## Example output
+
+After a session fixing the Yamanote destination display:
 
 ```
 ## Session Learnings Summary
 
-### Code Changes
-- displays/train_models/e235_1000/upper_lcd.py: _get_current_dest() method added, draw_destination() modified
-- data/translations.json: 13 Yamanote entries added
-
 ### New Understandings
 - IRL destination display stays as kanji, doesn't cycle to furigana like stations
 - Stop-level dest override needed for circular routes with midway destination switches
-- Compound destinations use "Shinagawa&\nTokyo" format (& followed by newline, no space)
+- Compound destinations use "Shinagawa&\nTokyo" (& + newline, no space)
 
-### Preferences Learned
-- Hard-coding UI text like "次は" is acceptable (no plans for multi-lingual UI)
-- Black formatting should run via pre-commit hook, not manually
+### Preferences expressed (default: log only)
+- [log-only] topic:hardcoding — "hard-coding 次は is fine" — context: said in passing during the cycler fix; no permanence framing
+- [promote-candidate] topic:tooling-format — "Black should run via pre-commit, not manual" — context: project-wide rule + "should" framing; check earlier logs for prior instances
 
-### Documentation Updates Needed
-- CLAUDE.md: Update "Mental Model" if a new IRL convention or scope fact came up; add to Module Responsibilities / Key Features only if structural
-- DATA_FORMAT.md: Document compound destination format, expand stop-level override examples
-- DISPLAY.md: Update architecture diagram if applicable, document new mode-renderer subtleties
-- .claude/rules/notes.md: Add ONLY if the new fact is genuinely cross-cutting (font loading, PyInstaller, preview) — otherwise route to CLAUDE.md/DISPLAY/DATA_FORMAT
-- .claude/rules/preferences.md: Update if new preferences expressed
-- memory/YYYY-MM-DD.md: Log session highlights
+### Documentation updates
+- CLAUDE.md: no change (no mental-model shift this session)
+- DATA_FORMAT.md: document compound destination format
+- DISPLAY.md: document stop-level dest override behavior
+- principles.md / conventions.md: pending user confirmation on the Black [promote-candidate]
+- memory/2026-04-28.md: prose for the Yamanote debugging + structured Preferences section with both tagged entries
 ```
 
-Then wait for user confirmation before proceeding.
+Then wait for user confirmation before updating files.

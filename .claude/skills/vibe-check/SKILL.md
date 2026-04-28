@@ -15,7 +15,7 @@ triggers:
 
 Multiple AI sessions add features cleanly enough on their own — but each session has a limited view of the whole. Over time the codebase accumulates: duplicated helpers (someone forked `utils.py` instead of editing the original), dead abstractions (a registry/factory created for "the future" that never came), unused imports left from a different prototype, stale comments describing a structure that's been refactored away, two ways to do the same thing within one class.
 
-This skill **finds and triages** that mess. It is intentionally NOT an autofix loop — most "dead code" needs a conversation before deleting, because in this project a meaningful fraction of "looks dead" code is actually **dormant scaffolding** (see `.claude/rules/preferences.md` "Comment dormant scaffolding explicitly") for known future work.
+This skill **finds and triages** that mess. It is intentionally NOT an autofix loop — most "dead code" needs a conversation before deleting, because in this project a meaningful fraction of "looks dead" code is actually **dormant scaffolding** (see `.claude/rules/conventions.md` "Comment dormant scaffolding explicitly") for known future work.
 
 ## When to run
 
@@ -37,8 +37,8 @@ Build the production surface. Use the project's own boundaries:
 
 | Always in scope | Always out of scope |
 |---|---|
-| `app.py`, `main.py`, `audio.py`, `constants.py`, `setup.py` | `preview_display.py` (testing harness, per `preferences.md` "Code Review Scope") |
-| `displays/**/*.py` (all LCD/model code) | `old_version.py` (intentionally preserved pre-refactor monolith, per `preferences.md` "Tooling") |
+| `app.py`, `main.py`, `audio.py`, `constants.py`, `setup.py` | `preview_display.py` (testing harness — not shipped, exclude from production reviews) |
+| `displays/**/*.py` (all LCD/model code) | `old_version.py` (intentionally preserved pre-refactor monolith — keep, do not propose deleting) |
 | `data_loader.py` or any other top-level production module | `compare_*.py`, `validate_*.py` (dev/CI tools) |
 | | `_*` folders / files (preserved-but-not-shipped, e.g. `_archive/`, `_mock/`) |
 | | Anything under `.claude/`, `memory/`, `data/`, `audio/` (not Python production code) |
@@ -93,7 +93,7 @@ For each item the user picks:
    - **Delete** (when truly dead and no future use)
    - **Inline** (trivial accessor / wrapper)
    - **Collapse** (forked helpers → single source)
-   - **Mark as dormant scaffolding** (when it's infrastructure for known future work — add the `# NOTE: deliberately NOT called yet` block per `.claude/rules/preferences.md` convention; explain *why* no caller today, *when* to wire it in)
+   - **Mark as dormant scaffolding** (when it's infrastructure for known future work — add the `# NOTE: deliberately NOT called yet` block per `.claude/rules/conventions.md` "Comment dormant scaffolding"; explain *why* no caller today, *when* to wire it in)
    - **Inheritance refactor** (when two classes are clones with intent to diverge — make one inherit, override only what diverges)
    - **Migrate** (when the value belongs in a different home — e.g. per-model constants moving from global `constants.py` to model package `__init__.py`)
 4. **Ask before editing** if the treatment is non-trivial (touches >1 file, changes a public signature, or the user's intent is ambiguous). For pure cleanups (drop unused import, delete dead trivial accessor), proceed and report.
@@ -116,8 +116,8 @@ If the smoke test fails or looks wrong, stop and investigate before moving to th
 After the user calls "done" (or skips remaining items):
 
 - Print a session summary: items cleaned, items marked as dormant scaffolding, items skipped, list of files touched.
-- Note any smoke-test artifacts (`smoke_*.png`) in the repo root and remind the user to delete when ready (per `preferences.md` "Never delete the latest iteration's screenshot" — don't auto-clean, the user reviews them).
-- Do NOT auto-commit. The user runs `/commit` themselves when ready (per `preferences.md` "No auto-commit").
+- Note any smoke-test artifacts (`smoke_*.png`) in the repo root and remind the user to delete when ready (the user reviews them — don't auto-clean; same rationale as the `/visual-adjust` "never delete the latest iteration's screenshot" rule).
+- Do NOT auto-commit. The user runs `/commit` themselves when ready (the project's `PreToolUse` hook on `Bash(git commit:*)` enforces this — direct commits are denied).
 - Suggest `/session-recap` if the cleanup was substantial.
 
 ## Things that are NOT vibe-coding mess
@@ -125,17 +125,17 @@ After the user calls "done" (or skips remaining items):
 Recognize these patterns and don't flag them:
 
 - **Dead features the user knows about.** Sometimes a feature was built, decided against, and its code lingers (e.g. `PASimulator.small_size` in this project — small-window mode that never shipped). The user typically knows about these and considers them "normal dead code from development, not vibe coding." If you suspect a finding is a known-dead feature, ASK before flagging — don't waste a report slot.
-- **Documented dormant scaffolding.** Multi-line `# NOTE: deliberately NOT called from … yet` markers explicitly signal "this is reserved for future X." Per `preferences.md` "Comment dormant scaffolding explicitly" — these are intentional, leave them alone.
+- **Documented dormant scaffolding.** Multi-line `# NOTE: deliberately NOT called from … yet` markers explicitly signal "this is reserved for future X." Per `conventions.md` "Comment dormant scaffolding explicitly" — these are intentional, leave them alone.
 - **Forward-looking architecture with explicit triggers.** Even without a `# NOTE:` block, infrastructure that has a clear known-future-trigger (e.g. multi-model registry waiting for a 2nd train model) may be intentional. Propose adding a dormant marker rather than deleting.
 - **Two-class structures kept for divergence intent.** If two classes have identical bodies today but the user's design intent is "they will diverge later" — propose **inheritance** (subclass with no overrides) rather than collapse, so the override path stays open without the duplication tax.
 - **Per-domain duplications that respect architecture.** Duplicate logic across two domain modules (e.g. `JapaneseDisplay` and `JapaneseEightStationDisplay` both walking station times) may be deliberate if the two views have meaningfully different needs. Propose extraction, but don't force it if the user pushes back.
 
 ## Gotchas encountered in practice
 
-- **The user has parallel WIP across PCs.** Per `preferences.md` "Environment", they work from 2 PCs. Mid-session they may say "stop touching X, I have WIP on it." Drop that item without resistance — never argue, never delete the in-progress work.
+- **The user has parallel WIP across PCs.** Per `principles.md` "2 different PCs", they work from 2 PCs. Mid-session they may say "stop touching X, I have WIP on it." Drop that item without resistance — never argue, never delete the in-progress work.
 - **`small_size`-style dead features** are normal. The user's distinction: vibe-coding mess = unnecessary forks/abstractions/duplications introduced during feature work; dead-feature code = intentional development byproduct. ASK if unsure.
 - **Smoke tests need visual confirmation, not just hash equality.** The clock changes every minute → hashes always differ. For layout-affecting changes, `Read` the screenshot and eyeball it.
-- **Per-model boundaries.** When deduplicating constants/helpers across `displays/train_models/{model}/` modules, respect that future train models may need their own. Per `preferences.md` "constants.py is for cross-module values only", per-model values belong in the model's package, NOT in top-level `constants.py`. Migrating constants from `constants.py` → per-model `__init__.py` is often the right direction.
+- **Per-model boundaries.** When deduplicating constants/helpers across `displays/train_models/{model}/` modules, respect that future train models may need their own. Per `conventions.md` "constants.py is for cross-module values only", per-model values belong in the model's package, NOT in top-level `constants.py`. Migrating constants from `constants.py` → per-model `__init__.py` is often the right direction.
 - **Don't autofix unused imports without scanning callers.** `from x import draw_text` may look unused in the current file but might be re-exported via `__all__` or referenced via `from module import *`. Grep the project before deleting.
 - **Façades may have a published-API contract.** A `displays/__init__.py` that re-exports `DisplayMode` etc. may be the intended public surface even if no in-tree caller uses it yet. Treat as potential dormant scaffolding — propose marker, not delete.
 

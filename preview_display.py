@@ -3,6 +3,8 @@
 Thin wrapper around `PASimulator(preview=True)`. Everything that isn't CLI
 plumbing — route loading, state machine, drawing, input handling — lives in
 app.py and is shared with the real application, so behavior can't drift.
+The full swap inventory (audio, input, mixer-init, window-position) is
+documented at `PASimulator.__init__`'s ``preview`` parameter.
 
 Usage:
   uv run preview_display.py                                     # MOCK route (audio/_mock/main)

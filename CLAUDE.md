@@ -72,7 +72,7 @@ Behaviors true on real trains and mirrored by the simulator:
 Before doing anything else:
 1. Read `memory/YYYY-MM-DD.md` (today and yesterday) for recent context
 2. Read [memory/MEMORY.md](memory/MEMORY.md) — long-term memory index
-3. Read [.claude/rules/preferences.md](.claude/rules/preferences.md) — user preferences
+3. Read [.claude/rules/principles.md](.claude/rules/principles.md) and [.claude/rules/conventions.md](.claude/rules/conventions.md) — values that shape judgment + project-local style/naming/tooling
 4. Skim [TODO.md](TODO.md) — centralized backlog grouped by area (auto-input / display / distribution / housekeeping + closed-off paths)
 
 ## Memory (project-level, in-repo)
@@ -152,9 +152,9 @@ Yellow hint square = multiple PA tracks available.
 - **Real-world JR East context** → already in this doc's "Mental Model" section above (preloaded — keep it in head, don't re-read each session)
 - **Audio/Diagram** → Use `/pa-make` skill (PA splitting + naming + route.json updates) or `/sta-make` skill (STA splitting + sta_cut validation + by-ear verifier)
 - **Auto-input / OCR / game-window capture** → [AUTO_INPUT.md](AUTO_INPUT.md) — companion module that reads JR EAST Train Sim's HUD via dxcam to fire PAs automatically. Lives in `auto_input.py` + `ocr.py` + `hud_layout.py` (in-process integration) and `data_tools/capture_game.py` (separate-process variant).
-- **Cross-cutting code patterns** → [.claude/rules/notes.md](.claude/rules/notes.md) — font loading on Windows, PyInstaller paths, preview mode, countdown system. (Display gotchas live in DISPLAY.md, not here.)
-- **Testing / previewing** → `uv run preview_display.py` defaults to the mock catalog (`audio/_mock/main`). Keys: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. See notes.md "Preview Mode" for `jump_to_stop` backward-rounding semantics.
+- **Cross-cutting code contracts** → live inline at their code site as `# CONTRACT:` blocks. Examples: PyInstaller path resolution at `displays/train_models/e235_1000/upper_lcd.py:get_base_dir`, countdown formula at `displays/train_models/e235_1000/lower_lcd.py:draw_times`, font-loading rule at the first font init in `upper_lcd.py`'s `JapaneseDisplay.__init__`.
+- **Testing / previewing** → `uv run preview_display.py` defaults to the mock catalog (see [`audio/_mock/main/README.md`](audio/_mock/main/README.md) for stop layout). Keys: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. `jump_to_stop` backward-rounding semantics are documented in its docstring at `app.py` `PASimulator.jump_to_stop`. Preview-mode swap inventory (audio, input, mixer, window) is at `PASimulator.__init__`'s ``preview`` parameter.
 - **Building/Releasing** → Use `/build` skill
 - **Codebase mess sweep** → Use `/vibe-check` skill (scan for duplicated logic, dead helpers, half-finished implementations, speculative architecture, stale comments — discussion-first, item-by-item, smoke-tests every fix). Distinct from `/review-dirty` (which reviews a single change for quality).
 
-**Editing docs?** Check the placement table in [.claude/skills/session-recap/SKILL.md](.claude/skills/session-recap/SKILL.md) before writing — `notes.md` is for cross-cutting code only, not display or data work.
+**Editing docs?** Check the placement table in [.claude/skills/session-recap/SKILL.md](.claude/skills/session-recap/SKILL.md) before writing — pick the narrowest-domain home (CLAUDE.md framing / DISPLAY.md gotcha / DATA_FORMAT.md schema / inline code contract / skill).

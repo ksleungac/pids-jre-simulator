@@ -72,6 +72,9 @@ see "Side-by-side composites" below.
   take screenshots and compare against ground truth yourself. Don't ask the user to
   review every intermediate screenshot — iterate autonomously until it looks right,
   then present the final result. Only show intermediates if the user specifically asks.
+- **Loose iteration language is approximate**: when the user says "half" or "5–10 px
+  more", treat it as approximate — verify with screenshots, don't over-fit to the
+  literal number. The user is describing an outcome, not specifying an exact value.
 - **User is the final judge**: Present your best result; user decides if it's right
 - **Don't batch background tasks**: These shells can be flaky — run one screenshot
   at a time with `cd` prefix to avoid path issues
@@ -207,5 +210,5 @@ When pixel-probing for containment, **isolate the region** so neighbors' content
 - **Headless mode**: Screenshot mode uses `SDL_VIDEODRIVER=dummy` automatically — no window needed
 - **Mock data**: The mock route is a real `route.json` at `audio/_mock/main/route.json`
   (not in code). Default for `preview_display.py`. Edit that file directly to add
-  test cases. Reference station indices for compare scripts: see `.claude/rules/notes.md`
-  "Mock route" section.
+  test cases. Reference station indices for compare scripts: see
+  [`audio/_mock/main/README.md`](../../../audio/_mock/main/README.md).
