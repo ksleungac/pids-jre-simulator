@@ -262,8 +262,9 @@ def _hover_text(s: dict, meta: dict, start_ts: float) -> str:
     spd = s.get("speed")
     dst = s.get("distance")
     bdg = s.get("badge") or "?"
-    dep = "✓" if s.get("departure_fired") else "·"
-    arr = "✓" if s.get("arrival_fired") else "·"
+    # Read renamed `*_observed` keys; fall back to legacy `*_fired` for old logs.
+    dep = "✓" if s.get("departure_observed", s.get("departure_fired")) else "·"
+    arr = "✓" if s.get("arrival_observed", s.get("arrival_fired")) else "·"
     return (
         f"<b>+{_fmt_elapsed(elapsed)}</b>  ({datetime.fromtimestamp(s['ts']).strftime('%H:%M:%S')})<br>"
         f"<b>{spd if spd is not None else '—'} km/h</b><br>"

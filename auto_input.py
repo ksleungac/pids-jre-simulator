@@ -51,6 +51,22 @@ SAMPLE_INTERVAL_S = 5
 SPEED_DEPARTURE_KMH = 30
 DEFAULT_LEAD_M = 900
 
+
+class Layer3State:
+    """Canonical names for AutoDriver's inferred view of the IRL game state.
+
+    See AUTO_INPUT.md § "Layer 3 — AutoDriver's inferred game state" for the
+    full inference truth table. Values are bare strings so they round-trip
+    cleanly through the status dict and JSONL drive log.
+    """
+
+    STOPPING_FRESH = "STOPPING_FRESH"
+    STOPPING_AFTER_ARR = "STOPPING_AFTER_ARR"
+    APPROACHING_BEFORE_DEP = "APPROACHING_BEFORE_DEP"
+    APPROACHING_AFTER_DEP = "APPROACHING_AFTER_DEP"
+    MOVING_AFTER_ARR = "MOVING_AFTER_ARR"
+    UNKNOWN = "UNKNOWN"
+
 # ─────────────────────────── drive recorder (blackbox) ────────────────────────
 # Per-drive JSONL log written by AutoDriver. Each file is one drive session.
 # Three record types (`_type` field discriminates):
@@ -318,7 +334,7 @@ def draw_debug_panel(surface: pygame.Surface, status: dict, sim_state, stops: li
     if badge_diff is not None:
         _blit_text(surface, font, f"(d={badge_diff:.1f})", (x, 6), _TEXT_GRAY)
 
-    # Line 2: speed + distance + cnt_pa + fired flags
+    # Line 2: speed + distance + cnt_pa + Layer 2 observed-flags
     s_val = status.get("speed")
     s_score = status.get("speed_score")
     d_val = status.get("distance")
@@ -332,26 +348,28 @@ def draw_debug_panel(surface: pygame.Surface, status: dict, sim_state, stops: li
     dst_str = f"{d_val:>5}m" if d_val is not None else "  ---m"
     x = _blit_text(surface, font, dst_str, (x, y2), _conf_color(d_score if d_val is not None else None)) + gap + 6
     x = _blit_text(surface, font, f"cnt_pa={sim_state.cnt_pa}", (x, y2), _TEXT_GRAY) + gap + 6
-    dep_fired = bool(status.get("departure_fired"))
-    arr_fired = bool(status.get("arrival_fired"))
-    atstn_fired = bool(status.get("at_station_fired"))
-    x = _blit_text(surface, font, "dep✓" if dep_fired else "dep·", (x, y2), _TEXT_WHITE if dep_fired else _TEXT_GRAY) + gap
-    x = _blit_text(surface, font, "arr✓" if arr_fired else "arr·", (x, y2), _TEXT_WHITE if arr_fired else _TEXT_GRAY) + gap
-    _blit_text(surface, font, "atstn✓" if atstn_fired else "atstn·", (x, y2), _TEXT_WHITE if atstn_fired else _TEXT_GRAY)
+    dep_obs = bool(status.get("departure_observed"))
+    arr_obs = bool(status.get("arrival_observed"))
+    atstn_obs = bool(status.get("at_station_observed"))
+    x = _blit_text(surface, font, "dep✓" if dep_obs else "dep·", (x, y2), _TEXT_WHITE if dep_obs else _TEXT_GRAY) + gap
+    x = _blit_text(surface, font, "arr✓" if arr_obs else "arr·", (x, y2), _TEXT_WHITE if arr_obs else _TEXT_GRAY) + gap
+    _blit_text(surface, font, "atstn✓" if atstn_obs else "atstn·", (x, y2), _TEXT_WHITE if atstn_obs else _TEXT_GRAY)
 
-    # Line 3: state ("stopped at A" or "between A -> B"); PASSING annotates the segment line.
+    # Line 3: App-layer position description + Layer 3 inferred game state.
+    inferred = status.get("inferred_state", Layer3State.UNKNOWN)
+    inferred_suffix = f"  ·  game: {inferred}"
     seg_start = status.get("segment_start_stop")
     y3 = 50
     if badge == "STOPPED" and 0 <= sim_state.curr_stop < len(stops):
         cur = stops[sim_state.curr_stop].get("name", "?")
-        _blit_text(surface, font, f"state: stopped at {cur}", (8, y3), _TEXT_WHITE)
+        _blit_text(surface, font, f"app: stopped at {cur}{inferred_suffix}", (8, y3), _TEXT_WHITE)
     elif seg_start is not None and 0 <= seg_start < len(stops) and 0 <= sim_state.curr_stop < len(stops):
         from_name = stops[seg_start].get("name", "?")
         to_name = stops[sim_state.curr_stop].get("name", "?")
-        suffix = "  (passing through — arrival skipped)" if badge == "PASSING" else ""
-        _blit_text(surface, font, f"state: between {from_name} -> {to_name}  (curr_stop={sim_state.curr_stop}){suffix}", (8, y3), _TEXT_WHITE)
+        passing = "  (passing through — arrival skipped)" if badge == "PASSING" else ""
+        _blit_text(surface, font, f"app: between {from_name} -> {to_name}  (curr_stop={sim_state.curr_stop}){passing}{inferred_suffix}", (8, y3), _TEXT_WHITE)
     else:
-        _blit_text(surface, font, f"state: curr_stop={sim_state.curr_stop}", (8, y3), _TEXT_GRAY)
+        _blit_text(surface, font, f"app: curr_stop={sim_state.curr_stop}{inferred_suffix}", (8, y3), _TEXT_GRAY)
 
 
 # ─────────────────────────── auto-input driver ────────────────────────────
@@ -374,9 +392,16 @@ def _crop_cell(frame_bgra: np.ndarray, hud_bbox: tuple[int, int, int, int], cell
 class _Detector:
     """State machine over distance + speed + badge samples.
 
-    Per-segment fired-flags reset on BADGE_STOPPED→MOVING. Returns event names;
-    the dispatcher decides whether to actually act on them based on current
-    simulator state.
+    Layer 2 cache (per-segment): three `*_observed` flags record whether the
+    trigger condition for that event has been observed in the current segment.
+    Reset on BADGE_STOPPED→(MOVING|PASSING). The flags semantically record "we
+    observed the trigger condition" — whether the dispatcher acts on the
+    resulting FIRE_* event is a separate concern (mismatch-skip in
+    `_fire_departure` / `_fire_arrival`).
+
+    `inferred_state()` returns the canonical Layer 3 state — what AutoDriver
+    thinks the IRL game train is doing. See AUTO_INPUT.md § "Layer 3" for the
+    inference truth table.
 
     PASSING badge handling: while the badge reads PASSING the HUD distance is to
     the passing-through station, NOT to the next stopping station — so arrival
@@ -388,9 +413,27 @@ class _Detector:
     arrival_lead_m: int = DEFAULT_LEAD_M
     prev_speed: Optional[int] = None
     prev_badge: Optional[str] = None
-    departure_fired: bool = False
-    arrival_fired: bool = False
-    at_station_fired: bool = False
+    departure_observed: bool = False
+    arrival_observed: bool = False
+    at_station_observed: bool = False
+
+    def inferred_state(self) -> str:
+        """Return the canonical Layer 3 state for the current sample.
+
+        Pure function of `prev_badge` + Layer 2 cache. See AUTO_INPUT.md
+        § "Layer 3 — AutoDriver's inferred game state" for the truth table.
+        """
+        badge = self.prev_badge
+        if badge is None:
+            return Layer3State.UNKNOWN
+        if badge == "STOPPED":
+            return Layer3State.STOPPING_AFTER_ARR if self.arrival_observed else Layer3State.STOPPING_FRESH
+        # MOVING or PASSING
+        if self.arrival_observed:
+            return Layer3State.MOVING_AFTER_ARR
+        if self.departure_observed:
+            return Layer3State.APPROACHING_AFTER_DEP
+        return Layer3State.APPROACHING_BEFORE_DEP
 
     def update(self, distance: Optional[int], speed: Optional[int], badge: Optional[str]) -> list[str]:
         events: list[str] = []
@@ -399,40 +442,40 @@ class _Detector:
         # a normal MOVING segment as PASSING for many consecutive frames
         # (live drive on Keiyo 2026-04-27 showed the ~80s run from 千葉みなと to
         # 稲毛海岸 stuck at PASSING). If we only reset on STOPPED→MOVING, those
-        # mis-classified segments inherit fired-flags from the previous segment
-        # and skip both PAs entirely. Resetting on STOPPED→(MOVING|PASSING)
-        # makes the detector resilient to that misread mode.
-        # Mid-segment MOVING↔PASSING transitions remain silent — those are
-        # the legitimate "we're crossing a passing-through station" markers
-        # within an already-active segment.
+        # mis-classified segments inherit observed-flags from the previous
+        # segment and skip both PAs entirely. Resetting on
+        # STOPPED→(MOVING|PASSING) makes the detector resilient to that misread.
+        # Mid-segment MOVING↔PASSING transitions remain silent — those are the
+        # legitimate "we're crossing a passing-through station" markers within
+        # an already-active segment.
         if badge is not None and self.prev_badge is not None and badge != self.prev_badge:
             if self.prev_badge == "STOPPED" and badge in ("MOVING", "PASSING"):
                 events.append("STOPPED->MOVING")
-                self.departure_fired = False
-                self.arrival_fired = False
-                self.at_station_fired = False
+                self.departure_observed = False
+                self.arrival_observed = False
+                self.at_station_observed = False
             elif self.prev_badge in ("MOVING", "PASSING") and badge == "STOPPED":
                 events.append("MOVING->STOPPED")
         # Departure: speed crossing 30 km/h upward — own-train speed, badge-independent.
         if speed is not None and self.prev_speed is not None:
-            if not self.departure_fired and self.prev_speed < SPEED_DEPARTURE_KMH <= speed:
+            if not self.departure_observed and self.prev_speed < SPEED_DEPARTURE_KMH <= speed:
                 events.append("FIRE_DEPARTURE")
-                self.departure_fired = True
+                self.departure_observed = True
         # Arrival: level test, gated on badge==MOVING. Skips PASSING (wrong distance ref);
         # handles PASSING→MOVING with distance already <lead via the level (not crossing) check.
         if badge == "MOVING" and distance is not None:
-            if not self.arrival_fired and distance <= self.arrival_lead_m:
+            if not self.arrival_observed and distance <= self.arrival_lead_m:
                 events.append("FIRE_ARRIVAL")
-                self.arrival_fired = True
-        # At-station: level test, gated on (badge==STOPPED AND arrival_fired).
-        # `arrival_fired` ensures the train *just* arrived in this segment — it
-        # rules out boot (parked at start station with no preceding approach)
+                self.arrival_observed = True
+        # At-station: level test, gated on (badge==STOPPED AND arrival_observed).
+        # `arrival_observed` ensures the train *just* arrived in this segment —
+        # it rules out boot (parked at start station with no preceding approach)
         # and post-jump_to_stop. Triggers the press that flips `at_station=True`
         # on the simulator (no audio — unified state machine's APPROACHING→STOPPING
         # transition is silent; pa_at_station cycling happens on subsequent presses).
-        if badge == "STOPPED" and self.arrival_fired and not self.at_station_fired:
+        if badge == "STOPPED" and self.arrival_observed and not self.at_station_observed:
             events.append("FIRE_AT_STATION")
-            self.at_station_fired = True
+            self.at_station_observed = True
         if speed is not None:
             self.prev_speed = speed
         if badge is not None:
@@ -547,9 +590,10 @@ class AutoDriver:
                         "distance": d_val,
                         "distance_score": d_score,
                         "segment_start_stop": self._segment_start_stop,
-                        "departure_fired": self._detector.departure_fired,
-                        "arrival_fired": self._detector.arrival_fired,
-                        "at_station_fired": self._detector.at_station_fired,
+                        "departure_observed": self._detector.departure_observed,
+                        "arrival_observed": self._detector.arrival_observed,
+                        "at_station_observed": self._detector.at_station_observed,
+                        "inferred_state": self._detector.inferred_state(),
                         "ts": sample_ts,
                     }
 
@@ -571,8 +615,9 @@ class AutoDriver:
                             "badge_diff": b_diff,
                             "curr_stop": self.sim.state.curr_stop,
                             "cnt_pa": self.sim.state.cnt_pa,
-                            "departure_fired": self._detector.departure_fired,
-                            "arrival_fired": self._detector.arrival_fired,
+                            "departure_observed": self._detector.departure_observed,
+                            "arrival_observed": self._detector.arrival_observed,
+                            "inferred_state": self._detector.inferred_state(),
                             "segment_start_stop": self._segment_start_stop,
                         })
 
