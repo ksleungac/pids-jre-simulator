@@ -11,6 +11,9 @@
         {
             "name": "大宮",
             "pa": [],
+            "pa_at_station": [
+                "omiya_stopping"
+            ],
             "sta": [
                 "JK47_OMY"
             ],
