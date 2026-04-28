@@ -112,7 +112,7 @@ Preloaded files (`CLAUDE.md`, `.claude/rules/*`) hold what humans keep in their 
    - **Preference-shaped, ambiguous** (passing remark, unclear permanence) → daily log `## Preferences (jot)` as `[log-only]`. Promote later via recurrence (≥2 distinct sessions) OR explicit forward framing in a future session.
 
    Cost of over-promotion is bloat; cost of under-promotion is one extra correction next session — strongly asymmetric. The asymmetric trap applies to the ambiguous middle, not to clearly rule-shaped or fact-shaped entries.
-2. **Before writing, check if the info already exists.** Update in place, don't add a second copy.
+2. **Before writing, check if the info already exists or has gone stale.** Update / remove in place, don't add a second copy, don't leave outdated content standing. Each domain doc carries an "Editing this doc" callout at its top with the same reminder. See [principles.md § "Tighten before appending"](../../rules/principles.md).
 3. **Cross-reference, don't copy.** E.g., `DATA_FORMAT.md` says "see CLAUDE.md § Mental Model" rather than re-explaining.
 4. **CLAUDE.md stays slim on implementation, generous on framing.** Mental-model content belongs there *because* it's preloaded. Implementation details go to domain docs.
 5. **MEMORY.md is an index.** One-line pointers to memory files only. No content, no rules.

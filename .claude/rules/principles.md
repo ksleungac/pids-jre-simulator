@@ -114,3 +114,10 @@ Don't duplicate the same fact across docs. Cross-reference instead.
 **Why:** Duplicates drift; readers don't know which is canonical.
 
 **How to apply:** Before writing a fact in two places, pick one canonical home and link from the other. E.g., `DATA_FORMAT.md` says "see CLAUDE.md § Mental Model for the convention itself" rather than re-explaining.
+
+### Tighten before appending
+When editing a domain doc (`DISPLAY.md`, `DATA_FORMAT.md`, `AUTO_INPUT.md`, …), scan for redundant or stale claims about the topic first. Merge or delete in place rather than appending — domain docs should stay tight, not grow additively.
+
+**Why:** Bloat in domain docs is the same failure mode that "no central kitchen-sink rules file" warns against, applied to docs instead of rules. Stale duplicates read as authoritative until someone notices they contradict each other; bloat dilutes attention and makes "I read the doc" a weaker signal.
+
+**How to apply:** Before adding a new section/paragraph, search the existing doc for the topic. If a near-duplicate or related stale claim exists, edit-in-place. Each domain doc carries an "Editing this doc" callout at its top so this rule lands in context at the moment of edit (same logic as inline `# CONTRACT:` blocks for code).
