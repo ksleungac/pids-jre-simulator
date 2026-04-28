@@ -158,10 +158,12 @@ Press counts to fully traverse a stop (advance-into → STOPPING → advance-out
 | State | Prefix (KANJI) | Furigana | English |
 |---|---|---|---|
 | `at_station=True` | ただいま | ただいま | Now stopping at |
-| `cnt_pa == 0` | 次は | つぎは | Next |
-| `cnt_pa >= 1` | まもなく | まもなく | Arriving at |
+| `cnt_pa == len(pa) - 1` (final approach PA) | まもなく | まもなく | Arriving at |
+| otherwise (`cnt_pa < last`) | 次は | つぎは | Next |
 
-`at_station=True` is the **only** path to "ただいま" — overrides cnt_pa-based mapping. The pre-migration `cnt_pa >= 2 → ただいま` fallback was removed because it preserved a wrong-stop ambiguity (display said "ただいま X" while the audio at pa[2+] referred to the previous stop's platform). All at-platform PAs now belong in `pa_at_station`; pa[2+] would be a third pre-arrival announcement (rare; still "まもなく").
+`at_station=True` is the **only** path to "ただいま" — overrides cnt_pa-based mapping. The pre-migration `cnt_pa >= 2 → ただいま` fallback was removed because it preserved a wrong-stop ambiguity (display said "ただいま X" while the audio at pa[2+] referred to the previous stop's platform). All at-platform PAs now belong in `pa_at_station`.
+
+**Final-approach rule.** Only the LAST entry in `pa[]` flips the prefix to "まもなく"; intermediate approach announcements (e.g. pa[1] of a future 3-PA stop) stay on "次は." For today's 2-PA data (`pa = [{prev}-dep, {this}-arr]`) this is identical to the previous `cnt_pa >= 1 → まもなく` mapping — pa[1] is both the second entry and the last, so it flips to "まもなく" either way.
 
 ### `jump_to_stop` semantic
 
@@ -237,7 +239,7 @@ class UpperDisplay:
         self.translations = load_json_relative("data/translations.json")
         self.train_types = load_json_relative("data/train_types.json")
 
-    def set_state(self, curr_stop: int, cnt_pa: int) -> None: ...
+    def set_state(self, curr_stop: int, cnt_pa: int, at_station: bool = False) -> None: ...
     def update(self, current_time: float = None) -> None: ...
     def draw(self, current_time_str: str = None) -> None: ...
 ```
@@ -646,7 +648,7 @@ class PASimulator:
 
     def run(self):
         # Initial draw
-        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa)
+        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=self.state.at_station)
         self.upper.draw()
         self.lower.draw()
         pygame.display.flip()
@@ -698,7 +700,7 @@ Per [CLAUDE.md](CLAUDE.md) "Mental Model → Per-model IRL line scope": the new 
 # Direct import (single train model)
 from displays.train_models.e235_1000 import UpperDisplay
 upper = UpperDisplay(screen, route_data, stops)
-upper.set_state(curr_stop=0, cnt_pa=0)
+upper.set_state(curr_stop=0, cnt_pa=0, at_station=True)  # boots STOPPING at start platform
 upper.update(timestamp)
 upper.draw()
 

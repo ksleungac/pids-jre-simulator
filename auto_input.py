@@ -334,8 +334,10 @@ def draw_debug_panel(surface: pygame.Surface, status: dict, sim_state, stops: li
     x = _blit_text(surface, font, f"cnt_pa={sim_state.cnt_pa}", (x, y2), _TEXT_GRAY) + gap + 6
     dep_fired = bool(status.get("departure_fired"))
     arr_fired = bool(status.get("arrival_fired"))
+    atstn_fired = bool(status.get("at_station_fired"))
     x = _blit_text(surface, font, "dep✓" if dep_fired else "dep·", (x, y2), _TEXT_WHITE if dep_fired else _TEXT_GRAY) + gap
-    _blit_text(surface, font, "arr✓" if arr_fired else "arr·", (x, y2), _TEXT_WHITE if arr_fired else _TEXT_GRAY)
+    x = _blit_text(surface, font, "arr✓" if arr_fired else "arr·", (x, y2), _TEXT_WHITE if arr_fired else _TEXT_GRAY) + gap
+    _blit_text(surface, font, "atstn✓" if atstn_fired else "atstn·", (x, y2), _TEXT_WHITE if atstn_fired else _TEXT_GRAY)
 
     # Line 3: state ("stopped at A" or "between A -> B"); PASSING annotates the segment line.
     seg_start = status.get("segment_start_stop")
@@ -388,6 +390,7 @@ class _Detector:
     prev_badge: Optional[str] = None
     departure_fired: bool = False
     arrival_fired: bool = False
+    at_station_fired: bool = False
 
     def update(self, distance: Optional[int], speed: Optional[int], badge: Optional[str]) -> list[str]:
         events: list[str] = []
@@ -407,6 +410,7 @@ class _Detector:
                 events.append("STOPPED->MOVING")
                 self.departure_fired = False
                 self.arrival_fired = False
+                self.at_station_fired = False
             elif self.prev_badge in ("MOVING", "PASSING") and badge == "STOPPED":
                 events.append("MOVING->STOPPED")
         # Departure: speed crossing 30 km/h upward — own-train speed, badge-independent.
@@ -420,6 +424,15 @@ class _Detector:
             if not self.arrival_fired and distance <= self.arrival_lead_m:
                 events.append("FIRE_ARRIVAL")
                 self.arrival_fired = True
+        # At-station: level test, gated on (badge==STOPPED AND arrival_fired).
+        # `arrival_fired` ensures the train *just* arrived in this segment — it
+        # rules out boot (parked at start station with no preceding approach)
+        # and post-jump_to_stop. Triggers the press that flips `at_station=True`
+        # on the simulator (no audio — unified state machine's APPROACHING→STOPPING
+        # transition is silent; pa_at_station cycling happens on subsequent presses).
+        if badge == "STOPPED" and self.arrival_fired and not self.at_station_fired:
+            events.append("FIRE_AT_STATION")
+            self.at_station_fired = True
         if speed is not None:
             self.prev_speed = speed
         if badge is not None:
@@ -536,6 +549,7 @@ class AutoDriver:
                         "segment_start_stop": self._segment_start_stop,
                         "departure_fired": self._detector.departure_fired,
                         "arrival_fired": self._detector.arrival_fired,
+                        "at_station_fired": self._detector.at_station_fired,
                         "ts": sample_ts,
                     }
 
@@ -600,6 +614,10 @@ class AutoDriver:
             return
         if event == "FIRE_ARRIVAL":
             self._fire_arrival()
+            return
+        if event == "FIRE_AT_STATION":
+            self._fire_at_station()
+            return
 
     def _fire_departure(self) -> None:
         # Departure is "advance from segment_start_stop to next stop" — auto-fire
@@ -639,3 +657,33 @@ class AutoDriver:
 
         self.sim.pending_next_pa = True
         print("          [AD] >>> FIRED arrival (set pending_next_pa)")
+
+    def _fire_at_station(self) -> None:
+        # The press that flips the sim from APPROACHING into STOPPING (ただいま).
+        # No audio — the unified state machine's APPROACHING→STOPPING transition
+        # is silent; this press just sets `state.at_station=True`. Subsequent
+        # presses cycle pa_at_station (if any) then advance.
+        if self.sim.state.at_station:
+            print("          [AD] >>> SKIPPED at-station fire (sim already STOPPING)")
+            return
+        curr = self.sim.state.curr_stop
+        # Mirrors _fire_arrival's anchor — curr should be segment_start_stop+1
+        # by now (arrival fire moved sim there, or it was already there).
+        if curr <= self._segment_start_stop:
+            print(f"          [AD] >>> SKIPPED at-station fire (sim still at segment_start={self._segment_start_stop}; arrival not advanced)")
+            return
+        if curr > self._segment_start_stop + 1:
+            print(f"          [AD] >>> SKIPPED at-station fire (sim past expected stop; at {curr})")
+            return
+        target = self.sim.stops[curr] if curr < len(self.sim.stops) else None
+        if target is None:
+            return
+        pa = target.get("pa", [])
+        # cnt_pa must be at the last approach PA (or pa empty) — otherwise the
+        # press would play the next approach PA instead of entering STOPPING,
+        # leaving the display on "まもなく" while the train is parked.
+        if pa and self.sim.state.cnt_pa != len(pa) - 1:
+            print(f"          [AD] >>> SKIPPED at-station fire (cnt_pa={self.sim.state.cnt_pa}, expected={len(pa) - 1}; arrival likely missed)")
+            return
+        self.sim.pending_next_pa = True
+        print("          [AD] >>> FIRED at-station (set pending_next_pa)")

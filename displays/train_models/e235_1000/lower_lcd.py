@@ -235,6 +235,12 @@ class JapaneseDisplay:
                 (apex_x, l_y + self.bar_height / 2),
                 (rect_right_x, l_y - overhang),
             ]
+            # Halo is two x-shifted copies of the polygon (one each side),
+            # both drawn before the body. The left copy's right edge + apex
+            # tuck inside the body and only its left edge pokes out; the
+            # right copy mirrors that on the apex side. Top/bottom remain
+            # flush — extend overhang if a top/bottom outline is wanted.
+            draw_aapolygon(self.screen, PASSED_COLOR, [(i - halo_offset, j) for (i, j) in points])
             draw_aapolygon(self.screen, PASSED_COLOR, [(i + halo_offset, j) for (i, j) in points])
             draw_aapolygon(self.screen, ptr_color, points)
 
@@ -575,12 +581,18 @@ class JapaneseDisplay:
                 chev_step = cont_chev_w + cont_chev_gap
                 chev2_x = bar_x_eff - cont_chev_stroke - 4  # 4 = visible top gap
                 chev1_x = chev2_x - chev_step
+                # Chevrons sit on the segment LEADING INTO this cell — they
+                # should dim once the train has arrived (cursor_pos >= gi),
+                # even though the cell itself is still active. Slots 0/2 don't
+                # need this because their chevrons trail off their own cell
+                # which naturally flips inactive when cursor passes.
+                chev_color = self.color if (cursor_pos < gi and gi <= dest_idx) else INACTIVE_COLOR
                 draw_continuity_arrow(
                     self.screen,
                     int(chev1_x),
                     l_y,
                     self.bar_height,
-                    cell_color,
+                    chev_color,
                     n_chevrons=cont_chev_n,
                     chevron_w=cont_chev_w,
                     chevron_stroke=cont_chev_stroke,
@@ -999,6 +1011,9 @@ class JapaneseEightStationDisplay:
                 (apex_x, y + self.bar_height / 2),
                 (rect_right_x, y - overhang),
             ]
+            # Halo: two x-shifted copies (mirrors full-route view) so left
+            # edge gets an outline matching the right apex's drop-shadow.
+            draw_aapolygon(self.screen, PASSED_COLOR, [(i - halo_offset, j) for (i, j) in points])
             draw_aapolygon(self.screen, PASSED_COLOR, [(i + halo_offset, j) for (i, j) in points])
             draw_aapolygon(self.screen, ptr_color, points)
 

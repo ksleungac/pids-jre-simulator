@@ -52,10 +52,17 @@ Skip code-change inventory (git covers it). Present this:
   framing this session, OR (b) the same topic has surfaced in earlier
   daily logs (grep for the topic to check).
 
+### TODO.md sweep
+- **Closed this session**: items shipped — propose `[x]` mark or removal, with a one-line "what landed."
+- **New items surfaced**: design Qs deferred, follow-ups left dangling, side-quests noted in passing.
+- **Rephrase needed**: items whose framing rotted because the world changed (e.g. an item gated on "X is blocked by Y" once Y ships).
+- **No changes**: explicitly state this if true. Skipping the sweep silently lets TODO.md drift.
+
 ### Documentation updates
 - CLAUDE.md: only if mental-model shift
-- DATA_FORMAT.md / DISPLAY.md: only if schema/architecture genuinely changed
+- DATA_FORMAT.md / DISPLAY.md / AUTO_INPUT.md: only if schema/architecture genuinely changed
 - principles.md / conventions.md: ONLY for confirmed [promote-candidate]
+- TODO.md: per the sweep above (open / close / rephrase)
 - memory/YYYY-MM-DD.md: everything else (prose + the tagged Preferences section)
 ```
 
@@ -89,6 +96,7 @@ This table applies *always*, not only at recap time. Whenever you write or edit 
 | LCD architecture, mode rendering, skip animation, layout gotchas | `DISPLAY.md` | CLAUDE.md, inline comments |
 | Daily session logs (prose + structured Preferences section) | `memory/YYYY-MM-DD.md` | — |
 | Long-term memory index (one-line pointers only) | `memory/MEMORY.md` | — |
+| Open work items, follow-ups, deferred design Qs (one-line each + source pointer) | `TODO.md` | daily logs (logs capture history; TODO captures forward state) |
 
 ### Preloaded vs progressive
 

@@ -99,6 +99,7 @@ as today, with manual PageDown control.
    │   SPEED_UP_30                    │
    │   DIST_DOWN_<lead_m>             │
    │   BADGE_MOVING→STOPPED           │
+   │   FIRE_AT_STATION                │
    └──────────────────────────────────┘
               │
               ▼ for each "fire ... PA" event:
@@ -276,10 +277,11 @@ These are the **logical states** — the autodriver's semantic conclusions about
 
 | Event | Trigger | Effect |
 |---|---|---|
-| `BADGE_STOPPED→MOVING` | badge transition | New segment begins; reset both fired-flags + segment_start_ts |
-| `BADGE_MOVING→STOPPED` | badge transition | Train just arrived at platform |
+| `BADGE_STOPPED→MOVING` | badge transition | New segment begins; reset all three fired-flags + segment_start_ts |
+| `BADGE_MOVING→STOPPED` | badge transition | Train just arrived at platform (logged only — see `FIRE_AT_STATION`) |
 | `SPEED_UP_30` | speed crossed 30 km/h upward AND `departure_fired=False` | Fire departure PA, set `departure_fired=True` |
 | `DIST_DOWN_<lead>` | `badge==MOVING` AND `distance ≤ arrival_lead_m` AND `arrival_fired=False` | Fire arrival PA, set `arrival_fired=True` |
+| `FIRE_AT_STATION` | `badge==STOPPED` AND `arrival_fired=True` AND `at_station_fired=False` | Fire the silent press that flips sim into STOPPING (sets `state.at_station=True`); set `at_station_fired=True` |
 
 `arrival_lead_m` defaults to **900m**. For 1a, adjust on the setup-screen Lead
 stepper (range 500–1500, ±100m) before launching. For 1b, override with `--lead`
@@ -289,9 +291,16 @@ lines (Tokyo, Shinjuku scenarios).
 **Per-segment fired flags** prevent double-firing within a single segment when
 OCR misreads transiently flip a threshold-crossing condition (e.g. a speed misread
 as `7` between two real `>30` reads would fire `SPEED_UP_30` twice without the
-flag). Both flags reset on `BADGE_STOPPED→MOVING`. PASSING transitions do NOT
-reset flags — PASSING is a transient sub-state of MOVING within a segment, not a
-new segment.
+flag). All three flags (`departure_fired`, `arrival_fired`, `at_station_fired`)
+reset on `BADGE_STOPPED→MOVING`. PASSING transitions do NOT reset flags — PASSING
+is a transient sub-state of MOVING within a segment, not a new segment.
+
+**`at_station_fired` is gated on `arrival_fired`** so it only triggers in this
+segment's stopping moment. Without that gate, the level test would fire on the
+first capture cycle (train parked at session start with `badge==STOPPED`) and
+desync the simulator before the first real drive begins. Pa-empty stops still
+get the at-station fire — `_fire_at_station` accepts `pa==[]` because the
+APPROACHING→STOPPING transition is silent regardless of pa contents.
 
 ### Arrival is a level test, not a downward crossing
 
@@ -395,6 +404,7 @@ models with different LCD widths are added, panel follows automatically.
     "segment_start_stop": int,      # sim.state.curr_stop snapshot at last STOPPED→MOVING
     "departure_fired": bool,
     "arrival_fired": bool,
+    "at_station_fired": bool,       # set when the silent STOPPING-entry press has fired
     "ts": float,                    # time.time() of capture
 }
 ```

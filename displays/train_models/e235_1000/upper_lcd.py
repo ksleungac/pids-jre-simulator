@@ -451,6 +451,7 @@ class UpperDisplay:
         self.prefix_text = "ただいま"
         self.curr_stop = 0
         self.cnt_pa = 0
+        self.at_station = True  # boots in STOPPING (matches AppState default)
 
         # Extract route data
         self.route_name = route_data.get("route", "Unknown")
@@ -630,10 +631,15 @@ class UpperDisplay:
         """Update display state (current stop, PA count, STOPPING flag).
 
         Prefix mapping:
-            at_station=True  -> "ただいま" (train is at the platform)
-            cnt_pa == 0      -> "次は"     (heading toward this stop)
-            cnt_pa >= 1      -> "まもなく" (approaching — covers single-arr and
-                                            any future multi-stage approach pa)
+            at_station=True              -> "ただいま" (at the platform)
+            cnt_pa == len(pa) - 1        -> "まもなく" (final approach PA played)
+            otherwise (cnt_pa < last)    -> "次は"     (heading toward this stop)
+
+        The "final approach PA" rule generalizes cleanly to 3+ approach PAs:
+        only the LAST entry in pa[] flips the prefix to まもなく; intermediate
+        approach announcements stay on 次は. For today's 2-PA data
+        (pa = [{prev}-dep, {this}-arr]) this is identical to the previous
+        ``cnt_pa >= 1 → まもなく`` mapping.
 
         ``at_station=True`` is the ONLY path to "ただいま" — the old
         ``cnt_pa >= 2`` fallback was a pre-migration hack for at-platform
@@ -643,13 +649,17 @@ class UpperDisplay:
         """
         self.curr_stop = curr_stop
         self.cnt_pa = cnt_pa
+        self.at_station = at_station
+
+        pa = self.stops[curr_stop].get("pa", []) if 0 <= curr_stop < len(self.stops) else []
+        is_final_approach_pa = len(pa) >= 1 and cnt_pa == len(pa) - 1
 
         if at_station:
             self.prefix_text = "ただいま"
-        elif cnt_pa == 0:
-            self.prefix_text = "次は"
-        else:
+        elif is_final_approach_pa:
             self.prefix_text = "まもなく"
+        else:
+            self.prefix_text = "次は"
 
     def update(self, current_time: float = None) -> None:
         """Update mode cycling."""
@@ -684,8 +694,14 @@ class UpperDisplay:
         self._draw_station_code_badge()
 
         if self.stops and self.curr_stop < len(self.stops):
-            pa_tracks = self.stops[self.curr_stop].get("pa", [])
-            if len(pa_tracks) > 1:
-                pygame.draw.rect(self.screen, (247, 225, 158), pygame.Rect(S_WIDTH - 20, UPPER_HEIGHT - 20, 20, 20))
+            stop = self.stops[self.curr_stop]
+            # Yellow hint = "more press(es) yields more PA at this stop." During
+            # STOPPING the relevant list is pa_at_station (>0 = anything to play
+            # while parked). During APPROACHING it's pa (>1 = at least one more
+            # approach PA after pa[0]'s dep-prev announcement).
+            if self.at_station:
+                show_yellow = len(stop.get("pa_at_station", [])) > 0
             else:
-                pygame.draw.rect(self.screen, _bg("pa_hint"), pygame.Rect(S_WIDTH - 20, UPPER_HEIGHT - 20, 20, 20))
+                show_yellow = len(stop.get("pa", [])) > 1
+            color = (247, 225, 158) if show_yellow else _bg("pa_hint")
+            pygame.draw.rect(self.screen, color, pygame.Rect(S_WIDTH - 20, UPPER_HEIGHT - 20, 20, 20))
