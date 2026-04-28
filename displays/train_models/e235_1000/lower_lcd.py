@@ -18,7 +18,7 @@ change the ENGLISH branch in `LowerDisplay.draw()` to dispatch to
 """
 
 import math
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 import pygame
 import pygame.gfxdraw
 
@@ -82,6 +82,11 @@ class JapaneseDisplay:
         self.contrast_color = route_data.get("contrast_color", [224, 54, 37])
 
         self._calculate_layout()
+
+        # Cached window from last show_stops call — read by hit_test so click
+        # geometry matches what was rendered, and so hit_test never re-mutates
+        # `continuity[2]` via _get_stops_list_disp's side effect.
+        self._last_window: Optional[List[Tuple[int, Dict]]] = None
 
         self.font_stops = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", FONT_STOPS_SIZE)
         self.font_time = pygame.font.Font("fonts/HelveticaNeue-Bold.otf", FONT_TIME_SIZE)
@@ -518,6 +523,7 @@ class JapaneseDisplay:
         cursor_pos = state.cursor_pos + self.display_offset
 
         f_stops = self._get_stops_list_disp(curr_stop)
+        self._last_window = f_stops
         x = self.x
         y = self.y
         window_start = f_stops[0][0] if f_stops else 0
@@ -695,6 +701,46 @@ class JapaneseDisplay:
 
         draw_route_disclaimer(self.screen, self.font_disclaimer, S_WIDTH - 8, S_HEIGHT - 4, (0, 0, 0))
 
+    def hit_test(self, state, mx: int, my: int) -> Optional[int]:
+        """Map LCD-local (mx, my) to a sim_index for click-to-jump.
+
+        Returns None for clicks outside any cell, or for pre_stops cells
+        (visible-but-not-clickable through-service prefix). Reads the
+        last-rendered window so click geometry matches what's on screen.
+        Past-dest filtering (`sim_idx > dest_stop_idx`) lives in the caller —
+        that index is on `PASimulator`, not the renderer.
+        """
+        f_stops = self._last_window
+        if not f_stops or state is None:
+            return None
+        window_start = f_stops[0][0]
+
+        is_multi_row = len(f_stops) > self.per_line
+        if is_multi_row:
+            row1_bottom = self.y + self.h_line + self.bar_height
+            row2_top = self.y + 2 * self.h_line + self.top_pad
+            mid_split = (row1_bottom + row2_top) // 2
+            row1_band = (self.y, mid_split)
+            row2_band = (mid_split, row2_top + self.bar_height + 30)
+        else:
+            row1_band = (self.y, self.y + self.h_line + self.bar_height + 30)
+            row2_band = None
+
+        for gi, _ in f_stops:
+            local_i = gi - window_start
+            line_num = self._get_line(local_i)
+            cell_x = self.x + (local_i % self.per_line) * self.stops_w
+            band = row1_band if line_num == 1 else row2_band
+            if band is None:
+                continue
+            band_top, band_bot = band
+            if cell_x <= mx < cell_x + self.stops_w and band_top <= my < band_bot:
+                sim_idx = gi - self.display_offset
+                if sim_idx < 0:
+                    return None
+                return sim_idx
+        return None
+
 
 # =============================================================================
 # Japanese Display — 8-station zoomed-in view
@@ -781,6 +827,9 @@ class JapaneseEightStationDisplay:
         self.badge_y = self.bar_y + self.bar_height + self.bar_badge_gap
 
         self.circular = 1 if self.stops and self.stops[0].get("name") == self.stops[-1].get("name") else 0
+
+        # Cached window from last show_stops call — read by hit_test.
+        self._last_window: Optional[List[Tuple[int, Dict]]] = None
 
     # ------------------------------------------------------------------
     # Window
@@ -1286,6 +1335,7 @@ class JapaneseEightStationDisplay:
         curr_stop = state.curr_stop + self.display_offset
         cursor_pos = state.cursor_pos + self.display_offset
         window = self._get_window(curr_stop, cursor_pos)
+        self._last_window = window
 
         # stop_dest reads from sim's stops[] (pre_stops can't override dest).
         sim_curr_stop = state.curr_stop
@@ -1329,6 +1379,31 @@ class JapaneseEightStationDisplay:
         self.draw_times(window, dest_idx, cursor_pos, current_time, state.departure_time, state.is_last_pa, state.at_station, curr_stop)
 
         draw_route_disclaimer(self.screen, self.font_disclaimer, S_WIDTH - 8, S_HEIGHT - 4, (0, 0, 0))
+
+    def hit_test(self, state, mx: int, my: int) -> Optional[int]:
+        """Map LCD-local (mx, my) to a sim_index for click-to-jump.
+
+        Hit area is the full vertical column (label + bar + badge). Returns
+        None for clicks outside any cell or for pre_stops cells. Past-dest
+        filtering lives in the caller.
+        """
+        window = self._last_window
+        if not window or state is None:
+            return None
+        window_start = window[0][0]
+        band_top = self.label_top_y
+        band_bot = self.badge_y + self.badge_h + 5
+        if not (band_top <= my < band_bot):
+            return None
+        for gi, _ in window:
+            local_i = gi - window_start
+            cell_x = self.x + local_i * self.stops_w
+            if cell_x <= mx < cell_x + self.stops_w:
+                sim_idx = gi - self.display_offset
+                if sim_idx < 0:
+                    return None
+                return sim_idx
+        return None
 
 
 # =============================================================================
@@ -1466,3 +1541,23 @@ class LowerDisplay:
         else:
             renderer = self.japanese_display
         renderer.show_stops(self._state, current_time)
+
+    def hit_test(self, mx: int, my: int) -> Optional[int]:
+        """Dispatch a click in LCD-local coords to the active renderer's hit_test.
+
+        Returns sim_index for clickable cells, None for non-clickable
+        (pre_stops, padding). ENGLISH mode falls back to the Japanese
+        full-route renderer's hit_test — clicks DO work in ENGLISH. Past-dest
+        filter lives in the caller (`PASimulator._click_target`) since
+        `dest_stop_idx` is on the simulator, not the renderer.
+        """
+        if self._state is None:
+            return None
+        mode = self.mode_cycler.get_current_mode()
+        if mode in (DisplayMode.KANJI, DisplayMode.FURIGANA):
+            renderer = self._pick_japanese_renderer()
+        else:
+            renderer = self.japanese_display
+        if hasattr(renderer, "hit_test"):
+            return renderer.hit_test(self._state, mx, my)
+        return None

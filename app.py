@@ -18,6 +18,13 @@ from displays.utils import draw_text
 class AppState:
     """Holds the current state of the application."""
 
+    # CONTRACT: Layer 1 (App) state machine cycles APPROACHING_EARLY → APPROACHING_FINAL → STOPPING per stop.
+    # See DISPLAY.md § "Unified State Machine" for transitions; § "Edge cases & guards" for non-obvious behavior.
+    # Non-obvious field semantics:
+    #   cnt_pa — DEAD during STOPPING (at_station overrides prefix; cnt_pa is not read until _advance_to_next_stop).
+    #   cnt_pa_at_station — `-1` is the pre-first sentinel ("next press plays [0]").
+    #   frame_mode — read by lower_lcd as an early-return gate; never mutated. Dormant scaffolding.
+
     def __init__(self):
         """Initialize application state."""
         self.curr_stop = 0
@@ -320,6 +327,7 @@ class PASimulator:
 
             # Handle input
             self._handle_input()
+            self._update_hover_cursor()
 
             # Event handling
             for event in pygame.event.get():
@@ -338,6 +346,10 @@ class PASimulator:
                     from auto_input import handle_panel_click  # local import: defer dxcam pull
 
                     handle_panel_click(self, event.pos)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    # Click below the debug panel (or anywhere when no panel)
+                    # — try click-to-jump on the lower LCD.
+                    self._handle_lcd_click(event.pos)
 
         self.cleanup()
 
@@ -355,6 +367,47 @@ class PASimulator:
         draw_debug_panel(self.debug_surface, self.auto_input_status, self.state, self.stops)
 
     # ──────────────────────────── input handling ────────────────────────────
+    def _click_target(self, lcd_x: int, lcd_y: int) -> Optional[int]:
+        """Return the sim_index a click at (lcd_x, lcd_y) would jump to, or None.
+
+        Coords are LCD-local (debug-panel offset already subtracted). Layers
+        the past-dest filter on top of the renderer's hit_test — cells past
+        ``dest_stop_idx`` on non-circular routes are not clickable (e.g.
+        Keihin 727B's 磯子→大船 reference tail).
+        """
+        sim_idx = self.lower.hit_test(lcd_x, lcd_y)
+        if sim_idx is None:
+            return None
+        if self.state.circular != 1 and sim_idx > self.dest_stop_idx:
+            return None
+        return sim_idx
+
+    def _handle_lcd_click(self, pos) -> None:
+        """Translate a window-coords click into a click-to-jump action.
+
+        Subtracts the debug-panel offset (when auto_input is on) before
+        querying hit_test. Silent no-op on non-clickable cells.
+        """
+        mx, my = pos
+        panel_h = self.debug_surface.get_height() if (self.auto_input and self.debug_surface is not None) else 0
+        lcd_y = my - panel_h
+        if lcd_y < 0:
+            return
+        sim_idx = self._click_target(mx, lcd_y)
+        if sim_idx is None:
+            return
+        self.jump_to_stop(sim_idx)
+
+    def _update_hover_cursor(self) -> None:
+        """Set pointer-hand cursor over clickable cells, default elsewhere."""
+        mx, my = pygame.mouse.get_pos()
+        panel_h = self.debug_surface.get_height() if (self.auto_input and self.debug_surface is not None) else 0
+        lcd_y = my - panel_h
+        clickable = lcd_y >= 0 and self._click_target(mx, lcd_y) is not None
+        pygame.mouse.set_cursor(
+            pygame.SYSTEM_CURSOR_HAND if clickable else pygame.SYSTEM_CURSOR_ARROW
+        )
+
     def _handle_input(self) -> None:
         """Dispatch input handling based on mode."""
         if self.preview:
@@ -401,6 +454,8 @@ class PASimulator:
                     self.jump_to_stop(self.state.curr_stop - 1)
                 elif event.key == pygame.K_m:
                     self._cycle_display_mode()
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self._handle_lcd_click(event.pos)
 
     def _cycle_display_mode(self) -> None:
         """Cycle the upper display's forced mode (preview helper, bound to M)."""
@@ -429,7 +484,11 @@ class PASimulator:
         Resets animation state so countdown and skip-progress start fresh
         (``departure_time=0`` keeps the lower-LCD countdown frozen until the
         next real PA advance).
+
+        Pauses any in-flight audio so a jump during PA playback gives a
+        clean handoff (no stale audio playing over the new state).
         """
+        self.audio.pause()
         if not self.stops:
             return
         target = max(0, min(target, len(self.stops) - 1))
