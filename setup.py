@@ -4,7 +4,9 @@ import os
 import json
 import pygame
 
+import i18n
 from constants import SETUP_KEY_REPEAT_DELAY, SETUP_KEY_REPEAT_INTERVAL
+from displays.utils import draw_station_code_badge
 
 
 class SetupScreen:
@@ -27,19 +29,46 @@ class SetupScreen:
         available_height = screen.get_height() - 160
         self.max_visible = max(3, available_height // self.row_height)
 
-        # Fonts - load from fonts/ folder
-        self.title_font = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 28)
-        self.route_font = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 20)
-        self.instruction_font = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 16)
-        self.control_font = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 14)
+        # Chrome fonts per active language:
+        # - EN mode → HelveticaNeue-Bold (PIDS-canon Latin, clean macron rendering
+        #   for Tōkyō/Chūō destinations; matches the LCD's English aesthetic).
+        # - HK/CN modes → i18n.font() returns YaHei (CJK chrome).
+        # `route_font_cjk` is always YaHei-class because route names on line 1
+        # remain Japanese kanji today (translation deferred per user); it's used
+        # for the kanji portion of line 1 in EN mode (two-pass with tail Latin).
+        if i18n.current_lang() == "en":
+            helvetica = lambda s: pygame.font.Font(str(i18n.app_root() / "fonts" / "HelveticaNeue-Bold.otf"), s)
+            self.title_font = helvetica(28)
+            self.route_font = helvetica(18)
+            self.instruction_font = helvetica(16)
+            self.control_font = helvetica(14)
+        else:
+            self.title_font = i18n.font(28, bold=True)
+            self.route_font = i18n.font(18, bold=True)
+            self.instruction_font = i18n.font(16, bold=True)
+            self.control_font = i18n.font(14, bold=True)
+        self.route_font_cjk = i18n.font(18, bold=True)
+        # Line badge re-uses NeueFrutigerWorld-Bold (PIDS-canon, same font as the
+        # LCD's station-code badges) for visual consistency with the LCD.
+        self.badge_font = pygame.font.Font(str(i18n.app_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 18)
 
-        # Colors
-        self.bg_color = (30, 30, 30)
-        self.text_color = (255, 255, 255)
-        self.highlight_color = (116, 193, 30)
-        self.dim_color = (150, 150, 150)
-        self.control_bg = (60, 60, 60)
-        self.control_dim = (90, 90, 90)
+        # Translation tables for EN mode lookup of route-level data fields.
+        # zh_HK / zh_CN modes keep route-data text in kanji (no source data exists
+        # today); only the chrome strings around it translate.
+        self._translations = self._load_data_json("translations.json")
+        self._train_types = self._load_data_json("train_types.json")
+
+        # Colors — lifted dark slate. Bright enough to read comfortably without
+        # going full light mode; controls keep ~20-RGB-step contrast above bg
+        # so steppers / pill stay distinct. Highlight green stays separable on
+        # luminance for red-green color-blind viewers (not just hue).
+        self.bg_color = (62, 68, 80)
+        self.text_color = (240, 242, 248)
+        self.highlight_color = (96, 168, 84)
+        self.dim_color = (175, 182, 195)
+        self.highlight_dim_color = (220, 225, 235)  # line-2 dim on highlight bg
+        self.control_bg = (88, 96, 112)
+        self.control_dim = (118, 126, 142)
 
         # OCR Auto-PA controls — defaults match the prior CLI defaults; user toggles
         # per-launch (no persistence). Lead/interval clamped to the ranges below.
@@ -55,6 +84,15 @@ class SetupScreen:
         self._lead_plus_rect: pygame.Rect | None = None
         self._interval_minus_rect: pygame.Rect | None = None
         self._interval_plus_rect: pygame.Rect | None = None
+
+    @staticmethod
+    def _load_data_json(filename: str) -> dict:
+        path = i18n.app_root() / "data" / filename
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
 
     def scan_routes(self, base_dir: str = "audio") -> list:
         """Scan for available routes by finding route.json files.
@@ -92,6 +130,15 @@ class SetupScreen:
                         # Prefer folder name for diagram, fallback to JSON
                         diagram = folder_diagram if folder_diagram else route_data.get("diagram", "")
 
+                        # Line code (e.g. "JO", "JK") = first 2 chars of any
+                        # stop's sta_code. Used for the row-leading line badge.
+                        line_code = ""
+                        for stop in route_data.get("stops", []):
+                            sc = stop.get("sta_code")
+                            if sc and len(sc) >= 2:
+                                line_code = sc[:2]
+                                break
+
                         self.routes.append(
                             {
                                 "path": root,
@@ -99,6 +146,8 @@ class SetupScreen:
                                 "diagram": diagram,
                                 "type": route_data.get("type", ""),
                                 "dest": route_data.get("dest", ""),
+                                "line_code": line_code,
+                                "color": tuple(route_data.get("color") or (90, 90, 90)),
                             }
                         )
                 except Exception as e:
@@ -117,7 +166,7 @@ class SetupScreen:
         self.screen.fill(self.bg_color)
 
         # Draw title
-        title = "路線を選択 (Select Route)"
+        title = i18n.t("setup.title")
         title_img = self.title_font.render(title, True, self.text_color)
         title_x = (self.screen.get_width() - title_img.get_width()) // 2
         self.screen.blit(title_img, (title_x, 20))
@@ -147,41 +196,90 @@ class SetupScreen:
             route_type = route.get("type", "")
             dest = route.get("dest", "")
 
-            # Build display text - consistent format:
-            # Line 1: Route name - Train diagram (if exists)
-            # Line 2: Train type | Destination ゆき
-            if diagram:
-                line1 = f"{route_name} - {diagram}"
-            else:
-                line1 = route_name
+            # EN-mode lookup for type + dest from existing translation tables.
+            # Route-name itself has no translation source; leaves as kanji. HK/CN
+            # modes keep all data text as kanji per current scope.
+            if i18n.current_lang() == "en":
+                if route_type in self._train_types:
+                    route_type = self._train_types[route_type].get("english", route_type)
+                if dest in self._translations:
+                    dest = self._translations[dest].get("english", dest).replace("\n", " ")
 
-            # Line 2: Type and destination
+            # Line 2: Train type | Destination
             line2_parts = []
             if route_type:
                 line2_parts.append(route_type)
             if dest:
-                line2_parts.append(f"{dest} ゆき")
+                line2_parts.append(i18n.t("setup.dest_label", dest=dest))
             line2 = "  |  ".join(line2_parts) if line2_parts else ""
 
-            # Check if selected
+            # Selection highlight covers the full row.
             is_selected = i == selected_idx
-
+            row_top = y_offset + display_idx * self.row_height
             if is_selected:
-                # Draw highlight background (taller to cover both lines)
-                highlight_rect = pygame.Rect(20, y_offset + display_idx * self.row_height - 5, self.screen.get_width() - 40, self.row_height)
+                highlight_rect = pygame.Rect(20, row_top, self.screen.get_width() - 40, self.row_height)
                 pygame.draw.rect(self.screen, self.highlight_color, highlight_rect, border_radius=5)
-                text_color = (255, 255, 255)
+                text_color = self.text_color
+                line2_color = self.highlight_dim_color
             else:
                 text_color = self.text_color
+                line2_color = self.dim_color
 
-            # Draw route name
-            line1_img = self.route_font.render(line1, True, text_color)
-            self.screen.blit(line1_img, (40, y_offset + display_idx * self.row_height))
+            # Line badge at row's left edge (JR-style: 2-letter code, no station number).
+            badge_right = self._draw_line_badge(
+                x=30,
+                cy=row_top + self.row_height // 2,
+                line_code=route.get("line_code", ""),
+                color=route.get("color", self.dim_color),
+            )
+            text_x = badge_right + 12
 
-            # Draw secondary info
-            if line2:
-                line2_img = self.route_font.render(line2, True, self.dim_color if not is_selected else (200, 200, 200))
-                self.screen.blit(line2_img, (60, y_offset + display_idx * self.row_height + 22))
+            # Pre-render both lines so we can vertically center the content block
+            # inside the row. EN mode line 1 is two-pass (kanji name in CJK font +
+            # Latin tail in Helvetica, baselines aligned via get_ascent() diff);
+            # HK/CN modes are single-pass CJK throughout.
+            if i18n.current_lang() == "en":
+                line1_name_img = self.route_font_cjk.render(route_name, True, text_color)
+                if diagram:
+                    tail_text = f" - {i18n.t('setup.diagram_label', diagram=diagram)}"
+                    line1_tail_img = self.route_font.render(tail_text, True, text_color)
+                else:
+                    line1_tail_img = None
+                line1_h = line1_name_img.get_height()
+            else:
+                line1_name_img = None
+                line1 = f"{route_name} - {i18n.t('setup.diagram_label', diagram=diagram)}" if diagram else route_name
+                line1_tail_img = self.route_font.render(line1, True, text_color)
+                line1_h = line1_tail_img.get_height()
+
+            # In EN mode, dest/type may have stayed kanji if their entries are
+            # missing from translations.json / train_types.json. HelveticaNeue
+            # has no CJK glyphs → would render as tofu boxes. Detect any CJK
+            # codepoint in line2 and fall back to the CJK font for that string.
+            line2_font = self.route_font
+            if line2 and i18n.current_lang() == "en" and any(0x3000 <= ord(c) <= 0x9FFF for c in line2):
+                line2_font = self.route_font_cjk
+            line2_img = line2_font.render(line2, True, line2_color) if line2 else None
+            line2_h = line2_img.get_height() if line2_img else 0
+
+            inter_gap = 2 if line2_img else 0
+            content_h = line1_h + inter_gap + line2_h
+            top_pad = max(0, (self.row_height - content_h) // 2)
+            line1_y = row_top + top_pad
+            line2_y = line1_y + line1_h + inter_gap
+
+            # Blit line 1 (single- or two-pass)
+            if line1_name_img is not None:
+                self.screen.blit(line1_name_img, (text_x, line1_y))
+                if line1_tail_img is not None:
+                    ascent_diff = self.route_font_cjk.get_ascent() - self.route_font.get_ascent()
+                    self.screen.blit(line1_tail_img, (text_x + line1_name_img.get_width(), line1_y + ascent_diff))
+            else:
+                self.screen.blit(line1_tail_img, (text_x, line1_y))
+
+            # Line 2 — slightly indented from line 1 for visual hierarchy
+            if line2_img is not None:
+                self.screen.blit(line2_img, (text_x + 20, line2_y))
 
         # Draw scrollbar if there are more routes than visible
         if len(self.routes) > self.max_visible:
@@ -191,7 +289,7 @@ class SetupScreen:
         self._draw_auto_pa_band()
 
         # Draw instructions (centered at bottom)
-        instructions = "↑↓: 移動 (Navigate)  |  Enter: 決定 (Select)  |  ESC: キャンセル (Cancel)"
+        instructions = i18n.t("setup.nav_hint")
         inst_img = self.instruction_font.render(instructions, True, self.dim_color)
         inst_x = (self.screen.get_width() - inst_img.get_width()) // 2
         self.screen.blit(inst_img, (inst_x, self.screen.get_height() - 35))
@@ -227,7 +325,8 @@ class SetupScreen:
         dot_color = (255, 255, 255) if self.auto_input_enabled else (180, 180, 180)
         pygame.draw.circle(self.screen, dot_color, (dot_cx, cy), dot_r)
         # Label
-        label = f"OCR Auto-PA: {'ON' if self.auto_input_enabled else 'OFF'}"
+        state = i18n.t("setup.on" if self.auto_input_enabled else "setup.off")
+        label = i18n.t("setup.ocr_state", state=state)
         label_img = self.control_font.render(label, True, self.text_color)
         self.screen.blit(label_img, (dot_cx + dot_r + 6, cy - label_img.get_height() // 2))
 
@@ -257,9 +356,9 @@ class SetupScreen:
             return plus.right, minus, plus
 
         x = self._toggle_rect.right + gap
-        x, self._lead_minus_rect, self._lead_plus_rect = draw_stepper("Lead:", f"{self.lead_m}m", x)
+        x, self._lead_minus_rect, self._lead_plus_rect = draw_stepper(i18n.t("setup.lead_label"), f"{self.lead_m}m", x)
         x += gap
-        _, self._interval_minus_rect, self._interval_plus_rect = draw_stepper("Interval:", f"{self.interval_s}s", x)
+        _, self._interval_minus_rect, self._interval_plus_rect = draw_stepper(i18n.t("setup.interval_label"), f"{self.interval_s}s", x)
 
     def _handle_band_click(self, pos: tuple[int, int]) -> bool:
         """Dispatch a mouse click to the OCR Auto-PA band. Returns True if any
@@ -280,6 +379,35 @@ class SetupScreen:
             self.interval_s = min(self.interval_max, self.interval_s + self.interval_step)
             return True
         return False
+
+    def _draw_line_badge(self, x: int, cy: int, line_code: str, color: tuple) -> int:
+        """Draw a JR-style line marker (2-letter code only, no station number) via
+        the LCD's canonical badge helper. Vertically centered at `cy`. Returns the
+        right-edge x for placing subsequent content — when line_code is empty
+        (route has no sta_code), no badge is drawn and `x` is returned unchanged
+        so text isn't pushed right by a phantom badge width."""
+        # ── tuneable params ────────────────
+        badge_w, badge_h = 38, 38
+        # ────────────────────────────────────
+        if not line_code:
+            return x
+        draw_station_code_badge(
+            self.screen,
+            x=x,
+            y=cy - badge_h // 2,
+            w=badge_w,
+            h=badge_h,
+            sta_code=line_code,
+            color=color,
+            font_prefix=self.badge_font,
+            font_num=self.badge_font,  # unused in line-marker mode
+            ring_black=2,
+            ring_color=3,
+            outer_radius=5,
+            color_radius=3,
+            interior_radius=0,
+        )
+        return x + badge_w
 
     def _draw_scrollbar(self) -> None:
         """Draw a scrollbar indicator on the right side."""
@@ -313,7 +441,7 @@ class SetupScreen:
         self.scan_routes()
 
         if not self.routes:
-            print("No routes found. Please add route.json files to the audio/ directory.")
+            print(i18n.t("setup.no_routes"))
             return None
 
         # Store original key repeat state to restore later

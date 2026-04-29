@@ -50,3 +50,7 @@ _sta_verify_*.json
 /version_info.txt
 /release_notes.md
 *.spec
+
+# User settings (language, future per-PC preferences). Lives next to the exe in
+# frozen builds / project root in dev. Local-only — separate per machine.
+/settings.json

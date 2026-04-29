@@ -44,6 +44,14 @@ Speculative side-quest from the future-direction discussion. Competing for budge
 - [ ] **Mac build investigation.** Confirm whether pygame + win32-only deps (e.g. `keyboard` library, `win32gui`, `dxcam`) can be cleanly excluded behind `sys.platform == "win32"` guards.
 - [ ] **First-run smoothness.** Whatever needs polishing for the ~1800 video-play / occasional-railfan audience.
 
+## Chrome / i18n / OOBE
+
+The chrome i18n foundation shipped 2026-04-29 evening: `i18n.py`, language picker, setup-screen translation, EN-mode font swap to HelveticaNeue-Bold, line-marker badges, lifted theme. Open follow-ups:
+
+- [ ] **OOBE first-time start guide.** Multi-screen post-language-picker walkthrough — app intro (audio is the main feature, LCD is navigation, controls), OCR Auto-PA preview-feature disclaimer + screen-capture privacy notice (the existing TODO under § Auto-input/OCR), then setup screen. Builds on the i18n infrastructure shipped this session. Settings-file presence already gates the picker; OOBE flow can use the same gate.
+- [ ] **Refine ZH translation phrasing in `data/translations_app.json`.** Strings tagged "draft pending user review" in the file's `_comment`. User is native zh-HK and will iterate on terminology when OOBE work brings more in-context strings to settle on.
+- [ ] **Add EN data translations for routes not covered by `translations.json` / `train_types.json`.** Today's EN mode falls back to kanji + CJK font for line 2 when a dest/type entry is missing (e.g. joban's `土浦`, mock route's `品川・高輪ゲートウェイ`). Long-term: add `english` field to route.json for route names + line-name itself, expand `translations.json` for missing dests. User: "in the future all of those will be in English."
+
 ## Housekeeping (small, do-when-you-touch-the-area)
 
 - [ ] **Delete iteration screenshots from project root** once eyeballed: `screenshot_v1_setup_off.png`, `screenshot_v1_setup_on.png`. They're gitignored but cluttering. (`memory/2026-04-27.md` § "Status for next session".)

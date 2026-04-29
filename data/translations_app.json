@@ -1,0 +1,71 @@
+{
+  "_comment": "App-chrome translations. Station/route names are NOT here — those live in data/translations.json. ZH-HK / ZH-CN strings here are draft pending user review (EN is authoritative).",
+
+  "picker.title": {
+    "en": "Choose Language",
+    "zh_HK": "選擇語言",
+    "zh_CN": "选择语言"
+  },
+  "picker.confirm": {
+    "en": "OK",
+    "zh_HK": "確定",
+    "zh_CN": "确定"
+  },
+  "picker.hint": {
+    "en": "↑↓: Navigate  |  Enter: Confirm",
+    "zh_HK": "↑↓:移動  |  Enter:確定",
+    "zh_CN": "↑↓:移动  |  Enter:确定"
+  },
+
+  "setup.title": {
+    "en": "Select Route",
+    "zh_HK": "選擇路線",
+    "zh_CN": "选择路线"
+  },
+  "setup.nav_hint": {
+    "en": "Up/Down: Navigate  |  Enter: Select  |  ESC: Cancel",
+    "zh_HK": "↑↓:移動  |  Enter:選定  |  ESC:取消",
+    "zh_CN": "↑↓:移动  |  Enter:选定  |  ESC:取消"
+  },
+  "setup.diagram_label": {
+    "en": "Diagram: {diagram}",
+    "zh_HK": "車序:{diagram}",
+    "zh_CN": "车序:{diagram}"
+  },
+  "setup.dest_label": {
+    "en": "Bound for {dest}",
+    "zh_HK": "開往 {dest}",
+    "zh_CN": "开往 {dest}"
+  },
+  "setup.no_routes": {
+    "en": "No routes found. Please add route.json files to the audio/ directory.",
+    "zh_HK": "找不到路線。請於 audio/ 目錄下加入 route.json 檔案。",
+    "zh_CN": "找不到路线。请在 audio/ 目录下添加 route.json 文件。"
+  },
+
+  "setup.ocr_state": {
+    "en": "OCR Auto-PA: {state}",
+    "zh_HK": "OCR 自動廣播:{state}",
+    "zh_CN": "OCR 自动广播:{state}"
+  },
+  "setup.on": {
+    "en": "ON",
+    "zh_HK": "開",
+    "zh_CN": "开"
+  },
+  "setup.off": {
+    "en": "OFF",
+    "zh_HK": "關",
+    "zh_CN": "关"
+  },
+  "setup.lead_label": {
+    "en": "Lead:",
+    "zh_HK": "提前距離:",
+    "zh_CN": "提前距离:"
+  },
+  "setup.interval_label": {
+    "en": "Interval:",
+    "zh_HK": "間隔:",
+    "zh_CN": "间隔:"
+  }
+}

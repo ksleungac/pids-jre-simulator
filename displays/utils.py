@@ -303,7 +303,7 @@ def draw_station_code_badge(
     code_3_x_offset: int = 0,
     code_3_y_offset: int = 4,
 ) -> None:
-    """Draw the framed station-code badge (e.g. JO25, JY03).
+    """Draw the framed station-code badge (e.g. JO25, JY03, or line-only "JO").
 
     The (x, y, w, h) rect describes the **framed JY/03 portion only** — the
     optional `code_3` 3-letter top band, when present, is drawn above the
@@ -314,15 +314,20 @@ def draw_station_code_badge(
     separated by `text_gap` (visible-pixel gap, measured via
     `get_bounding_rect`).
 
-    Returns silently if `sta_code` cannot be parsed into letters+digits.
-    Used by both upper-LCD (large badge with optional code_3 band) and the
-    lower-LCD 8-station view (smaller per-cell badge, no code_3 band).
+    `sta_code` may be letters+digits (`JY03`) or letters-only (`JY` — used
+    by the route selection screen as a line marker without station number,
+    in which case the letters are vertically centered with no number row).
+
+    Returns silently if `sta_code` cannot be parsed into letters [+ digits].
+    Used by upper-LCD (large badge with optional code_3 band), the lower-LCD
+    8-station view (smaller per-cell badge, no code_3 band), and the setup
+    screen (line-marker mode, letters only).
     """
-    m = re.match(r"([A-Za-z]+)(\d+)", sta_code or "")
+    m = re.match(r"([A-Za-z]+)(\d*)", sta_code or "")
     if not m:
         return
     letters = m.group(1).upper()
-    number = m.group(2)
+    number = m.group(2)  # may be empty (line-marker mode)
 
     inset = ring_black + ring_color
     interior_x = x + inset
@@ -349,16 +354,21 @@ def draw_station_code_badge(
     pygame.draw.rect(screen, WHITE_BG, pygame.Rect(interior_x, interior_y, interior_w, interior_h), 0, interior_radius)
 
     letter_surf = font_prefix.render(letters, True, text_color)
-    num_surf = font_num.render(number, True, text_color)
     l_rect = letter_surf.get_bounding_rect()
-    n_rect = num_surf.get_bounding_rect()
 
-    total_h = l_rect.height + text_gap + n_rect.height
+    if number:
+        num_surf = font_num.render(number, True, text_color)
+        n_rect = num_surf.get_bounding_rect()
+        total_h = l_rect.height + text_gap + n_rect.height
+    else:
+        total_h = l_rect.height
+
     start_y = interior_y + (interior_h - total_h) // 2 + text_y_offset
-
     screen.blit(letter_surf, (center_x + prefix_x_offset - l_rect.width // 2 - l_rect.x, start_y - l_rect.y))
-    num_y = start_y + l_rect.height + text_gap
-    screen.blit(num_surf, (center_x - n_rect.width // 2 - n_rect.x, num_y - n_rect.y))
+
+    if number:
+        num_y = start_y + l_rect.height + text_gap
+        screen.blit(num_surf, (center_x - n_rect.width // 2 - n_rect.x, num_y - n_rect.y))
 
     if code_3 and font_code_3 is not None:
         code_3_surf = font_code_3.render(code_3, True, WHITE_BG)

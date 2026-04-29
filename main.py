@@ -11,6 +11,8 @@ import pygame
 # Suppress pygame welcome message
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 
+import i18n
+from language_picker import LanguagePicker
 from setup import SetupScreen
 from app import PASimulator
 
@@ -24,9 +26,25 @@ def main():
     # Get the directory where the executable is located
     BASE_DIR = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
 
-    # Create screen for setup
+    # Create screen for setup (also reused by the first-run language picker)
     screen = pygame.display.set_mode((730, 420))
-    pygame.display.set_caption("PA Simulator - Route Selection")
+    pygame.display.set_caption("PA Simulator")
+
+    # First-run language picker. Settings file absent or missing 'language' →
+    # show picker; otherwise skip straight to setup with the saved language.
+    settings = i18n.load_settings()
+    lang = settings.get("language")
+    if lang not in i18n.SUPPORTED_LANGS:
+        i18n.init(i18n.detect_default_lang())  # so picker chrome can render
+        chosen = LanguagePicker(screen).run()
+        if chosen is None:
+            print("Language selection cancelled. Exiting.")
+            pygame.quit()
+            return
+        lang = chosen
+        settings["language"] = lang
+        i18n.save_settings(settings)
+    i18n.init(lang)
 
     # Run setup screen to select route + OCR Auto-PA toggle/lead/interval
     setup = SetupScreen(screen)

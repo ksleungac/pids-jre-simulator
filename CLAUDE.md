@@ -97,7 +97,10 @@ Rules:
 ```
 pids_jre_simulator/
 ├── main.py, app.py, audio.py, constants.py
+├── i18n.py, language_picker.py        # App-chrome i18n (settings, locale detect, font, t()) + first-run picker
+├── setup.py                           # Route selection screen (line badge, EN translation lookup, theme)
 ├── preview_display.py                 # Audio-free preview entry point — uses PASimulator(preview=True)
+├── preview_chrome.py                  # Chrome screenshot tool for picker / setup iteration
 ├── displays/                          # Modular display system
 │   ├── base.py                        # DisplayMode enum, ModeCycler
 │   ├── utils.py                       # ALL drawing primitives + display-domain helpers (draw_text, draw_aapolygon, arrow_points, draw_station_code_badge, draw_route_disclaimer, draw_continuity_*)
@@ -106,8 +109,9 @@ pids_jre_simulator/
 │       ├── upper_lcd.py               # JapaneseDisplay + FuriganaDisplay (inherits Japanese, no override) + EnglishDisplay + UpperDisplay manager
 │       └── lower_lcd.py               # JapaneseDisplay (full route) + JapaneseEightStationDisplay (8-station zoomed) + EnglishDisplay placeholder + LowerDisplay manager (24s view-cycler)
 ├── data/
-│   ├── translations.json              # Station names (furigana, english)
+│   ├── translations.json              # Station names (furigana, english) — for LCD rendering
 │   ├── train_types.json               # Train type English translations
+│   ├── translations_app.json          # App-chrome strings (en / zh_HK / zh_CN), separate from LCD data
 │   └── stations.json                  # Station metadata, line-independent (3-letter codes; more fields later)
 └── audio/
     ├── [line]/[diagram]/route.json    # Real routes
@@ -124,7 +128,9 @@ pids_jre_simulator/
 | `displays/` | Modular per-train-model UpperDisplay + LowerDisplay (E235-1000): set_state(), update(), draw() |
 | `displays/train_models/{model}/__init__.py` | Per-model manifest: dimensions, palette, exported display classes. Where each train series declares its physical LCD shape. |
 | `app.py` | PASimulator, AppState, translation loading, PA/STA handling |
-| `main.py` | Entry point, setup screen, error handling |
+| `i18n.py` | App-chrome i18n: settings persistence (alongside-exe), locale detection, `t()` translation lookup, per-language SysFont helper. NOT used for LCD station-name rendering. |
+| `language_picker.py` / `setup.py` | First-run language picker + route-selection screen. Both consume `i18n.t()` / `i18n.font()`. |
+| `main.py` | Entry point, picker → setup screen orchestration, error handling |
 
 ## Key Features
 
