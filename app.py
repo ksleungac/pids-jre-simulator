@@ -109,6 +109,12 @@ class _SilentAudio:
     def is_playing(self) -> bool:
         return False
 
+    def position(self) -> Optional[float]:
+        return None
+
+    def duration(self) -> Optional[float]:
+        return None
+
     def cleanup(self) -> None: ...
 
 
@@ -721,11 +727,12 @@ class PASimulator:
         if self.state.cnt_sta < len(sta_tracks) - 1:
             self.state.cnt_sta += 1
 
-    # CONTRACT: snapshot/restore is for the OOBE tutorial's [Back] button only.
-    # See WIP_oobe_tutorial.md § "Snapshot / restore (for [Back])".
-    # AppState fields are scalar-only (verified) so shallow copy via copy.copy()
-    # is sufficient; restore via __dict__.update() preserves the @property
-    # `cursor_pos` (which lives on the class, not the instance).
+    # CONTRACT: snapshot/restore is for the OOBE tutorial's [Back] button + the
+    # progress-bar's backward-jump path. AppState fields are scalar-only
+    # (verified) so shallow copy via copy.copy() is sufficient; restore via
+    # __dict__.update() preserves the @property `cursor_pos` (which lives on
+    # the class, not the instance). Caller is responsible for resyncing
+    # other sim-side state (audio, upper LCD's set_state) on restore.
     def snapshot_state(self) -> AppState:
         """Snapshot AppState for tutorial [Back] navigation.
 

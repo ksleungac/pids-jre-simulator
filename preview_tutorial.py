@@ -73,6 +73,7 @@ def render(step: int = 1, lang: str = "en", out: str = "screenshot_tutorial.png"
         # Mirror _tick_sim's final overlay step so step-specific callouts
         # appear in the screenshot.
         tut._draw_callout()
+        tut._draw_pa_hint_highlight()
 
     tut._draw_progress_bar()
     tut._draw_panel()
