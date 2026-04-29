@@ -189,9 +189,11 @@ class AudioPlayer:
         mixer.music.stop()
 
     def cleanup(self) -> None:
-        """Clean up resources."""
-        mixer.quit()
+        """Clean up resources. Caller-driven only — never tied to GC.
 
-    def __del__(self):
-        """Destructor to clean up resources."""
-        self.cleanup()
+        Tutorial flow drops the PASimulator reference between tutorial and
+        setup; if a `__del__` here called `mixer.quit()` at GC time, the
+        downstream setup screen and main app would inherit a dead mixer.
+        Cleanup is explicit (PASimulator.cleanup → here) on app exit only.
+        """
+        mixer.quit()

@@ -1,5 +1,6 @@
 """Main application class for PA Simulator."""
 
+import copy
 import os
 import json
 import pygame
@@ -104,6 +105,7 @@ class _SilentAudio:
     def play_pa_at_station(self, *args, **kwargs) -> None: ...
     def play_sta(self, *args, **kwargs) -> None: ...
     def pause(self) -> None: ...
+    def stop(self) -> None: ...
     def is_playing(self) -> bool:
         return False
 
@@ -113,7 +115,15 @@ class _SilentAudio:
 class PASimulator:
     """Main application class managing game loop and state."""
 
-    def __init__(self, work_dir: str, route_data: Optional[Dict] = None, preview: bool = False, auto_input: bool = False):
+    def __init__(
+        self,
+        work_dir: str,
+        route_data: Optional[Dict] = None,
+        preview: bool = False,
+        auto_input: bool = False,
+        tutorial: bool = False,
+        target_surface: Optional[pygame.Surface] = None,
+    ):
         """Initialize the PA Simulator.
 
         Args:
@@ -138,9 +148,21 @@ class PASimulator:
                 — it draws to a sub-surface positioned below the panel and is
                 unaware of the offset. Populated by `auto_input.AutoDriver` via
                 `self.auto_input_status` dict.
+            tutorial: If True, the simulator runs as an embedded LCD inside
+                the OOBE tutorial's larger window (1100×500). Caller (tutorial.py)
+                creates the display + supplies ``target_surface`` (the LCD
+                sub-surface). Skips ``pygame.display.set_mode``, the win32 window
+                pin, and the caption set; uses real ``AudioPlayer`` for live audio.
+                Tutorial drives the sim via direct method calls (``_next_pa`` /
+                ``_next_sta`` / ``jump_to_stop``) and ticks the render path
+                manually each frame — does NOT call ``run()``.
+            target_surface: Pre-allocated LCD render target. Required when
+                ``tutorial=True``; ignored otherwise.
         """
         self.preview = preview
         self.auto_input = auto_input
+        self.tutorial = tutorial
+        self.target_surface = target_surface
         self.work_dir = work_dir
         self.route_data = route_data
         self._load_route_data()
@@ -273,15 +295,28 @@ class PASimulator:
         and ``self.screen`` is a sub-surface positioned below the panel area —
         existing LCD code is oblivious to the offset. ``self.debug_surface`` is
         the panel's own sub-surface (None when auto-input is off).
+
+        When ``tutorial`` is True, ``self.screen`` is the caller-provided
+        ``target_surface`` (a sub-surface inside the tutorial's 1100×500
+        window). We do NOT call ``set_mode`` (would resize the tutorial
+        window), do NOT pin a window position, and do NOT re-init the mixer
+        (caller has already initialized it via main.py at startup).
         """
         pygame.init()
+        if self.tutorial:
+            # Caller owns the display + mixer; just bind our render target.
+            self.clock = pygame.time.Clock()
+            self.window = pygame.display.get_surface()
+            self.screen = self.target_surface
+            self.debug_surface: Optional[pygame.Surface] = None
+            return
         if not self.preview:
             pygame.mixer.init()
         self.clock = pygame.time.Clock()
         panel_h = DEBUG_PANEL_HEIGHT if self.auto_input else 0
         self.window = pygame.display.set_mode((S_WIDTH, S_HEIGHT + panel_h))
         if self.auto_input:
-            self.debug_surface: Optional[pygame.Surface] = self.window.subsurface((0, 0, S_WIDTH, panel_h))
+            self.debug_surface = self.window.subsurface((0, 0, S_WIDTH, panel_h))
             self.screen = self.window.subsurface((0, panel_h, S_WIDTH, S_HEIGHT))
         else:
             self.debug_surface = None
@@ -409,7 +444,16 @@ class PASimulator:
         )
 
     def _handle_input(self) -> None:
-        """Dispatch input handling based on mode."""
+        """Dispatch input handling based on mode.
+
+        Tutorial mode never goes through ``run()`` (the tutorial drives the
+        sim manually via direct method calls), so this should never be invoked
+        in tutorial mode. Defensive guard catches misuse — without it, the
+        global ``keyboard`` library polling in ``_handle_input_main`` would
+        bypass the tutorial's action lock-down.
+        """
+        if self.tutorial:
+            return
         if self.preview:
             self._handle_input_preview()
         else:
@@ -676,6 +720,32 @@ class PASimulator:
 
         if self.state.cnt_sta < len(sta_tracks) - 1:
             self.state.cnt_sta += 1
+
+    # CONTRACT: snapshot/restore is for the OOBE tutorial's [Back] button only.
+    # See WIP_oobe_tutorial.md § "Snapshot / restore (for [Back])".
+    # AppState fields are scalar-only (verified) so shallow copy via copy.copy()
+    # is sufficient; restore via __dict__.update() preserves the @property
+    # `cursor_pos` (which lives on the class, not the instance).
+    def snapshot_state(self) -> AppState:
+        """Snapshot AppState for tutorial [Back] navigation.
+
+        Returns a shallow copy. Caller is responsible for re-syncing other
+        sim-side state (audio, upper LCD's set_state) on restore.
+        """
+        return copy.copy(self.state)
+
+    def restore_state(self, snap: AppState) -> None:
+        """Restore an AppState snapshot taken by snapshot_state().
+
+        Pauses in-flight audio (tutorial convention: state jumps pause, not
+        stop — silences the soundtrack but keeps the mixer warm) and re-sends
+        the upper LCD's set_state so its cached state matches the restored
+        AppState. Lower LCD reads state live from self.state each frame, so
+        no explicit re-bind is needed there.
+        """
+        self.audio.pause()
+        self.state.__dict__.update(snap.__dict__)
+        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=self.state.at_station)
 
     def cleanup(self) -> None:
         """Clean up resources."""

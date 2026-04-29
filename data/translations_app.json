@@ -1,5 +1,5 @@
 {
-  "_comment": "App-chrome translations. Station/route names are NOT here — those live in data/translations.json. ZH-HK / ZH-CN strings here are draft pending user review (EN is authoritative).",
+  "_comment": "App-chrome translations. Station/route names are NOT here — those live in data/translations.json. ZH-HK / ZH-CN strings here are draft pending user review (EN is authoritative). Tutorial keys (tutorial.*) are EN-only pending flow-finalization; ZH translations land after the flow stabilizes.",
 
   "picker.title": {
     "en": "Choose Language",
@@ -67,5 +67,99 @@
     "en": "Interval:",
     "zh_HK": "間隔:",
     "zh_CN": "间隔:"
+  },
+
+  "setup.tutorial_button": {
+    "en": "? Tutorial"
+  },
+
+  "tutorial.step_header": {
+    "en": "Step {n} of {total}"
+  },
+  "tutorial.btn.next": {
+    "en": "Next"
+  },
+  "tutorial.btn.back": {
+    "en": "Back"
+  },
+  "tutorial.btn.skip_step": {
+    "en": "Skip step"
+  },
+  "tutorial.btn.skip_tutorial": {
+    "en": "Skip tutorial"
+  },
+  "tutorial.btn.done": {
+    "en": "Done"
+  },
+
+  "tutorial.phase.at_station": { "en": "At station" },
+  "tutorial.phase.pre_departure": { "en": "Pre-departure" },
+  "tutorial.phase.departure_melody": { "en": "Departure melody" },
+  "tutorial.phase.departed": { "en": "Departed" },
+  "tutorial.phase.driving": { "en": "Driving" },
+  "tutorial.phase.approaching": { "en": "Approaching" },
+  "tutorial.phase.approached": { "en": "Approached" },
+  "tutorial.phase.click_jump": { "en": "Click jump" },
+  "tutorial.phase.recap": { "en": "Recap" },
+
+  "tutorial.step.1.body": {
+    "en": "'ただいま 国府津' on the upper LCD reads 'Now Stopping at Kōzu' — the train is parked at this platform. The pentagon on the route bar below shows your position on the line."
+  },
+  "tutorial.step.1.action": {
+    "en": "Press [[Next]] to begin the tutorial."
+  },
+  "tutorial.step.2.body": {
+    "en": "国府津 has multiple at-platform announcements queued — the yellow hint square on the upper LCD signals there's more than one."
+  },
+  "tutorial.step.2.action": {
+    "en": "Press [[PgDn]] to play one. Press again to hear the rest."
+  },
+  "tutorial.step.3.body": {
+    "en": "発車メロディ (departure melody) signals the doors are about to close. Pair it with the game's departure cue."
+  },
+  "tutorial.step.3.action": {
+    "en": "Press [[PgUp]] to play the melody."
+  },
+  "tutorial.step.4.body": {
+    "en": "The train will depart 国府津 and announce the next stop, 鴨宮 (Kamonomiya). The prefix changes from 'ただいま' to '次は' (next stop)."
+  },
+  "tutorial.step.4.action": {
+    "en": "Press [[PgDn]] to depart."
+  },
+  "tutorial.step.5.body": {
+    "en": "The countdown on the lower LCD ticks toward 鴨宮 in real time, sped up 60×. Watch the red arrow walk through the passing cells."
+  },
+  "tutorial.step.5.action": {
+    "en": "Wait 5 seconds, then press [[Next]]."
+  },
+  "tutorial.step.6.body": {
+    "en": "The prefix is about to flip from '次は' to 'まもなく' (arriving soon) — always the last announcement before a stop."
+  },
+  "tutorial.step.6.action": {
+    "en": "Press [[PgDn]] to play the arrival announcement."
+  },
+  "tutorial.step.7.body": {
+    "en": "One more press lands the train at 鴨宮 — the cycle repeats at every stop along the route."
+  },
+  "tutorial.step.7.action": {
+    "en": "Press [[PgDn]] to arrive."
+  },
+  "tutorial.step.8.body": {
+    "en": "You don't have to ride the whole route. Clicking a station name on the route map jumps the train there — the cycle restarts at the clicked station."
+  },
+  "tutorial.step.8.action": {
+    "en": "Click any station (like the example below) to try it."
+  },
+  "tutorial.step.8.body_after_click": {
+    "en": "Nice — you just jumped to {station}. The cycle restarts there."
+  },
+  "tutorial.step.8.action_after_click": {
+    "en": "Click another station to keep exploring, or press [[Next]] to wrap up."
+  },
+  "tutorial.step.9.body": {
+    "en": "You're set. Quick reference:\n\n[[PgDn]] — next announcement\n[[PgUp]] — departure melody\n[[End]] — pause audio\n[[Esc]] — quit\nClick any station — jump there"
+  },
+  "tutorial.step.9.action": {
+    "en": "Press [[Done]] to finish."
   }
 }

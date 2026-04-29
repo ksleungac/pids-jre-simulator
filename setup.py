@@ -12,17 +12,24 @@ from displays.utils import draw_station_code_badge
 class SetupScreen:
     """Handles route and train selection before starting the simulator."""
 
-    def __init__(self, screen: pygame.Surface):
+    def __init__(self, screen: pygame.Surface, show_tutorial_button: bool = False):
         """Initialize the setup screen.
 
         Args:
             screen: Pygame surface to draw on
+            show_tutorial_button: If True, render a "? Tutorial" button in the
+                top-right corner that returns the run-tutorial sentinel from
+                ``run()``. Caller (main.py) gates this on ``oobe_completed``
+                — first-launch users haven't seen the tutorial yet, so the
+                button is hidden until they finish (or skip) it.
         """
         self.screen = screen
+        self.show_tutorial_button = show_tutorial_button
         self.routes = []
         self.selected_idx = 0
         self.scroll_offset = 0
         self.row_height = 50
+        self._tutorial_btn_rect: pygame.Rect | None = None
         # Reserve ~60px below the route list for the OCR Auto-PA band, plus the usual
         # title (50px) and instructions (50px). Route list shrinks from 6 to 5 visible
         # rows on the default 420px-tall window.
@@ -170,6 +177,10 @@ class SetupScreen:
         title_img = self.title_font.render(title, True, self.text_color)
         title_x = (self.screen.get_width() - title_img.get_width()) // 2
         self.screen.blit(title_img, (title_x, 20))
+
+        # "? Tutorial" button top-right (only after OOBE is complete).
+        # Drawn before the route list so its hit-rect is set for the click loop.
+        self._draw_tutorial_button()
 
         # Calculate visible area
         start_idx = 0
@@ -380,6 +391,34 @@ class SetupScreen:
             return True
         return False
 
+    def _draw_tutorial_button(self) -> None:
+        """Render the "? Tutorial" replay button top-right. Sets
+        ``_tutorial_btn_rect`` for the click handler. No-op when
+        ``show_tutorial_button`` is False (first-launch users haven't seen
+        the tutorial yet, so we don't surface a "replay" affordance)."""
+        if not self.show_tutorial_button:
+            self._tutorial_btn_rect = None
+            return
+        # ── tuneable params ──────────────────────────────────────
+        margin_right = 12
+        margin_top = 12
+        btn_h = 28
+        btn_pad_x = 12
+        # ─────────────────────────────────────────────────────────
+        label = i18n.t("setup.tutorial_button")
+        label_img = self.control_font.render(label, True, self.text_color)
+        btn_w = label_img.get_width() + 2 * btn_pad_x
+        btn_x = self.screen.get_width() - margin_right - btn_w
+        btn_y = margin_top
+        rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+        pygame.draw.rect(self.screen, self.control_bg, rect, border_radius=btn_h // 2)
+        self.screen.blit(
+            label_img,
+            (rect.centerx - label_img.get_width() // 2,
+             rect.centery - label_img.get_height() // 2),
+        )
+        self._tutorial_btn_rect = rect
+
     def _draw_line_badge(self, x: int, cy: int, line_code: str, color: tuple) -> int:
         """Draw a JR-style line marker (2-letter code only, no station number) via
         the LCD's canonical badge helper. Vertically centered at `cy`. Returns the
@@ -432,11 +471,17 @@ class SetupScreen:
         pygame.draw.rect(self.screen, (180, 180, 180), pygame.Rect(bar_x, thumb_y, bar_width, int(thumb_height)), border_radius=3)
 
     def run(self) -> dict | None:
-        """Run the setup screen loop. Returns configuration or None if cancelled.
+        """Run the setup screen loop. Returns an action-keyed dict or None.
 
         Returns:
-            dict with {"work_dir": path, "route_data": data} when confirmed
-            None if user cancels (ESC)
+            ``{"action": "select", **config}`` when a route is confirmed
+                (config keys: ``work_dir``, ``route_data``, ``auto_input``,
+                ``lead_m``, ``interval_s``).
+            ``{"action": "run_tutorial"}`` when the user clicks the
+                "? Tutorial" button (only shown when ``show_tutorial_button``
+                is True). Caller is expected to run the tutorial then call
+                ``run()`` again to re-show the route picker.
+            ``None`` if the user cancels (ESC / window close).
         """
         self.scan_routes()
 
@@ -462,6 +507,13 @@ class SetupScreen:
                     if event.type == pygame.QUIT:
                         return None
                     if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        # ? Tutorial button takes priority — sits above the
+                        # OCR auto-PA band, so check it first.
+                        if (
+                            self._tutorial_btn_rect is not None
+                            and self._tutorial_btn_rect.collidepoint(event.pos)
+                        ):
+                            return {"action": "run_tutorial"}
                         self._handle_band_click(event.pos)
                         continue
                     if event.type == pygame.KEYDOWN:
@@ -479,6 +531,7 @@ class SetupScreen:
                                     with open(os.path.join(selected["path"], "route.json"), encoding="utf-8") as f:
                                         route_data = json.load(f)
                                     return {
+                                        "action": "select",
                                         "work_dir": selected["path"],
                                         "route_data": route_data,
                                         "auto_input": self.auto_input_enabled,
