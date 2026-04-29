@@ -1,6 +1,6 @@
-# WIP: OOBE Tutorial — implementation plan
+# WIP: OOBE Tutorial — design notes (post-implementation, refining)
 
-Pending design for the first-run tutorial that follows the language picker. Captures decisions from the 2026-04-29 OOBE discussion. Status: plan, awaiting /review+fix and user sign-off before implementation.
+Living doc for the first-run tutorial. Original plan landed via /review+fix in 3 cycles; this doc has been edited down to the parts still load-bearing for ongoing refinement. Step-by-step body/action copy and visual polish are still in flight — see "Open refinement items" at the bottom.
 
 ---
 
@@ -36,320 +36,149 @@ main.py:
 
 ## Window & layout
 
-**Tutorial owns its own pygame window**, sized **1100×500**:
+Tutorial owns its own pygame window, **1100×500**. Layout (current code, see `tutorial.py` for tuneable params):
 
-```
-┌─────────────────────────────────────────────────────────┐  40px
-│ progress bar — 7 phase cells, current highlighted        │
-├──────────────────────────────────┬──────────────────────┤
-│  LCD region (730×420)            │  Side panel (370×420) │
-│  ┌────────────────────┐          │  ┌──────────────────┐ │
-│  │ UPPER LCD          │          │  │ Step N of 9      │ │
-│  ├────────────────────┤          │  │ Title            │ │
-│  │ LOWER LCD          │          │  │ Body text        │ │
-│  └────────────────────┘          │  │ (game ss slot)   │ │
-│                                  │  │                  │ │
-│  callouts (overlay)              │  │  ◀ Back  Next ▶  │ │
-│                                  │  │  Skip step       │ │
-│                                  │  │  Skip tutorial   │ │
-│                                  │  └──────────────────┘ │
-└──────────────────────────────────┴──────────────────────┘  40px footer for buttons
-```
+- **Top strip (`PROGRESS_H = 64`)**: 9-circle stepper with connecting line + labels below each circle. Circles 1–7 are the audio cycle phases (At station / Pre-departure / Departure melody / Departed / Driving / Approaching / Approached); circles 8–9 cover the click-jump demo + recap. Each phase column is a click-target — clicking jumps to that step (forward via `_skip_step` chain, backward via snapshot restore).
+- **LCD subsurface `(0, PROGRESS_H, 730, 420)`**: live sim renders here every frame.
+- **Side panel `(730, PROGRESS_H, 370, 436)`**: phase-name header + small "Step N of 9" subtitle + body text + (step 8) flashing station-example card + action prompt (accent-green with left stripe) + button stack at the bottom (Back / Next, then Skip step / Skip tutorial below — both skip rows hidden on the wrap-up step so the recap body has full vertical budget).
+- **Background** = lifted slate `(62, 68, 80)`, matching picker / setup chrome.
+- LCD region is live throughout; mode cycler ticks, lower-view alternation runs, audio plays during action steps.
 
-- LCD blits to sub-surface at `(0, 40, 730, 420)`.
-- Side panel `(730, 40, 370, 420)`.
-- Buttons live in the bottom of the side panel.
-- Callouts (small outlined-box + arrow line to a region) overlay the LCD area as needed.
-- Background: lifted slate `(62, 68, 80)` matching setup/picker palette.
-- **LCD region is live throughout** — sim runs continuously, mode cycler ticks, lower view alternates, audio plays during action steps. Step 1 and step 9 (wrap-up) keep the LCD at 国府津 STOPPING (where boot left it / where step 8 click-jump landed); the side panel's wrap-up content sits next to a still-live LCD. (No special "blank" state.)
-- **Progress bar during steps 8 & 9:** all 7 phase cells rendered dim (post-cycle complete); no cell highlighted. Optional checkmark or "✓" overlay on each cell to convey "you've completed the cycle." Vibe-pass during implementation.
-
-**On tutorial exit**, the 1100×500 window is destroyed; main flow proceeds to setup with its native 730×420 window.
+On tutorial exit: stop in-flight audio, drop the sim ref (no `cleanup()` — that calls `pygame.quit()`), `pygame.display.set_mode((730, 420))` to hand the window back to the setup screen.
 
 ---
 
-## Step content (9 steps total)
+## Step machine
 
-Boot: `PASimulator` instantiated on tokaido/1865E, `jump_to_stop(13)` lands STOPPING@国府津. Tutorial in step 1.
+Boot: `PASimulator(work_dir="audio/tokaido/1865E", tutorial=True, target_surface=lcd_subsurface)`, then `jump_to_stop(13)` lands STOPPING@国府津.
 
-### Progress bar phase mapping
+Step content lives entirely in `data/translations_app.json` under `tutorial.step.{n}.body` + `tutorial.step.{n}.action` keys (step 8 also has `body_after_click` + `action_after_click` variants). Phase labels live under `tutorial.phase.{name}`. EN-only pending flow finalization.
 
-```
-🚉 At station → 🔔 Pre-departure → 🎵 Departure melody → 📢 Departed → 🚆 Train Driving → 📢 Approaching → 🚉 Approached
-```
+### Step descriptor (`tutorial.py:Step`)
 
-Steps 1–7 each illuminate exactly one phase cell. Step 8 illuminates none (post-cycle). Step 9 is wrap-up panel.
+Frozen dataclass. Per-step fields:
+- `n: int` — 1..9
+- `phase_idx: int | None` — progress-bar circle index (currently 0..8 for all steps)
+- `allowed: frozenset[str]` — subset of {`pgdn`, `pgup`, `click`}
+- `predicate: Callable[Tutorial, bool]` — gates [Next]
+- `next_handler` — runs on [Next], BEFORE advancing (e.g. step 2's pa_at_station exhaustion)
+- `skip_handler` — runs on [Skip step], BEFORE advancing
+- `entry_handler` — runs inside `_enter_step` AFTER `audio.pause()` and BEFORE the snapshot. Used for steps that need a deterministic starting state regardless of inbound path. Currently only step 8 (`_entry_step8`: `audio.pause()` + `jump_to_stop(14)`).
+- `min_dwell_s: float` — step 5 = 5.0; gates `_pred_min_dwell`
+- `lock_after_first_action: bool` — True for steps where chained presses would cross a phase boundary; False for step 2 (multi-press through `pa_at_station`), step 3 (STA can be replayed), step 8 (multi-click jumps).
+- `callout_rect: tuple | None` — optional LCD-local outline. Currently unset on every step (step 8's route-bar callout was prototyped then removed — see Open items).
 
-### Step table
+### State-jump convention
 
-| # | Phase | Action expected | Predicate (enables [Next]) | Side-panel body |
-|---|---|---|---|---|
-| 1 | 🚉 At station | none | passive — [Next] always | "You're at 国府津. The 'ただいま' prefix on the upper LCD = currently at the platform. The pentagon on the lower LCD shows your position." |
-| 2 | 🔔 Pre-departure | `PageDown` | PA audio finished | "Press `PageDown` to play the at-platform announcement. The yellow hint square means there's more than one PA queued — press again to hear them all." |
-| 3 | 🎵 Departure melody | `PageUp` | STA audio finished | "Press `PageUp` for the 発車メロディ (departure melody). IRL this signals the doors are about to close. (Game-pairing slot.)" |
-| 4 | 📢 Departed | `PageDown` | dep PA (`pa[0]`) audio finished | "Press `PageDown`. The train departs 国府津 and announces 鴨宮. Watch the prefix change to '次は' (next stop)." |
-| 5 | 🚆 Train Driving | none | passive — min 5s dwell, then [Next] | "The countdown on the lower LCD ticks down toward 鴨宮 in real-time at 60× speed. Watch the red arrow walk through the cells." |
-| 6 | 📢 Approaching | `PageDown` | arr PA (`pa[1]`) audio finished | "Press `PageDown`. The prefix flips to 'まもなく' (final approach) — always the last announcement before a stop." |
-| 7 | 🚉 Approached | `PageDown` | sim lands STOPPING@鴨宮 | "Press `PageDown` once more. The train arrives at 鴨宮; the cycle repeats every stop." |
-| 8 | (post-cycle, no phase) | click any lower-LCD station | click → `jump_to_stop` fired | Pre-click: "You don't have to ride the whole route. Click any station on the lower LCD to jump there. Try it." Post-click (dynamic): "Nice — you just jumped to {station_kanji} ({station_english if available, else omit}). The cycle restarts there." |
-| 9 | wrap-up panel | none | [Done] | Cheat-sheet: `PageDown`=PA, `PageUp`=STA, `End`=pause, `Esc`=quit, click-station=jump. (Game-pairing slot table.) |
+Every state transition pauses (not stops) in-flight audio first, then mutates state. This silences the soundtrack but keeps the mixer warm; it ALSO clears `_next_pa`'s audio guard so skip-chains advance cleanly even when previous-step audio is still playing.
 
-### Step 5 minimum dwell
+Applied at three sites:
+- `_enter_step`: `audio.pause()` → `entry_handler(tut)` → snapshot.
+- `_skip_step`: `audio.pause()` → step's `skip_handler` → `_advance_step` (which runs `next_handler` + `_enter_step(n+1)`).
+- `_dispatch_action` ACT_CLICK: `audio.pause()` → `sim.jump_to_stop(target)`.
 
-[Next] grays out for the first 5s **measured from step-5 entry time** (`step_entered_at`) so the user actually sees the countdown move. After 5s, [Next] enables. No max — they can keep watching.
+`PASimulator.restore_state` (used by [Back]) also pauses (was `audio.stop()`).
 
-### Step 4 / 6 audio completion
+### Step 2 — pa_at_station cap
 
-`pa[0]="25"` already played before tutorial boot (国府津 had been approached). The tutorial uses `pa` of **国府津's next stop (鴨宮 idx 14, `pa=["29","30"]`)**:
-- Step 4 fires the dep PA `29` (= "{国府津 を発車しました} 次は 鴨宮").
-- Step 6 fires the arr PA `30` (= "まもなく 鴨宮").
+`国府津.pa_at_station = ["27", "28"]`. Step 2 allows multi-press (`lock_after_first_action=False`) so the user can hear both. **Inline guard in `_dispatch_action`:** once `cnt_pa_at_station >= len(pa_at_station) - 1`, further PgDn is swallowed before reaching `_next_pa`. Otherwise the press would fall into the pa-exhausted branch and advance to the next stop — that's step 4's job, and it'd create a state mismatch with the panel telling the user they're still pre-departure.
 
-This works because after 国府津 STOPPING + (forced pa_at_station exhaustion via step 2's [Next] handler — see below) + STA, the next `PageDown` calls `_advance_to_next_stop` (cnt_pa_at_station already at exhausted sentinel), advances curr_stop to 14 (鴨宮), `cnt_pa=0`, plays `pa[0]=29`. Following PgDn plays `pa[1]=30`. Following PgDn lands STOPPING@鴨宮 via `_next_in_approaching`'s pa-exhausted branch (`cnt_pa < len(pa)-1` False → at_station=True).
+`next_handler` (and `skip_handler`) for step 2 force-set `cnt_pa_at_station = len - 1` so that step 4's PgDn correctly triggers `_advance_to_next_stop` even if the user only listened to the first entry.
 
-### 国府津's pa_at_station has 2 entries — predicate AND [Next] handler
+### Step 4 / 6 / 7 cycle
 
-`pa_at_station=["27","28"]`. Step 2 satisfies on **first audio completion** (one entry plays — keeps the step quick). User can press `PageDown` again to hear `28`; yellow square is visible throughout demonstrating the multi-PA hint.
+After step 2 + step 3 (STA — independent of cycle counters), the train is still STOPPING@国府津 with `cnt_pa_at_station` exhausted.
+- Step 4 PgDn → `_advance_to_next_stop` fires `pa[0]="29"` ("国府津を発車しました 次は 鴨宮"); curr_stop=14, cnt_pa=0.
+- Step 5 = passive 5s dwell to watch the countdown move.
+- Step 6 PgDn → `_next_pa` plays `pa[1]="30"` ("まもなく 鴨宮"); cnt_pa=1.
+- Step 7 PgDn → `_next_pa` falls into STOPPING@鴨宮 via the pa-exhausted branch (no audio).
 
-**State-coherence requirement:** Step 2's [Next] click must silently force `sim.state.cnt_pa_at_station = len(pa_at_station) - 1` before transitioning. Otherwise: user hears only `27`, clicks [Next], proceeds to step 3 (STA, fine), then step 4's `PageDown` plays `28` instead of 鴨宮's `29` because the sim is still in pa_at_station-cycling state. Forcing cnt_pa_at_station to "exhausted" ensures the next non-STA `PageDown` triggers `_advance_to_next_stop`. (Pure state mutation, no audio fired.) Same logic applies if step 2 is Skip-Step'd (see "Skip step" below).
+### Step 8 — click-jump demo
+
+Entry handler forces STOPPING@鴨宮 regardless of inbound state. Side panel shows a flashing station-example card (`_draw_station_illustration`, sine-pulse border between `ACCENT_COLOR` and `ACCENT_BRIGHT` over 1.2 s; hides after first click). User can click any visible station — each click pauses audio + `jump_to_stop(target)`. Predicate `_pred_step8_clicked` just needs `_action_in_step` set once.
+
+### Step 9 — recap
+
+Wrap-up panel. Body = quick-reference cheat sheet using `[[Key]]` markup; action = "Press [[Done]] to finish." Skip buttons hidden — primary [Back]/[Done] row drops to bottom.
 
 ---
 
-## Tutorial-state machine
+## UI rendering
 
-Internal Tutorial class state:
+### Mixed-script + keycap renderer
 
-```
-TutorialState:
-  current_step: int            # 1..9
-  predicate_satisfied: bool    # gates [Next]
-  step_entered_at: float       # for step 5's min-dwell
-  state_stack: list[Snapshot]  # one per step entered, for [Back]
-```
+Chrome uses bundled OTFs, not `pygame.font.SysFont`:
+- `HelveticaNeue-Roman/Medium/Bold.otf` for Latin (covers macron `ō` etc., which SysFont JhengHei tofu'd).
+- `ShinGoPr6N-Medium/Heavy.otf` for CJK glyphs.
 
-Per-step descriptor (declarative):
+`_render_mixed(text, latin_font, cjk_font, color)` splits text into Latin / CJK / keycap runs and concatenates with baseline alignment via `font.get_ascent()`. `_measure_mixed` mirrors it for word-wrap.
 
-```
-Step:
-  phase: str | None            # progress bar cell, or None for step 8/9
-  body_key: str                # i18n lookup
-  callout_target: Region | None
-  allowed_actions: set[Action] # {PgDn} / {PgUp} / {Click} / {} / {} (passive)
-  predicate: Callable          # given sim/audio state → bool
-  min_dwell_s: float = 0       # step 5 = 5.0
-```
+Body strings can embed `[[KeyName]]` markup; the run-splitter (`_split_runs`) yields a `RUN_KEYCAP` segment which renders via `_render_keycap(label, font)`. Keycap visual = sunken slate chip (fill darker than panel bg, thin cool-gray border, soft white text); used for both keyboard keys (`[[PgDn]]`, `[[Esc]]`) and side-panel button names (`[[Next]]`, `[[Done]]`).
 
-### Action lock-down
+### Body / action split
 
-The tutorial owns its own pygame event loop (1100×500 window) and ticks the sim manually each frame — it does NOT call `sim.run()`. `PASimulator.__init__` accepts a new `tutorial=True` parameter that suppresses the keyboard-library polling path entirely (same pattern as `preview=True`); the tutorial's input arrives via pygame events only and is dispatched by the tutorial's filter.
+Each step has TWO i18n keys:
+- `tutorial.step.{n}.body` — explanation, rendered in `TEXT_COLOR`.
+- `tutorial.step.{n}.action` — "do this" prompt, rendered in `ACCENT_BRIGHT` with a small left-side accent stripe.
 
-The sim is driven by direct method calls — NOT via `pending_next_pa` (which is for AutoDriver's background-thread → main-loop pattern and is incompatible with the tutorial's own loop):
+Step 8 has post-click variants (`body_after_click` + `action_after_click`).
 
-- Tutorial calls `sim._next_pa()` to fire a PA press.
-- Tutorial calls `sim._next_sta()` (or equivalent) to fire an STA press.
-- Tutorial calls `sim.jump_to_stop(idx)` for click-to-jump in step 8 and the boot-time positioning at idx 13.
+### Snapshot / restore (for [Back] and progress-bar backward jumps)
 
-Each frame, tutorial ticks the LCD render path in this exact order (verified against `sim.run()`):
+`AppState` is a plain class with scalar-only fields (verified at `app.py:18–47`). Snapshot via `copy.copy(sim.state)` (shallow is sufficient).
 
-```python
-sim.state.update_skip_progress(ts)   # FIRST — mutates skip_progress that cursor_pos derives from
-sim.upper.update(ts)
-sim.upper.draw(time_str)
-sim.lower.draw(ts)
-# tutorial then draws side panel + callouts + progress bar to its own surface
-# tutorial owns the parent-window pygame.display.flip()
-```
+Snapshots are taken inside `_enter_step` AFTER `audio.pause()` + `entry_handler` so the saved state matches the canonical step-entry state. Restore via `PASimulator.restore_state(snap)` → `audio.pause()` + `state.__dict__.update(snap.__dict__)` + `upper.set_state(...)` to re-bind the upper LCD's cached fields.
 
-The order matters: `update_skip_progress` must run before `lower.draw` so the cursor position is fresh that frame. Tutorial does NOT call `_render_panel()` (debug panel; auto_input only) or `_handle_input()` (real-app event loop) or `_update_hover_cursor()` (real-app; tutorial manages its own cursor for side-panel buttons).
-
-Filter dispatches based on the active step's `allowed_actions`:
-
-- Always allowed (side-panel handler): clicks on Back/Next/Skip-step/Skip-tutorial.
-- Always allowed: window close (`QUIT`) → exit tutorial without setting `oobe_completed`.
-- Always allowed (intercepted): `Esc` → confirm-quit modal → either ignore or trigger Skip-tutorial.
-- Allowed per step's `allowed_actions`:
-  - `K_PAGEDOWN` → tutorial calls `sim._next_pa()` if step allows. Multiple presses within a step are fine — sim cycles forward, predicate latches True on first audio completion. Press AFTER predicate-satisfied is rejected if it would cross a phase boundary (so Driving phase can't be skipped via spamming PgDn).
-  - `K_PAGEUP` → tutorial calls `sim._next_sta()` if step allows.
-  - `K_END` → `sim.audio.pause()` (always allowed; safety/comfort).
-  - `MOUSEBUTTONDOWN` on lower-LCD area → tutorial computes hit-test via `sim.lower.hit_test(state, mx, my)` and calls `sim.jump_to_stop(target)` if step 8 (otherwise swallowed; renderer hover-cursor returns arrow not hand).
-- Everything else → swallowed silently.
-
-### Snapshot / restore (for [Back])
-
-`AppState` is a plain class (NOT decorated with `@dataclass`), with scalar-only fields (verified at `app.py:18–47`). Snapshot via `copy.copy(sim.state)` (shallow is sufficient — no list/dict fields on AppState itself; any collections live on `PASimulator`, not on its `state`).
-
-On step entry: push `Snapshot(state_copy=copy.copy(sim.state))` to stack. Restore on [Back]:
-
-```python
-sim.audio.stop()                              # truncate any in-flight audio
-sim.state.__dict__.update(snap.state_copy.__dict__)  # restore scalar fields
-predicate_satisfied = step_predicate(prev_step, sim) # re-eval; often True since user already acted
-```
-
-[Back] from step 1 is disabled. [Back] from step 9 (wrap-up) goes to step 8.
+[Back] from step 1 is disabled. Progress-bar backward clicks restore from the target step's snapshot directly (multi-step [Back]). Forward clicks run intermediate `_skip_step`s in a loop.
 
 ### Skip step
 
-**Skip-step applies the step's underlying state mutation directly (no audio replay)** so the sim stays in the state downstream steps expect, without forcing the user to listen to audio they've explicitly skipped. Per-step skip-handlers:
-
-| Step | Skip-handler |
-|---|---|
-| 1 (At station) | step++ (no sim mutation) |
-| 2 (Pre-departure) | `state.cnt_pa_at_station = len(pa_at_station) - 1`; step++. Same idempotent force-set that the [Next] handler applies — works whether predicate was satisfied or not. |
-| 3 (Departure melody) | step++ (STA is independent of cnt_* counters; skipping just doesn't play it). |
-| 4 (Departed) | call `sim._advance_to_next_stop()` directly (state-only, since `_advance_to_next_stop` does play `pa[0]` audio — actually firing audio is unavoidable here; **resolved: accept the audio fires**, since state coherence requires the curr_stop advance + cnt_pa init that only `_advance_to_next_stop` provides). step++. |
-| 5 (Train Driving) | step++ (passive). |
-| 6 (Approaching) | call `sim._next_pa()` (fires arr `pa[1]=30` audio; same accept-audio rationale as step 4 — `_next_in_approaching` does the cnt_pa increment we need). step++. |
-| 7 (Approached) | call `sim._next_pa()` (fires the pa-exhausted-branch transition into STOPPING@鴨宮; no audio since the branch doesn't call `play_pa`). step++. |
-| 8 (Click-to-jump) | step++ (no jump applied; sim stays at 鴨宮 if user reached it cleanly, else wherever cycle left it). |
-
-The mixed pattern (state-only for 2/3/5/7/8, audio-fires for 4/6) is acceptable — Skip-step is an escape hatch, not a hot path. [Back] after Skip restores the per-step snapshot regardless.
+Each step's `skip_handler` applies the underlying state mutation so downstream steps stay coherent. Mixed pattern (state-only for steps 2/3/5/7/8, audio-fires for steps 4/6) — Skip-step is an escape hatch, not a hot path. [Back] after Skip restores via snapshot regardless. The audio.pause at the top of `_skip_step` clears `_next_pa`'s audio guard so chained skips with audio in flight don't silently no-op.
 
 ### Skip tutorial
 
-Confirm-modal → if confirmed: jumps directly to step 9 (wrap-up panel) → [Done] sets `oobe_completed=True`.
+Jumps directly to step 9 (no confirm-modal yet — TODO).
 
 ---
 
-## File-level changes
+## Action filter (lock-down)
 
-### New files
+The tutorial owns its own pygame event loop and ticks the sim manually; `PASimulator(tutorial=True)` suppresses the keyboard-library polling path. All input arrives via pygame events and is dispatched by `_dispatch_action` (or `_handle_panel_click` / `_handle_progress_click` for chrome).
 
-- **`tutorial.py`** — `Tutorial` class. Owns 1100×500 window, instantiates `PASimulator(tokaido/1865E, tutorial=True)`, drives the step machine, renders progress bar + side panel + callouts on top of LCD subsurface. ~300–400 lines.
-- **`WIP_oobe_tutorial.md`** — this doc. Removed once shipped + memory entry written.
+`_dispatch_action(action)` dispatches the user's action only when:
+1. `action in step.allowed`
+2. Not (`step.lock_after_first_action and self._action_in_step`)
+3. Sim is alive
+4. Step-specific guards pass (currently only step 2's `cnt_pa_at_station >= len-1` cap)
 
-### Modified files
+Actions:
+- `pgdn` → `sim._next_pa()`
+- `pgup` → `sim._next_sta()`
+- `click` → `audio.pause()` + `sim.jump_to_stop(target)` (target via `sim._click_target(lcd_x, lcd_y)`)
 
-- **`main.py`** — between picker and setup, gate on `settings.get("oobe_completed", False)`; if False, run `Tutorial`. On Done/Skip, set `settings["oobe_completed"] = True` and `i18n.save_settings()`. Then proceed to setup. **Cleanup decision (resolved cycle 2 + 3): tutorial does NOT call `PASimulator.cleanup()`** — that method calls `pygame.quit()` (full subsystem teardown), which would invalidate the mixer + display + everything; the existing setup screen would then fail. Instead, tutorial teardown:
-  1. `sim.audio.stop()` to silence any in-flight audio.
-  2. `pygame.display.set_mode((730, 420))` to switch the window back to setup's expected size.
-  3. Drop the `sim` reference (Python GC handles the AudioPlayer finalizer harmlessly — see `audio.py` change below).
-
-  Pygame mixer + display remain initialized for the setup screen and main app to inherit. `PASimulator.cleanup()` is reserved for full app exit (called from `main.py`'s `finally` block).
-- **`audio.py`** — remove the `mixer.quit()` from `AudioPlayer.__del__` (or remove the `__del__` finalizer entirely; cleanup is called explicitly on app exit). Today `__del__` calls `self.cleanup()` → `mixer.quit()`, which would fire at GC time when the tutorial drops its sim reference, tearing down the mixer the setup screen + main app are about to use. Fix: `__del__` either becomes `self.stop()` only, or is deleted (relying on explicit `PASimulator.cleanup()` → `audio.cleanup()` on app exit, which is the only place teardown actually needs to happen). **Lean: delete `__del__`.** Finalizers calling subsystem-quit functions are fragile in general — this is a correctness fix beyond just the tutorial use case.
-- **`app.py`** — three additions:
-  1. `PASimulator.__init__` accepts optional `tutorial=False` flag (matches existing `preview` and `auto_input` parameter shape). When True, suppresses the keyboard-library polling path in `_handle_input_main` (selecting a pygame-events-only path equivalent to `_handle_input_preview` semantics) so the tutorial's filter has full control.
-  2. `PASimulator.snapshot_state()` and `restore_state(snap)` methods. Implementation: `snapshot = copy.copy(self.state)`; restore = `self.state.__dict__.update(snap.__dict__)` + `self.audio.stop()`. Scalar-only fields verified.
-  3. The window/surface handoff: `PASimulator` accepts an optional `target_surface` so the tutorial can render the LCD into a sub-surface of its 1100×500 window. Today `app.py` calls `pygame.display.set_mode((730, 420 + panel_h))`; refactor to use the provided surface if non-None, else create its own. **Verify scope before implementing** — `display.flip()` calls happen inside renderers; with a sub-surface, the tutorial owns the flip on the parent window. Renderers may need to skip flip when running under tutorial.
-- **`setup.py`** — top-right **"? Tutorial"** labeled button (text, not icon-only), only renders when `oobe_completed=True` per settings. Click → `setup.run()` returns `{"action": "run_tutorial"}` (a typed-action dict). Existing return becomes `{"action": "select", "config": {...}}` (or stays `dict` with action key added; `main.py` dispatches on the action key). New i18n key: `setup.tutorial_button` ("? Tutorial" in EN). Title centering currently uses screen-width // 2 with no right-edge reservation — flag for visual-adjust pass to ensure the labeled button doesn't visually collide with the centered title at 730px width.
-- **`i18n.py`** — no API changes. New keys consumed via `t()`.
-- **`data/translations_app.json`** — ~35–45 new EN-only keys broken down as: 7 phase names, 9 step titles, 9 step bodies, 5 button labels (Next/Back/Skip step/Skip Tutorial/Done), 2–3 confirm-modal strings, 2–3 chrome strings ("Step N of 9", "Welcome to the tutorial", etc.). ZH-HK / ZH-CN slots left as `null` or absent; `t()` already falls back to EN. Add note in `_comment` flagging tutorial keys as EN-only-pending until flow is finalized.
-
-### Not modified (verify during implementation)
-
-- `displays/` — tutorial uses LCD as-is. No display changes.
-- `auto_input.py` — tutorial doesn't run in auto_input mode.
-- `audio.py` — tutorial uses existing `is_playing()` to gate predicates. **Verify** `is_playing` returns False as soon as the audio file ends, not just on explicit stop. (Pygame mixer behavior — `pygame.mixer.music.get_busy()` should suffice.)
+Window close (`QUIT`) and `Esc` exit the tutorial. `K_END` always pauses audio.
 
 ---
 
-## Implementation order
+## Open refinement items
 
-All draw methods in `tutorial.py` must use the **tuneable-params block** convention (`.claude/rules/conventions.md` § "UI code style"): magic numbers as labeled local variables at the top of the method, downstream coordinates derived from them. Apply at every step below that touches draw code.
-
-1. **Refactor `app.py` for surface/window handoff + snapshot/restore.** Smoke test by running normally — must be a pure refactor with zero behavior change. Verify `AppState` field-list is still scalar-only; verify `audio.stop()` semantics; verify mixer init/cleanup ordering survives. Snapshot/restore is technically reusable infra, but its only consumer is the tutorial — keep scoped to this PR.
-2. **Build `Tutorial` skeleton in `tutorial.py`** — window, progress bar, side panel chrome, button rects, all in tuneable-params blocks. No steps yet. Smoke test: shows blank progress bar + dummy LCD + dummy side panel.
-3. **Wire LCD subsurface render path.** Tutorial owns a `PASimulator(tutorial=True, target_surface=lcd_subsurf)`, ticks it each frame manually (mirroring `sim.run()`'s render path minus event ownership). Verify LCD renders inside the 1100×500 window at the right offset.
-4. **Startup-failure handling.** If `audio/tokaido/1865E/route.json` is absent (no-audio build, user deleted, etc.), tutorial logs a warning, sets `oobe_completed=True` (so we don't re-prompt every launch), and returns immediately to main.py which proceeds to setup. Same for `pa/27.mp3` etc. — if any file required by the cycle is missing, abort tutorial gracefully.
-5. **Step machine + step descriptors for steps 1–9.** Body strings stubbed (`"step 1 body"`). Test step transitions manually via [Next]/[Back]/[Skip step].
-6. **Predicates + audio-completion gating.** Wire `mixer.music.get_busy()` polling each tick. Test that [Next] grays/un-grays correctly. Step 2's [Next] handler also force-sets `cnt_pa_at_station = len(pa_at_station) - 1`.
-7. **Action lock-down filter.** Test that PgDn in step 1 is swallowed, PgDn in step 2 fires the PA via direct `sim._next_pa()` call.
-8. **Snapshot/restore on [Back].** Test backing from step 4 to step 3 — sim state restores, audio stops.
-9. **Skip-step "execute behind scenes."** Verify state coherence: skip step 2 → cnt_pa_at_station correct; skip step 4 → 鴨宮 pa[0] fired; etc.
-10. **Step 5 min-dwell timer.**
-11. **Callout overlay primitives.** Outlined-box + arrow line; positioned via per-step `callout_target` region. (Vibe first per user.)
-12. **Wire `?` button on setup.py + action-key return.** Tag with visual-adjust pass for title-collision check.
-13. **i18n keys — EN authoritative; tag tutorial keys in `_comment` as EN-only-pending.**
-14. **Smoke test full happy path** end-to-end: picker → tutorial steps 1–9 → setup → app. Plus failure paths: no audio, mid-tutorial close, [Skip Tutorial] from intro.
-15. **Run /review+fix on the implementation.**
+- **Step bodies + action wording** for steps 3 / 4 / 5 / 6 / 7 / 9 — only steps 1, 2, 8 sweep'd. Same body+action split applies; copy still in flight.
+- **Step 8 LCD callout** — original prototype (outline of route bar) read as too loud and didn't direct the eye to *one* clickable thing. Removed pending a clearer design — maybe per-cell highlight, chevron animation, or a connector line from the side-panel example to a real cell.
+- **ESC confirm-quit modal** — currently exits without confirm (TODO comment in `_handle_events`).
+- **Game-pairing screenshot slots** — placeholders implied in step 3 / 6 / 9 bodies; user provides screenshots later.
+- **ZH-HK / ZH-CN translations** — EN-only for now; flow stabilizes first.
 
 ---
 
-## Open questions for review
+## File touchpoints
 
-Resolved during /review+fix cycle 1 (kept here for traceability):
-
-- ~~**Skip-step semantics** — execute behind the scenes vs no-op?~~ **Resolved: execute behind the scenes.** State coherence requires it; downstream step bodies stay truthful.
-- ~~**Snapshot field types** — dataclass.replace?~~ **Resolved: `AppState` is a plain class (not `@dataclass`), all scalar fields. Use `copy.copy()`; `__dict__.update()` for restore.**
-- ~~**`audio.is_playing()` precision** — latency?~~ **Resolved: `mixer.music.get_busy()` returns False immediately on clip end; at 15 FPS the predicate fires within ~67 ms, invisible.**
-- ~~**Step 7 predicate viability**~~ **Resolved: `_next_in_approaching` falls through to STOPPING@鴨宮 via the pa-exhausted branch on the last PgDn; predicate `state.curr_stop == 14 AND at_station == True` is reached cleanly.**
-
-Still open: none. All design Qs resolved through cycles 1–3.
-
-Resolved post-cycle-3:
-- ~~Re-trigger button affordance~~ → labeled button "? Tutorial" top-right of setup.
-- ~~Step 8 click-to-jump constraints~~ → accept any station; tutorial responds dynamically with "Nice — you just jumped to {station}." Reads `sim.stops[sim.state.curr_stop]["name"]` (kanji) + optional English from `data/translations.json`.
-
----
-
-## Refinements (post-implementation, 2026-04-29 → 2026-04-30)
-
-Original plan above is preserved for traceability. The points below supersede it where they overlap.
-
-### Progress bar — stepper, not phase-cell row
-- 7 phase cells → **9 numbered circles** on a connecting line, labels below. Phase 8 = "Click jump", phase 9 = "Recap" (steps 8 / 9 are no longer post-cycle-dim — they're regular phases with their own active state).
-- Completed = filled `ACCENT_COLOR`; current = filled `ACCENT_COLOR` + bright outer ring (`ACCENT_BRIGHT`); future = `DOT_FUTURE` slate. Connecting line: `LINE_DIM` base, `ACCENT_COLOR` overlay through completed segments.
-- **Phase columns are click targets** — clicking a phase jumps to that step. Forward jumps run intermediate `skip_handler`s via `_skip_step` (so state stays coherent); backward jumps restore the snapshot taken on entry to the target step (same mechanic as [Back], multi-step).
-- `PROGRESS_H` grew 40 → 64 to fit circles + labels.
-
-### Panel header — phase name, not "Step N of 9"
-- Header line is now the phase name (matches the progress-bar label for the current step).
-- Old "Step N of 9" demoted to a small dim subtitle line under the header.
-- On the wrap-up step (no skip buttons), the primary [Back] / [Done] row drops to the panel bottom — frees the body's vertical budget for the cheat sheet.
-
-### Body / action split
-- Each step's translation now has TWO keys: `tutorial.step.{n}.body` (explanation) + `tutorial.step.{n}.action` (the "do this" prompt).
-- Body renders in `TEXT_COLOR`; action renders in `ACCENT_BRIGHT` with a small left-side accent stripe — visual callout without a horizontal divider.
-- Step 8 has post-click variants of both (`body_after_click` + `action_after_click`).
-
-### Inline keycap rendering
-- Body strings use `[[KeyName]]` markup; the run-splitter (`_split_runs`) now yields three kinds: Latin / CJK / keycap.
-- Keycap visual: **sunken slate chip** — fill darker than panel bg (`(38, 44, 56)`), thin cool-gray border (`(148, 158, 178)`), soft white text. Inline-`<kbd>` aesthetic, no fake-3D shadow strips.
-- Used for both keyboard keys (`[[PgDn]]`, `[[PgUp]]`, `[[End]]`, `[[Esc]]`) and side-panel button names (`[[Next]]`, `[[Done]]`).
-
-### Font swap — bundled OTFs, mixed-script renderer
-- Chrome no longer uses `pygame.font.SysFont("microsoftjhenghei", ...)`. SysFont JhengHei tofu'd Latin Extended-A glyphs (macron `ō` in `Kōzu`); the bold variant dropped even more.
-- Now uses bundled `HelveticaNeue-Roman/Medium/Bold.otf` for Latin (incl. macrons) and `ShinGoPr6N-Medium/Heavy.otf` for CJK.
-- `_render_mixed(text, latin_font, cjk_font, color)` splits into runs and concatenates with baseline alignment via `font.get_ascent()`. `_measure_mixed` mirrors it for word-wrap width measurement.
-- `_draw_wrapped_text` updated to take both fonts.
-
-### State-jump convention — pause audio + reset state
-- Every state transition in the tutorial pauses (not stops) in-flight audio first. This silences the soundtrack but keeps the mixer warm; it also clears `_next_pa`'s audio guard so skip-chains advance state cleanly even when previous-step audio is still playing.
-- Applied at:
-  - `_enter_step(n)`: `audio.pause()` → run target step's `entry_handler` → snapshot.
-  - `_skip_step()`: `audio.pause()` → `skip_handler` → `_advance_step`.
-  - `_dispatch_action` ACT_CLICK: `audio.pause()` → `sim.jump_to_stop(target)`.
-- `app.py:PASimulator.restore_state` switched `audio.stop()` → `audio.pause()` for consistency.
-
-### Step.entry_handler — deterministic step entry state
-- New field on `Step` descriptor: `entry_handler: Callable[Tutorial, None]`. Runs inside `_enter_step` AFTER the audio pause and BEFORE the snapshot — the snapshot captures the post-handler state, so future [Back] also lands on the canonical state.
-- **Step 8** is the only consumer: `_entry_step8` calls `sim.audio.pause() + sim.jump_to_stop(14)` to force STOPPING @ Kamonomiya regardless of how the user got here. Skip-paths that left state lagging are no longer a concern for step 8's demo.
-
-### Step 2 — PgDn capped at pa_at_station length
-- `lock_after_first_action=False` on step 2 (multi-press allowed for both at-station entries).
-- Inline guard in `_dispatch_action`: once `cnt_pa_at_station >= len(pa_at_station) - 1`, the dispatcher swallows further PgDn before it reaches `_next_pa`. Otherwise the press would fall through to the pa-exhausted branch and advance to the next stop — that's step 4's job, not step 2's.
-
-### Step 8 specifics
-- `lock_after_first_action=False` — user can click as many stations as they want; predicate `_pred_step8_clicked` just needs `_action_in_step` set once.
-- Each click pauses audio + jumps; entry_handler force-resets to Kamonomiya STOPPING.
-- Side-panel **station example card**: `_draw_station_illustration` mirrors a route-bar cell (kanji + romaji), hides after first click. Border **flashes** via a sine cycle between `ACCENT_COLOR` and `ACCENT_BRIGHT` (1.2 s period).
-- LCD callout outline (originally added) **removed pending a better design** — `_draw_callout` now only honors `Step.callout_rect` (still unset on all steps).
-
-### Step 1 wording — `ただいま` gloss corrected
-- Old: `'ただいま' = 'currently at the platform'`.
-- New: `'ただいま 国府津' on the upper LCD reads 'Now Stopping at Kōzu'` — closer to the actual PIDS semantic.
-
-### preview_tutorial.py
-- Now imports `STEPS` and invokes `STEPS[step - 1].entry_handler(tut)` after sim boot — so step 8 preview shows Kamonomiya STOPPING (matching runtime).
-- Now mirrors `_tick_sim`'s final overlay step (`tut._draw_callout()`) so step-specific callouts appear in screenshots.
-- `--pre-action` flag (NEW): renders the pre-action UI state — needed to capture step 8's flashing example card before the spoofed `_action_in_step=True` hides it.
-
-### Still open / next iteration
-
-- Steps 3 / 4 / 5 / 6 / 7 / 9 wording — same body+action split, but copy hasn't been reviewed yet (only steps 1, 2, 8 sweep'd).
-- Step 8 LCD callout — needs a clearer "click these station cells" cue. Maybe a subtle chevron animation, individual cell highlight, or a connector line from the side-panel example to a real cell. Deferred.
-- ZH translations — still EN-only.
-- Game-pairing screenshot slots in step 3 / 6 / 9 bodies.
-- ESC confirm-quit modal (TODO comment in `_handle_events`).
+- `tutorial.py` (new) — Tutorial class + Step descriptor + STEPS tuple + render helpers.
+- `preview_tutorial.py` (new) — chrome screenshot tool. `--no-sim` for headless smoke; `--pre-action` to capture pre-click UI cues.
+- `app.py` — `PASimulator(tutorial=True, target_surface=...)` params; `snapshot_state` / `restore_state`.
+- `audio.py` — `AudioPlayer.__del__` deleted (was tearing down mixer at GC time when tutorial drops its sim ref).
+- `main.py` — OOBE gate between picker and setup; setup re-trigger loop.
+- `setup.py` — "? Tutorial" button when `oobe_completed=True`; action-keyed dict return.
+- `data/translations_app.json` — phase names, step bodies + actions, button labels, `setup.tutorial_button`. EN-only.
 
 ---
 
