@@ -56,7 +56,7 @@ $versionInfo | Out-File -FilePath "version_info.txt" -Encoding ascii
 
 # Build executable
 Write-Host "`n[1/5] Building executable (embedding version $versionString)..." -ForegroundColor Yellow
-uv run --no-dev --group build pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean --noconfirm --version-file version_info.txt
+uv run --no-dev --group build pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean --noconfirm --version-file version_info.txt --collect-data plotly
 if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 
 # Create distribution folder structure

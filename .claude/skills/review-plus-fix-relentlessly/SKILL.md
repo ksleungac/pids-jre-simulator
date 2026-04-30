@@ -63,8 +63,10 @@ while [[ $ISSUES_FOUND == "true" && $CYCLE_COUNT -lt $MAX_CYCLES ]]; do
   # Collect reviewer feedback (simplified - in practice would parse actual output)
   REVIEW_FEEDBACK="$(cat .claude/.ralph-feedback.json 2>/dev/null || echo '{\"issues_found\": false}')"
 
-  # Extract issues_found from feedback (simplified parsing)
-  ISSUES_FOUND=$(echo "$REVIEW_FEEDBACK" | grep -o '"issues_found": true' || echo "")
+  # Extract blocking issues — loop continues while ANY architectural-critical OR critical exists.
+  # warning/info findings don't block stop (they route to deferred-findings logging in Step 2c).
+  HAS_BLOCKING=$(echo "$REVIEW_FEEDBACK" | grep -oE '"severity": *"(architectural-critical|critical)"' || echo "")
+  ISSUES_FOUND=$([ -n "$HAS_BLOCKING" ] && echo "true" || echo "")
 
   # Step 2b: If issues found, YOU (main agent) fix them
   if [[ -n "$ISSUES_FOUND" ]]; then
@@ -91,7 +93,12 @@ while [[ $ISSUES_FOUND == "true" && $CYCLE_COUNT -lt $MAX_CYCLES ]]; do
     ISSUES_FOUND=false
   fi
 
-  # Step 2c: Report cycle completion and prepare for next cycle
+  # Step 2c: Triage deferred findings (NEW — runs each cycle)
+  # If you (main agent) chose to defer any finding rather than fix it
+  # (uncertain, parallel-WIP collision, scope creep, user said "not now"), route per the
+  # Triage policy section below. Do NOT silently drop deferred findings.
+
+  # Step 2d: Report cycle completion and prepare for next cycle
   if [[ $ISSUES_FOUND == "true" ]]; then
     echo "--- End of cycle $CYCLE_COUNT ---"
     echo "Ready for next review cycle..."
@@ -104,6 +111,62 @@ while [[ $ISSUES_FOUND == "true" && $CYCLE_COUNT -lt $MAX_CYCLES ]]; do
   fi
 done
 ```
+
+## Triage policy for deferred findings
+
+When you (main agent) decide to defer a finding rather than fix it during a cycle, route it per its severity:
+
+### Routing rules
+
+| Severity | If user explicitly defers | If you auto-defer (uncertain / out-of-scope / parallel WIP) |
+|---|---|---|
+| `architectural-critical` | TODO.md `## Deferred review findings` (real obligation, must surface at startup) | TODO.md (same — these block release-quality, do not silently bury in daily log) |
+| `critical` | TODO.md `## Deferred review findings` | TODO.md (same) |
+| `warning` | Daily log with `[review-deferred]` tag (recurrence may promote later) | Daily log with `[review-deferred]` tag |
+| `info` | Daily log with `[review-deferred]` tag | Drop (the ASK-flag was answered "not real") |
+
+### Dedup logic
+
+For each finding to be logged, dedup by `<file>:<line>` + issue summary:
+
+1. **Already in today's `memory/<today>.md` under `## Deferred from /review+fix [HH:MM]`?** → skip (no within-session duplicates).
+2. **Already in TODO.md `## Deferred review findings`?** → skip (no duplicate in backlog).
+3. **Already in any `memory/2026-*.md` from prior days under `[review-deferred]`?** → recurrence detected. Propose promotion to TODO.md, ask user:
+   - **Approved**: add to TODO.md `## Deferred review findings`; retag prior daily-log entries `[review-deferred]` → `[review-promoted: TODO.md § "Deferred review findings"]`.
+   - **Declined**: append today's entry as `[review-deferred]` with new reason captured.
+4. **Otherwise (first occurrence)**: append per the routing table above.
+
+This keeps the recurrence-promotion ladder self-contained in the loop — no separate distill pass needed for review-backlog management. The loop is self-promoting.
+
+### Daily-log entry format
+
+Append to `memory/<today>.md` under section heading `## Deferred from /review+fix <HH:MM>` (create section if not present):
+
+```
+- [review-deferred] <file>:<line> [lens N, severity] [rule_citation if any] — <issue summary> — Deferred reason: <why>
+```
+
+### TODO.md entry format
+
+Append to TODO.md under section `## Deferred review findings` (create section if not present, place at end before `## Closed-off paths`):
+
+```
+- [ ] **<issue summary>** — `<file>:<line>` (lens N, severity; rule: <citation if any>; first flagged YYYY-MM-DD; recurred X times across [date list]) — Deferred because: <why>
+```
+
+### Tag lifecycle (for `[review-deferred]`)
+
+```
+review-plus-fix-relentlessly writes:
+  [review-deferred] — first occurrence of a deferred finding
+
+Loop's own recurrence detection transitions to:
+  [review-promoted: TODO.md § "Deferred review findings"] — promoted after recurrence
+  [review-resolved] — manual retag when subsequent review confirms gone (optional, low-priority)
+  [review-rejected: <reason>] — manual retag when user explicitly says "not a real issue"
+```
+
+Once an entry is `[review-promoted]`, future loop runs skip its dedup check (it lives in TODO.md now). `[review-resolved]` and `[review-rejected]` are manual retags — the loop doesn't need to enforce them, they exist so future-you knows the item was decided not just dropped.
 
 ### Step 3: Final summary
 ```bash
@@ -123,14 +186,14 @@ rm -f .claude/.ralph-*.json 2>/dev/null || true
 
 ## Key Features:
 - **Cycle Counting**: Tracks and reports review+fix iterations
-- **Stop Conditions**: Stops when no issues found or max cycles reached (10)
-- **Role Separation**: Reviewer (sonnet) reads only, Fixer (opus) applies fixes
+- **Stop Conditions**: Stops when no blocking issues remain (`architectural-critical` or `critical`) or max cycles reached (10). `warning`/`info` findings route to deferred-findings logging (see Triage policy below) without blocking.
+- **Role Separation**: Reviewer (opus) reads only, Fixer (opus, main agent) applies fixes
 - **Context Passing**: Feedback passed between agents for iterative improvement
 - **Graceful Degradation**: Clean up temporary files, handle errors
 
 ## Configuration:
 - **MAX_CYCLES**: 10 (configurable)
-- **Reviewer Model**: sonnet (cost-effective for review)
+- **Reviewer Model**: opus — project favors deeper architectural reasoning over cost; required for the three-lens review structure (see `.claude/skills/review-dirty/SKILL.md`)
 - **Fixer Model**: opus (better for complex fixes)
 - **Timeout**: 30 minutes total for entire loop
 

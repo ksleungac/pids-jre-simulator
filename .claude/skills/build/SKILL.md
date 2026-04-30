@@ -85,12 +85,14 @@ if (Test-Path $audioJunction) {
 }
 Remove-Item -Path "dist", "dist-release", "build" -Recurse -Force -ErrorAction SilentlyContinue
 
-uv run --no-dev --group build pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean --noconfirm --version-file version_info.txt
+uv run --no-dev --group build pyinstaller --onefile --console --name "JRE-PA-Simulator" main.py --clean --noconfirm --version-file version_info.txt --collect-data plotly
 ```
 
 `--no-dev --group build` isolates the build venv to **prod deps + pyinstaller only** — no `librosa` / `ffmpeg-python` / `black` / `pyright` visible to PyInstaller's static analysis. Defense-in-depth against accidental dev-dep bundling. The `build` dependency group is declared in `pyproject.toml`; if a future build step needs another tool (e.g. UPX), add it there.
 
 `--console` is required — a console window is needed for error visibility on non-English Windows (where Japanese stdout requires `PYTHONUTF8=1` or `sys.stdout.reconfigure('utf-8')`, and silent crashes are otherwise invisible). If the build fails, surface the pyinstaller error verbatim and stop.
+
+`--collect-data plotly` ships plotly's `package_data/` subdirectory — specifically `plotly.min.js`, the ~3MB JS bundle that `fig.to_html(include_plotlyjs='inline')` reads at runtime. PyInstaller's static import analysis bundles plotly's `.py` files but skips non-Python data files; without this flag, the Report ↓ button in the OCR debug panel silently breaks in release builds (lib loads, but its JS bundle is missing → render-time crash swallowed by the `try/except` in `auto_input.py:_render_report_async`). Discovered by /review+fix Lens 1 on 2026-04-30 reviewing commit `51c7b07`. If a future runtime-asset-shipping lib enters `dependencies` (matplotlib, bokeh, ...), add a sibling `--collect-data <lib>` here.
 
 ### Step 4 — Stage distribution folder (with audio junction for testing)
 
