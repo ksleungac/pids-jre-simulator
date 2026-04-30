@@ -17,8 +17,9 @@ This skill is the **codify** operation that pairs with session-recap's **capture
 1. **Promote** — recurring topic with no rule home yet → land it in `principles.md` / `conventions.md` / skill / inline.
 2. **Retag** — topic already lives in a rule (often added directly by session-recap as rule-shaped or fact-shaped); update old `[log-only]` entries to `[promoted: <pointer>]` so future passes don't re-propose.
 3. **Reject** — considered and declined; mark `[rejected]` so future passes don't re-surface.
+4. **Complete half-promoted** — both-shaped item (per session-recap Rule 1) where only one half landed: canonical content in a domain doc but no behavioral binding in preloaded rules, or vice versa. Propose adding the missing half. The autodriver-vocabulary case (2026-04-30) is the canonical example: Layer 1/2/3 names lived in AUTO_INPUT.md but the binding rule was never added to conventions.md, so claude forgot to use them.
 
-A fourth, rarer action: **stale-rule removal** — a rule exists but lived evidence contradicts it. Highest bar; user confirms explicitly.
+A fifth, rarer action: **stale-rule removal** — a rule exists but lived evidence contradicts it. Highest bar; user confirms explicitly.
 
 ## When to run
 
@@ -65,7 +66,8 @@ Classify the topic:
 
 | Status | Meaning | Default action |
 |---|---|---|
-| `[in-rules-supported]` | already in rules; ≥1 log entry confirms it lives | retag old [log-only] → [promoted: <pointer>] |
+| `[in-rules-supported]` | already in rules, single-shape rule (or both halves of a both-shaped rule present); ≥1 log entry confirms it lives | retag old [log-only] → [promoted: <pointer>] |
+| `[half-promoted]` | both-shaped topic where only ONE half landed: canonical content in a domain doc but no preloaded binding in `conventions.md` / `principles.md` (or vice versa). Detection: topic appears in a domain doc AND log entries describe a behavioral directive ("always use", "prefer X", "don't") but `grep` of preloaded rules turns up nothing. | flag for user; propose adding the missing half |
 | `[in-rules-thin]` | in rules, but only one weak log datapoint supports it | flag for user review (over-promotion suspect) |
 | `[recurring-not-in-rules]` | ≥2 distinct sessions, no rule home | promotion candidate |
 | `[one-shot]` | single appearance, no rule | leave as `[log-only]`, no action |
@@ -99,6 +101,11 @@ Total preference entries: M
 
 ### Already supported ([in-rules-supported]) — auto-retag pending
 N entries across K topics already in rules. Retag [log-only] → [promoted: <pointer>] in place.
+
+### Half-promoted ([half-promoted]) — discuss
+| topic | half present | half missing | proposed home for missing half |
+|---|---|---|---|
+| ... |
 
 ### Stale rules ([stale]) — discuss
 | rule | location | contradicting evidence |

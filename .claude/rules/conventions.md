@@ -45,3 +45,20 @@ When a function or class has a non-obvious contract that lives in a doc (`DISPLA
 - ❌ Routine functions whose behavior is obvious from the code itself, or where the contract is local and self-documenting.
 
 **Don't substitute for the doc.** The pointer summarizes; the doc has the actual contract. Update the doc when the contract changes; keep the inline comment terse.
+
+## Domain vocabulary bindings
+
+Some domain docs (`AUTO_INPUT.md`, `DISPLAY.md`) define canonical names + notation for non-obvious concepts. Discussions, design docs, and code edits about those domains MUST use the canonical forms — even when not editing the doc itself. The doc holds the canonical content; this section holds the binding rule that fires regardless of whether claude opened the doc.
+
+- **AutoDriver state vocabulary.** Use the Layer 1/2/3 names defined in [AUTO_INPUT.md](../../AUTO_INPUT.md):
+  - **Layer 1 (app sub-states):** `STOPPING` / `APPROACHING_EARLY` / `APPROACHING_FINAL`
+  - **Layer 2 (OCR badge reads):** `STOPPED` / `MOVING` / `PASSING` / `UNKNOWN`
+  - **Layer 3 (inferred game state):** `STOPPING_FRESH` / `STOPPING_AFTER_ARR` / `APPROACHING_BEFORE_DEP` / `APPROACHING_AFTER_DEP` / `MOVING_AFTER_ARR` / `UNKNOWN`
+
+  **Notation:** prefer arrow flow (`prev → curr`) over tables when describing transitions. Tables only when ≥3 dimensions matter at once.
+
+  **Don't redesign the state machine** without an explicit "I want to change this" framing. The taxonomy was settled across multiple sessions; ad-hoc renaming or layer-merging in chat causes doc-vs-discussion drift.
+
+  **Why:** even with the canonical names defined in `AUTO_INPUT.md`, claude has reverted to ad-hoc vocabulary in chat and code reviews ("the badge says X", "stopped state") — surfacing as the 2026-04-29 evening Layer 3 refactor incident, where doc led code by 24h until user noticed. Canonical content alone (in a domain doc) is read-on-demand and doesn't fire when the doc isn't opened. The binding lives here so it's preloaded into every session.
+
+  **How to apply:** any conversation, design discussion, code review, doc edit, or commit message that touches autodriver / OCR / state-machine reasoning — use the canonical names; use arrows for transitions; flag any proposed redesign explicitly.

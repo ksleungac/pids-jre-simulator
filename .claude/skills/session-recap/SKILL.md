@@ -37,20 +37,16 @@ Skip code-change inventory (git covers it). Present this:
 - [What "why" decision was made? What mental-model shift happened?]
 - [What behavioral pattern was discovered?]
 
-### Preferences expressed (ambiguous middle only)
-- [log-only] topic:<noun> — "verbatim quote" — context: one-liner
-- [promote-candidate] topic:<noun> — "verbatim quote" — context: one-liner
+### Corrections / preferences this session
 
-  This section is ONLY for preference-shaped entries — passing remarks
-  where permanence is unclear. Rule-shaped findings (implicit-pattern
-  articulations, decision-shaping rules) and fact-shaped findings (IRL
-  conventions, library quirks, domain truths) go straight to their home
-  under "Documentation updates" below — no log-only detour.
+Per Rule 1, classify each user correction or articulated preference and propose home(s). User reviews + approves per item in Step 2; claude writes the actual rule wording in Step 3 (diff shown before file edits land).
 
-  Within this section: default [log-only]. Use [promote-candidate] only
-  when (a) user used "always / never / from now on / in the future"
-  framing this session, OR (b) the same topic has surfaced in earlier
-  daily logs (grep for the topic to check).
+- "verbatim quote 1" → **rule-shaped** → conventions.md (or principles.md / skill / inline `# CONTRACT:`)
+- "verbatim quote 2" → **both-shaped** → DOMAIN_DOC.md (canonical content) AND conventions.md (behavioral binding)
+- "verbatim quote 3" → **fact-shaped** → CLAUDE.md mental model (or domain doc / inline)
+- "verbatim quote 4" → **preference, ambiguous** → daily log `[log-only]` only
+
+If no corrections this session, state it explicitly — don't skip silently.
 
 ### TODO.md sweep
 - **Closed this session**: items shipped — propose `[x]` mark or removal, with a one-line "what landed."
@@ -58,12 +54,11 @@ Skip code-change inventory (git covers it). Present this:
 - **Rephrase needed**: items whose framing rotted because the world changed (e.g. an item gated on "X is blocked by Y" once Y ships).
 - **No changes**: explicitly state this if true. Skipping the sweep silently lets TODO.md drift.
 
-### Documentation updates
-- CLAUDE.md: only if mental-model shift
-- DATA_FORMAT.md / DISPLAY.md / AUTO_INPUT.md: only if schema/architecture genuinely changed
-- principles.md / conventions.md: ONLY for confirmed [promote-candidate]
+### Documentation updates (will land after Step 2 approval)
+- CLAUDE.md / domain docs: per fact-shaped + both-shaped corrections approved
+- principles.md / conventions.md: per rule-shaped + both-shaped corrections approved
 - TODO.md: per the sweep above (open / close / rephrase)
-- memory/YYYY-MM-DD.md: everything else (prose + the tagged Preferences section)
+- memory/YYYY-MM-DD.md: free-form prose for context + structured Preferences section (one entry per correction, tagged per its disposition)
 - memory/MEMORY.md: ONE one-line pointer per session-block (per Rule 5 format), no abstracts
 ```
 
@@ -110,11 +105,12 @@ Preloaded files (`CLAUDE.md`, `.claude/rules/*`) hold what humans keep in their 
 ## Rules
 
 1. **Match the entry's shape to its home — don't universally default to log-only.**
-   - **Rule-shaped** (articulates an implicit pattern, or forward-framing "always / never / from now on") → direct to `principles.md` / `conventions.md` / skill / inline `# CONTRACT:`. No log-only step.
+   - **Rule-shaped** (articulates an implicit pattern, or forward-framing "always / never / from now on / don't / use X not Y") → direct to `principles.md` / `conventions.md` / skill / inline `# CONTRACT:`. No log-only step.
    - **Fact-shaped** (IRL convention, library quirk, domain truth) → direct to CLAUDE.md mental model / domain doc / inline. No log-only step.
-   - **Preference-shaped, ambiguous** (passing remark, unclear permanence) → daily log `## Preferences (jot)` as `[log-only]`. Promote later via recurrence (≥2 distinct sessions) OR explicit forward framing in a future session.
+   - **Both-shaped** (correction has BOTH canonical content AND a behavioral binding about how to use it) → save in BOTH homes. Canonical content → domain doc (read on demand); behavioral binding → `principles.md` / `conventions.md` (preloaded every session). A rule that lives only in a domain doc fires only when claude opens the doc. For corrections that need to bind in chat / design / review, the preloaded home is mandatory. Concrete (2026-04-30 incident): "for autodriver discussions use Layer 1/2/3 names + arrow flow + don't redesign" → AUTO_INPUT.md gets the canonical names + arrows AND conventions.md gets the binding rule. Saving only one half is the failure mode.
+   - **Preference-shaped, ambiguous** (passing remark, unclear permanence) → daily log `## Preferences (jot)` as `[log-only]`.
 
-   Cost of over-promotion is bloat; cost of under-promotion is one extra correction next session — strongly asymmetric. The asymmetric trap applies to the ambiguous middle, not to clearly rule-shaped or fact-shaped entries.
+   **When in doubt, classify rule-shaped, not ambiguous.** A correction is rule-shaped if violating it would cause the same mistake in any future session on this project — even without explicit "always" wording. The conservative bias toward "ambiguous middle" produced recurrences. Cost asymmetry: over-promotion = bloat (prunable via `/distill-memory`); under-promotion = recurrence (paid by user, who has explicitly named it costly: "same thing happens 2 times are frustrating enough already"). The asymmetry favors over-classifying as rule-shaped at recap time. The user's Step 2 review is the safety net for false-positive promotions.
 2. **Before writing, check if the info already exists or has gone stale.** Update / remove in place, don't add a second copy, don't leave outdated content standing. Each domain doc carries an `EDIT-CONTRACT` block at its top with the concrete refuse-list and merge-or-replace requirement — re-read before writing. See [principles.md § "Tighten before appending"](../../rules/principles.md).
 3. **Cross-reference, don't copy.** E.g., `DATA_FORMAT.md` says "see CLAUDE.md § Mental Model" rather than re-explaining.
 4. **CLAUDE.md stays slim on implementation, generous on framing.** Mental-model content belongs there *because* it's preloaded. Implementation details go to domain docs.
@@ -163,6 +159,26 @@ Each entry is one line, format:
 - One-line entries are scannable in a long-running pass.
 - Tag evolution (`[log-only]` → `[promote-candidate]` → `[promoted]` / `[rejected]`) gives `/distill-memory` a way to know what's already been decided, so monthly passes don't re-propose rejected ones.
 - Free-form prose stays free-form for the parts that aren't preferences (debugging narrative, mental-model notes) — those don't need structure.
+
+---
+
+## Daily log EDIT-CONTRACT
+
+Daily logs are decision-records, not narrative dumps. Before writing a session-block to `memory/YYYY-MM-DD.md`, check the addition isn't on the refuse list. Re-read this block at write-time, same discipline as the domain-doc EDIT-CONTRACTs.
+
+**Refuse:**
+- Blow-by-blow review-cycle reports ("Cycle 1 caught X, Y, Z. Cycle 2 caught Q. Cycle 3 clean."). Git log + commit messages already cover what changed. Keep only the WHY of decisions made during review.
+- "What got done" narrative — bullet list of code changes. Git diff covers it. Keep WHY decisions, not WHAT was edited.
+- Full-text rehashes of design discussions. Keep the 2-3-line decision + WHY. Trim the meandering.
+- Documentation enumerations ("Updated A, B, C, D, E files"). `git status` covers it. Mention only non-obvious doc moves.
+
+**Keep:**
+- WHY a decision was made (context that doesn't survive in code).
+- Non-obvious context that has no other home (mental-model shifts, surprising IRL conventions discovered, unresolved threads).
+- `[log-only]` / `[promote-candidate]` preferences (per Rule 1).
+- Trace of incidents — what surprised us, what we fixed, what could recur. The pathology, not the play-by-play.
+
+**Size target:** <50 lines per session-block. >100 lines is typically the failure mode — narrating git history that's already in git. The 2026-04-29 log at 538 lines is the canonical anti-example.
 
 ---
 
