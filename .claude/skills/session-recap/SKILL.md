@@ -64,6 +64,7 @@ Skip code-change inventory (git covers it). Present this:
 - principles.md / conventions.md: ONLY for confirmed [promote-candidate]
 - TODO.md: per the sweep above (open / close / rephrase)
 - memory/YYYY-MM-DD.md: everything else (prose + the tagged Preferences section)
+- memory/MEMORY.md: ONE one-line pointer per session-block (per Rule 5 format), no abstracts
 ```
 
 ### Step 2 — User reviews and confirms
@@ -117,7 +118,7 @@ Preloaded files (`CLAUDE.md`, `.claude/rules/*`) hold what humans keep in their 
 2. **Before writing, check if the info already exists or has gone stale.** Update / remove in place, don't add a second copy, don't leave outdated content standing. Each domain doc carries an `EDIT-CONTRACT` block at its top with the concrete refuse-list and merge-or-replace requirement — re-read before writing. See [principles.md § "Tighten before appending"](../../rules/principles.md).
 3. **Cross-reference, don't copy.** E.g., `DATA_FORMAT.md` says "see CLAUDE.md § Mental Model" rather than re-explaining.
 4. **CLAUDE.md stays slim on implementation, generous on framing.** Mental-model content belongs there *because* it's preloaded. Implementation details go to domain docs.
-5. **MEMORY.md is an index.** One-line pointers to memory files only. No content, no rules.
+5. **MEMORY.md is an index, not an abstract.** Format: `- [YYYY-MM-DD time-block](file.md) — headline finding`. ~150 char cap per line. Multi-session days get one entry per session-block ("2026-04-30 AM" / "2026-04-30 PM"), not a bundled paragraph. The temptation at recap time is to write a summary of the session in the index entry — that's the wrong shape. Headlines, not summaries. The daily log behind the link holds the detail; the index entry only has to make a future reader say "yes, click this" or "no, skip."
 6. **Be specific.** "Fixed display bug" → "Destination always displays as kanji (no furigana cycling) to match IRL behavior."
 
 ---
