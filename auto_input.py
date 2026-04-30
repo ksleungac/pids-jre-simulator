@@ -670,6 +670,16 @@ class AutoDriver:
         if self.sim.state.curr_stop != self._segment_start_stop:
             print(f"          [AD] >>> SKIPPED departure fire (sim already at stop {self.sim.state.curr_stop}; user advanced manually)")
             return
+        # Silent pa_at_station drain — if user lagged on at-station announcements,
+        # the synthesized press below would consume one queue entry instead of
+        # advancing the segment. Mark the queue as exhausted so _next_in_stopping
+        # falls through to _advance_to_next_stop (plays pa[0] of next stop).
+        if self.sim.state.at_station:
+            pa_at_st = self.sim.stops[self.sim.state.curr_stop].get("pa_at_station", [])
+            if self.sim.state.cnt_pa_at_station + 1 < len(pa_at_st):
+                dropped = len(pa_at_st) - 1 - self.sim.state.cnt_pa_at_station
+                self.sim.state.cnt_pa_at_station = len(pa_at_st) - 1
+                print(f"          [AD] >>> Silent drain: dropped {dropped} unplayed pa_at_station entr{'y' if dropped == 1 else 'ies'}")
         self.sim.pending_next_pa = True
         print("          [AD] >>> FIRED departure (set pending_next_pa)")
 

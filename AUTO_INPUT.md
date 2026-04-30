@@ -121,16 +121,21 @@ acceleration window is functionally equivalent at entry).
 The inference function is pluggable; future cross-attribute hardening enriches
 it without changing the named-state vocabulary.
 
-**Vocabulary discipline.** In design conversations and code comments: say
-*"AutoDriver thinks the game is in `STOPPING_FRESH`"* — not *"badge is
-STOPPED."* The badge is one input to the inference; the inferred game state
-is what the design reasons about. They are not the same thing — if OCR
-misclassifies the badge for a frame, the inferred state may stay correct (the
-inference can refuse to commit on a single bad sample). Likewise, the inferred
-state can be wrong even when every OCR read is correct, if the inference
-function is naive (e.g. trusting `badge==STOPPED` while speed is still 40
-km/h). The vocabulary separation is what lets us harden inference without
-re-litigating design conclusions that depend on the named state.
+**Vocabulary discipline.** In design conversations and code comments:
+
+1. **Use the Layer 1 / 2 / 3 named states verbatim** — say *"AutoDriver thinks
+   the game is in `STOPPING_FRESH`"*, not *"badge is STOPPED"* or any invented
+   parallel vocabulary. The badge is one input to the inference; the inferred
+   state is what the design reasons about. The vocabulary separation lets us
+   harden inference without re-litigating design conclusions.
+2. **Use arrow-flow notation for state progressions** — write
+   `STOPPING(queue) → STOPPING(queue exhausted) → APPROACHING_EARLY`, not a
+   multi-column table. Tables fit orthogonal cross-products (Layer 3 × Layer 1
+   alignment table); progressions are a sequence and read as arrows. Tables on
+   transitions read as over-engineered.
+3. **Don't redesign the state machine** — the named states are already
+   implemented in `_Detector.update`. Design how flows interact with them, not
+   what they should be.
 
 ### Layer interaction
 
