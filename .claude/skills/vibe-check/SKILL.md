@@ -58,6 +58,7 @@ Each finding must match one of these categories. Do not flag general code style.
 7. **Two ways to do the same thing within one class.** Mix of `self._accessor()` and `self.attr` for the same field, mix of two helpers with overlapping responsibility.
 8. **Stale comments / docstrings contradicting code.** Comment describes a structure (`mode_displays` dict, "uncomment ENGLISH entry") that doesn't exist in the current file.
 9. **Trivial accessors with no derivation.** `def _bar_y(self): return self.bar_y` — added "in case it becomes dynamic later" but never did.
+10. **Production code importing from `_*/` paths.** Files at project root + under `displays/` MUST NOT have `from _foo` / `import _foo` / `from _foo.bar` for any `_*/` folder (`_archive/`, `_mock/`, `_dev_scripts/`, `_experiments/`, etc.). Per `conventions.md` § "_*" prefix, those folders are dev-only and not shipped — a production import is a misclassification (either the file should be promoted out of `_*/`, OR the caller is dev-only and shouldn't be at root). **Verification:** for each `_*/` folder at the tree top, grep production code (excluding `_*/` itself) for `from <folder>` or `import <folder>`. **Sibling rule** (Step 1 scope table): `_*/` paths are out of scope for this skill's reviews — but production imports OF them ARE in scope, this category. See `.claude/rules/critical_lessons.md` § "Lazy import ≠ optional dep" for the underlying pathology.
 
 ### Step 3 — Verify before reporting
 

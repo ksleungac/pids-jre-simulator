@@ -41,7 +41,7 @@ implementation:
   path as manual PageDown. Manual-press precedence is implicit: the driver
   inspects `sim.state.curr_stop` / `sim.state.cnt_pa` each cycle and skips its
   fire on mismatch. Includes the in-window debug panel.
-- **Separate-process** (`data_tools/capture_game.py`) — standalone diagnostic
+- **Separate-process** (`_dev_scripts/capture_game.py`) — standalone diagnostic
   script. Synthesizes PageDown via the `keyboard` library and uses a
   self-press timestamp guard for manual-press precedence. No debug panel.
 
@@ -350,7 +350,7 @@ for one frame. The state machine handles this via flag-resets only on transition
 
 ## State machine — `PaEventDetector`
 
-Lives in `data_tools/capture_game.py` (1b) + `auto_input.py` `_Detector` (1a, kept in sync). Tracks distance + speed + badge across samples, emits PA-fire event names on transitions.
+Lives in `_dev_scripts/capture_game.py` (1b) + `auto_input.py` `_Detector` (1a, kept in sync). Tracks distance + speed + badge across samples, emits PA-fire event names on transitions.
 
 ### State vocabulary
 
@@ -370,7 +370,7 @@ The state machine works in the Layer 3 named-state vocabulary — see "State mac
 
 `arrival_lead_m` defaults to **900m**. For 1a, adjust on the setup-screen Lead
 stepper (range 500–1500, ±100m) before launching. For 1b, override with `--lead`
-on the `data_tools/capture_game.py` invocation. Use 1200m for transfer-heavy
+on the `_dev_scripts/capture_game.py` invocation. Use 1200m for transfer-heavy
 lines (Tokyo, Shinjuku scenarios).
 
 **Per-segment observed flags** prevent double-firing within a single segment when
@@ -527,16 +527,16 @@ uv run main.py
 
 ```bash
 # Default — 900m arrival threshold, 5s sample interval, fires synthetic PageDowns
-uv run python data_tools/capture_game.py
+uv run python _dev_scripts/capture_game.py
 
 # Transfer-heavy line — bump arrival threshold
-uv run python data_tools/capture_game.py --lead 1200
+uv run python _dev_scripts/capture_game.py --lead 1200
 
 # Debug / observation mode — log OCR + events but don't send keystrokes
-uv run python data_tools/capture_game.py --no-fire
+uv run python _dev_scripts/capture_game.py --no-fire
 
 # Pass --route to enable PA-count cross-check
-uv run python data_tools/capture_game.py --route audio/sobu/1217F
+uv run python _dev_scripts/capture_game.py --route audio/sobu/1217F
 ```
 
 Stop with Ctrl+C. The script prints one line per sample (badge state, speed,
@@ -554,12 +554,12 @@ auto/manual key activity.
 | `constants.py` | `DEBUG_PANEL_HEIGHT = 80` |
 | `hud_layout.py` | HUD + cell bbox constants for 2560×1440 |
 | `ocr.py` | OCR pipeline + badge classifier; runnable for offline validation (`uv run python ocr.py`) |
-| `data_tools/capture_game.py` | Standalone observation/debug script (separate process, synthetic keystrokes, optional `--route` flag for PA-count check) |
-| `data_tools/test_dxcam.py` | Diagnostic — full-desktop dxcam capture + brightness check |
+| `_dev_scripts/capture_game.py` | Standalone observation/debug script (separate process, synthetic keystrokes, optional `--route` flag for PA-count check) |
+| `_dev_scripts/test_dxcam.py` | Diagnostic — full-desktop dxcam capture + brightness check |
 | `ocr_templates/digits/*.png` | **Runtime input** — 10 pre-extracted digit glyphs (~20×30 binary PNGs, ~1 KB each). Loaded by `ocr.build_templates()`. Committed. |
 | `ocr_templates/badges/*.png` | **Runtime input** — 6 pre-extracted badge cell crops (125×45 RGB PNGs, ~5 KB each). Loaded by `ocr.load_badge_anchors()`. Committed. |
 | `_ocr_calibration/*.png` | **Local-only** source screenshots (full 2560×1440 desktop captures, ~33 MB total). Gitignored. Only needed when re-extracting `ocr_templates/` after a game HUD layout change. |
-| `data_tools/extract_ocr_assets.py` | One-shot extractor: reads `_ocr_calibration/` source screenshots → writes `ocr_templates/`. Run after re-capturing sources, then commit the diff. |
+| `_dev_scripts/extract_ocr_assets.py` | One-shot extractor: reads `_ocr_calibration/` source screenshots → writes `ocr_templates/`. Run after re-capturing sources, then commit the diff. |
 | `_recordings/drive_<line>_<diagram>_<TS>.jsonl` | **Blackbox / drive recorder log** — one file per AutoDriver lifetime. Line 0 is `_type: "meta"` (route/diagram/dest/stops); subsequent lines are `_type: "sample"` (one OCR cycle each). Written inside `auto_input.py`'s capture loop with per-line `flush()` for crash safety. Local-only / gitignored. Schema is locked — downstream plot generator depends on the layout. |
 | `_experiments/live_captures/` | Saved HUD crops from prior live testing (gitignored — `_experiments/` itself is now an artifact-only folder; OCR + layout modules promoted to root) |
 | `fonts/ShinGoPr6N-Medium.otf` | Latin + CJK font used by debug panel for station names |
@@ -571,8 +571,8 @@ If the game runs at a different resolution:
 1. Capture screenshots in the target resolution with HUD visible (running mode + at-platform mode + passing-through mode)
 2. Identify HUD position (top-right); update `HUD_BBOX` in `hud_layout.py`
 3. Crop HUD; identify cell positions within it; update `*_VALUE_BBOX` and `BADGE_BBOX`
-4. Save the 9 source screenshots into `_ocr_calibration/` (gitignored). Filenames must match the keys in `KNOWN_VALUES` (digits) + `BADGE_ANCHOR_FILES` (badges) — both live in `data_tools/extract_ocr_assets.py` and `ocr.py` respectively. PASSING is the rapid-service "Pass" / "通過" blue pentagon (filenames `passing_en.png`, `passing_jp.png`).
-5. Run `uv run python data_tools/extract_ocr_assets.py` — extracts digit glyphs + badge anchor crops into `ocr_templates/`.
+4. Save the 9 source screenshots into `_ocr_calibration/` (gitignored). Filenames must match the keys in `KNOWN_VALUES` (digits) + `BADGE_ANCHOR_FILES` (badges) — both live in `_dev_scripts/extract_ocr_assets.py` and `ocr.py` respectively. PASSING is the rapid-service "Pass" / "通過" blue pentagon (filenames `passing_en.png`, `passing_jp.png`).
+5. Run `uv run python _dev_scripts/extract_ocr_assets.py` — extracts digit glyphs + badge anchor crops into `ocr_templates/`.
 6. Run `uv run python ocr.py` to sanity-check the new templates load + cross-classify cleanly. Commit the `ocr_templates/` diff.
 
 Digit templates are resolution-specific because exact-pixel matching requires

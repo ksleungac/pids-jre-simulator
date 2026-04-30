@@ -1098,7 +1098,7 @@ class Tutorial:
         # Audio progress seek bar — only when audio is playing. Anchored just
         # above the action prompt; renders elapsed/total labels under a slim
         # filled bar. Mirrors the inline visualization pattern from
-        # data_tools/verify_sta_listen.py (head/tail tints stripped — tutorial
+        # _dev_scripts/verify_sta_listen.py (head/tail tints stripped — tutorial
         # only needs simple progress).
         if self.sim is not None and self.sim.audio.is_playing():
             pos = self.sim.audio.position()

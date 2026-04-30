@@ -265,13 +265,13 @@ def _draw_report_button(surface: pygame.Surface, font: pygame.font.Font) -> None
 def _render_report_async(log_path: Path) -> None:
     """Background-thread report generation so the simulator UI doesn't freeze.
 
-    `auto_input.py` lives at the project root, so `data_tools.plot_drive`
-    resolves via the standard sys.path that the launching `main.py` set up
-    — no per-call sys.path.insert needed (and previously accumulated
-    duplicate entries on every click).
+    `auto_input.py` and `plot_drive.py` both live at the project root, so
+    the import resolves via the standard sys.path that the launching
+    `main.py` set up — no per-call sys.path.insert needed (and previously
+    accumulated duplicate entries on every click).
     """
     try:
-        from data_tools.plot_drive import render_html_report, load_jsonl
+        from plot_drive import render_html_report, load_jsonl
         out_path = Path(__file__).parent / f"{log_path.stem}.html"
         meta, events, samples = load_jsonl(log_path)
         render_html_report(meta, events, samples, 5, out_path)
@@ -527,11 +527,11 @@ class AutoDriver:
         missing = set("0123456789") - templates.glyphs.keys()
         if missing:
             print(f"[AutoDriver] FATAL: missing digit templates: {sorted(missing)} — auto-driver disabled.")
-            print("[AutoDriver] Re-run `uv run python data_tools/extract_ocr_assets.py` to re-extract from _ocr_calibration/.")
+            print("[AutoDriver] Re-run `uv run python _dev_scripts/extract_ocr_assets.py` to re-extract from _ocr_calibration/.")
             return
         if not any(badge_anchors.values()):
             print("[AutoDriver] FATAL: no badge anchors loaded — auto-driver disabled.")
-            print("[AutoDriver] Re-run `uv run python data_tools/extract_ocr_assets.py` to re-extract from _ocr_calibration/.")
+            print("[AutoDriver] Re-run `uv run python _dev_scripts/extract_ocr_assets.py` to re-extract from _ocr_calibration/.")
             return
 
         print("[AutoDriver] Initializing dxcam...")

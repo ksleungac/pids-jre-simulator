@@ -24,6 +24,16 @@ What this project is modeling. Keep this in head — it shapes every design deci
 
 **Distribution is lightly public** — released on GitHub + YouTube videos circulate, some railfans use it. **Fidelity bar is high:** elements iterate against IRL reference photos until they read pixel-correct (often 15+ revs per element). "Good enough" is rejected. See `/visual-adjust` and recent memory for the iteration patterns.
 
+### Distribution & deployment artifact
+
+The simulator ships as a PyInstaller exe (Windows) to the public audience above. The deployment frame matters when classifying deps, placing files, or wrapping defensive code — **silent breakage in a release build is the worst-case mode**, because the dev env has everything installed but the user's exe doesn't, and the failure is invisible until a user hits it.
+
+- **Bundled:** all `dependencies` in `pyproject.toml`; code at project root + everything under `displays/`; asset folders (`audio/`, `data/`, `fonts/`, `ocr_templates/`).
+- **Not bundled:** the `dev` dep group; folders prefixed with `_` (`_dev_scripts/`, `_experiments/`, `audio/_archive/`, `audio/_mock/`, `_*_calibration/`). Per [conventions.md § "_*" prefix](.claude/rules/conventions.md), production code MUST NOT import from `_*/` paths — folder placement carries dep-classification semantics.
+- **Library classification follows the call graph, not folder location or import timing.** A library reachable from any production code path is a runtime dep — eager, lazy, behind a button, behind a flag, all the same. "Lazy" is a perf choice (when it loads); "optional" is a contract choice (whether it must exist). They aren't interchangeable. See [critical_lessons.md § "Lazy import ≠ optional dep"](.claude/rules/critical_lessons.md).
+
+Build mechanics (PyInstaller invocation, version metadata, junction handling) live in `/build` skill — that's *how to build*; this section is *what's in the artifact*.
+
 ### Direction of travel
 
 The project is in a **mature phase** — heavy architecture done, audio pipeline mature, visual fidelity high. Future work splits into:
@@ -162,7 +172,7 @@ Yellow hint square = multiple PA tracks available.
 - **LCD displays** (upper or lower) → [DISPLAY.md](DISPLAY.md) — architecture, mode rendering, skip animation, layout gotchas, draw-method subtleties
 - **Real-world JR East context** → already in this doc's "Mental Model" section above (preloaded — keep it in head, don't re-read each session)
 - **Audio/Diagram** → Use `/pa-make` skill (PA splitting + naming + route.json updates) or `/sta-make` skill (STA splitting + sta_cut validation + by-ear verifier)
-- **Auto-input / OCR / game-window capture** → [AUTO_INPUT.md](AUTO_INPUT.md) — companion module that reads JR EAST Train Sim's HUD via dxcam to fire PAs automatically. Lives in `auto_input.py` + `ocr.py` + `hud_layout.py` (in-process integration) and `data_tools/capture_game.py` (separate-process variant).
+- **Auto-input / OCR / game-window capture** → [AUTO_INPUT.md](AUTO_INPUT.md) — companion module that reads JR EAST Train Sim's HUD via dxcam to fire PAs automatically. Lives in `auto_input.py` + `ocr.py` + `hud_layout.py` (in-process integration) and `_dev_scripts/capture_game.py` (separate-process variant).
 - **Cross-cutting code contracts** → live inline at their code site as `# CONTRACT:` blocks. Examples: PyInstaller path resolution at `displays/train_models/e235_1000/upper_lcd.py:get_base_dir`, countdown formula at `displays/train_models/e235_1000/lower_lcd.py:draw_times`, font-loading rule at the first font init in `upper_lcd.py`'s `JapaneseDisplay.__init__`.
 - **Testing / previewing** → `uv run preview_display.py` defaults to the mock catalog (see [`audio/_mock/main/README.md`](audio/_mock/main/README.md) for stop layout). Keys: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. `jump_to_stop` backward-rounding semantics are documented in its docstring at `app.py` `PASimulator.jump_to_stop`. Preview-mode swap inventory (audio, input, mixer, window) is at `PASimulator.__init__`'s ``preview`` parameter.
 - **Building/Releasing** → Use `/build` skill

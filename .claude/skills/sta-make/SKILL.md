@@ -353,7 +353,7 @@ Source recordings occasionally have a tiny stutter at the start (e.g., the first
 Trims leading + trailing silence to ~0.2 s pads (lossless stream-copy) and the mid-file silence between music end and voice start to ~1 s (re-encodes, only when detection confidence is high and gap is in a sane range). With `--route`, patches route.json `sta_cut` values down by `lead_trim + mid_trim`.
 
 ```bash
-PYTHONUTF8=1 uv run python data_tools/trim_sta_silence.py audio/<line>/<diagram>/sta \
+PYTHONUTF8=1 uv run python _dev_scripts/trim_sta_silence.py audio/<line>/<diagram>/sta \
     --route audio/<line>/<diagram>/route.json
 ```
 
@@ -367,7 +367,7 @@ Detector compares each `sta_cut` against the [`music_end`, `voice_start`] window
 - **LATE** (`sta_cut > voice_start`): simulator clips the first syllable of the announcement. Always wrong.
 
 ```bash
-PYTHONUTF8=1 uv run python data_tools/detect_sta_cut.py audio/<line>/<diagram>/sta \
+PYTHONUTF8=1 uv run python _dev_scripts/detect_sta_cut.py audio/<line>/<diagram>/sta \
     --truth audio/<line>/<diagram>/route.json
 ```
 
@@ -407,7 +407,7 @@ Re-run Step 9 to confirm `in gap: N/N`.
 The detector is a feature-based heuristic; the by-ear gate is the ground truth. Run the GUI verifier:
 
 ```bash
-PYTHONUTF8=1 uv run python data_tools/verify_sta_listen.py audio/<line>/<diagram>
+PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/<line>/<diagram>
 ```
 
 Per station, the script:
@@ -436,7 +436,7 @@ The trim regions show as red overlays on the seek bar. Status line below the bar
 **Single-station retest** when iterating on a fix:
 
 ```bash
-PYTHONUTF8=1 uv run python data_tools/verify_sta_listen.py audio/<line>/<diagram> --only kumagaya
+PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/<line>/<diagram> --only kumagaya
 ```
 
 Results merge into `audio_src/<line>/<diagram>/sta_verify_results.json` (auto-creating the dir under the gitignored `audio_src/` tree) — verdicts for stations not tested this run are preserved from the prior JSON. Read this file to pick up FAILs:
@@ -596,8 +596,8 @@ Every STA file ships with **~0.2 s of silence at each end**:
 
 - **pa-make** skill — PA workflow (separate; PA has different conventions, no `sta_cut`)
 - `DATA_FORMAT.md` — route.json schema reference (field meanings, validation rules)
-- `data_tools/trim_sta_silence.py` — trim leading/trailing/mid-gap silence
-- `data_tools/detect_sta_cut.py` — validate `sta_cut` placement
-- `data_tools/verify_sta_listen.py` — by-ear verification GUI
-- `data_tools/validate_pa.py` — PA silence-bracket validator (PA-only; lives here for proximity to other audio tools)
+- `_dev_scripts/trim_sta_silence.py` — trim leading/trailing/mid-gap silence
+- `_dev_scripts/detect_sta_cut.py` — validate `sta_cut` placement
+- `_dev_scripts/verify_sta_listen.py` — by-ear verification GUI
+- `_dev_scripts/validate_pa.py` — PA silence-bracket validator (PA-only; lives here for proximity to other audio tools)
 - `validate_data.py` — checks audio files referenced by routes exist on disk

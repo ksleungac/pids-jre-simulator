@@ -18,9 +18,9 @@ Each section is its own card with header + Plotly chart. Pan/zoom is
 per-section; y is clamped non-negative.
 
 CLI:
-    uv run python data_tools/plot_drive.py
-    uv run python data_tools/plot_drive.py path/to/drive.jsonl
-    uv run python data_tools/plot_drive.py --per-row 8
+    uv run python plot_drive.py
+    uv run python plot_drive.py path/to/drive.jsonl
+    uv run python plot_drive.py --per-row 8
 
 Reads partial-write-safe — last truncated line of a still-recording log
 is silently skipped.
@@ -38,7 +38,7 @@ from pathlib import Path
 
 import plotly.graph_objects as go
 
-ROOT = Path(__file__).parent.parent
+ROOT = Path(__file__).parent
 RECORDINGS_DIR = ROOT / "_recordings"
 
 

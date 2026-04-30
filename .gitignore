@@ -31,7 +31,7 @@ _sta_verify_*.json
 /_experiments/
 
 # OCR calibration sources — full 2560×1440 desktop screenshots used by
-# data_tools/extract_ocr_assets.py to regenerate ocr_templates/. Local-only,
+# _dev_scripts/extract_ocr_assets.py to regenerate ocr_templates/. Local-only,
 # only present when re-extracting after the game HUD layout changes. The
 # committed runtime artifacts under ocr_templates/ are what's actually loaded
 # at runtime — these source PNGs are NOT a runtime dependency.
@@ -41,7 +41,7 @@ _sta_verify_*.json
 # the in-process auto-driver at runtime. Local-only; user-private telemetry.
 /_recordings/
 
-# Drive-recorder rendered HTML reports (output of data_tools/plot_drive.py).
+# Drive-recorder rendered HTML reports (output of plot_drive.py).
 # Self-contained per-drive artifact; user opens locally and shares as needed,
 # not part of the repo.
 /drive_*.html

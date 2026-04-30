@@ -1,6 +1,6 @@
 """Minimal dxcam test — capture whole desktop, save PNG. No window detection, no OCR.
 
-Run: uv run python data_tools/test_dxcam.py
+Run: uv run python _dev_scripts/test_dxcam.py
 Then open _experiments/live_captures/desktop_test.png to see what dxcam returned.
 """
 

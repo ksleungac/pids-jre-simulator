@@ -74,7 +74,7 @@ AutoDriver tracks last-known `curr_stop`. If it differs from current and the cha
 - **2026-04-26 evening (Phase 2)**: speed OCR (decimal-place stripping, gap tuning); badge classifier (4-anchor pixel-diff); event state machine with per-segment observed-flags; validated against multi-station live drive (2 segments, all transitions detected correctly).
 - **2026-04-26 late evening (Phase 3)**: speed OCR robustness — decimal-point detection (replaces gap heuristic for boundary), gap relaxation for narrow-digit kerning; validated on 17 live frames spanning 0–120+ km/h.
 - **2026-04-27 (Phase 4)**: PASSING badge added (rapid-service "Pass" / "通過" blue pentagon); classifier expanded from 4 to 6 anchors. Arrival logic switched from downward-crossing to level test gated on `badge==MOVING` so post-PASSING under-threshold cases fire correctly. OCR + layout modules promoted from `_experiments/` to project root. Auto-input toggle + Lead/Interval steppers moved from CLI flags to setup screen. Offline OCR validation 6/6 PASS; detector scenarios cover normal segment, mid-segment PASSING, post-PASSING already-under-threshold, double-fire prevention, STOPPED gate.
-- **2026-04-27 evening**: live-validated 1b (separate-process, `data_tools/capture_game.py`) on Keihin-Tōhoku 727B Omiya→Kanda full route — flawless. 1a (in-process) feature-complete + compiles cleanly but **not yet live-validated**.
+- **2026-04-27 evening**: live-validated 1b (separate-process, `_dev_scripts/capture_game.py`) on Keihin-Tōhoku 727B Omiya→Kanda full route — flawless. 1a (in-process) feature-complete + compiles cleanly but **not yet live-validated**.
 - **2026-04-29**: Layer 2 cache rename `*_fired` → `*_observed`; `_Detector.inferred_state()` accessor extracted; `inferred_state` surfaced in status dict + JSONL drive log + debug panel. Layer 3 vocabulary (canonical names + truth table) now mirrored between code and AUTO_INPUT.md.
 
 ## Calibration insights (rationale / guardrails)
@@ -120,4 +120,4 @@ Manual smoke-test hint for live-validating 1a:
    - `inferred_state` value matches expectations (`STOPPING_FRESH` / `APPROACHING_*` / `MOVING_AFTER_ARR`)
    - `app:` line shows correct App-state description
    - Manual PageDown overrides cleanly (auto skips its own fire)
-3. If anything misbehaves, paste the terminal log + a panel screenshot. The 1b path (`data_tools/capture_game.py`) is the comparison baseline — known working.
+3. If anything misbehaves, paste the terminal log + a panel screenshot. The 1b path (`_dev_scripts/capture_game.py`) is the comparison baseline — known working.

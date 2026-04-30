@@ -18,7 +18,7 @@ Passing-EN/JA); lowest diff wins. Language-agnostic.
 Runtime assets live under `ocr_templates/` — pre-extracted small PNGs (digit
 glyphs ~20×30 binary, badge anchors 125×45 RGB). The ~33 MB of full desktop
 source screenshots that were used to extract them live under `_ocr_calibration/`
-(gitignored, local-only). Re-extract via `data_tools/extract_ocr_assets.py`
+(gitignored, local-only). Re-extract via `_dev_scripts/extract_ocr_assets.py`
 after re-capturing source screenshots (only needed if the game HUD layout
 changes).
 
@@ -266,7 +266,7 @@ def build_templates(assets_dir: Path | None = None) -> Templates:
     Each PNG is a 0/255 grayscale image of a tight-bbox digit (~20×30 px).
     Loaded as a binary numpy array — fed directly to `Templates.match`.
 
-    Re-extract via: uv run python data_tools/extract_ocr_assets.py
+    Re-extract via: uv run python _dev_scripts/extract_ocr_assets.py
     """
     if assets_dir is None:
         assets_dir = DEFAULT_TEMPLATES_DIR / "digits"
@@ -315,7 +315,7 @@ def main() -> int:
 
     For an end-to-end OCR validation against the original full-screen sources,
     re-capture them into `_ocr_calibration/` and run
-    `uv run python data_tools/extract_ocr_assets.py` (it warns + bails if any
+    `uv run python _dev_scripts/extract_ocr_assets.py` (it warns + bails if any
     digit / anchor is missing, which is the actual runtime failure mode).
     """
     pygame.init()

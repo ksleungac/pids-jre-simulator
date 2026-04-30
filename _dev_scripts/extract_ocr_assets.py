@@ -12,7 +12,7 @@ Source screenshots live under `_ocr_calibration/` (gitignored — local-only,
 The committed runtime assets under `ocr_templates/` are a few KB total.
 
 Run after re-capturing reference screenshots (e.g. game HUD layout changed):
-    uv run python data_tools/extract_ocr_assets.py
+    uv run python _dev_scripts/extract_ocr_assets.py
 
 Then commit the diff under `ocr_templates/`. Domain reference: AUTO_INPUT.md.
 """

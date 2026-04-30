@@ -5,7 +5,7 @@ then [sta_cut - TAIL_LEAD, EOF] so you hear the music tail → cut → voice
 transition. A short beep marks the exact sta_cut moment during tail playback.
 Click/key in PASS or FAIL per station; final report to stdout.
 
-    uv run python data_tools/verify_sta_listen.py audio/takasaki/3922E
+    uv run python _dev_scripts/verify_sta_listen.py audio/takasaki/3922E
 
 Keys: P=Pass  F=Fail  R=Replay  E=Edit note  N=Next without verdict  Q/Esc=Quit
       [/] adjust start-trim  ,/. adjust end-trim  T apply trim  Z reset trim

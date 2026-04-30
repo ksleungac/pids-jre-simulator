@@ -36,6 +36,14 @@ Before claiming "X is a bug" or "X works like Y" in existing code, verify by rea
 
 **How to apply:** When proposing a fix to existing code, the bar is "I have read the relevant call sites + traced the state transitions," not "this looks wrong." When uncertain about a convention, say so explicitly and verify before taking a position. The user's "original design" is a strong prior — assume it's coherent until the trace says otherwise.
 
+### Causal depth on diagnoses
+
+When a problem reveals an interesting causal failure (not just a bug to fix, but a pattern of mistake), develop the causal analysis fully before jumping to the fix. Surface-level "X things got conflated" or "three contributing factors" framings are usually shortcuts — push for the actual underlying frame mismatch or cognitive failure that explains all the symptoms.
+
+**Why:** During the 2026-04-30 dep-misclassification incident, I framed the failure as "two things got conflated" (lazy import + dev classification). User pushed: *"It's the deferred import, but that doesn't mean production doesn't need that library... it's so weird..."* I then expanded to "three contributing factors" (folder taxonomy / inherited invariants / try-except masking). User pushed again: *"is amateur and not normal TBH., any more hint?"* Only on the third pass did I articulate the actual root cause — claude reasons about code as text rather than as a deployed system; the three "factors" are all the same pathology in different costumes. User then redirected: *"I need to answer 'why' but not 'ok now this is fixed'."* The shallow framings would have been satisfying-enough to move on, but they would have left the actual pathology unaddressed and the same family of mistake free to recur.
+
+**How to apply:** When discussing why an incident happened, explicitly ask: "is this the actual cognitive failure, or just a comfortable surface description?" If the explanation reads as a list of contributing factors without a shared root, keep digging. The user's tolerance for "let's just fix it" is low when the underlying pattern is generalizable — they want the diagnosis precise enough that future Claude won't repeat the same family of mistake. Sibling to "Verify before claiming": that one is about *factual accuracy* (don't claim X without verification); this one is about *analytical depth* (don't satisfice with surface explanations when the underlying pattern matters).
+
 ---
 
 ## Data modeling
@@ -73,7 +81,7 @@ When format varies between batches (e.g., audio splitting where one source uses 
 **How to apply:** When asked to extend a tool to handle a new source format, propose a fresh per-source script instead of overloading the existing one.
 
 ### Backup before in-place destructive modification
-Before running tools that re-encode / overwrite / delete files in place (e.g. `data_tools/trim_sta_silence.py`, manual `ffmpeg -filter_complex` splices, `route.json` multi-value patches), snapshot the target into `audio_src/<line>/<diagram>/` (gitignored) first. Mention the safety net in the pre-flight summary so the user knows the rollback path exists.
+Before running tools that re-encode / overwrite / delete files in place (e.g. `_dev_scripts/trim_sta_silence.py`, manual `ffmpeg -filter_complex` splices, `route.json` multi-value patches), snapshot the target into `audio_src/<line>/<diagram>/` (gitignored) first. Mention the safety net in the pre-flight summary so the user knows the rollback path exists.
 
 **Why:** Destructive in-place modifications are unrecoverable without a snapshot. Re-deriving lost data from source mp3s is hours of work; the disk cost of a snapshot is seconds.
 

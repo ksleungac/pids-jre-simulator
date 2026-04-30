@@ -13,7 +13,7 @@ a global keyboard hook and skips the auto-fire for that segment. Self-press guar
 
 Verbose log per sample + every event so you can watch the state machine work.
 
-Run: uv run python data_tools/capture_game.py
+Run: uv run python _dev_scripts/capture_game.py
 Flags:
   --no-fire        log only, no synthetic keystrokes (debug mode)
   --lead N         arrival distance threshold in meters (default 900;
