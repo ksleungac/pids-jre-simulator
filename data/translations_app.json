@@ -1,0 +1,228 @@
+{
+  "_comment": "App-chrome translations. Station/route names are NOT here — those live in data/translations.json. EN is authoritative; zh-HK and zh-CN are independent translations (not character-set conversions of each other — register differs: HK tolerates English code-switching for casual nouns, CN does not).",
+
+  "picker.title": {
+    "en": "Choose Language",
+    "zh_HK": "選擇語言",
+    "zh_CN": "选择语言"
+  },
+  "picker.confirm": {
+    "en": "OK",
+    "zh_HK": "確定",
+    "zh_CN": "确定"
+  },
+  "picker.hint": {
+    "en": "↑↓: Navigate  |  Enter: Confirm",
+    "zh_HK": "↑↓:移動  |  Enter:確定",
+    "zh_CN": "↑↓:移动  |  Enter:确定"
+  },
+
+  "setup.title": {
+    "en": "Select Route",
+    "zh_HK": "選擇路線",
+    "zh_CN": "选择路线"
+  },
+  "setup.nav_hint": {
+    "en": "Up/Down: Navigate  |  Enter: Select  |  ESC: Cancel",
+    "zh_HK": "↑↓:移動  |  Enter:選定  |  ESC:取消",
+    "zh_CN": "↑↓:移动  |  Enter:选定  |  ESC:取消"
+  },
+  "setup.diagram_label": {
+    "en": "Diagram: {diagram}",
+    "zh_HK": "車序:{diagram}",
+    "zh_CN": "车序:{diagram}"
+  },
+  "setup.dest_label": {
+    "en": "Bound for {dest}",
+    "zh_HK": "開往 {dest}",
+    "zh_CN": "开往 {dest}"
+  },
+  "setup.no_routes": {
+    "en": "No routes found. Please add route.json files to the audio/ directory.",
+    "zh_HK": "找不到路線。請於 audio/ 目錄下加入 route.json 檔案。",
+    "zh_CN": "找不到路线。请在 audio/ 目录下添加 route.json 文件。"
+  },
+
+  "setup.ocr_state": {
+    "en": "OCR Auto-PA: {state}",
+    "zh_HK": "OCR 自動廣播:{state}",
+    "zh_CN": "OCR 自动广播:{state}"
+  },
+  "setup.on": {
+    "en": "ON",
+    "zh_HK": "開",
+    "zh_CN": "开"
+  },
+  "setup.off": {
+    "en": "OFF",
+    "zh_HK": "關",
+    "zh_CN": "关"
+  },
+  "setup.lead_label": {
+    "en": "Lead:",
+    "zh_HK": "提前距離:",
+    "zh_CN": "提前距离:"
+  },
+  "setup.interval_label": {
+    "en": "Interval:",
+    "zh_HK": "間隔:",
+    "zh_CN": "间隔:"
+  },
+
+  "setup.tutorial_button": {
+    "en": "? Tutorial",
+    "zh_HK": "? 教學",
+    "zh_CN": "? 教程"
+  },
+
+  "tutorial.step_header": {
+    "en": "Step {n} of {total}",
+    "zh_HK": "第 {n}/{total} 步",
+    "zh_CN": "第 {n}/{total} 步"
+  },
+  "tutorial.btn.next": {
+    "en": "Next",
+    "zh_HK": "下一步",
+    "zh_CN": "下一步"
+  },
+  "tutorial.btn.back": {
+    "en": "Back",
+    "zh_HK": "上一步",
+    "zh_CN": "上一步"
+  },
+  "tutorial.btn.skip_tutorial": {
+    "en": "Skip tutorial",
+    "zh_HK": "跳過教學",
+    "zh_CN": "跳过教程"
+  },
+  "tutorial.btn.done": {
+    "en": "Done",
+    "zh_HK": "完成",
+    "zh_CN": "完成"
+  },
+
+  "tutorial.phase.at_station": { "en": "At station", "zh_HK": "停站中", "zh_CN": "停站中" },
+  "tutorial.phase.pre_departure": { "en": "Pre-departure", "zh_HK": "出發前", "zh_CN": "出发前" },
+  "tutorial.phase.departure_melody": { "en": "Departure melody", "zh_HK": "發車音樂", "zh_CN": "发车音乐" },
+  "tutorial.phase.departed": { "en": "Departed", "zh_HK": "出發後", "zh_CN": "出发后" },
+  "tutorial.phase.approaching": { "en": "Approaching", "zh_HK": "即將抵達", "zh_CN": "即将到达" },
+  "tutorial.phase.stopped_at_next": { "en": "Stopped at next station", "zh_HK": "抵達下一站", "zh_CN": "到达下一站" },
+  "tutorial.phase.click_jump": { "en": "Jump to station", "zh_HK": "跳至車站", "zh_CN": "跳至车站" },
+  "tutorial.phase.recap": { "en": "Recap", "zh_HK": "總結", "zh_CN": "总结" },
+
+  "tutorial.step.1.body": {
+    "en": "'ただいま 国府津' on the upper LCD reads 'Now Stopping at Kōzu' — the train is parked at this platform. The pentagon on the route bar below shows your position on the line.",
+    "zh_HK": "上方屏幕「ただいま 国府津」即列車正停靠國府津,下方路線圖上的五角形是列車位置。",
+    "zh_CN": "上方屏幕「ただいま 国府津」即列车正停靠国府津,下方路线图上的五角形是列车位置。"
+  },
+  "tutorial.step.1.action": {
+    "en": "Press [[btn:Next]] to begin the tutorial.",
+    "zh_HK": "按 [[btn:下一步]] 開始教學。",
+    "zh_CN": "按 [[btn:下一步]] 开始教程。"
+  },
+  "tutorial.step.2.body": {
+    "en": "国府津 has at-platform announcements queued — the yellow hint square on the upper LCD lights up whenever any are present.",
+    "zh_HK": "列車於國府津停留時有廣播。",
+    "zh_CN": "列车于国府津停留时有广播。"
+  },
+  "tutorial.step.2.action": {
+    "en": "Press [[PgDn]] to play one.",
+    "zh_HK": "按 [[PgDn]] 播放廣播。",
+    "zh_CN": "按 [[PgDn]] 播放广播。"
+  },
+  "tutorial.step.2.action_after_first": {
+    "en": "Press [[PgDn]] again to play the remaining.",
+    "zh_HK": "再按一次 [[PgDn]] 播放餘下廣播。",
+    "zh_CN": "再按一次 [[PgDn]] 播放剩余广播。"
+  },
+  "tutorial.step.3.body": {
+    "en": "発車メロディ (departure melody) plays just before the doors close. Start it when about 25 seconds remain on the in-game departure cue.",
+    "zh_HK": "在關閉車門前播放發車音樂,可在遊戲出發時間前 25 秒開始播放。",
+    "zh_CN": "在关闭车门前播放发车音乐,可在游戏出发时间前 25 秒开始播放。"
+  },
+  "tutorial.step.3.action": {
+    "en": "Press [[PgUp]] to play the melody.",
+    "zh_HK": "按 [[PgUp]] 播放音樂。",
+    "zh_CN": "按 [[PgUp]] 播放音乐。"
+  },
+  "tutorial.step.3.action_after_first": {
+    "en": "Now try it again — press [[PgUp]] to start a second play.",
+    "zh_HK": "再試一次,按 [[PgUp]] 開始第二次播放。",
+    "zh_CN": "再试一次,按 [[PgUp]] 开始第二次播放。"
+  },
+  "tutorial.step.3.action_during_second": {
+    "en": "Press [[PgUp]] one more time to cut the melody short.",
+    "zh_HK": "再按一次 [[PgUp]] 提早終止音樂。",
+    "zh_CN": "再按一次 [[PgUp]] 提前结束音乐。"
+  },
+  "tutorial.step.3.action_done": {
+    "en": "Press [[btn:Next]] to continue.",
+    "zh_HK": "按 [[btn:下一步]] 繼續。",
+    "zh_CN": "按 [[btn:下一步]] 继续。"
+  },
+  "tutorial.step.4.body": {
+    "en": "The train will depart 国府津 (Kōzu) and announce the next stop, 鴨宮 (Kamonomiya). The upper LCD changes from 'ただいま 国府津' (now stopping at Kōzu) to '次は 鴨宮' (next stop Kamonomiya).",
+    "zh_HK": "列車從國府津出發,廣播下一站鴨宮。上方屏幕由「ただいま 国府津」變成「次は 鴨宮」(下一站鴨宮)。",
+    "zh_CN": "列车从国府津出发,广播下一站鸭宫。上方屏幕由「ただいま 国府津」变为「次は 鴨宮」(下一站鸭宫)。"
+  },
+  "tutorial.step.4.action": {
+    "en": "Press [[PgDn]] to depart.",
+    "zh_HK": "按 [[PgDn]] 出發。",
+    "zh_CN": "按 [[PgDn]] 出发。"
+  },
+  "tutorial.step.5.body": {
+    "en": "The yellow hint square shows that 鴨宮 has an arrival announcement. About 1200 to 800 m from the platform, play it: '次は 鴨宮' becomes 'まもなく 鴨宮' (arriving at Kamonomiya). Without the yellow square, the stop has no arrival announcement.",
+    "zh_HK": "黃色方格表示鴨宮有到站廣播。請於距離月台約 1200 至 800 米時播放,上方屏幕由「次は 鴨宮」變成「まもなく 鴨宮」(即將到達鴨宮)。沒有顯示黃色方格的車站,則沒有到站廣播。",
+    "zh_CN": "黄色方格表示鸭宫有到站广播。请在距离站台约 1200 至 800 米时播放,上方屏幕由「次は 鴨宮」变为「まもなく 鴨宮」(即将到达鸭宫)。没有显示黄色方格的车站,则没有到站广播。"
+  },
+  "tutorial.step.5.action": {
+    "en": "Press [[PgDn]] to play the arrival announcement.",
+    "zh_HK": "按 [[PgDn]] 播放到站廣播。",
+    "zh_CN": "按 [[PgDn]] 播放到站广播。"
+  },
+  "tutorial.step.6.body": {
+    "en": "When the train has stopped at 鴨宮 (Kamonomiya), the next [[PgDn]] press changes the upper LCD to 'ただいま 鴨宮' — the final Stopping state of the cycle. To depart, it's the same cycle starting from step 1.",
+    "zh_HK": "列車到達鴨宮後,[[PgDn]] 會將上方屏幕切換為停站狀態「ただいま 鴨宮」。要再發車,從第 1 步重新開始。",
+    "zh_CN": "列车到达鸭宫后,[[PgDn]] 会将上方屏幕切换为停站状态「ただいま 鴨宮」。要再次出发,从第 1 步重新开始。"
+  },
+  "tutorial.step.6.action": {
+    "en": "Press [[PgDn]] to change the state into Stopping.",
+    "zh_HK": "按 [[PgDn]] 切換為停站中。",
+    "zh_CN": "按 [[PgDn]] 切换为停站中。"
+  },
+  "tutorial.step.6.action_done": {
+    "en": "Press [[btn:Next]] to go to the next step.",
+    "zh_HK": "按 [[btn:下一步]] 進入下一步。",
+    "zh_CN": "按 [[btn:下一步]] 进入下一步。"
+  },
+  "tutorial.step.7.body": {
+    "en": "Click any station on the route map to jump there — the cycle restarts at that station.",
+    "zh_HK": "點擊路線圖上任何車站可跳轉至該站,並從該站重新開始。",
+    "zh_CN": "点击路线图上任何车站可跳转至该站,并从该站重新开始。"
+  },
+  "tutorial.step.7.action": {
+    "en": "Click any station to try it, or press [[PgDn]] / [[PgUp]] to explore freely.",
+    "zh_HK": "點擊任何車站,或按 [[PgDn]] / [[PgUp]] 自由探索。",
+    "zh_CN": "点击任何车站,或按 [[PgDn]] / [[PgUp]] 自由探索。"
+  },
+  "tutorial.step.7.body_after_click": {
+    "en": "You jumped to {station}. The cycle restarts there.",
+    "zh_HK": "已跳轉至 {station},並從該站重新開始。",
+    "zh_CN": "已跳转至 {station},并从该站重新开始。"
+  },
+  "tutorial.step.7.action_after_click": {
+    "en": "Click any station to try it, or press [[PgDn]] / [[PgUp]] to explore freely, or press [[btn:Next]] to wrap up.",
+    "zh_HK": "點擊任何車站,或按 [[PgDn]] / [[PgUp]] 自由探索,或按 [[btn:下一步]] 完成教學。",
+    "zh_CN": "点击任何车站,或按 [[PgDn]] / [[PgUp]] 自由探索,或按 [[btn:下一步]] 完成教程。"
+  },
+  "tutorial.step.8.body": {
+    "en": "You're set. Quick reference:\n\n[[PgDn]] — next announcement\n[[PgUp]] — departure melody\n[[End]] — pause audio\n[[Esc]] — quit\nClick any station — jump there",
+    "zh_HK": "你已完成教學!快速參考:\n\n[[PgDn]] — 下一個廣播\n[[PgUp]] — 發車音樂\n[[End]] — 暫停音效\n[[Esc]] — 退出\n點擊車站 — 跳轉至該站",
+    "zh_CN": "你已完成教程!快速参考:\n\n[[PgDn]] — 下一个广播\n[[PgUp]] — 发车音乐\n[[End]] — 暂停音效\n[[Esc]] — 退出\n点击车站 — 跳转至该站"
+  },
+  "tutorial.step.8.action": {
+    "en": "Press [[btn:Done]] to finish.",
+    "zh_HK": "按 [[btn:完成]] 完成教學。",
+    "zh_CN": "按 [[btn:完成]] 完成教程。"
+  }
+}

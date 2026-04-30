@@ -56,6 +56,12 @@ class AudioPlayer:
         self.sta_dir = os.path.join(work_dir, "sta")
         self.stops = stops
         self._temp_index = 0  # Track which temp file to use next
+        # Last-played track metadata for position()/duration() — used by the
+        # tutorial's seek bar and any future progress UI. Set in _load_and_play
+        # right before mixer.music.play(); zeroed on init so position() returns
+        # None safely before any track has played.
+        self._current_duration: float = 0.0
+        self._current_start_offset: float = 0.0
 
         # Initialize mixer if not already done
         if not mixer.get_init():
@@ -158,6 +164,8 @@ class AudioPlayer:
             mixer.music.unload()
             mixer.music.load(write_path)
 
+            self._current_duration = len(data) / rate
+            self._current_start_offset = float(cut_position)
             if cut_position > 0:
                 mixer.music.play(fade_ms=AUDIO_FADE_MS, start=cut_position)
             else:
@@ -184,14 +192,34 @@ class AudioPlayer:
         """
         return mixer.music.get_busy()
 
+    def position(self) -> Optional[float]:
+        """Current playback position in file-time seconds, or None when not
+        playing. Includes any ``cut_position`` offset so the value reads as
+        absolute file time even when an STA was restarted mid-play at
+        sta_cut. Returns None outside playback so callers can gate UI on it
+        directly without a separate is_playing() check."""
+        if not mixer.music.get_busy():
+            return None
+        pos_ms = mixer.music.get_pos()
+        if pos_ms < 0:
+            return None
+        return self._current_start_offset + pos_ms / 1000.0
+
+    def duration(self) -> Optional[float]:
+        """Duration of the last-loaded track in seconds, or None if no track
+        has played yet."""
+        return self._current_duration if self._current_duration > 0 else None
+
     def stop(self) -> None:
         """Stop current playback."""
         mixer.music.stop()
 
     def cleanup(self) -> None:
-        """Clean up resources."""
-        mixer.quit()
+        """Clean up resources. Caller-driven only — never tied to GC.
 
-    def __del__(self):
-        """Destructor to clean up resources."""
-        self.cleanup()
+        Tutorial flow drops the PASimulator reference between tutorial and
+        setup; if a `__del__` here called `mixer.quit()` at GC time, the
+        downstream setup screen and main app would inherit a dead mixer.
+        Cleanup is explicit (PASimulator.cleanup → here) on app exit only.
+        """
+        mixer.quit()

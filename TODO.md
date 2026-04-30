@@ -44,9 +44,16 @@ Speculative side-quest from the future-direction discussion. Competing for budge
 - [ ] **Mac build investigation.** Confirm whether pygame + win32-only deps (e.g. `keyboard` library, `win32gui`, `dxcam`) can be cleanly excluded behind `sys.platform == "win32"` guards.
 - [ ] **First-run smoothness.** Whatever needs polishing for the ~1800 video-play / occasional-railfan audience.
 
+## Chrome / i18n / OOBE
+
+The chrome i18n foundation shipped 2026-04-29 evening: `i18n.py`, language picker, setup-screen translation, EN-mode font swap to HelveticaNeue-Bold, line-marker badges, lifted theme. Open follow-ups:
+
+- [x] **OOBE first-time start guide — basic walkthrough.** Shipped 2026-04-29 overnight, refined 2026-04-30 (vibe-pass: 9→8 steps, dropped Driving phase; flashing route-bar callout for click-jump; flashing red box around yellow pa_hint square on steps 2/5; CJK chrome refactor with language-aware font dispatch + atom-based CJK char-level wrapping; keycap baseline alignment for CJK button labels; bilingual zh-HK / zh-CN translations shipped). 8-step tutorial in `tutorial.py` + `preview_tutorial.py`, gated by `settings["oobe_completed"]` between picker and setup; boots tokaido/1865E at 国府津, walks one full press cycle + click-jump demo + recap. `? Tutorial` button on setup re-runs. OCR-Auto-PA preview-feature disclaimer + screen-capture privacy notice is a separate TODO under § Auto-input/OCR (line 20) — not part of this scope.
+- [ ] **OOBE — game-pairing screenshots.** Placeholders implied in step 3 (~25s departure cue) + step 5 (~1200-800m approach distance) + step 8 recap. User provides screenshots later.
+- [ ] **Add EN data translations for routes not covered by `translations.json` / `train_types.json`.** Today's EN mode falls back to kanji + CJK font for line 2 when a dest/type entry is missing (e.g. joban's `土浦`, mock route's `品川・高輪ゲートウェイ`). Long-term: add `english` field to route.json for route names + line-name itself, expand `translations.json` for missing dests. User: "in the future all of those will be in English."
+
 ## Housekeeping (small, do-when-you-touch-the-area)
 
-- [ ] **Delete iteration screenshots from project root** once eyeballed: `screenshot_v1_setup_off.png`, `screenshot_v1_setup_on.png`. They're gitignored but cluttering. (`memory/2026-04-27.md` § "Status for next session".)
 - [ ] **Decide 1b debug-frame dump behaviour.** `data_tools/capture_game.py:320` saves a HUD crop every sample interval to `_experiments/live_captures/`. Gitignored, but disk spam if 1b runs long. Options: leave (debugging tool), gate behind `--save-frames` flag (default off), or remove. (Discussed 2026-04-27, deferred.)
 - [ ] **Re-grab `passing_en.png` at native 2560×1440.** Current capture is 2559×1439 — pygame blit handles it, classifier diff=0.00, but a clean re-capture is tidier.
 
