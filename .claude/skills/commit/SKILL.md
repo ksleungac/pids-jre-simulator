@@ -23,7 +23,7 @@ Run this **before** drafting the commit message — the outcome may change what'
 
 ## Pre-flight (must hold before drafting the commit message)
 
-Three checks the model owes the user before any commit:
+Four checks the model owes the user before any commit:
 
 ### 1. Smoke test of the change (model's gate)
 
@@ -40,7 +40,25 @@ Surface the smoke-test result to the user — *concrete output, not "I tested it
 
 The model passes the smoke-test on whether the code does *something coherent*; only the user can judge whether the visible behavior matches the ask. Skipping this is what caused the OCR-template incident (see `.claude/rules/critical_lessons.md` § "Runtime-required materials must be committed") — code ran, model called it done, user discovered the silent no-op only later.
 
-### 3. Has session-recap run?
+### 3. Branch-domain check
+
+**Does this commit belong on the current branch?** Run `git branch --show-current` and compare to the work being committed:
+
+- A feature branch's name encodes its scope (`feat/transfer-info`, `feat/audio-overhaul`, `fix/ocr-templates`). Commits whose subject doesn't fit that scope are misplaced — they should go to `master` (or a different branch), not the active feature branch.
+- If you're on a feature branch and the change is **unrelated** to that feature (e.g. on `feat/transfer-info` but committing an audio-pipeline refactor, or a docs-only README fix), surface the mismatch **before drafting the commit message**:
+
+  ```
+  Branch-domain mismatch: current branch is `feat/transfer-info`, but
+  this change is about <X>. Want me to:
+    (a) Stash, switch to master, commit there, then come back?
+    (b) Stash, create a new branch from master, commit there?
+    (c) Commit here anyway (you have a reason — say what)?
+  ```
+
+- The user's authorization to commit at all does NOT pre-authorize where to commit. Don't silently commit on the current branch when the work doesn't fit. Misplaced commits are expensive to move later — they require cherry-pick + rebase + force-push (real incident: 2026-05-02 dual-stream audio committed on `feat/transfer-info`, had to be moved to master mid-session, rewrote 4 already-pushed commits' SHAs as collateral).
+- Master-fit changes: project-wide tooling, cross-cutting docs/skills, generic refactors, incident fixes that aren't tied to a feature branch's scope.
+
+### 4. Has session-recap run?
 
 If this is the last commit of a coding session (e.g. the user is about to wrap up, has said "commit this and we're done", or the session has produced a meaningful chunk of new code/docs/learnings), check whether `/session-recap` has been run. Look for: a `memory/<today>.md` daily log file mentioning this session's work, or a recent `MEMORY.md` index entry pointing at it.
 
