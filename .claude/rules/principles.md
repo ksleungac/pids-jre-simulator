@@ -44,6 +44,27 @@ When a problem reveals an interesting causal failure (not just a bug to fix, but
 
 **How to apply:** When discussing why an incident happened, explicitly ask: "is this the actual cognitive failure, or just a comfortable surface description?" If the explanation reads as a list of contributing factors without a shared root, keep digging. The user's tolerance for "let's just fix it" is low when the underlying pattern is generalizable — they want the diagnosis precise enough that future Claude won't repeat the same family of mistake. Sibling to "Verify before claiming": that one is about *factual accuracy* (don't claim X without verification); this one is about *analytical depth* (don't satisfice with surface explanations when the underlying pattern matters).
 
+### Implementation-completion-as-spec
+
+When the user states the *positive* shape of a rule but leaves edge cases / failure modes / "what if X" gaps unstated, **Claude MUST ALWAYS ask the user with open questions to clarify each gap**. Never fill gaps autonomously.
+
+**Why:** four documented instances across different domains:
+
+- **2026-04-30 PM (dep classification):** user said "use plotly", didn't specify dev vs runtime → Claude filled with "lazy import + dev folder ⇒ dev dep" → silent release-build breakage. Codified in `critical_lessons.md` as "Lazy import ≠ optional dep."
+- **2026-04-30 evening (MEMORY.md drift):** spec said "one-line pointers", didn't specify a write-time gate → Claude wrote multi-paragraph entries → drift accumulated over weeks until user noticed.
+- **2026-04-30 late-evening (autodriver scaffolding):** user said "drain the queue", didn't specify the contract surface → Claude invented "self-contained `_advance_silently` primitive + two-channel write contract" around a wrong anchor → 12-turn over-architecting before user redirected to the actual one-line fix.
+- **2026-05-01 / 2026-05-02 (transfer-info Rule 1):** user stated "Rule 1 = use upper anchors", didn't specify visual-collision behavior → Claude filled with "all-or-nothing row-level overlap forfeit" → wrote it into WIP doc + commit message verbatim → next-day session read it as user spec → multiple correction rounds + two /third-man invocations to unwind.
+
+The shape is consistent: the smoothness of the autonomous fill is the trap. Each fill reads as locally-coherent reasoning ("of course any overlap should fail the row"; "of course we need a primitive for this"). The fill gets written into the artifact at the same authority level as the user's spec. Future-me reads the artifact, sees it under the same heading as actual user-stated content, and treats both equivalently — there's no marker distinguishing "user said this" from "Claude filled this in."
+
+**How to apply:**
+
+- The moment Claude identifies a gap in user spec — edge case, failure mode, what-if branch, validation criterion, fallback behavior, ambiguous wording — Claude **MUST** ask an open question. No autonomous fill, no "minimal placeholder", no "I'll just pick something reasonable for now", no "let me defer this and decide later", no "I'll flag it in a comment". Just ask.
+- **Open questions, not leading questions.** "What should happen when X?" — not "Should X do Y? (yes/no)" or "Should X do Y or Z?". The leading form lets Claude's pre-loaded interpretation bias the user's answer.
+- **One gap per question.** Surface the gap in the same turn it's detected. Don't batch unrelated gaps into a single multi-part question — each loses its own context and the user has to triage them.
+- This applies during: design discussions, refactors, doc writing, rule codification, edge-case implementation, algorithm spec — anywhere Claude is converting user-stated rule shapes into concrete artifacts.
+- **Recursive trap:** this principle applies to its own meta-rules. When the user doesn't specify whether to codify a pattern, the bias is "classify rule-shaped" per session-recap Rule 1 — don't fill the "should we codify?" gap with a cautious "wait for more data" that itself becomes the recorded decision. If genuinely uncertain whether to codify, ask.
+
 ---
 
 ## Data modeling

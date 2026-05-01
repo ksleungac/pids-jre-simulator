@@ -34,8 +34,28 @@ Skip code-change inventory (git covers it). Present this:
 ## Session Learnings Summary
 
 ### New Understandings
-- [What "why" decision was made? What mental-model shift happened?]
-- [What behavioral pattern was discovered?]
+
+**HARD RULE — every bullet MUST carry a destination annotation. NO EXCEPTIONS.**
+
+A New Understanding is, by definition, something claude learned this session. The user does NOT learn it from reading the recap — only claude does, and only if it's saved to a file that future sessions will load. A bullet without a save is self-narration: it costs the user reading time, costs claude write tokens, and produces ZERO forward value because next session has no record of it.
+
+The mental model: claude learning ≠ user learning. The user is not the audience for the New Understandings list — the audience is *future claude*. The list exists so claude can identify what to write down. If a bullet has no destination, it's a confession that claude is about to lose the learning — and outputting that confession is worse than silent loss because it wastes the user's time too.
+
+Every bullet MUST be one of:
+
+- `(already in X.md from this session)` — the understanding landed in a doc as part of this session's work; the bullet is a pointer for the user's review.
+- `→ propose: write to X.md` — proposed for codification in Step 3 (user reviews/adjusts in Step 2).
+
+If a candidate bullet doesn't fit either: **OMIT it entirely.** Don't write it down to "share with the user" — there is no value to share. The user does not internalize understandings by reading; claude does, and only via the save.
+
+Example (correct):
+- IRL destination display stays as kanji, doesn't cycle to furigana like stations *(already in CLAUDE.md § "IRL display conventions")*
+- Implementation-completion-as-spec recurrence pattern → *propose: write to principles.md as new entry*
+
+Example (WRONG — anti-pattern, never produce this):
+- ~~IRL destination display stays as kanji~~ ← no destination annotation; if it's already in a doc, say so; if not, propose a save; if neither applies, this bullet should not exist.
+
+This rule is the canonical source of truth. The same logic applies in spirit to "Corrections / preferences" — but that section already has destinations baked into its template, so the gap is specifically here in "New Understandings."
 
 ### Corrections / preferences this session
 
@@ -103,6 +123,8 @@ Preloaded files (`CLAUDE.md`, `.claude/rules/*`) hold what humans keep in their 
 ---
 
 ## Rules
+
+0. **HARD RULE — Every "New Understanding" bullet MUST have a save-destination, NO EXCEPTIONS.** A New Understanding without a destination annotation is forbidden output. The user does NOT learn from reading the recap; only claude does, and only via the save. Outputting a destination-less understanding wastes the user's time AND loses the learning. Every bullet must be `(already in X.md from this session)` OR `→ propose: write to X.md`. If neither applies, OMIT the bullet — never narrate without committing. See Step 1 for full rationale and examples.
 
 1. **Match the entry's shape to its home — don't universally default to log-only.**
    - **Rule-shaped** (articulates an implicit pattern, or forward-framing "always / never / from now on / don't / use X not Y") → direct to `principles.md` / `conventions.md` / skill / inline `# CONTRACT:`. No log-only step.
@@ -190,9 +212,11 @@ After a session fixing the Yamanote destination display:
 ## Session Learnings Summary
 
 ### New Understandings
-- IRL destination display stays as kanji, doesn't cycle to furigana like stations
-- Stop-level dest override needed for circular routes with midway destination switches
-- Compound destinations use "Shinagawa&\nTokyo" (& + newline, no space)
+- IRL destination display stays as kanji, doesn't cycle to furigana like stations → *propose: write to DISPLAY.md § "Mode rendering"*
+- Stop-level dest override needed for circular routes with midway destination switches → *propose: write to DISPLAY.md § "Mode rendering"*
+- Compound destinations use "Shinagawa&\nTokyo" (& + newline, no space) → *propose: write to DATA_FORMAT.md § "Destination encoding"*
+
+(Every bullet has a destination. If a candidate bullet had nothing to propose AND wasn't already saved, it would be omitted entirely — see Step 1 hard rule.)
 
 ### Preferences expressed (default: log only)
 - [log-only] topic:hardcoding — "hard-coding 次は is fine" — context: said in passing during the cycler fix; no permanence framing
