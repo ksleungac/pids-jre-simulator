@@ -22,9 +22,9 @@
     "tohoku_shinkansen":  {"badges": [{"icon": "shinkansen_jr_east"}],    "name_ja": "東北・山形・秋田・北海道・上越・北陸新幹線", "name_en": "Tōhoku・Yamagata・Akita・Hokkaido・Jōetsu・Hokuriku Shinkansen", "category": "shinkansen"},
     "tokaido_shinkansen": {"badges": [{"icon": "shinkansen_jr_central"}], "name_ja": "東海道・山陽新幹線", "name_en": "Tōkaidō・Sanyō Shinkansen",                            "category": "shinkansen"},
     "marunouchi":         {"badges": [{"icon": "metro_marunouchi"}],      "name_ja": "丸ノ内線",   "name_en": "Marunouchi Line",                                            "category": "non_jr"},
-    "keikyu":              {"badges": [{"icon": "_universal"}], "name_ja": "京急本線",                "name_en": "Keikyū Line",                          "category": "non_jr"},
+    "keikyu":              {"badges": [{"icon": "_universal"}], "name_ja": "京急線",                "name_en": "Keikyū Line",                          "category": "non_jr"},
     "tokyu_toyoko":        {"badges": [{"icon": "_universal"}], "name_ja": "東急東横線",              "name_en": "Tōkyū Tōyoko Line",                    "category": "non_jr"},
     "sotetsu":             {"badges": [{"icon": "_universal"}], "name_ja": "相鉄線",                  "name_en": "Sōtetsu Line",                "category": "non_jr"},
     "minatomirai":         {"badges": [{"icon": "_universal"}], "name_ja": "みなとみらい線",         "name_en": "Minatomirai Line",            "category": "non_jr"},
-    "yokohama_subway_blue":{"badges": [{"icon": "_universal"}], "name_ja": "横浜市営地下鉄（ブルーライン）", "name_en": "Yokohama Subway Blue Line", "category": "non_jr"}
+    "yokohama_subway_blue":{"badges": [{"icon": "_universal"}], "name_ja": "横浜市営地下鉄(ブルーライン)", "name_en": "Yokohama Subway Blue Line", "category": "non_jr"}
 }

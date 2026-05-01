@@ -1,6 +1,6 @@
 # WIP — Transfer-info display (lower LCD)
 
-**Status:** Algorithm refactored to explicit Rule 1/2/3 fallthrough and validated structurally against both Tokyo and Yokohama IRL references. Tokyo matches pixel-close; Yokohama matches row-by-row structurally but has spacing imprecision in row 3 still to tune. **Algorithm shape is locked; remaining work is data + spacing polish.**
+**Status:** Algorithm refactored 2026-05-02 to per-entry Rule 1 + per-segment Rule 2 (leftmost-fit tail anchor) + Rule 3 right-edge fallback. Validated structurally against both Tokyo and Yokohama IRL references. **Algorithm shape is locked; remaining work is data population + private-operator icons + production wiring.**
 
 ---
 
@@ -25,19 +25,96 @@ Reference photo: `lcd_references/transfer_tokyo.png`. Yokohama reference (untest
 - **Icon assets** — 36 PNGs at 128×128 in `data/line_icons/`. Sources (33 SVGs + 2 Shinkansen variants + universal-fallback PNG) in `lcd_references/line_badges/` and `lcd_references/Shinkansen_jr*.svg`. Regen one-liner: `magick -background none <src.svg> -resize 128x128 <dst.png>`.
 - **Tokyo data** — `東京` populated with 11 transfers (`tohoku_shinkansen`, `tokaido_shinkansen`, `yamanote`, `keihin_tohoku`, `chuo_rapid`, `tokaido`, `ueno_tokyo`, `keiyo`, `yokosuka`, `sobu_rapid`, `marunouchi`).
 - **Renderer prototype** (`preview_transfers.py`) — banner with bilingual "のりかえ案内 Transfer" (dim PASSED_COLOR bg, JA centered, EN bottom-anchored 7 px), 3-row layout with shinkansen row-fenced and 4-entries-per-row cap, mixed-script Latin/CJK font dispatch, two-tier JA compression (0.75 for 7-char like 上野東京ライン, 0.90 for 8+ char, none for ≤6), compact `・` (U+30FB → U+00B7 + 1 px side-pad), badge sized to 1.1 × JA height, margins per user spec (left = 1.6 × badge_h).
-- **Column-anchored layout — Rule 1/2/3 fallthrough** (refactored from earlier (K, H) double loop; H is gone, always 1 in rule 2):
-  - **Row 0**: head at `margin_x`, tail's right edge at `canvas_right`, middles even-distribute.
-  - **Rule 1** (Row R > 0, N ≤ M): try `positions = upper_anchors[0..N-1]`. All-or-nothing; any single overlap forfeits.
-  - **Rule 2** (head + tail anchored, middles even-distribute): head at `upper[0]`, tail at `upper[K]` for K from `min(N-1, M-1)` up to `M-1`. Middles 1..N-2 always even-distribute — never greedy-anchored in this rule. First K that passes overlap check wins. Tail screen-overflow at K terminates K loop.
-  - **Rule 3** (right-edge fallback): head at margin, tail right-edge-aligned to `max(rightmost-edge of upper rows)`. **N=3 single-middle case**: greedy-anchor — first upper anchor that fits between head.right and tail.left wins. N≥4 or greedy-fail: even-distribute.
-  - **Last-ditch pack-left** (zero gap from margin) if even Rule 3 overlaps.
-  - **Validation**: full-width inter-entry no-overlap (text from entry k can't reach entry k+1's badge) + tail no-screen-overflow.
-  - Verified IRL behavior:
-    - Tokyo row 1 (N=4, M=2) → Rule 2, K=1.
-    - Tokyo row 2 (N=3, M=4) → Rule 2, K=2; marunouchi at upper[2] = JC's column.
-    - Yokohama row 1 (N=4, M=2) → Rule 2, K=1.
-    - Yokohama row 2 (N=4, M=4) → Rule 2.
-    - Yokohama row 3 (N=3, M=4) → Rule 3 (BL too wide for any upper[K]); みなとみらい greedy-anchored at upper[1] = JH's column.
+- **Column-anchored layout — Rule 1 / Rule 2 / Rule 3 cascade.** Each row's per-entry x positions are decided by this cascade. Refactored 2026-05-02 to match user spec; third-man verified.
+
+  ### Definitions
+
+  - `N` = number of entries in current row.
+  - `M` = number of upper anchors = `len(upper_anchors)` of the row directly above.
+  - `upper_anchors[k]` = the chosen x position of the k-th entry in the row directly above.
+  - `widths[k]` = full entry width = badge group + gap + max(JA text width, EN text width).
+  - `predecessor of entry k` = entry k-1 (the one to its immediate left in the same row).
+  - `predecessor's right edge` = `predecessor.x + predecessor.width`.
+  - `right_edge_canvas` = `canvas_width - margin_x` (the rightmost x any entry's right edge may reach).
+  - `margin_x` = canvas left/right margin.
+
+  ### Row 0 (no upper row to anchor against)
+
+  - Head (entry 0) at `margin_x`.
+  - Tail (entry N-1) right-edge at `right_edge_canvas` → `tail_x = right_edge_canvas - widths[N-1]`.
+  - Middles (entries 1..N-2) distribute evenly between head's right edge and tail's anchor x.
+
+  ### Row R > 0 — Rule 1 (column alignment, fires only when N ≤ M)
+
+  Per-entry left-to-right sweep. Entry k attempts to anchor at `upper_anchors[k]`.
+
+  **Asymmetric predecessor-intrusion check** is the ONLY validator:
+  - Entry 0 has no predecessor → always succeeds at `upper_anchors[0]`.
+  - Entry k (k ≥ 1) succeeds iff `predecessor's right edge ≤ upper_anchors[k]`. Otherwise it is **blocked**.
+
+  **Asymmetry rationale.** Entry k overflowing rightward into entry k+1's territory is NOT entry k's concern — it doesn't block entry k. But entry k+1's anchor at `upper_anchors[k]` being intruded by entry k's text IS entry k+1's concern — it blocks entry k+1. The check is one-directional: the entry being placed cares only about whether its own predecessor intrudes into its own anchor.
+
+  **Failure is per-entry, not row-wide.** Successful entries stay anchored. The first failure stops the sweep at index `first_failed`. Entries `[first_failed..N-1]` then proceed to Rule 2 as a segment.
+
+  **Edge case:** Entry 0 cannot fail by construction — the predecessor check is skipped at k=0 (no predecessor exists).
+
+  ### Row R > 0 — Rule 2 (head + tail + distribute, leftmost-fit tail anchor)
+
+  Triggered by either:
+
+  - **Failed-segment case** (Rule 1 attempted, partially succeeded, failed at index `f = first_failed > 0`):
+    - `head_right = chosen_xs[f-1] + widths[f-1]` — i.e. the last Rule-1-successful entry's right edge. NOT reset to margin_x.
+    - Tail = entry N-1 (original last entry of the row).
+    - Middles = entries `[f..N-2]` (failed-segment entries strictly between head and tail).
+  - **N > M case** (Rule 1 didn't fire at all):
+    - Head = entry 0, anchored at `upper_anchors[0]`. `head_right = upper_anchors[0] + widths[0]`.
+    - Tail = entry N-1.
+    - Middles = entries `[1..N-2]`.
+
+  **Tail anchor selection — leftmost-fit.** Iterate `upper_anchors` in order (k = 0, 1, 2, …). For each candidate `a = upper_anchors[k]`, `a` is "fitting" iff ALL of:
+
+  - **Middle-distribution check.** If middles exist: `distribute_middles(head_right, a, middle_widths)` returns valid positions (positive gap with all middle widths fitting). If no middles: `head_right ≤ a` (the tail's predecessor — which IS the head when there are no middles — does not intrude into `a`).
+  - **Canvas check.** `a + tail.width ≤ right_edge_canvas`.
+
+  Note: the tail's own predecessor-intrusion check is enforced implicitly by the middle-distribution branch — `distribute_middles` only returns valid positions when the rightmost middle's right edge ≤ `a`. The no-middles branch checks the same condition directly (head IS the tail's predecessor).
+
+  The **first (leftmost) `a` that fits** becomes the tail's anchor. Middles then distribute evenly between `head_right` and the tail's anchor; tail anchored at the chosen `a`.
+
+  If no `upper_anchors[k]` fits → fall to Rule 3.
+
+  ### Row R > 0 — Rule 3 (right-edge fallback)
+
+  Triggered when Rule 2's tail iteration finds no fitting upper anchor.
+
+  - `right_edge_target = max(rightmost edge of every row above)`. (Take the maximum across all rows above this one.)
+  - `tail_x = right_edge_target - tail.width`. The tail's RIGHT edge aligns to `right_edge_target`.
+  - Middles (if any) distribute evenly between `head_right` (same `head_right` as Rule 2's segment) and `tail_x`.
+  - `head_right` continues from Rule 2's segment context (last-Rule-1-successful right edge, or entry 0's right edge if N > M).
+  - If middles still don't fit (negative span): last-ditch pack-from-margin with zero gap. Not expected on real data.
+
+  ### Worked examples (post 2026-05-02 refactor)
+
+  **Tokyo row 0** (shinkansen, N=2, no upper). `widths=[405, 201]`. Row 0: head at 40, tail at 690-201=489. No middles. → `[40, 489]`.
+
+  **Tokyo row 1** (jr_east 4, N=4, M=2). `widths=[115, 143, 97, 120]`. N > M → Rule 2 (N > M case). Head at upper[0]=40, head_right=40+115=155. Middles=[143, 97]. Tail width=120. Iterate `upper_anchors=[40, 489]`:
+  - upper[0]=40: distribute_middles(155, 40, [143,97]) → negative span. FAIL.
+  - upper[1]=489: distribute_middles(155, 489, [143,97]) → span 334, sum 240, gap 31. Canvas 489+120=609 ≤ 690. ✓.
+  - mid_xs=[186, 360], tail at 489 → `[40, 186, 360, 489]`.
+
+  **Tokyo row 2** (3 entries, N=3, M=4). `widths=[176, 97, 126]`. N ≤ M → Rule 1. k=0: anchor at upper[0]=40. right edge=216. k=1 (keiyo): try upper[1]=186, predecessor's right edge 216 > 186 → BLOCKED. first_failed=1. Rule 2 failed-segment with head_right=216, middles=[97], tail width=126. Iterate `upper_anchors=[40, 186, 361, 489]`:
+  - upper[0]=40: distribute_middles(216, 40, [97]) → negative. FAIL.
+  - upper[1]=186: distribute_middles(216, 186, [97]) → negative. FAIL.
+  - upper[2]=361: distribute_middles(216, 361, [97]) → span 145, gap (145-97)/2=24. Canvas 361+126=487 ≤ 690. ✓.
+  - mid_xs=[240], tail at 361 → `[40, 240, 361]`.
+
+  **Yokohama row 0** (N=4, no upper). `widths=[143, 120, 149, 157]`. Head at 40, tail at 690-157=533. Middles distribute → `[40, 210, 357, 533]`.
+
+  **Yokohama row 1** (N=4, M=4). `widths=[98, 117, 97, 143]`. N=M → Rule 1. k=0..3 each succeed (every predecessor's right edge ≤ next upper anchor). → `[40, 210, 357, 533]`.
+
+  **Yokohama row 2** (N=3, M=4). `widths=[99, 149, 315]`. N ≤ M → Rule 1. k=0 (相鉄): anchor at 40, right=139. k=1 (みなとみらい): upper[1]=210, 139 ≤ 210 → anchor at 210, right=359. k=2 (BL): upper[2]=357, 359 > 357 → BLOCKED. first_failed=2. Rule 2 failed-segment with head_right=359, no middles, tail width=315. Iterate `upper_anchors=[40, 210, 357, 533]`:
+  - upper[0..2]: head_right 359 > each → all FAIL middle-distribution check (no-middles branch).
+  - upper[3]=533: 359 ≤ 533 ✓ but canvas 533+315=848 > 690 → FAIL canvas check.
+  - No upper anchor fits → Rule 3. `right_edge_target = max(row 0's rightmost = 690, row 1's rightmost = 676) = 690` (湘南新宿's right edge in row 0). The algorithm scans each row's last entry's right edge only (`row_rights_list[i][-1]`), not interior entries. tail_x = 690-315=375. No middles. → `[40, 210, 375]`.
 
 - **Through-service variant pattern — option (b) sibling slugs**: Lines whose badge set varies by station zone (e.g. Ueno-Tōkyō Line: JT+JU central / JT-only south / JU-only north) get sibling slugs in `lines.json`. Naming: `<base>_<badges-joined>` (e.g. `ueno_tokyo_jt`). JA/EN names duplicate intentionally — each slug self-contained. Considered option (a) per-entry override hook; rejected for less flexibility / more renderer-side machinery.
 
@@ -49,9 +126,7 @@ Reference photo: `lcd_references/transfer_tokyo.png`. Yokohama reference (untest
 
 ## Open follow-ups (priority order)
 
-1. **Yokohama row 3 spacing tweaks.** Algorithm structure is right (相鉄 / みなとみらい under JH / BL right-anchored), but visual placement of みなとみらい and BL has minor spacing mismatch vs `lcd_references/yokohama.png`. Probably tunable via existing params or minor Rule 3 refinement.
-
-2. **Source 5 private-operator icons** (Keikyū, Tōkyū Tōyoko, Sōtetsu, Minatomirai, Yokohama Subway Blue Line). Currently rendering as `_universal` fallback. SVGs to be sourced into `lcd_references/line_badges/` then converted via the standard `magick -resize 128x128` one-liner.
+1. **Source 5 private-operator icons** (Keikyū, Tōkyū Tōyoko, Sōtetsu, Minatomirai, Yokohama Subway Blue Line). Currently rendering as `_universal` fallback. SVGs to be sourced into `lcd_references/line_badges/` then converted via the standard `magick -resize 128x128` one-liner.
 
 3. **Promote to production.** Move `render_transfer` from `preview_transfers.py` into `displays/train_models/e235_1000/` — likely a new sibling module beside `lower_lcd.py` (the transfer view *replaces* the route bar conditionally, not an addition to it). Wire into `LowerDisplay`'s view-cycler so it triggers when `at_station=True` AND the current station has `transfers` data. Surfaces and font-loading patterns to mirror existing `lower_lcd.py` style.
 
@@ -82,14 +157,13 @@ The single source of truth for IRL-derived layout decisions is the params block 
 
 ## What was tested
 
-- **Tokyo full render** (9 entries post-JO-filter, 3 rows): all rows match reference photo (unchanged from prior validation).
-- **Yokohama full render** (11 entries, 3 rows: 4-4-3): structural row-by-row match. Rule 1 doesn't apply on rows 1-2 (overlap). Rule 2 wins rows 1-2. Rule 3 fires for row 3 (BL too wide for any upper[K]); みなとみらい greedy-anchored at upper[1] = JH's column. Spacing imprecision in row 3 noted.
-- **Refactor regression check**: Tokyo render unchanged after Rule 1/2/3 split; H>1 cases of the old (K, H) loop confirmed dead (never fired in production data).
+- **Tokyo full render** (9 entries post-JO-filter, 3 rows: 2/4/3): row 0 head/tail/distribute, row 1 N>M Rule 2 (tail at upper[1]=489), row 2 Rule 1 partial (ueno_tokyo at 40) → Rule 2 leftmost-fit (tail at upper[2]=361). Matches reference photo.
+- **Yokohama full render** (11 entries, 3 rows: 4-4-3): row 0 head/tail/distribute, row 1 Rule 1 N=M=4 full success, row 2 Rule 1 partial (相鉄 + みなとみらい) → Rule 2 fails (canvas overflow at upper[3]) → Rule 3 right-edge align tail. Matches reference photo.
+- **Refactor regression check (2026-05-02)**: Tokyo unchanged outcome for rows 0+1; row 2 keiyo distributed at x=240 (was x=186 — predecessor intrusion now triggers Rule 2 segment). Yokohama row 2 BL moved 357→375 (Rule 3 fired post-fix).
 - **Filter semantics**: any-overlap drop (`{active} ⊆ slug.codes`) — `--filter-line JO` at Tokyo drops yokosuka + sobu_rapid as before; would also drop ueno_tokyo on a JT/JU train.
 
 ## What was NOT tested
 
-- **Yokohama row-3 pixel-precise spacing** (deferred — algorithm is structurally right).
 - **Private-operator icons at runtime** (all 5 fall back to `_universal` placeholder).
 - **Other ~21 stations** (only Tokyo + Yokohama populated).
 - **Through-service variants beyond `ueno_tokyo_jt`** (e.g. `ueno_tokyo_ju` for stations north of Tokyo — slug not yet defined; will be when a north-of-Tokyo station gets populated).

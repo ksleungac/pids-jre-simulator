@@ -279,31 +279,7 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
     entry_h = badge_h + name_line_gap + font_en.get_height()
 
     # --- Layout pass: compute (entry, x, y_rel) for every entry without drawing.
-    #
-    # Column-anchored algorithm (3-rule fallthrough):
-    #   Row 0: first entry at margin_x; last entry right-edge-anchored at
-    #   (W - margin_x); middle entries distribute with equal whitespace gaps.
-    #   Row 0's chosen left-edges become the upper_anchors for row 1.
-    #
-    #   Row R > 0 (N entries) vs upper row's M anchors — try in order:
-    #
-    #     Rule 1 (full column alignment, requires N ≤ M):
-    #       positions = upper_anchors[0..N-1]. All-or-nothing — any single
-    #       overlap forfeits the rule (no partial anchoring within rule 1).
-    #
-    #     Rule 2 (head + tail anchored, middles even-distribute):
-    #       Head[0] at upper_anchors[0]. Tail[N-1] at upper_anchors[K] for K
-    #       iterating from min(N-1, M-1) up to M-1. Middles 1..N-2 distribute
-    #       evenly between head.right and tail.left — never greedy-anchored
-    #       in this rule. First K that fits without overlap → win.
-    #       Tail screen-overflow at K terminates the K loop (larger K worse).
-    #
-    #     Rule 3 (right-edge fallback):
-    #       Head at margin_x, tail right-edge-aligned to
-    #       max(upper rows' rightmost edges). For N=3 (single middle): try
-    #       greedy-anchor — first upper anchor that fits between head.right
-    #       and tail.left. For N≥4 or if greedy fails: even-distribute.
-    #
+    # Per-rule comments inline below; canonical narrative in WIP_transfer_display.md.
     # Row-grouping (independent of positioning): natural-flow with
     # max_entries_per_row=4, max_rows=3, shinkansen row-fenced.
 
@@ -391,76 +367,90 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
             upper_anchors = row_anchors_list[r_idx - 1]
             m = len(upper_anchors)
 
-            # Rule 1: full column alignment (N ≤ M).
+            # Rule 1 — per-entry left-to-right sweep with asymmetric
+            # predecessor-intrusion check. Only fires when N ≤ M. Entry k
+            # anchors at upper[k] iff its predecessor's right edge ≤ upper[k].
+            # Successful entries stay anchored even if a later entry fails —
+            # failure is per-entry, not row-wide. The first failure stops
+            # the sweep; remaining entries fall to Rule 2 as a segment.
+            #
+            # When N > M, Rule 1 doesn't fire at all. Entry 0 is anchored at
+            # upper[0] to start Rule 2's segment from index 1; Rule 2 then
+            # places middles[1..N-2] + tail[N-1] via head+tail+distribute.
+            rule1_xs: list = []
+            first_failed = n  # sentinel: no failure
             if n <= m:
-                attempt = list(upper_anchors[:n])
-                if (
-                    attempt[-1] + widths[-1] <= right_edge_canvas
-                    and check_no_overlap(attempt, widths)
-                ):
-                    chosen_xs = attempt
-
-            # Rule 2: head at upper[0], tail at upper[K] (K iterates),
-            # middles even-distribute. H is fixed at 1 — no greedy anchoring
-            # for middles in rule 2.
-            if chosen_xs is None and n >= 2:
-                start_k = min(n - 1, m - 1)
-                head_x = upper_anchors[0]
-                for k_idx in range(start_k, m):
-                    tail_x = upper_anchors[k_idx]
-                    if tail_x + widths[n - 1] > right_edge_canvas:
-                        # Tail screen-overflows. Larger K only worse. Stop.
-                        break
-                    if n == 2:
-                        attempt = [head_x, tail_x]
+                for k in range(n):
+                    a = upper_anchors[k]
+                    if k == 0:
+                        rule1_xs.append(a)
                     else:
-                        mid_xs = distribute_middles(
-                            head_x + widths[0], tail_x, widths[1:n - 1]
-                        )
+                        prev_right = rule1_xs[-1] + widths[k - 1]
+                        if prev_right > a:
+                            first_failed = k
+                            break
+                        rule1_xs.append(a)
+            else:
+                # N > M: anchor entry 0 at upper[0], Rule 2 handles the rest.
+                rule1_xs.append(upper_anchors[0])
+                first_failed = 1
+
+            if first_failed == n:
+                # All entries placed cleanly under Rule 1.
+                chosen_xs = rule1_xs
+            else:
+                # Rule 2 — head + tail + distribute, applied to the failed
+                # segment [first_failed..n-1]. Head's right edge is the last
+                # Rule-1-successful entry's right edge (NOT row's first entry).
+                # Tail iterates upper anchors leftmost-first, picks the
+                # leftmost where (a) middles fit between head_right and the
+                # candidate (or — when no middles — head_right ≤ candidate),
+                # AND (b) candidate + tail_w fits canvas. If no candidate
+                # works → Rule 3.
+                f = first_failed
+                head_right = rule1_xs[f - 1] + widths[f - 1]
+                middle_widths = widths[f:n - 1]
+                tail_w = widths[n - 1]
+                tail_anchor = None
+                tail_mid_xs: list = []
+                for cand in upper_anchors:
+                    if middle_widths:
+                        mid_xs = distribute_middles(head_right, cand, middle_widths)
                         if mid_xs is None:
                             continue
-                        attempt = [head_x] + mid_xs + [tail_x]
-                    if check_no_overlap(attempt, widths):
-                        chosen_xs = attempt
-                        break
+                    else:
+                        if head_right > cand:
+                            continue
+                        mid_xs = []
+                    if cand + tail_w > right_edge_canvas:
+                        continue
+                    tail_anchor = cand
+                    tail_mid_xs = mid_xs
+                    break
 
-            # Right-edge fallback: align rightmost edge with max(rightmost edge
-            # of upper rows). Triggered when no (K, H) fit — typically because
-            # the last entry's text is longer than any upper-row tail can host.
-            if chosen_xs is None:
-                right_edge_target = max(
-                    row_rights_list[i][-1] for i in range(r_idx)
-                )
-                if n == 1:
-                    chosen_xs = [right_edge_target - widths[0]]
+                if tail_anchor is not None:
+                    chosen_xs = rule1_xs + tail_mid_xs + [tail_anchor]
                 else:
-                    head_x = margin_x
-                    tail_x = right_edge_target - widths[-1]
-                    # Single-middle case (N == 3): try anchoring the middle to
-                    # an upper anchor first, so e.g. みなとみらい lands under JH
-                    # rather than free-floating in the middle gap. Multi-middle
-                    # cases (N >= 4) keep even-distribute — anchor-greedy
-                    # placement there isn't IRL-validated.
-                    if n == 3:
-                        mid_w = widths[1]
-                        for h in range(m):
-                            cand_x = upper_anchors[h]
-                            if cand_x < head_x + widths[0]:
-                                continue
-                            if cand_x + mid_w > tail_x:
-                                continue
-                            attempt = [head_x, cand_x, tail_x]
-                            if check_no_overlap(attempt, widths):
-                                chosen_xs = attempt
-                                break
-                    if chosen_xs is None:
-                        mid_xs = distribute_middles(
-                            head_x + widths[0], tail_x, widths[1:-1]
-                        )
-                        if mid_xs is not None:
-                            attempt = [head_x] + mid_xs + [tail_x]
-                            if check_no_overlap(attempt, widths):
-                                chosen_xs = attempt
+                    # Rule 3 — right-edge fallback. Tail's right edge aligns
+                    # to the rightmost edge of any row above. Middles
+                    # distribute between head's right edge and tail's anchor.
+                    # If head_right > tail_x (no-middles branch) or middles
+                    # don't fit (with-middles branch), tail_x is voided and
+                    # the last-ditch pack-from-margin path takes over.
+                    right_edge_target = max(
+                        row_rights_list[i][-1] for i in range(r_idx)
+                    )
+                    tail_x = right_edge_target - tail_w
+                    if middle_widths:
+                        mid_xs = distribute_middles(head_right, tail_x, middle_widths)
+                        if mid_xs is None:
+                            tail_x = None
+                    else:
+                        if head_right > tail_x:
+                            tail_x = None
+                        mid_xs = []
+                    if tail_x is not None:
+                        chosen_xs = rule1_xs + mid_xs + [tail_x]
 
         if chosen_xs is None:
             # Last-ditch (also catches the r_idx==0 path where row 0's
