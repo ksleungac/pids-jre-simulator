@@ -29,7 +29,9 @@ This document defines the JSON data formats used by the PA Simulator for route c
 data/
 ├── translations.json        # Central translation database (furigana, english)
 ├── train_types.json         # Train type English translations (with optional english_short)
-└── stations.json            # Station metadata (3-letter codes; more fields over time)
+├── lines.json               # Rail line catalog (badges, colors, display names) for transfer entries
+├── line_icons/              # PNG assets for branded line logos (Shinkansen, etc.)
+└── stations.json            # Station metadata (3-letter codes, transfers; more fields over time)
 audio/[line]/[diagram]/route.json   # diagram folder may be omitted for single-diagram lines
 ```
 
@@ -195,6 +197,50 @@ English translations follow the same Hepburn-with-macrons convention as station 
 
 ---
 
+## lines.json Format (Rail Line Catalog)
+
+**Location:** `data/lines.json` (project root)
+
+### Purpose
+
+Catalog of rail lines referenced as transfer entries on station displays. Stores brand metadata (line code, icon asset, display name) once per line, referenced by slug from `stations.json` `transfers` arrays.
+
+### Structure
+
+```json
+{
+    "yamanote": {"badges": [{"code": "JY", "icon": "JY"}], "name_ja": "山手線", "name_en": "Yamanote Line", "category": "jr_east"},
+    "ueno_tokyo": {
+        "badges": [
+            {"code": "JT", "icon": "JT"},
+            {"code": "JU", "icon": "JU"}
+        ],
+        "name_ja": "上野東京ライン",
+        "name_en": "Ueno-Tōkyō Line",
+        "category": "jr_east"
+    },
+    "tohoku_shinkansen": {"badges": [{"icon": "shinkansen_jr_east"}], "name_ja": "東北・…", "name_en": "Tōhoku・…", "category": "shinkansen"},
+    "marunouchi": {"badges": [{"icon": "metro_marunouchi"}], "name_ja": "丸ノ内線", "name_en": "Marunouchi Line", "category": "non_jr"}
+}
+```
+
+### Fields
+
+| Field | Description |
+|-------|-------------|
+| `badges` | Optional. Array of badge objects rendered left-to-right before the line name. Each badge carries `icon` (required — slug naming a PNG asset under `data/line_icons/<slug>.png`) and optionally `code` (1-2 letter line code, e.g. `JY` — used by the runtime transfer-filter rule to match against the active route's line code). One badge for typical JR East lines (`code` + matching `icon`); multiple for through-running compound services (e.g. 上野東京ライン = JT + JU); `icon`-only without `code` for Shinkansen / non-JR operators with their own branded logo. **If `badges` is absent**, the renderer draws the universal fallback icon (`data/line_icons/_universal.png`) — used for non-JR operators that JRE PIDS doesn't badge specifically (Keisei, Tsukuba Express, etc., regardless of whether the operator has its own IRL icon). |
+| `name_ja` | Required. Japanese display name. May include a direction qualifier `（XX方面）` for branch services. |
+| `name_en` | Required. English display name (Hepburn romanization with macrons). |
+| `category` | One of `jr_east` / `shinkansen` / `non_jr`. Drives row-grouping at render time (Shinkansen first, then JR East, then non-JR). |
+
+### Notes
+
+- **Multiple entries can share a `code`.** 横須賀線 (`yokosuka`) and 総武線快速 (`sobu_rapid`) both carry `JO` — physically the same through-running line, displayed as two named services on PIDS. Encoded as two entries.
+- **Slug keys are arbitrary IDs** — keep them stable so `stations.json` references don't churn.
+- **Icon slug = filename stem** under `data/line_icons/`. Convention: JR letter codes use the bare code (`JY`, `JK`, `JT`, …); Tokyo Metro / Toei use operator-prefixed slugs (`metro_marunouchi`, `toei_asakusa`, …); other operators use a descriptive slug (`tokyo_monorail`, `nippori_toneri`); the universal fallback is `_universal` (underscore prefix marks it non-line). Source SVGs live in `lcd_references/line_badges/` and regenerate via `magick -background none <src.svg> -resize 128x128 <dst.png>`.
+
+---
+
 ## stations.json Format (Station Metadata)
 
 **Location:** `data/stations.json` (project root)
@@ -203,7 +249,7 @@ English translations follow the same Hepburn-with-macrons convention as station 
 
 Line-independent station metadata, keyed by Japanese station name. Shares the same key space as `translations.json` but separated by concern:
 - `translations.json` → display text (furigana, english)
-- `stations.json` → operational/physical facts (3-letter codes; future: transfer lines, platforms, etc.)
+- `stations.json` → operational/physical facts (3-letter codes, transfer-line lists; future: platforms, etc.)
 
 A station has a single entry even if it appears on multiple routes (e.g., 秋葉原 is on both Yamanote and Keihin-Tohoku — one row).
 
@@ -211,7 +257,16 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 
 ```json
 {
-    "東京": {"code_3": "TYO"},
+    "東京": {
+        "code_3": "TYO",
+        "transfers": [
+            "tohoku_shinkansen", "tokaido_shinkansen",
+            "yamanote", "keihin_tohoku", "chuo_rapid", "tokaido",
+            "ueno_tokyo", "keiyo",
+            "yokosuka", "sobu_rapid",
+            "marunouchi"
+        ]
+    },
     "秋葉原": {"code_3": "AKB"},
     "武蔵小杉": {"code_3": "MKG"}
 }
@@ -222,12 +277,14 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 | Field | Description |
 |-------|-------------|
 | `code_3` | JR East 3-letter station code. Only 22 stations total have one — the rule is "3+ JR East systems converge" (with 浜松町 and 高輪ゲートウェイ as explicit exceptions). Absent on all other stations. |
+| `transfers` | Optional. Ordered array of slug keys into `data/lines.json`, listing rail lines transferable at this station. Order matches IRL PIDS reading order (top-to-bottom rows, left-to-right within rows). Include all lines reaching the station, including the user's active line — runtime renderer applies a coverage-based filter (hides a transfer if its line stops at every station between here and the active route's next stop, including skipped stations) so self-line, parallel-corridor, and shared-branch cases are all suppressed at draw time. |
 
 ### Notes
 
 - Not every station needs an entry. Only add rows for stations with metadata to record.
 - Stations without a 3-letter code simply omit the `code_3` key.
 - 3-letter Roman codes (`code_3`) are distinct from 2-character katakana telegraph codes (電略) — the latter is a separate internal JR system and is not stored here.
+- `transfers` populated only for stations with `code_3` in v1 scope (the 22 major interchange catalog). Other stations may gain `transfers` later as data is collected.
 
 ---
 

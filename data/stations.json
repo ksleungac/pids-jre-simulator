@@ -10,8 +10,38 @@
     "新宿": {"code_3": "SJK"},
     "新橋": {"code_3": "SMB"},
     "日暮里": {"code_3": "NPR"},
-    "東京": {"code_3": "TYO"},
-    "横浜": {"code_3": "YHM"},
+    "東京": {
+        "code_3": "TYO",
+        "transfers": [
+            "tohoku_shinkansen",
+            "tokaido_shinkansen",
+            "yamanote",
+            "keihin_tohoku",
+            "chuo_rapid",
+            "tokaido",
+            "ueno_tokyo",
+            "keiyo",
+            "yokosuka",
+            "sobu_rapid",
+            "marunouchi"
+        ]
+    },
+    "横浜": {
+        "code_3": "YHM",
+        "transfers": [
+            "keihin_tohoku",
+            "tokaido",
+            "ueno_tokyo_jt",
+            "shonan_shinjuku",
+            "negishi",
+            "yokohama_line",
+            "keikyu",
+            "tokyu_toyoko",
+            "sotetsu",
+            "minatomirai",
+            "yokohama_subway_blue"
+        ]
+    },
     "武蔵小杉": {"code_3": "MKG"},
     "池袋": {"code_3": "IKB"},
     "浜松町": {"code_3": "HMC"},
