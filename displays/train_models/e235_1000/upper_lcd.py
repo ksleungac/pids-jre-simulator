@@ -37,7 +37,8 @@ from displays.utils import draw_text_given_width, draw_station_code_badge
 #                                                                              may extend above via font leading,
 #                                                                              but visible caps stay at y≥35 —
 #                                                                              verified by probe across all 4 modes)
-# pa_hint      (710, 97, 20, 20)          UpperDisplay.draw           orange (yellow when len(pa)>1)
+# pa_hint      (710, 97, 20, 20)          UpperDisplay.draw           orange (blinks yellow @ 1 Hz when extras remain;
+#                                                                              suppressed while PA audio is playing)
 # badge        (222, 49, 68, 68)          _draw_station_code_badge    — (route color, optional code_3 band extends up)
 # =============================================================================
 
@@ -444,13 +445,18 @@ class UpperDisplay:
     Handles mode cycling and delegates rendering to mode-specific displays.
     """
 
-    def __init__(self, screen, route_data, stops):
+    def __init__(self, screen, route_data, stops, audio=None):
         self.screen = screen
         self.route_data = route_data
         self.stops = stops
+        # Live audio ref (optional). Used by the yellow PA hint to suppress
+        # flashing while pa[0] (prev-stop dep) is still auto-playing in
+        # APPROACHING_EARLY — the user can't act yet, so flashing is noise.
+        self.audio = audio
         self.prefix_text = "ただいま"
         self.curr_stop = 0
         self.cnt_pa = 0
+        self.cnt_pa_at_station = -1
         self.at_station = True  # boots in STOPPING (matches AppState default)
 
         # Extract route data
@@ -627,7 +633,7 @@ class UpperDisplay:
             code_3_y_offset=code_3_y_offset,
         )
 
-    def set_state(self, curr_stop: int, cnt_pa: int, at_station: bool = False) -> None:
+    def set_state(self, curr_stop: int, cnt_pa: int, at_station: bool = False, cnt_pa_at_station: int = -1) -> None:
         """Update display state (current stop, PA count, STOPPING flag).
 
         Prefix mapping:
@@ -650,6 +656,7 @@ class UpperDisplay:
         self.curr_stop = curr_stop
         self.cnt_pa = cnt_pa
         self.at_station = at_station
+        self.cnt_pa_at_station = cnt_pa_at_station
 
         pa = self.stops[curr_stop].get("pa", []) if 0 <= curr_stop < len(self.stops) else []
         is_final_approach_pa = len(pa) >= 1 and cnt_pa == len(pa) - 1
@@ -695,13 +702,30 @@ class UpperDisplay:
 
         if self.stops and self.curr_stop < len(self.stops):
             stop = self.stops[self.curr_stop]
-            # Yellow hint = "more press(es) yields more PA at this stop." During
-            # STOPPING the relevant list is pa_at_station (>0 = anything to play
-            # while parked). During APPROACHING it's pa (>1 = at least one more
-            # approach PA after pa[0]'s dep-prev announcement).
+            # Yellow hint = "more press(es) yields more PA at this stop." Square
+            # blinks at 1 Hz while extras remain unplayed; once the last extra
+            # has been started (acknowledged), the square disappears entirely.
+            #   APPROACHING: extras are pa[1..] (pa[0] auto-fires). Flash while
+            #     cnt_pa < len(pa)-1.
+            #   STOPPING: extras are pa_at_station[0..] (cnt starts at -1).
+            #     Flash while cnt_pa_at_station < len(pa_at_station)-1.
             if self.at_station:
-                show_yellow = len(stop.get("pa_at_station", [])) > 0
+                pa_at_st = stop.get("pa_at_station", [])
+                show_yellow = len(pa_at_st) > 0 and self.cnt_pa_at_station < len(pa_at_st) - 1
             else:
-                show_yellow = len(stop.get("pa", [])) > 1
-            color = (247, 225, 158) if show_yellow else _bg("pa_hint")
+                pa_list = stop.get("pa", [])
+                # APPROACHING_EARLY only: suppress flash while audio is still
+                # auto/just-played. Floor passes to the user only when the
+                # current PA finishes, so flashing earlier is misleading nag.
+                audio_busy = self.audio is not None and self.audio.is_pa_playing()
+                show_yellow = (
+                    len(pa_list) > 1
+                    and self.cnt_pa < len(pa_list) - 1
+                    and not audio_busy
+                )
+            if show_yellow:
+                on = (pygame.time.get_ticks() // 500) % 2 == 0
+                color = (247, 225, 158) if on else _bg("pa_hint")
+            else:
+                color = _bg("pa_hint")
             pygame.draw.rect(self.screen, color, pygame.Rect(S_WIDTH - 20, UPPER_HEIGHT - 20, 20, 20))

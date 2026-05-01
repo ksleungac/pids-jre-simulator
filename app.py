@@ -105,8 +105,15 @@ class _SilentAudio:
     def play_pa_at_station(self, *args, **kwargs) -> None: ...
     def play_sta(self, *args, **kwargs) -> None: ...
     def pause(self) -> None: ...
+    def pause_pa(self) -> None: ...
+    def pause_sta(self) -> None: ...
+    def unpause(self) -> None: ...
     def stop(self) -> None: ...
     def is_playing(self) -> bool:
+        return False
+    def is_pa_playing(self) -> bool:
+        return False
+    def is_sta_playing(self) -> bool:
         return False
 
     def position(self) -> Optional[float]:
@@ -192,7 +199,7 @@ class PASimulator:
 
         # Initialize components
         self.audio = _SilentAudio() if preview else AudioPlayer(work_dir, self.stops)
-        self.upper = UpperDisplay(self.screen, self.route_data, self.stops)
+        self.upper = UpperDisplay(self.screen, self.route_data, self.stops, audio=self.audio)
         # Lower shares the upper's mode_cycler — modes stay in lockstep, no
         # parallel timer. set_state below binds the state reference; lower
         # reads cursor_pos / skip / etc. live from it each frame.
@@ -341,7 +348,7 @@ class PASimulator:
         """Main game loop."""
         # Draw initial state — boot lands in STOPPING@curr_stop=0 by default
         # (see AppState.__init__). Prefix reads "ただいま <start station>".
-        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=self.state.at_station)
+        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=self.state.at_station, cnt_pa_at_station=self.state.cnt_pa_at_station)
         self.upper.draw()
         self.lower.draw()
         self._render_panel()
@@ -480,7 +487,18 @@ class PASimulator:
             elif keyboard.is_pressed("page_up"):
                 self._next_sta()
             elif keyboard.is_pressed("end") and self.audio.is_playing():
-                self.audio.pause()
+                # When both PA + STA overlap, pause STA preferentially —
+                # the in-train PA carries info, the platform melody is the
+                # one users typically want to silence.
+                if self.audio.is_sta_playing():
+                    self.audio.pause_sta()
+                else:
+                    self.audio.pause_pa()
+                # Throttle: End is stateful (each press changes which stream
+                # is paused) so frame-rate polling without a delay would
+                # collapse a single tap into "pause STA then pause PA" on
+                # consecutive frames.
+                pygame.time.wait(KEY_REPEAT_DELAY)
         except Exception as e:
             print(f"Input error: {e}")
 
@@ -586,7 +604,7 @@ class PASimulator:
         self.state.time_to_next = 0
         self.state.is_last_pa = False
         self.state.departure_time = 0.0
-        self.upper.set_state(target, 0, at_station=True)
+        self.upper.set_state(target, 0, at_station=True, cnt_pa_at_station=self.state.cnt_pa_at_station)
 
     # CONTRACT: unified state machine cycles APPROACHING -> STOPPING -> APPROACHING.
     # See DISPLAY.md § "Unified State Machine" — entry to STOPPING is a no-audio
@@ -596,7 +614,10 @@ class PASimulator:
     # may extend past dest for through-running reference (Keihin 727B 磯子→大船).
     def _next_pa(self) -> None:
         """Advance the state machine by one press."""
-        if self.audio.is_playing():
+        # Only PA blocks PA — STA plays on its own channel and does not
+        # delay the train's announcement flow (matches IRL: the platform
+        # melody and the in-train PA are independent audio sources).
+        if self.audio.is_pa_playing():
             return
         if not self.stops:
             return
@@ -617,7 +638,10 @@ class PASimulator:
         if self.state.cnt_pa_at_station + 1 < len(pa_at_st):
             self.state.cnt_pa_at_station += 1
             self.audio.play_pa_at_station(self.state.curr_stop, self.state.cnt_pa_at_station)
-            # Display stays "ただいま X" — no set_state needed.
+            # Prefix stays "ただいま X", but the yellow hint must refresh so
+            # it stops flashing once the last pa_at_station is started.
+            self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=True, cnt_pa_at_station=self.state.cnt_pa_at_station)
+            self.upper.draw()
             return
         self._advance_to_next_stop()
 
@@ -638,13 +662,13 @@ class PASimulator:
             self.state.skip_progress = 0
             self.state.time_to_next = 0
             self.audio.play_pa(self.state.curr_stop, self.state.cnt_pa)
-            self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=False)
+            self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=False, cnt_pa_at_station=self.state.cnt_pa_at_station)
             self.upper.draw()
             return
         # pa exhausted — enter STOPPING (no audio).
         self.state.at_station = True
         self.state.cnt_pa_at_station = -1
-        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=True)
+        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=True, cnt_pa_at_station=self.state.cnt_pa_at_station)
         self.upper.draw()
 
     def _advance_to_next_stop(self) -> None:
@@ -693,7 +717,7 @@ class PASimulator:
         self.state.departure_time = time.time()
         self.state.cnt_sta = 0
         self.audio.play_pa(self.state.curr_stop, 0)
-        self.upper.set_state(self.state.curr_stop, 0, at_station=False)
+        self.upper.set_state(self.state.curr_stop, 0, at_station=False, cnt_pa_at_station=self.state.cnt_pa_at_station)
         self.upper.draw()
 
     def _next_sta(self) -> None:
@@ -716,8 +740,9 @@ class PASimulator:
         # Get cut position (default to 0 if not specified)
         cut_position = current_stop_data.get("sta_cut", 0)
 
-        # If already playing, restart from cut position
-        if self.audio.is_playing():
+        # If STA is already playing, restart from cut position. PA on its
+        # own channel doesn't trigger the restart path.
+        if self.audio.is_sta_playing():
             self.audio.play_sta(self.state.curr_stop, self.state.cnt_sta, cut_position)
             return
 
@@ -752,7 +777,7 @@ class PASimulator:
         """
         self.audio.pause()
         self.state.__dict__.update(snap.__dict__)
-        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=self.state.at_station)
+        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=self.state.at_station, cnt_pa_at_station=self.state.cnt_pa_at_station)
 
     def cleanup(self) -> None:
         """Clean up resources."""

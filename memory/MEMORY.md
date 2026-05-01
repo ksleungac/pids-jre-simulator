@@ -4,6 +4,7 @@ Long-term curated memories. One-line pointers — daily logs hold the detail.
 
 ---
 
+- [2026-05-02](2026-05-02.md) — yellow-square nag indicator (blink + disappear-on-acknowledged + audio-busy gate) + dual-stream audio (PA on music, STA on Channel) + APPROACHING/STOPPING auto-fire asymmetry promoted to CLAUDE.md
 - [2026-04-30 late evening](2026-04-30.md) — autodriver `pa_at_station` silent drain in `_fire_departure` + AUTO_INPUT.md vocabulary-discipline rules extended (arrow flows)
 - [2026-04-30 evening](2026-04-30.md) — /distill pass + MEMORY.md drift traced to 4-23 + /session-recap MEMORY.md gate tightened
 - [2026-04-30 PM](2026-04-30.md) — dep-classification pathology + `_dev_scripts/` rename + deployment-frame section in CLAUDE.md

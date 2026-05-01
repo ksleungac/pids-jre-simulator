@@ -77,10 +77,13 @@ Behaviors true on real trains and mirrored by the simulator:
 - **Compound destinations** like 品川・東京 use a `&` separator on real PIDS for the multi-line layout.
 - **English text uses modified Hepburn romanization with macrons** (Tōkyō, Chūō, Etchūjima). JSON-encoding details in [DATA_FORMAT.md](DATA_FORMAT.md).
 - **Through-service combined frame.** Trains that physically through-run from another line (e.g. Yokosuka Line→Sōbu Rapid: 久里浜→東京→千葉) display the combined journey on one LCD frame, with pre-route stations rendered dim/passed. At major continuation junctions (e.g. Chiba for Sōbu Rapid yielding to Sōtobō / Narita Line) the frame swaps to the next line's view — modeled via `pre_stops` in route.json; frame-swap-at-junction is deferred. See [DATA_FORMAT.md § "pre_stops Array"](DATA_FORMAT.md).
+- **PA and STA are independent audio sources.** PA (in-train announcement) and STA (platform departure melody) come from different speakers IRL — they overlap freely. Sim mirrors this: PA on `mixer.music`, STA on a dedicated `mixer.Channel`; pressing Page Down during STA does not block, and vice versa.
 
 ### App state machine
 
 Each stop advances through three press-driven sub-states: **APPROACHING_EARLY** ("次は X") → **APPROACHING_FINAL** ("まもなく X", final entry in `pa[]`) → **STOPPING** ("ただいま X", at platform) → next stop's APPROACHING_EARLY. PageDown drives transitions; `jump_to_stop` lands in STOPPING@target. Full transition spec + edge cases in [DISPLAY.md § Unified State Machine](DISPLAY.md); `AppState` field semantics in the inline `# CONTRACT:` on the class in `app.py`.
+
+**Auto-fire asymmetry:** APPROACHING entry auto-fires `pa[0]` (the prev-stop departure announcement) — a passive-listening window where the user hasn't acted yet. STOPPING has no auto-fire; every `pa_at_station` entry plays only because the user pressed. UI cues that gate on "is the user being asked to act?" must respect this asymmetry.
 
 ## Session Startup
 

@@ -12,9 +12,16 @@ from constants import TARGET_LOUDNESS, AUDIO_FADE_MS
 
 # Create a temp directory for audio files
 _temp_dir = tempfile.mkdtemp(prefix="pa_simulator_audio_")
-# Use two temp files for double-buffering (avoid file locking issues)
-_temp_file_paths = [os.path.join(_temp_dir, "temp_audio_1.mp3"), os.path.join(_temp_dir, "temp_audio_2.mp3")]
-_current_temp_index = 0
+# Two double-buffered temp files for PA (mixer.music) + a third for STA
+# (mixer.Sound on a dedicated channel). PA double-buffers to dodge file
+# locks; STA loads fully into memory at Sound() construction so a single
+# file is enough — the next write overwrites freely.
+_temp_file_paths = [
+    os.path.join(_temp_dir, "temp_audio_1.mp3"),
+    os.path.join(_temp_dir, "temp_audio_2.mp3"),
+    os.path.join(_temp_dir, "temp_sta.mp3"),
+]
+_STA_TEMP_INDEX = 2
 
 
 def _cleanup_temp_dir():
@@ -66,6 +73,20 @@ class AudioPlayer:
         # Initialize mixer if not already done
         if not mixer.get_init():
             mixer.init()
+
+        # PA flows through mixer.music (single global stream). STA flows
+        # through a dedicated mixer.Channel + Sound so it can overlap PA —
+        # IRL the platform departure melody and the in-train PA come from
+        # different audio sources. _sta_sound is held to keep the Sound
+        # alive for the channel's lifetime; pygame stops playback if the
+        # Sound is GC'd mid-play.
+        self._sta_channel = mixer.Channel(0)
+        self._sta_sound: Optional[mixer.Sound] = None
+        # pygame.Channel.get_busy() returns True even on a paused channel,
+        # so we track pause state explicitly. Used by is_sta_playing() so
+        # _next_sta treats "paused" as "not playing" (Page Up after End
+        # plays from start, not restart-from-sta_cut).
+        self._sta_paused: bool = False
 
     def play_pa(self, stop_index: int, pa_index: int) -> None:
         """Load and play PA announcement with loudness normalization.
@@ -126,7 +147,7 @@ class AudioPlayer:
                 return
 
             track_path = os.path.join(self.sta_dir, track_name + ".mp3")
-            self._load_and_play(track_path, cut_position=cut_position)
+            self._load_and_play_sta(track_path, cut_position=cut_position)
         except (IndexError, KeyError) as e:
             print(f"STA playback error: {e}")
 
@@ -176,28 +197,86 @@ class AudioPlayer:
             # Don't toggle index on error so we can retry
             self._temp_index = 1 - self._temp_index
 
+    def _load_and_play_sta(self, track_path: str, cut_position: float = 0) -> None:
+        """STA playback path. Uses a dedicated mixer.Channel so STA can
+        overlap PA (mixer.music). Sound.play() has no start-offset arg, so
+        sta_cut is implemented by slicing leading samples off the
+        normalized array before writing the temp file.
+        """
+        if not os.path.exists(track_path):
+            print(f"STA file not found: {track_path}")
+            return
+
+        try:
+            data, rate = sf.read(track_path)
+            meter = pyln.Meter(rate)
+            loudness = meter.integrated_loudness(data)
+            normalized = pyln.normalize.loudness(data, loudness, TARGET_LOUDNESS)
+
+            if cut_position > 0:
+                start_sample = int(cut_position * rate)
+                if 0 < start_sample < len(normalized):
+                    normalized = normalized[start_sample:]
+
+            write_path = _temp_file_paths[_STA_TEMP_INDEX]
+            sf.write(write_path, normalized, rate)
+
+            # Sound() loads the entire file into memory, so the temp file
+            # is free to be overwritten on the next STA play. Channel.play
+            # auto-stops the previous sound on the channel — matches the
+            # restart-from-sta_cut semantic.
+            self._sta_sound = mixer.Sound(write_path)
+            # Unpause first in case the channel was previously paused via the
+            # End-key — Channel.play on a paused channel can otherwise leave
+            # the new sound stuck silent.
+            self._sta_channel.unpause()
+            self._sta_channel.play(self._sta_sound, fade_ms=AUDIO_FADE_MS)
+            self._sta_paused = False
+        except Exception as e:
+            print(f"STA playback error: {type(e).__name__}: {e}")
+
     def pause(self) -> None:
-        """Pause current playback."""
+        """Pause both PA and STA streams. Used by jump_to_stop /
+        restore_state / tutorial state-jumps where a clean wipe is wanted.
+        For the End-key (selective pause), use pause_pa() / pause_sta()."""
+        mixer.music.pause()
+        self._sta_channel.pause()
+        self._sta_paused = True
+
+    def pause_pa(self) -> None:
+        """Pause only the PA stream (mixer.music)."""
         mixer.music.pause()
 
+    def pause_sta(self) -> None:
+        """Pause only the STA stream (dedicated channel)."""
+        self._sta_channel.pause()
+        self._sta_paused = True
+
     def unpause(self) -> None:
-        """Resume paused playback."""
+        """Resume both PA and STA streams."""
         mixer.music.unpause()
+        self._sta_channel.unpause()
+        self._sta_paused = False
 
     def is_playing(self) -> bool:
-        """Check if audio is currently playing.
+        """True if either PA or STA is currently playing."""
+        return self.is_pa_playing() or self.is_sta_playing()
 
-        Returns:
-            True if audio is playing, False otherwise
-        """
+    def is_pa_playing(self) -> bool:
+        """True if PA (mixer.music) is currently playing."""
         return mixer.music.get_busy()
 
+    def is_sta_playing(self) -> bool:
+        """True if STA is currently playing. A paused channel reports busy
+        in pygame; the explicit ``_sta_paused`` flag excludes it."""
+        return self._sta_channel.get_busy() and not self._sta_paused
+
     def position(self) -> Optional[float]:
-        """Current playback position in file-time seconds, or None when not
-        playing. Includes any ``cut_position`` offset so the value reads as
-        absolute file time even when an STA was restarted mid-play at
-        sta_cut. Returns None outside playback so callers can gate UI on it
-        directly without a separate is_playing() check."""
+        """Current PA playback position in file-time seconds, or None when
+        not playing. PA-only — STA runs on its own channel and does not
+        feed this getter (the tutorial seek bar consumes PA position only).
+        Returns None outside playback so callers can gate UI on it directly
+        without a separate is_pa_playing() check."""
         if not mixer.music.get_busy():
             return None
         pos_ms = mixer.music.get_pos()
@@ -211,8 +290,10 @@ class AudioPlayer:
         return self._current_duration if self._current_duration > 0 else None
 
     def stop(self) -> None:
-        """Stop current playback."""
+        """Stop both PA and STA streams."""
         mixer.music.stop()
+        self._sta_channel.stop()
+        self._sta_paused = False
 
     def cleanup(self) -> None:
         """Clean up resources. Caller-driven only — never tied to GC.
