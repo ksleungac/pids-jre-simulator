@@ -1,6 +1,6 @@
 ---
 name: third-man
-description: Spawn a fresh-context Opus 4.7 agent to give an independent take when Claude and the user are talking past each other on a contested logic interpretation. User-triggered.
+description: Spawn a fresh-context Opus 4.7 agent to give an independent take when Claude and the user are talking past each other on a contested logic interpretation, OR to validate behavioral self-observations from /session-recap Step 0. User-triggered or claude self-proposed at impasse.
 triggers:
   - /third-man
   - third man
@@ -22,7 +22,12 @@ A fresh-context Opus 4.7 agent — never having seen Claude's prior framing — 
 
 ## When to invoke
 
-User triggers `/third-man` when they sense the conversation is talking past itself. **MVP: user-triggered only.** Self-triggering is a future refinement.
+Two pathways, both supported:
+
+- **User-triggered.** User invokes `/third-man` when they sense the conversation is talking past itself.
+- **Claude self-proposed.** When claude has restated the same contested point 3+ rounds with no convergence — or notices itself defending a position instead of re-reading source — claude proactively offers `/third-man` rather than attempting a 4th restatement. Single-line offer: *"I think we may be talking past each other; want to spawn /third-man for an independent take?"* User signs off; claude does NOT unilaterally invoke. See `principles.md § "Self-propose /third-man at impasse"`.
+
+A third pathway is via `/session-recap` Step 0: when claude self-detects friction at recap time, claude writes a behavioral self-observation and hands it to a third-man (in fair-researcher / doctor mode) to validate patterns + dedup against existing principles.md entries before any codification lands. This is not interpretation-deadlock recovery — it's pattern validation — but uses the same brief-assembly + neutrality discipline.
 
 ## Instructions when invoked
 

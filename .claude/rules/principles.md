@@ -18,9 +18,12 @@ Present findings/learnings before making documentation updates or non-trivial ch
 ### Skip-confirmation when explicitly signaled
 When the user says "push directly" / "skip my confirmation" at session-end commit time, bypass the per-file confirmation gate within `/commit`. Still split logically into one commit per concern, still write meaningful messages — just don't pause for OK between commits or before push.
 
-**Why:** Discussion-first matters at decision points, not at session-end housekeeping. The user shouldn't have to reaffirm 5 commits in a row when they've already decided.
+**Why:** Discussion-first matters at decision points, not at session-end housekeeping. The user shouldn't have to reaffirm 5 commits in a row when they've already decided. Per-step gating after a chain authorization re-asks for permission claude already has — the asymmetry of cost (claude pays nothing to ask; user pays cognitive load) makes this an easy trap to fall into and the user has named it costly multiple times.
 
-**How to apply:** Waiver applies to the *current batch* only, not session-wide. The next commit-worthy moment requires fresh signal.
+**How to apply:**
+
+- Waiver applies to the *current batch* only, not session-wide. The next commit-worthy moment requires fresh signal.
+- **Chain authorizations** ("/review+fix, then /session-recap, then /commit") suppress per-step gates within the chain. Each step inside the authorized chain is not a fresh decision point — the chain itself is the unit the user authorized. Only re-gate if a step encounters something genuinely outside the chain's declared scope.
 
 ### Discussion-first for data work specifically
 When splitting audio, importing route data, or adding any batch of files — present the parse + flag uncertainties + ask before generating splitter scripts or touching `route.json`.
@@ -34,7 +37,14 @@ Before claiming "X is a bug" or "X works like Y" in existing code, verify by rea
 
 **Why:** During the 2026-04-28 click-to-jump design discussion, I claimed `jump_to_stop`'s `cnt_pa = 0` skipped `pa[0]` and proposed changing it to `cnt_pa = -1`. The user pushed back: *"not my original design?"* Verification (reading `audio/sobu/1217F/route.json` + `upper_lcd.py:629-639`) showed `pa[0] = "{prev}-dep"`, `pa[1] = "{this}-arr"`, and `cnt_pa = 0` correctly lands the display in "次は X" mode for the click semantic "heading toward X." The proposed `-1` would have introduced a foreign sentinel value never used anywhere in active code. User: *"next time when you discuss with me do not just guess on convention."*
 
-**How to apply:** When proposing a fix to existing code, the bar is "I have read the relevant call sites + traced the state transitions," not "this looks wrong." When uncertain about a convention, say so explicitly and verify before taking a position. The user's "original design" is a strong prior — assume it's coherent until the trace says otherwise.
+Recurred multiple times on 2026-05-02 across distinct substrates (code-comment column header, state-machine threshold count, skill-text re-read, primary-source while loaded in context) — see daily log. The substrate doesn't matter; the failure is reasoning from cached impression instead of re-reading source-of-truth at decision time, even when the source is already in context.
+
+**How to apply:**
+
+- When proposing a fix to existing code, the bar is "I have read the relevant call sites + traced the state transitions," not "this looks wrong." When uncertain about a convention, say so explicitly and verify before taking a position. The user's "original design" is a strong prior — assume it's coherent until the trace says otherwise.
+- **Apply to user-stated framing too**, not just code. Before proposing a design, restate the user's framing in one line and check the proposal against that framing's logic — don't import adjacent assumptions (animation style, badge semantics, render order, opacity) the user didn't invoke.
+- **When the user reframes a concept** (e.g. "badge → per-press nag indicator"), sweep all related logic for cascading implications in one pass. Don't iterate point-fixes while the user surfaces each implication — the reframing is the trigger to re-walk the whole behavior tree.
+- **When the user pushes back** ("wrong place", "why is it only X", "no, that's not it"), the first move is to **re-read the source-of-truth** — file, doc, comment, skill text. NOT to re-justify the prior position from memory. Defense-from-memory after pushback is the most concerning shape because the source is usually already loaded in context, and the pushback is the strongest signal that cached impression diverged from what the source actually says.
 
 ### Causal depth on diagnoses
 
@@ -64,6 +74,55 @@ The shape is consistent: the smoothness of the autonomous fill is the trap. Each
 - **One gap per question.** Surface the gap in the same turn it's detected. Don't batch unrelated gaps into a single multi-part question — each loses its own context and the user has to triage them.
 - This applies during: design discussions, refactors, doc writing, rule codification, edge-case implementation, algorithm spec — anywhere Claude is converting user-stated rule shapes into concrete artifacts.
 - **Recursive trap:** this principle applies to its own meta-rules. When the user doesn't specify whether to codify a pattern, the bias is "classify rule-shaped" per session-recap Rule 1 — don't fill the "should we codify?" gap with a cautious "wait for more data" that itself becomes the recorded decision. If genuinely uncertain whether to codify, ask.
+
+### Commit to a recommendation, don't offer menus
+
+When the user asks for a design decision that's claude's to drive (animation style, naming, layout choice, doc placement), recommend ONE option with reasoning. Don't present a menu of equivalents and push the choice back.
+
+**Why:** Hedging looks like deference but is friction — it forces the user to decide things claude could have decided with reasoning loaded from context. Three concrete examples on 2026-05-02: "blink or pulse?" (answer was reachable from "the LCD is otherwise discrete, no smooth animations"); "fits CLAUDE.md mental-model § X (or a sibling 'IRL audio conventions')" (the "or a sibling" added optionality the source didn't permit); "Options: (1) drop edits (2) just asymmetry (3) something else" (pushing the decision back when the skill text already specified the answer). Distinct from `Implementation-completion-as-spec`: that rule fires when *user spec has a gap* (claude must ask); this fires when *the recommendation is claude's job* (claude must commit, with reasoning, user can override).
+
+**How to apply:**
+
+- When the answer is reachable from loaded context (skill text, IRL conventions, code comments, prior decisions) — commit. State the recommendation + one-line reason.
+- When two options are genuinely equivalent and the choice is preference-driven — pick one, name the tradeoff in one line, let the user override.
+- Reserve open questions for actual user-spec gaps (the `Implementation-completion-as-spec` regime), not for design decisions claude owns.
+- Sibling pair: `Implementation-completion-as-spec` covers user-owned decisions; this covers claude-owned ones. Together they say *ask when it's theirs, commit when it's yours.*
+
+### Ground reasoning in the user's stated terms
+
+When working through user-stated logic, reason strictly in the vocabulary and frame the user used. Don't import adjacent context (rendering behavior, opacity, draw order, performance, z-index) as justification unless the user invoked it.
+
+**Why:** During the 2026-05-02 transfer-info Rule 1 unwind, claude reached the asymmetric predecessor-intrusion conclusion via "opaque badge paints over text" — a rendering-behavior justification the user never invoked. User: *"It's nothing about opaque or what, just dead logic to follow. I didn't say even anything about the opaque, why are you assuming?"* The conclusion happened to match in some cases but the frame was off, which surfaced when later cases diverged. Each piece of imported adjacent context feels like helpful elaboration; in aggregate they shift the frame off the user's logic. Took 5 rounds + 2 `/third-man` invocations to unwind. Sibling to `Verify before claiming` (factual accuracy) and `Causal depth on diagnoses` (analytical depth); this one is about *frame integrity*.
+
+**How to apply:**
+
+- If the user says "anchor", reason about anchor — not "badge", not "opacity", not "z-order".
+- When an adjacent concept *would* clarify reasoning, **ask** whether it's in scope before grafting it on. "Does opacity matter here, or is this purely about anchor claimability?" — open question, not assumed.
+- If a justification feels load-bearing but uses vocabulary the user didn't introduce, that's the smell. Stop and ask.
+
+### Self-propose /third-man at impasse
+
+When claude has restated the same contested point 3+ rounds with no convergence — or notices itself defending a position instead of re-reading source — proactively propose `/third-man` rather than attempting a 4th restatement.
+
+**Why:** `/third-man`'s value is highest exactly at the moment claude can't see its own framing bias — the bias is what colors the re-reads. The 2026-05-02 Rule 1 unwind (5 rounds + 2 third-man invocations) and the 2026-04-30 badge-width-vs-element-width misread would have shortened if claude self-triggered third-man earlier instead of waiting for user invocation. Pairs with `Verify before claiming` (re-read first) and `Ground reasoning in the user's stated terms` (frame integrity) as the *recovery* layer when prevention failed.
+
+**How to apply:**
+
+- Heuristic counter — 3 rounds of restating the same contested point + user pushback continuing → single-line offer: *"I think we may be talking past each other; want to spawn /third-man for an independent take?"*
+- Don't unilaterally invoke. The user signs off. The offer is the move; the invocation follows their OK.
+- The trigger is "I'm restating, not re-reading" — distinct from healthy iteration where each round genuinely incorporates new information from the user.
+
+### No filler narration
+
+Skip "got it / I have the picture / now updating X / let me read the file" turns when the next tool call says everything. A turn earns its tokens by either (a) surfacing new information / a question / a finding, or (b) executing tool calls. Pure status acknowledgments fail both.
+
+**Why:** Multiple narration-only turns this session produced no forward value. Quoting the user on a related output-without-save pattern: *"wasted me 30 seconds to read while you DO NOT save for the next session, then what's the point of telling me that?"* The shape generalizes: output that looks like work but contributes no forward value is a cost paid by the user (reading time) AND claude (tokens / context).
+
+**How to apply:**
+
+- Before a tool call: at most one short sentence stating what's about to happen, only if the tool call alone wouldn't make it obvious. Often: nothing. The tool call is the signal.
+- After a tool result: jump to the next action or the finding. Skip "got it" / "perfect" / "now I'll do X."
+- **Carve-out:** when the user's message is purely conversational and requires NO tool call (acknowledging a decision, accepting a recommendation, ending a thread), a short reply is appropriate — silence would read as ignored. The rule targets filler *between* substantive actions, not the natural close of a conversational exchange.
 
 ---
 
