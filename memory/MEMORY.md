@@ -4,6 +4,7 @@ Long-term curated memories. One-line pointers — daily logs hold the detail.
 
 ---
 
+- [2026-05-03 PM](2026-05-03.md) — transfer-info: name_ja_compress migration + 4 algorithm enhancements (capped row-grouping, single-row equal-spacing + side_pad formula, Rule 1 canvas-fit, blueprint placement) + 新橋/浜松町/大崎 populated; Preserve-named-user-frameworks principle codified
 - [2026-05-03](2026-05-03.md) — OOBE action-history feature + ActionFlow refactor + STA seek bar + bundled-EN-fonts; Step 0 codified scope-expansion + weirdness-as-signal patterns
 - [2026-05-02 PM cont 3](2026-05-02.md) — transfer-info layout: lex-maximin row-grouping + Rule 4 equal-spacing fallback + `transfers_by_view.edit` op; Pre-stated scope fences codified
 - [2026-05-02 PM cont 2](2026-05-02.md) — transfer-info schema: nested variants, dot-notation refs, drop-only `transfers_by_view`
