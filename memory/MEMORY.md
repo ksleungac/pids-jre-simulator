@@ -4,6 +4,8 @@ Long-term curated memories. One-line pointers — daily logs hold the detail.
 
 ---
 
+- [2026-05-03](2026-05-03.md) — OOBE action-history feature + ActionFlow refactor + STA seek bar + bundled-EN-fonts; Step 0 codified scope-expansion + weirdness-as-signal patterns
+- [2026-05-02 PM cont 3](2026-05-02.md) — transfer-info layout: lex-maximin row-grouping + Rule 4 equal-spacing fallback + `transfers_by_view.edit` op; Pre-stated scope fences codified
 - [2026-05-02 PM cont 2](2026-05-02.md) — transfer-info schema: nested variants, dot-notation refs, drop-only `transfers_by_view`
 - [2026-05-02 PM cont](2026-05-02.md) — memory-system overhaul: killed log-only middle, sync codification + dedup gate, Step 0 friction loop + third-man behavioral review
 - [2026-05-02 PM](2026-05-02.md) — transfer-info Rule 1/2/3 algorithm correction (per-entry asymmetric / leftmost-fit / per-segment) + implementation-completion-as-spec promoted to principles.md (recurrence #4)
