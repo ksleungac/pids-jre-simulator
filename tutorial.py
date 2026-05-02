@@ -87,13 +87,16 @@ def _font_shingo(size: int, *, heavy: bool = False) -> pygame.font.Font:
 def _font_cjk(size: int, *, heavy: bool = False) -> pygame.font.Font:
     """Language-aware CJK font for chrome rendering.
 
-    zh_CN routes through Microsoft YaHei (a SysFont) — ShinGoPr6N is built
-    from Japanese JIS and tofus Simplified-only glyphs (开, 进, 这, etc.)
-    that aren't in JIS. Other languages keep ShinGoPr6N: Japanese forms read
-    correctly for embedded JP kanji on the LCD line (国府津, 鴨宮), and
-    Traditional Chinese (zh-HK) chars overlap with JIS so render fine."""
+    zh_CN routes through Microsoft YaHei Bold (a SysFont) — ShinGoPr6N is
+    built from Japanese JIS and tofus Simplified-only glyphs (开, 进, 这, etc.)
+    that aren't in JIS. Always bold even for body weight: YaHei Regular reads
+    visibly thinner than ShinGoPr6N Medium at the same point size, and the
+    tutorial's body text needs strokes thick enough to scan. Other languages
+    keep ShinGoPr6N: Japanese forms read correctly for embedded JP kanji on
+    the LCD line (国府津, 鴨宮), and Traditional Chinese (zh-HK) chars overlap
+    with JIS so render fine."""
     if i18n.current_lang() == "zh_CN":
-        return i18n.font_named("microsoftyahei", size, bold=heavy)
+        return i18n.font_named("microsoftyahei", size, bold=True)
     return _font_shingo(size, heavy=heavy)
 
 
@@ -362,15 +365,14 @@ def _pred_passive(tut: "Tutorial") -> bool:
     return True
 
 
-def _pred_audio_done_after_action(tut: "Tutorial") -> bool:
-    """Step 2/3/4/6: user did the action AND audio finished playing.
-
-    `_action_in_step` flips True when the dispatcher fires the step's action;
-    `audio.is_playing()` returning False means the clip has ended (mixer's
-    music channel is idle). At 15 FPS the predicate observes the transition
-    within ~67ms of clip end — invisible to the user.
-    """
-    return tut._action_in_step and tut.sim is not None and not tut.sim.audio.is_playing()
+def _pred_action_flow_complete(tut: "Tutorial") -> bool:
+    """Enable [Next] when the step's ActionFlow has reached its final stage
+    AND audio has settled. One predicate covers all multi-press steps (2/3/4/5);
+    derived from the same flow that drives the active prompt + history, so the
+    [Next] gate can never desync from the "Press Next to continue" prompt
+    appearance — they are computed from the same state."""
+    flow = tut._step_action_flow()
+    return flow is not None and flow.is_complete()
 
 
 def _pred_step7_approached(tut: "Tutorial") -> bool:
@@ -445,6 +447,74 @@ def _skip_step7(tut: "Tutorial") -> None:
     tut.sim._next_pa()
 
 
+# ─── ActionFlow — the multi-stage prompt model ──────────────────────────────
+# One source of truth for "what action prompt is active and what's in history?"
+# across all multi-press tutorial steps. Replaced the pre-2026-05-02 per-step
+# branchy logic that drifted between active-text and history-keys (every
+# threshold tweak broke a sibling). Two timing rules, applied uniformly:
+#
+#   - Strikethrough/history fires ON PRESS — a stage moves to history the
+#     moment the next is pressed, regardless of audio state.
+#   - Next active prompt appears AFTER the prior press's audio finishes —
+#     during that window the active area is BLANK by design (gives the user
+#     time to listen before being nagged into the next action).
+#
+# Exception: stages flagged ``mid_play`` show DURING the prior audio (use case:
+# step 3's "press one more to cut" prompt — only meaningful while the melody
+# is in flight). When a mid-play stage's audio ends without user action, the
+# flow auto-skips it (treating natural-finish as implicit pass-through).
+
+@dataclass(frozen=True)
+class ActionFlow:
+    """Per-step multi-stage action prompt model. ``stages`` is the ordered
+    list of i18n keys for prompts within the step; ``pressed_count`` is the
+    number of action presses performed so far; ``audio_playing`` is the live
+    audio state. ``mid_play_stages`` is the set of stage indices that should
+    render DURING prior audio rather than after."""
+    stages: tuple[str, ...]
+    pressed_count: int
+    audio_playing: bool
+    mid_play_stages: frozenset[int] = frozenset()
+
+    def active_index(self) -> Optional[int]:
+        """Index of the stage to render as the active prompt, or None when
+        the active area should be blank (in-between window). Stage 0 is
+        always shown (no prior audio to wait for)."""
+        n = self.pressed_count
+        if n == 0:
+            return 0
+        if n in self.mid_play_stages:
+            if self.audio_playing:
+                return n
+            # Mid-play stage's audio ended without user action — skip past.
+            n += 1
+        if n >= len(self.stages):
+            return len(self.stages) - 1
+        # Default rule: gate on prior audio completion.
+        if self.audio_playing:
+            return None
+        return n
+
+    def history_indices(self) -> list[int]:
+        """Indices of stages to render struck-through (everything strictly
+        before the user's current press count). Press-based — not gated on
+        audio."""
+        return list(range(self.pressed_count))
+
+    def active_key(self) -> Optional[str]:
+        idx = self.active_index()
+        return self.stages[idx] if idx is not None else None
+
+    def history_keys(self) -> list[str]:
+        return [self.stages[i] for i in self.history_indices()]
+
+    def is_complete(self) -> bool:
+        """True when active prompt is the final stage AND audio has settled —
+        ready for [Next] to enable. Single source of truth for action-flow
+        predicates."""
+        return self.active_index() == len(self.stages) - 1 and not self.audio_playing
+
+
 # ─── per-step entry handlers (force-set sim state on step entry) ────────────
 # Run inside ``_enter_step`` BEFORE the snapshot is taken — used for steps
 # whose canonical starting state must be deterministic regardless of how the
@@ -491,10 +561,6 @@ class Step:
     # no overlay. Pulses BG → ACCENT_BRIGHT each cycle so it visibly appears
     # and disappears.
     callout_rect: Optional[tuple[int, int, int, int]] = None
-    # If True, a flashing red box is drawn around the upper-LCD's yellow hint
-    # square. Set on steps that reference the yellow square in their body
-    # (steps 2 + 5) so the user can locate the cue immediately.
-    highlight_pa_hint: bool = False
     # Runs inside ``_enter_step`` after audio.pause() and BEFORE the snapshot.
     # Used for steps whose canonical starting state must be deterministic
     # regardless of how the user got here — currently step 7 (click-jump demo
@@ -509,23 +575,21 @@ STEPS: tuple[Step, ...] = (
     # Step 2: pa_at_station has 2 entries, allow multiple PgDn so user can
     # hear both. [Next] handler exhausts pa_at_station so step 4's PgDn
     # correctly calls _advance_to_next_stop instead of replaying entry [1].
-    Step(2, 1,    frozenset({ACT_PGDN}),      _pred_audio_done_after_action,
+    Step(2, 1,    frozenset({ACT_PGDN}),      _pred_action_flow_complete,
          next_handler=_skip_step2,
          skip_handler=_skip_step2,
-         lock_after_first_action=False,
-         highlight_pa_hint=True),
-    # Step 3: STA can be restarted (each PgUp re-cuts from sta_cut position).
-    Step(3, 2,    frozenset({ACT_PGUP}),      _pred_audio_done_after_action,
          lock_after_first_action=False),
-    Step(4, 3,    frozenset({ACT_PGDN}),      _pred_audio_done_after_action,
+    # Step 3: STA can be restarted (each PgUp re-cuts from sta_cut position).
+    Step(3, 2,    frozenset({ACT_PGUP}),      _pred_action_flow_complete,
+         lock_after_first_action=False),
+    Step(4, 3,    frozenset({ACT_PGDN}),      _pred_action_flow_complete,
          skip_handler=_skip_step4),
     # Step 5 (Approaching): arrival announcement. Tokaido 1865E has no passing
     # stations between 国府津 and 鴨宮, so a separate "driving" dwell phase to
     # showcase station-skipping + countdown was dropped — countdown still
     # ticks visibly on the LCD between step 4 and this step.
-    Step(5, 4,    frozenset({ACT_PGDN}),      _pred_audio_done_after_action,
-         skip_handler=_skip_step6,
-         highlight_pa_hint=True),
+    Step(5, 4,    frozenset({ACT_PGDN}),      _pred_action_flow_complete,
+         skip_handler=_skip_step6),
     Step(6, 5,    frozenset({ACT_PGDN}),      _pred_step7_approached,
          skip_handler=_skip_step7),
     # Step 7: click-to-jump demo. PgDn / PgUp are also unlocked so the user
@@ -856,7 +920,6 @@ class Tutorial:
         self.sim.upper.draw(time.strftime("%H:%M", time.localtime(ts)))
         self.sim.lower.draw(ts)
         self._draw_callout()
-        self._draw_pa_hint_highlight()
 
     def _draw_callout(self) -> None:
         """Outline the current step's callout region on the LCD (if any),
@@ -888,25 +951,6 @@ class Tutorial:
             int(BG_COLOR[i] + (bright[i] - BG_COLOR[i]) * t) for i in range(3)
         )
         pygame.draw.rect(self.screen, border_color, rect, width=outline_w, border_radius=radius)
-
-    def _draw_pa_hint_highlight(self) -> None:
-        """Flashing red box around the upper-LCD's yellow hint square. Drawn
-        when ``Step.highlight_pa_hint`` is True (steps 2 + 5 reference the
-        yellow square in their copy)."""
-        if not self._step().highlight_pa_hint:
-            return
-        # The pa_hint square renders at (S_WIDTH-20, UPPER_HEIGHT-20, 20, 20)
-        # in upper-LCD-local coords (see upper_lcd.py UpperDisplay.draw). Pad
-        # 5 px on each side so the highlight surrounds rather than overlaps it.
-        from displays.train_models.e235_1000 import S_WIDTH as _SW, UPPER_HEIGHT as _UH
-        pad = 5
-        rect = pygame.Rect(
-            LCD_X + _SW - 20 - pad,
-            LCD_Y + _UH - 20 - pad,
-            20 + 2 * pad,
-            20 + 2 * pad,
-        )
-        self._draw_pulsing_outline(rect, (235, 80, 80), outline_w=3, radius=3)
 
     def _teardown_sim(self) -> None:
         """Tutorial-only teardown. Does NOT call PASimulator.cleanup() — that
@@ -1081,6 +1125,20 @@ class Tutorial:
             )
         action_top = primary_row_y - action_gap_above_btns - action_h
 
+        # History block sits above the active prompt. Compute its height now
+        # so the seek bar can anchor above the combined (history + active)
+        # block, not just the active prompt.
+        history_keys = self._step_action_history_keys()
+        history_gap_above_active = 8
+        history_gap_between = 4
+        history_block_h = self._action_history_total_h(
+            history_keys, action_latin, action_cjk, action_max_w,
+            body_line_gap,
+            gap_above_active=history_gap_above_active,
+            gap_between=history_gap_between,
+        )
+        action_block_top = action_top - history_block_h
+
         # Body — multi-line wrapped, mixed-script (Helvetica for Latin incl.
         # macrons, ShinGoPr6N for embedded kanji/kana). Flows from top down.
         body_latin = _font_helv(body_size, medium=True)
@@ -1113,7 +1171,7 @@ class Tutorial:
                 time_font = _font_helv(label_size, medium=True)
                 label_h = time_font.get_height()
                 seek_block_h = seek_h + label_gap + label_h
-                seek_y = action_top - seek_gap_below - seek_block_h
+                seek_y = action_block_top - seek_gap_below - seek_block_h
                 seek_w = btn_w
                 seek_rect = pygame.Rect(PANEL_X + panel_pad, seek_y, seek_w, seek_h)
                 pygame.draw.rect(self.screen, BTN_BG_DIM, seek_rect, border_radius=3)
@@ -1147,6 +1205,22 @@ class Tutorial:
                 self.screen, ACCENT_BRIGHT,
                 pygame.Rect(PANEL_X + panel_pad, action_top, stripe_w, action_h),
                 border_radius=2,
+            )
+
+        # Action history render — past prompts struck-through + dimmed,
+        # stacked immediately above the active prompt. Layout dimensions
+        # already computed above so the seek bar could anchor correctly.
+        if history_keys:
+            self._draw_action_history(
+                history_keys,
+                anchor_top=action_top,
+                x=action_x,
+                max_w=action_max_w,
+                latin=action_latin,
+                cjk=action_cjk,
+                line_gap=body_line_gap,
+                gap_above_active=history_gap_above_active,
+                gap_between=history_gap_between,
             )
 
         self._btn_rects.clear()
@@ -1301,42 +1375,131 @@ class Tutorial:
             return i18n.t("tutorial.step.7.body_after_click", station=display)
         return i18n.t(f"tutorial.step.{self.current_step}.body")
 
-    def _step_action_text(self) -> str:
-        """Action prompt for the current step — the 'do this' line, rendered
-        below the explanatory body in an accent color so the user can see at
-        a glance what to do without parsing prose. Step 7 has post-click variant
-        ('click another or press Next') matching the post-click body. Step 2
-        switches from "play one" to "play the remaining" once the first
-        pa_at_station's audio has completed."""
-        if self.current_step == 2 and self.sim is not None:
-            # Trigger for the second prompt: either second press already
-            # dispatched (cnt>=1, definitively past first), or first audio
-            # has finished (cnt==0 and not playing). Otherwise keep prompt 1.
-            cnt = self.sim.state.cnt_pa_at_station
-            audio_done = not self.sim.audio.is_playing()
-            if cnt >= 1 or (cnt == 0 and audio_done):
-                return i18n.t("tutorial.step.2.action_after_first")
-        if self.current_step == 3 and self.sim is not None:
-            # 3-press flow: 1st = full play, 2nd = restart, 3rd-during-2nd = cut.
-            # Action prompt walks the user through it. After cut (n>=3) or if
-            # the user lets the 2nd play finish naturally (n==2 and not
-            # playing), drop to a "press Next" hint.
-            n = self._step3_pgup_count
-            playing = self.sim.audio.is_playing()
-            if n == 0:
-                pass                                       # initial prompt
-            elif n == 1 and not playing:
-                return i18n.t("tutorial.step.3.action_after_first")
-            elif n == 2 and playing:
-                return i18n.t("tutorial.step.3.action_during_second")
-            elif n >= 3 or (n == 2 and not playing):
-                return i18n.t("tutorial.step.3.action_done")
-            # n == 1 and playing → 1st play in progress, fall through to base.
-        if self.current_step == 6 and self._action_in_step:
-            return i18n.t("tutorial.step.6.action_done")
+    def _step_action_flow(self) -> Optional[ActionFlow]:
+        """Build the ActionFlow for the current step from sim state, or None
+        for steps without a multi-stage action sequence. Single source of
+        truth for active-prompt selection AND history — keep them aligned by
+        construction, not by mirrored branchy logic.
+
+        Steps 1, 7, 8 return None: step 1 is passive, step 8 is the recap,
+        step 7's post-click prompt is a superset of pre-click so it gets its
+        own dynamic-text path in ``_step_action_text``.
+        """
+        if self.sim is None or self.current_step in (1, 7, 8):
+            return None
+        audio_playing = self.sim.audio.is_playing()
+        if self.current_step == 2:
+            pa_at = self.sim.stops[self.sim.state.curr_stop].get("pa_at_station", [])
+            total = len(pa_at)
+            if total == 0:
+                return None
+            # cnt_pa_at_station is the INDEX of the last-fired entry, with -1
+            # as the pre-first sentinel. pressed_count = cnt + 1.
+            pressed = self.sim.state.cnt_pa_at_station + 1
+            stages = (
+                ("tutorial.step.2.action",)
+                + ("tutorial.step.2.action_after_first",) * (total - 1)
+                + ("tutorial.action.next_to_continue",)
+            )
+            return ActionFlow(stages, pressed, audio_playing)
+        if self.current_step == 3:
+            stages = (
+                "tutorial.step.3.action",
+                "tutorial.step.3.action_after_first",
+                "tutorial.step.3.action_during_second",
+                "tutorial.step.3.action_done",
+            )
+            # Stage 2 ("press one more to cut") is only meaningful while the
+            # 2nd melody is in flight — flag as mid-play so it shows DURING
+            # the prior audio, and is auto-skipped if audio ends without user
+            # action (natural-finish path).
+            return ActionFlow(stages, self._step3_pgup_count, audio_playing,
+                              mid_play_stages=frozenset({2}))
+        if self.current_step in (4, 5):
+            stages = (
+                f"tutorial.step.{self.current_step}.action",
+                "tutorial.action.next_to_continue",
+            )
+            pressed = 1 if self._action_in_step else 0
+            return ActionFlow(stages, pressed, audio_playing)
+        if self.current_step == 6:
+            stages = (
+                "tutorial.step.6.action",
+                "tutorial.step.6.action_done",
+            )
+            pressed = 1 if self._action_in_step else 0
+            return ActionFlow(stages, pressed, audio_playing)
+        return None
+
+    def _step_action_text(self) -> Optional[str]:
+        """Active action-prompt key resolved through the step's ActionFlow
+        (None when the active area should be blank — the in-between window
+        between a press and the audio it triggered finishing). Step 7 is
+        outside the flow model: its post-click variant interpolates the
+        landed-on station, handled inline."""
         if self.current_step == 7 and self._step7_clicked:
             return i18n.t("tutorial.step.7.action_after_click")
+        flow = self._step_action_flow()
+        if flow is not None:
+            key = flow.active_key()
+            return i18n.t(key) if key else None
         return i18n.t(f"tutorial.step.{self.current_step}.action")
+
+    def _step_action_history_keys(self) -> list[str]:
+        """Past action-prompt keys (struck-through above active). Press-based
+        per the ActionFlow contract — a stage moves to history immediately on
+        the press that advances past it, regardless of audio state. Step 7 is
+        excluded by ``_step_action_flow`` returning None."""
+        flow = self._step_action_flow()
+        return flow.history_keys() if flow else []
+
+    def _action_history_total_h(self, keys: list[str],
+                                 latin: pygame.font.Font, cjk: pygame.font.Font,
+                                 max_w: int, line_gap: int,
+                                 gap_above_active: int, gap_between: int) -> int:
+        """Total vertical span of the history block (including the gap between
+        the block's bottom edge and the active prompt's top). Returns 0 when
+        ``keys`` is empty so callers can treat 'no history' uniformly."""
+        if not keys:
+            return 0
+        items_h = sum(
+            self._measure_wrapped_text(i18n.t(k), latin, cjk,
+                                       max_w=max_w, line_gap=line_gap)
+            for k in keys
+        )
+        return gap_above_active + items_h + max(0, len(keys) - 1) * gap_between
+
+    def _draw_action_history(self, keys: list[str], *, anchor_top: int, x: int,
+                              max_w: int, latin: pygame.font.Font,
+                              cjk: pygame.font.Font, line_gap: int,
+                              gap_above_active: int, gap_between: int) -> None:
+        """Render past action prompts struck-through + dimmed, stacking
+        upward from ``anchor_top`` (the active prompt's top y). Each key is
+        wrapped to ``max_w`` like the active prompt. Strikethrough is a 1-px
+        line through the line-box midline of each rendered row."""
+        line_h = max(latin.get_height(), cjk.get_height())
+        # Most-recent (last in keys) sits closest to the active prompt.
+        cy_bottom = anchor_top - gap_above_active
+        for key in reversed(keys):
+            text = i18n.t(key)
+            h = self._measure_wrapped_text(
+                text, latin, cjk, max_w=max_w, line_gap=line_gap,
+            )
+            cy = cy_bottom - h
+            for paragraph in text.split("\n"):
+                if not paragraph:
+                    cy += line_h + line_gap
+                    continue
+                for line in self._wrap_lines(paragraph, latin, cjk, max_w):
+                    surf = _render_mixed(line, latin, cjk, DIM_COLOR)
+                    self.screen.blit(surf, (x, cy))
+                    mid_y = cy + line_h // 2
+                    pygame.draw.line(
+                        self.screen, DIM_COLOR,
+                        (x, mid_y), (x + surf.get_width(), mid_y), 1,
+                    )
+                    cy += line_h + line_gap
+            cy_bottom = (cy_bottom - h) - gap_between
 
     @property
     def predicate_satisfied(self) -> bool:

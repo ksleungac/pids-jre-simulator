@@ -122,22 +122,21 @@ def t(key: str, **fmt) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Font — Windows-bundled CJK font per active language. Drops ShinGoPr6N from
-# chrome (Japanese-glyph forms read wrong for Chinese); ShinGoPr6N stays for
-# LCD station-name rendering where its JP forms are right.
+# Font — per-language chrome font.
+#
+# EN routes to the bundled HelveticaNeue OTFs (consistent across systems —
+# same Latin face the LCD + setup screen + tutorial use). zh-HK / zh-CN
+# route to YaHei via SysFont — Windows ships it; non-Windows falls back to
+# pygame's default sans (acceptable since the project's primary distribution
+# is Windows).
 #
 # One CJK font per language (not a comma-fallback chain): pygame.font.SysFont
 # treats comma lists as font-installation fallback only, NOT glyph-level
-# fallback. So Arial-leading would render Arial for everything, and CJK
-# glyphs come out as .notdef boxes. Single CJK font sidesteps this — JhengHei
-# / YaHei both include Latin glyphs, so "English" labels render fine through
-# them, and route names with kanji always render. JhengHei (EN) and YaHei
-# (HK/CN) match heights at the same point size, so no per-language scaling
-# is needed and one UI design works across locales.
+# fallback. So a Latin-leading list would render Latin for everything and
+# CJK glyphs come out as .notdef boxes. Single SysFont sidesteps this.
 # ---------------------------------------------------------------------------
 
-_LANG_CHROME_FONT = {
-    "en":    "microsoftjhenghei",
+_LANG_CHROME_SYSFONT = {
     "zh_HK": "microsoftyahei",
     "zh_CN": "microsoftyahei",
 }
@@ -146,16 +145,31 @@ _font_cache: dict = {}
 
 
 def font(size: int, *, bold: bool = False) -> pygame.font.Font:
-    """Return a cached SysFont for the active language's chrome.
-    Requires pygame.font.init() (called by pygame.init())."""
-    name = _LANG_CHROME_FONT.get(_current_lang, "microsoftjhenghei")
+    """Cached chrome font for the active language. EN uses bundled
+    HelveticaNeue (deterministic across systems); zh-HK / zh-CN use SysFont
+    YaHei. Requires pygame.font.init() (called by pygame.init())."""
+    return font_for_lang(_current_lang, size, bold=bold)
+
+
+def font_for_lang(lang: str, size: int, *, bold: bool = False) -> pygame.font.Font:
+    """Cached chrome font for an explicit language code, bypassing the
+    active language. Used by the picker to render each row's label in its
+    own script's font regardless of which row is hovered."""
+    if lang == "en":
+        fname = "HelveticaNeue-Bold.otf" if bold else "HelveticaNeue-Roman.otf"
+        key = ("bundled", fname, size)
+        if key not in _font_cache:
+            _font_cache[key] = pygame.font.Font(str(app_root() / "fonts" / fname), size)
+        return _font_cache[key]
+    name = _LANG_CHROME_SYSFONT.get(lang, "microsoftyahei")
     return font_named(name, size, bold=bold)
 
 
 def font_named(name: str, size: int, *, bold: bool = False) -> pygame.font.Font:
-    """Direct font access bypassing active language. Used by the language
-    picker to lock each row's label to its own script's primary font, so
-    fonts don't jump as the user hovers across rows."""
+    """Direct SysFont access by name. Lower-level than ``font()`` /
+    ``font_for_lang()``; reserve for cases where a specific OS font is
+    needed regardless of language (currently unused — kept for the rare
+    case where chrome wants a non-language-mapped face)."""
     key = (name, size, bold)
     if key not in _font_cache:
         _font_cache[key] = pygame.font.SysFont(name, size, bold=bold)

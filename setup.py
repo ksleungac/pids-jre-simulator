@@ -36,25 +36,17 @@ class SetupScreen:
         available_height = screen.get_height() - 160
         self.max_visible = max(3, available_height // self.row_height)
 
-        # Chrome fonts per active language:
-        # - EN mode → HelveticaNeue-Bold (PIDS-canon Latin, clean macron rendering
-        #   for Tōkyō/Chūō destinations; matches the LCD's English aesthetic).
-        # - HK/CN modes → i18n.font() returns YaHei (CJK chrome).
-        # `route_font_cjk` is always YaHei-class because route names on line 1
-        # remain Japanese kanji today (translation deferred per user); it's used
-        # for the kanji portion of line 1 in EN mode (two-pass with tail Latin).
-        if i18n.current_lang() == "en":
-            helvetica = lambda s: pygame.font.Font(str(i18n.app_root() / "fonts" / "HelveticaNeue-Bold.otf"), s)
-            self.title_font = helvetica(28)
-            self.route_font = helvetica(18)
-            self.instruction_font = helvetica(16)
-            self.control_font = helvetica(14)
-        else:
-            self.title_font = i18n.font(28, bold=True)
-            self.route_font = i18n.font(18, bold=True)
-            self.instruction_font = i18n.font(16, bold=True)
-            self.control_font = i18n.font(14, bold=True)
-        self.route_font_cjk = i18n.font(18, bold=True)
+        # Chrome fonts via i18n.font() — bundled HelveticaNeue on EN (PIDS-canon
+        # Latin, clean macron rendering for Tōkyō/Chūō; deterministic across
+        # systems), YaHei (SysFont) on HK/CN. `route_font_cjk` is pinned to a
+        # CJK language explicitly because route names on line 1 are Japanese
+        # kanji today (translation deferred); used for the kanji portion of
+        # line 1 in EN mode (two-pass with tail Latin).
+        self.title_font = i18n.font(28, bold=True)
+        self.route_font = i18n.font(18, bold=True)
+        self.instruction_font = i18n.font(16, bold=True)
+        self.control_font = i18n.font(14, bold=True)
+        self.route_font_cjk = i18n.font_for_lang("zh_HK", 18, bold=True)
         # Line badge re-uses NeueFrutigerWorld-Bold (PIDS-canon, same font as the
         # LCD's station-code badges) for visual consistency with the LCD.
         self.badge_font = pygame.font.Font(str(i18n.app_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 18)

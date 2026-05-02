@@ -48,11 +48,19 @@ Before discussing learnings, claude self-assesses: *did this session involve fri
 
 5. **Cleanup.** Self-observation file (if any) is ephemeral — deleted after consolidation lands. The codified rule is the source of truth.
 
+**Routing into Step 1's report:** Step-0 codifications enter the **"New Understandings"** section with `→ propose:` annotations alongside other learnings — they are claude-side learnings about claude's own behavior, NOT user corrections. Do not file them under "Corrections / preferences" (which is reserved for user-articulated rules / preferences captured verbatim).
+
 **Scope:** this step targets **behavioral patterns claude noticed about its own outputs** — patterns the user observed but did not articulate as a rule. Project-specific factual corrections (got X wrong about the codebase) continue through Step 1's "Corrections / preferences" flow.
 
 ### Step 1 — Discuss learnings
 
-Skip code-change inventory (git covers it). Present this:
+Skip code-change inventory (git covers it). Present the report below.
+
+**Brevity is mandatory — the report is for the user's eye-scan, not a write-up.** Each bullet should fit on one line: the learning + destination annotation, nothing more. No parenthetical "(deliberate listening pause)" / "(why: X breaks if Y)" tails — the WHY belongs in the file the codification lands in, not the recap. If a bullet won't fit on one line, the WHY is leaking; trim it. Aim: ~5 words of content + the destination tag.
+
+Same brevity rule for "Corrections / preferences": list items being codified verbatim; for omits, **collapse to a count** ("3 other passing remarks omitted") rather than enumerating each one. Enumerating omits is the same self-narration anti-pattern the New Understandings hard-rule warns against.
+
+Present this:
 
 ```
 ## Session Learnings Summary
@@ -83,9 +91,9 @@ Example (WRONG — anti-pattern, never produce this):
 - "verbatim quote 1" → **rule-shaped** → `principles.md` (or conventions.md / skill / inline `# CONTRACT:`)
 - "verbatim quote 2" → **both-shaped** → DOMAIN_DOC.md (canonical content) AND conventions.md (behavioral binding)
 - "verbatim quote 3" → **fact-shaped** → CLAUDE.md mental model (or domain doc / inline)
-- "verbatim quote 4" → **omit** — passing remark with no rule shape, not codifying
+- (N other passing remarks omitted — no rule shape, no codification)
 
-If no corrections this session, state it explicitly — don't skip silently.
+If no corrections this session, state it explicitly — don't skip silently. If corrections exist but all were omits, state "all N corrections omitted as passing remarks" rather than enumerating each.
 
 ### TODO.md sweep
 - **Closed this session**: items shipped — propose `[x]` mark or removal, with a one-line "what landed."

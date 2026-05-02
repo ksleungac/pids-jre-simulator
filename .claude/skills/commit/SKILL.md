@@ -60,19 +60,23 @@ The model passes the smoke-test on whether the code does *something coherent*; o
 
 ### 4. Has session-recap run?
 
-If this is the last commit of a coding session (e.g. the user is about to wrap up, has said "commit this and we're done", or the session has produced a meaningful chunk of new code/docs/learnings), check whether `/session-recap` has been run. Look for: a `memory/<today>.md` daily log file mentioning this session's work, or a recent `MEMORY.md` index entry pointing at it.
+**Default: `/session-recap` always runs before `/commit`.** The user's framing is unconditional — "is always /session-recap first." Don't try to detect whether it's "the last commit" or whether the session "produced enough material" — those gates introduce false negatives. If the user is asking for a commit, assume recap is owed unless they explicitly waive.
 
-If recap has NOT been run and the session has produced material worth capturing (new patterns, preferences expressed, debugging insights, doc updates), surface it:
+Check whether `/session-recap` has already been run this session: look for a `memory/<today>.md` daily log file with an entry covering this session's work, or a recent `MEMORY.md` index entry pointing at it.
+
+If not yet run, propose recap-first (don't offer "skip and just commit" as an equal option — the skip clause below covers explicit waivers):
 
 ```
-Heads-up: I don't see a session-recap entry for today's work in memory/.
-Want me to run /session-recap first so the daily log + memory index are in
-the same commit set as the code, or skip and just commit?
+/session-recap hasn't run yet for this session — running it first so the
+daily log + memory index land in the same commit set as the code. Say
+"skip recap" if you want to bypass for this commit only.
 ```
 
-### Skip clause (applies to all three)
+If the user explicitly says "skip recap" / "just commit" / similar, that's the skip-clause waiver — proceed without recap, but the waiver applies only to this commit.
 
-The user explicitly waives a check ("trivial, just commit", typo fix, doc-only change). Default is no-skip; a waiver applies only to the commit it was given for, not session-wide.
+### Skip clause (applies to all four)
+
+The user explicitly waives a check ("trivial, just commit", typo fix, doc-only change, "skip recap"). Default is no-skip; a waiver applies only to the commit it was given for, not session-wide.
 
 If any check is missing and the user hasn't waived it, surface the gap *before* drafting the commit message — fixing it after the message is drafted is wasted work.
 

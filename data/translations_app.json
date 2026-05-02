@@ -12,7 +12,7 @@
     "zh_CN": "确定"
   },
   "picker.hint": {
-    "en": "↑↓: Navigate  |  Enter: Confirm",
+    "en": "Up/Down: Navigate  |  Enter: Confirm",
     "zh_HK": "↑↓:移動  |  Enter:確定",
     "zh_CN": "↑↓:移动  |  Enter:确定"
   },
@@ -101,6 +101,12 @@
     "zh_CN": "完成"
   },
 
+  "tutorial.action.next_to_continue": {
+    "en": "Press [[btn:Next]] to continue.",
+    "zh_HK": "按 [[btn:下一步]] 繼續。",
+    "zh_CN": "按 [[btn:下一步]] 继续。"
+  },
+
   "tutorial.phase.at_station": { "en": "At station", "zh_HK": "停站中", "zh_CN": "停站中" },
   "tutorial.phase.pre_departure": { "en": "Pre-departure", "zh_HK": "出發前", "zh_CN": "出发前" },
   "tutorial.phase.departure_melody": { "en": "Departure melody", "zh_HK": "發車音樂", "zh_CN": "发车音乐" },
@@ -121,9 +127,9 @@
     "zh_CN": "按 [[btn:下一步]] 开始教程。"
   },
   "tutorial.step.2.body": {
-    "en": "国府津 has at-platform announcements queued — the yellow hint square on the upper LCD lights up whenever any are present.",
-    "zh_HK": "列車於國府津停留時有廣播。",
-    "zh_CN": "列车于国府津停留时有广播。"
+    "en": "国府津 has at-platform announcements queued — the yellow hint square on the upper LCD flashes whenever any are present.",
+    "zh_HK": "閃爍緊嘅黃色方格代表列車於國府津停留時有廣播。",
+    "zh_CN": "闪烁的黄色方格表示列车于国府津停留时有广播。"
   },
   "tutorial.step.2.action": {
     "en": "Press [[PgDn]] to play one.",
@@ -136,9 +142,9 @@
     "zh_CN": "再按一次 [[PgDn]] 播放剩余广播。"
   },
   "tutorial.step.3.body": {
-    "en": "発車メロディ (departure melody) plays just before the doors close. Start it when about 25 seconds remain on the in-game departure cue.",
-    "zh_HK": "在關閉車門前播放發車音樂,可在遊戲出發時間前 25 秒開始播放。",
-    "zh_CN": "在关闭车门前播放发车音乐,可在游戏出发时间前 25 秒开始播放。"
+    "en": "発車メロディ (departure melody) plays just before the doors close. Start it when about 25 seconds remain on the in-game departure cue. PA and the melody play independently — you can start the melody while a station announcement is still playing.",
+    "zh_HK": "在關閉車門前播放發車音樂,可在遊戲出發時間前 25 秒開始播放。廣播同發車音樂可以一齊播放,廣播未完都可以開始播音樂。",
+    "zh_CN": "在关闭车门前播放发车音乐,可在游戏出发时间前 25 秒开始播放。广播和发车音乐可同时播放,广播未结束时也可以开始播放音乐。"
   },
   "tutorial.step.3.action": {
     "en": "Press [[PgUp]] to play the melody.",
@@ -171,9 +177,9 @@
     "zh_CN": "按 [[PgDn]] 出发。"
   },
   "tutorial.step.5.body": {
-    "en": "The yellow hint square shows that 鴨宮 has an arrival announcement. About 1200 to 800 m from the platform, play it: '次は 鴨宮' becomes 'まもなく 鴨宮' (arriving at Kamonomiya). Without the yellow square, the stop has no arrival announcement.",
-    "zh_HK": "黃色方格表示鴨宮有到站廣播。請於距離月台約 1200 至 800 米時播放,上方屏幕由「次は 鴨宮」變成「まもなく 鴨宮」(即將到達鴨宮)。沒有顯示黃色方格的車站,則沒有到站廣播。",
-    "zh_CN": "黄色方格表示鸭宫有到站广播。请在距离站台约 1200 至 800 米时播放,上方屏幕由「次は 鴨宮」变为「まもなく 鴨宮」(即将到达鸭宫)。没有显示黄色方格的车站,则没有到站广播。"
+    "en": "The yellow hint square flashes to show that 鴨宮 has an arrival announcement. About 1200 to 800 m from the platform, play it: '次は 鴨宮' becomes 'まもなく 鴨宮' (arriving at Kamonomiya). If no flashing yellow square is shown, the stop has no arrival announcement.",
+    "zh_HK": "閃爍緊嘅黃色方格代表鴨宮有到站廣播。請於距離月台約 1200 至 800 米時播放,上方屏幕由「次は 鴨宮」變成「まもなく 鴨宮」(即將到達鴨宮)。若畫面沒有顯示黃色閃爍方格,則代表沒有到站廣播。",
+    "zh_CN": "闪烁的黄色方格表示鸭宫有到站广播。请在距离站台约 1200 至 800 米时播放,上方屏幕由「次は 鴨宮」变为「まもなく 鴨宮」(即将到达鸭宫)。若画面没有显示黄色闪烁方格,则代表没有到站广播。"
   },
   "tutorial.step.5.action": {
     "en": "Press [[PgDn]] to play the arrival announcement.",
