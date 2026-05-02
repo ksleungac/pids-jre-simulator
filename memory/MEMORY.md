@@ -4,6 +4,7 @@ Long-term curated memories. One-line pointers — daily logs hold the detail.
 
 ---
 
+- [2026-05-02 PM cont](2026-05-02.md) — memory-system overhaul: killed log-only middle, sync codification + dedup gate, Step 0 friction loop + third-man behavioral review
 - [2026-05-02 PM](2026-05-02.md) — transfer-info Rule 1/2/3 algorithm correction (per-entry asymmetric / leftmost-fit / per-segment) + implementation-completion-as-spec promoted to principles.md (recurrence #4)
 - [2026-05-02](2026-05-02.md) — yellow-square nag indicator (blink + disappear-on-acknowledged + audio-busy gate) + dual-stream audio (PA on music, STA on Channel) + APPROACHING/STOPPING auto-fire asymmetry promoted to CLAUDE.md
 - [2026-05-01](2026-05-01.md) — transfer-info Yokohama validated + Rule 1/2/3 refactor + through-service variant pattern (option b sibling slugs) + /third-man skill
