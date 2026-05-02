@@ -5,12 +5,17 @@
         "transfers": [
             "tokaido_shinkansen",
             "yamanote",
-            "keihin_tohoku.oimachi_kamata",
+            "keihin_tohoku",
             "tokaido",
             "ueno_tokyo.tokaido",
             "yokosuka_sobu.yokosuka",
             "keikyu"
-        ]
+        ],
+        "transfers_by_view": {
+            "JY_inner": {
+                "edit": {"keihin_tohoku": "keihin_tohoku.oimachi_kamata"}
+            }
+        }
     },
     "大宮": {"code_3": "OMY"},
     "大崎": {"code_3": "OSK"},

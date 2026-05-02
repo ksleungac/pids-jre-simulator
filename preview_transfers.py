@@ -152,7 +152,6 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
     inter_badge_gap = 2
 
     inter_row_gap_factor = 1.0     # Multiples of badge_h
-    max_entries_per_row = 4        # IRL PIDS caps at 4 entries per row
     max_rows = 3                   # IRL PIDS max 3 rows of transfers
 
     # Body is vertically centered between banner-bottom and canvas-bottom,
@@ -311,34 +310,74 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
 
     # --- Layout pass: compute (entry, x, y_rel) for every entry without drawing.
     # Per-rule comments inline below; canonical narrative in WIP_transfer_display.md.
-    # Row-grouping (independent of positioning): natural-flow with
-    # max_entries_per_row=4, max_rows=3, shinkansen row-fenced.
 
     positions = []  # list of (entry, x, y_rel)
     right_edge_canvas = W - margin_x
 
-    # Step 1: group entries into rows.
-    rows = []  # list of [entry, ...]
-    cur_row: list = []
-    prev_category = None
-    for _, entry in ordered_entries:
-        cur_category = entry.get("category", "non_jr")
-        wrap_for_count = len(cur_row) >= max_entries_per_row
-        wrap_for_shinkansen_fence = (
-            prev_category == "shinkansen" and cur_category != "shinkansen"
-        ) or (
-            prev_category not in (None, "shinkansen") and cur_category == "shinkansen"
-        )
-        if cur_row and (wrap_for_count or wrap_for_shinkansen_fence):
-            rows.append(cur_row)
-            cur_row = []
-            if len(rows) >= max_rows:
-                break
-        cur_row.append(entry)
-        prev_category = cur_category
-    if cur_row and len(rows) < max_rows:
-        rows.append(cur_row)
-    rows = rows[:max_rows]
+    # Step 1: group entries into rows via lex-maximin row-grouping.
+    # CONTRACT: among splits respecting category-sorted order (no within-category
+    # reorder) and max_rows cap, pick the split that maximizes min(per-row gap),
+    # ties broken by lex-comparing the sorted-ascending gap vector.
+    # Per-row gap formula (h):
+    #   - n=1: h = (W - sum) / 2 (single-entry side margin).
+    #   - n>=2 equal-spacing case (when (W - sum)/(n+1) >= margin_x):
+    #       h = (W - sum) / (n + 1)  (sides == inters)
+    #   - n>=2 stretch case (sides bottom out at margin_x):
+    #       h = (W - 2*margin_x - sum) / (n - 1)
+    # See WIP_transfer_display.md § "Open follow-ups" for derivation.
+    from itertools import combinations
+    entries_seq = [e for _, e in ordered_entries]
+    widths_seq = [measure_entry(e) for e in entries_seq]
+    N_total = len(entries_seq)
+
+    def row_gap(widths_sum: float, n: int) -> float:
+        if n <= 0:
+            return float("inf")
+        if n == 1:
+            return (W - widths_sum) / 2
+        h_equal = (W - widths_sum) / (n + 1)
+        if h_equal >= margin_x:
+            return h_equal
+        return (W - 2 * margin_x - widths_sum) / (n - 1)
+
+    best_counts = None
+    best_key = None  # tuple of sorted-ascending row gaps; larger tuple wins lex
+    for num_rows in range(1, max_rows + 1):
+        if num_rows > N_total:
+            break
+        for splits in combinations(range(1, N_total), num_rows - 1) if num_rows > 1 else [()]:
+            counts = []
+            prev = 0
+            for s in splits:
+                counts.append(s - prev)
+                prev = s
+            counts.append(N_total - prev)
+            row_sums = []
+            idx = 0
+            for c in counts:
+                row_sums.append(sum(widths_seq[idx:idx + c]))
+                idx += c
+            gaps = [row_gap(row_sums[i], counts[i]) for i in range(len(counts))]
+            if any(g < 0 for g in gaps):
+                continue  # row physically overflows
+            key = tuple(sorted(gaps))
+            if best_key is None or key > best_key:
+                best_key = key
+                best_counts = counts
+
+    rows = []
+    if best_counts is not None:
+        idx = 0
+        for c in best_counts:
+            rows.append(entries_seq[idx:idx + c])
+            idx += c
+    else:
+        # Fallback: pack max_rows greedily even if overflowing — shouldn't happen
+        # on real data; kept defensive.
+        per = max(1, (N_total + max_rows - 1) // max_rows)
+        for i in range(0, N_total, per):
+            rows.append(entries_seq[i:i + per])
+        rows = rows[:max_rows]
 
     # Step 2: per-row positioning, threading anchors row-to-row.
 
@@ -376,10 +415,15 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
     row_widths_list: list = []   # per-row entry widths
     row_rights_list: list = []   # per-row right-edges (x + width)
 
+    # effective_margin_x can grow if Rule 4 (equal-spacing fallback) fires —
+    # rows already placed get retroactively shifted to align with the new margin.
+    effective_margin_x = margin_x
+
     for r_idx, row in enumerate(rows):
         widths = [measure_entry(e) for e in row]
         n = len(row)
         chosen_xs = None
+        right_edge_canvas = W - effective_margin_x
 
         if r_idx == 0:
             # Row 0 has no upper row to anchor against. First entry at margin,
@@ -483,11 +527,46 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
                     if tail_x is not None:
                         chosen_xs = rule1_xs + mid_xs + [tail_x]
 
+        if chosen_xs is None and r_idx > 0:
+            # Rule 4 — equal-spacing fallback. Fires when the cascade dies
+            # (Rule 3's right_edge_target lands left of head_right + tail_w,
+            # i.e. row above is narrower than this row). Place this row with
+            # h = (W − Σ widths) / (n+1) on each side and inter-gap, and
+            # shift all previously placed rows so their head_x = h. h must
+            # be ≥ margin_x for fallback to engage; below that, equal-spacing
+            # would degrade side margins below the floor and last-ditch is
+            # the safer outcome.
+            h = (W - sum(widths)) / (n + 1)
+            if h >= margin_x:
+                cursor = h
+                rule4_xs = []
+                for kk in range(n):
+                    rule4_xs.append(int(round(cursor)))
+                    cursor += widths[kk] + h
+                chosen_xs = rule4_xs
+                # Track back: shift previously placed rows by delta.
+                delta = int(round(h)) - effective_margin_x
+                if delta != 0:
+                    pos_cursor = 0
+                    for i in range(r_idx):
+                        prev_anchors = row_anchors_list[i]
+                        new_anchors = [x + delta for x in prev_anchors]
+                        row_anchors_list[i] = new_anchors
+                        row_rights_list[i] = [
+                            new_anchors[k] + row_widths_list[i][k]
+                            for k in range(len(new_anchors))
+                        ]
+                        for k in range(len(new_anchors)):
+                            e, _, y = positions[pos_cursor + k]
+                            positions[pos_cursor + k] = (e, new_anchors[k], y)
+                        pos_cursor += len(new_anchors)
+                effective_margin_x = int(round(h))
+
         if chosen_xs is None:
             # Last-ditch (also catches the r_idx==0 path where row 0's
             # head/tail/distribute didn't validate). Pack from margin with
             # zero gap — readability suffers but no crash.
-            chosen_xs = [margin_x]
+            chosen_xs = [effective_margin_x]
             for kk in range(1, n):
                 chosen_xs.append(chosen_xs[-1] + widths[kk - 1])
 
@@ -573,7 +652,9 @@ def main():
     if args.view:
         station_data = stations[args.station]
         view_map = station_data.get("transfers_by_view", {})
-        view_dropset = set(view_map.get(args.view, {}).get("drop", []))
+        view_ops = view_map.get(args.view, {})
+        view_dropset = set(view_ops.get("drop", []))
+        view_editmap = view_ops.get("edit", {})
         if view_dropset:
             before = len(transfers)
             transfers = [
@@ -584,8 +665,23 @@ def main():
                 f"View {args.view!r} drops {before - len(transfers)} entries: "
                 f"{sorted(view_dropset)}"
             )
-        else:
-            print(f"View {args.view!r}: no drops defined (or view-key absent)")
+        if view_editmap:
+            edited = []
+            edit_count = 0
+            for slug_ref in transfers:
+                base = slug_ref.split(".", 1)[0]
+                if base in view_editmap:
+                    edited.append(view_editmap[base])
+                    edit_count += 1
+                else:
+                    edited.append(slug_ref)
+            transfers = edited
+            print(
+                f"View {args.view!r} edits {edit_count} entries: "
+                f"{view_editmap}"
+            )
+        if not view_dropset and not view_editmap:
+            print(f"View {args.view!r}: no ops defined (or view-key absent)")
 
     if args.limit > 0:
         transfers = transfers[: args.limit]
