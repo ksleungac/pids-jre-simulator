@@ -39,6 +39,37 @@ def load_icon(slug: str, target_h: int, cache: dict) -> pygame.Surface:
     return scaled
 
 
+def resolve_entry(slug_ref: str, lines: dict) -> dict:
+    """Resolve 'slug' or 'slug.variant' to effective entry dict.
+
+    Variant fields override base fields; missing fields inherit from base.
+    Dot-notation is one-level only — `slug.variant.subvariant` is invalid.
+    Fails loud (KeyError) on missing base or unknown variant; per
+    `critical_lessons.md` § runtime-required artifacts, silent fallback on
+    missing data hides bugs at the worst time.
+    """
+    if "." in slug_ref:
+        base_slug, variant_name = slug_ref.split(".", 1)
+        if "." in variant_name:
+            raise ValueError(f"Dot-notation is one level only; got '{slug_ref}'")
+        if base_slug not in lines:
+            raise KeyError(
+                f"Base slug '{base_slug}' not in lines.json (referenced as '{slug_ref}')"
+            )
+        base = lines[base_slug]
+        variants = base.get("variants", {})
+        if variant_name not in variants:
+            raise KeyError(
+                f"Variant '{variant_name}' not under '{base_slug}' (referenced as '{slug_ref}')"
+            )
+        merged = {k: v for k, v in base.items() if k != "variants"}
+        merged.update(variants[variant_name])
+        return merged
+    if slug_ref not in lines:
+        raise KeyError(f"Slug '{slug_ref}' not in lines.json")
+    return {k: v for k, v in lines[slug_ref].items() if k != "variants"}
+
+
 def render_mixed(text: str, latin_font, cjk_font, color, latin_fallback=None, kern=True):
     """Render text with per-codepoint Latin/CJK font dispatch.
 
@@ -251,7 +282,7 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
     # with 丸ノ内線 non_jr).
     cat_order = {"shinkansen": 0, "jr_east": 1, "non_jr": 2}
     ordered_entries = sorted(
-        ((slug, lines[slug]) for slug in transfers),
+        ((slug_ref, resolve_entry(slug_ref, lines)) for slug_ref in transfers),
         key=lambda se: cat_order.get(se[1].get("category", "non_jr"), 99),
     )
 
@@ -496,6 +527,14 @@ def main():
         "Pass e.g. 'JO' to mimic the IRL reference photo (taken on a JO train).",
     )
     parser.add_argument(
+        "--view",
+        default="",
+        help="Apply per-view drops from station's transfers_by_view[<view>] map. "
+        "Format: '<line>_<direction>' e.g. 'JY_inner'. Combines with --filter-line. "
+        "Drop matches by base slug name, so a `drop: ['keihin_tohoku']` entry "
+        "drops both plain `keihin_tohoku` and any `keihin_tohoku.<variant>` references.",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=0,
@@ -523,10 +562,30 @@ def main():
     if args.filter_line:
         active = args.filter_line
         transfers = [
-            slug for slug in transfers
-            if not any(b.get("code") == active for b in lines[slug].get("badges", []))
+            slug_ref for slug_ref in transfers
+            if not any(
+                b.get("code") == active
+                for b in resolve_entry(slug_ref, lines).get("badges", [])
+            )
         ]
         print(f"Filter active line {active!r}: {len(transfers)} transfers remain")
+
+    if args.view:
+        station_data = stations[args.station]
+        view_map = station_data.get("transfers_by_view", {})
+        view_dropset = set(view_map.get(args.view, {}).get("drop", []))
+        if view_dropset:
+            before = len(transfers)
+            transfers = [
+                slug_ref for slug_ref in transfers
+                if slug_ref.split(".", 1)[0] not in view_dropset
+            ]
+            print(
+                f"View {args.view!r} drops {before - len(transfers)} entries: "
+                f"{sorted(view_dropset)}"
+            )
+        else:
+            print(f"View {args.view!r}: no drops defined (or view-key absent)")
 
     if args.limit > 0:
         transfers = transfers[: args.limit]

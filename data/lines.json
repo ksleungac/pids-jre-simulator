@@ -1,6 +1,17 @@
 {
     "yamanote":           {"badges": [{"code": "JY", "icon": "JY"}], "name_ja": "山手線",     "name_en": "Yamanote Line",                                                  "category": "jr_east"},
-    "keihin_tohoku":      {"badges": [{"code": "JK", "icon": "JK"}], "name_ja": "京浜東北線", "name_en": "Keihin-Tōhoku Line",                                             "category": "jr_east"},
+    "keihin_tohoku": {
+        "badges": [{"code": "JK", "icon": "JK"}],
+        "name_ja": "京浜東北線",
+        "name_en": "Keihin-Tōhoku Line",
+        "category": "jr_east",
+        "variants": {
+            "oimachi_kamata": {
+                "name_ja": "京浜東北線(大井町・蒲田方面)",
+                "name_en": "Keihin-Tōhoku Line (for Ōimachi/Kamata)"
+            }
+        }
+    },
     "chuo_rapid":         {"badges": [{"code": "JC", "icon": "JC"}], "name_ja": "中央線",     "name_en": "Chūō Line",                                                      "category": "jr_east"},
     "tokaido":            {"badges": [{"code": "JT", "icon": "JT"}], "name_ja": "東海道線",   "name_en": "Tōkaidō Line",                                                   "category": "jr_east"},
     "ueno_tokyo": {
@@ -10,12 +21,21 @@
         ],
         "name_ja": "上野東京ライン",
         "name_en": "Ueno-Tōkyō Line",
-        "category": "jr_east"
+        "category": "jr_east",
+        "variants": {
+            "tokaido": {"badges": [{"code": "JT", "icon": "JT"}]},
+            "tohoku":  {"badges": [{"code": "JU", "icon": "JU"}]}
+        }
     },
-    "ueno_tokyo_jt":      {"badges": [{"code": "JT", "icon": "JT"}], "name_ja": "上野東京ライン", "name_en": "Ueno-Tōkyō Line",                                              "category": "jr_east"},
     "keiyo":              {"badges": [{"code": "JE", "icon": "JE"}], "name_ja": "京葉線",     "name_en": "Keiyō Line",                                                     "category": "jr_east"},
-    "yokosuka":           {"badges": [{"code": "JO", "icon": "JO"}], "name_ja": "横須賀線",   "name_en": "Yokosuka Line",                                                  "category": "jr_east"},
-    "sobu_rapid":         {"badges": [{"code": "JO", "icon": "JO"}], "name_ja": "総武線快速", "name_en": "Sōbu Rapid Line",                                                "category": "jr_east"},
+    "yokosuka_sobu": {
+        "badges": [{"code": "JO", "icon": "JO"}],
+        "category": "jr_east",
+        "variants": {
+            "yokosuka": {"name_ja": "横須賀線",   "name_en": "Yokosuka Line"},
+            "sobu":     {"name_ja": "総武線快速", "name_en": "Sōbu Rapid Line"}
+        }
+    },
     "shonan_shinjuku":    {"badges": [{"code": "JS", "icon": "JS"}], "name_ja": "湘南新宿ライン", "name_en": "Shōnan-Shinjuku Line",                                         "category": "jr_east"},
     "negishi":            {"badges": [{"code": "JK", "icon": "JK"}], "name_ja": "根岸線",     "name_en": "Negishi Line",                                                   "category": "jr_east"},
     "yokohama_line":      {"badges": [{"code": "JH", "icon": "JH"}], "name_ja": "横浜線",     "name_en": "Yokohama Line",                                                  "category": "jr_east"},

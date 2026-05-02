@@ -1,6 +1,17 @@
 {
     "上野": {"code_3": "UEN"},
-    "品川": {"code_3": "SGW"},
+    "品川": {
+        "code_3": "SGW",
+        "transfers": [
+            "tokaido_shinkansen",
+            "yamanote",
+            "keihin_tohoku.oimachi_kamata",
+            "tokaido",
+            "ueno_tokyo.tokaido",
+            "yokosuka_sobu.yokosuka",
+            "keikyu"
+        ]
+    },
     "大宮": {"code_3": "OMY"},
     "大崎": {"code_3": "OSK"},
     "大船": {"code_3": "OFN"},
@@ -20,21 +31,25 @@
             "chuo_rapid",
             "tokaido",
             "ueno_tokyo",
+            "yokosuka_sobu.yokosuka",
+            "yokosuka_sobu.sobu",
             "keiyo",
-            "yokosuka",
-            "sobu_rapid",
             "marunouchi"
-        ]
+        ],
+        "transfers_by_view": {
+            "JY_inner": {"drop": ["keihin_tohoku", "chuo_rapid", "ueno_tokyo"]}
+        }
     },
     "横浜": {
         "code_3": "YHM",
         "transfers": [
             "keihin_tohoku",
             "tokaido",
-            "ueno_tokyo_jt",
+            "ueno_tokyo.tokaido",
             "shonan_shinjuku",
             "negishi",
             "yokohama_line",
+            "yokosuka_sobu.yokosuka",
             "keikyu",
             "tokyu_toyoko",
             "sotetsu",
