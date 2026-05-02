@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+import time
 import atexit
 import pygame.mixer as mixer
 import soundfile as sf
@@ -87,6 +88,13 @@ class AudioPlayer:
         # _next_sta treats "paused" as "not playing" (Page Up after End
         # plays from start, not restart-from-sta_cut).
         self._sta_paused: bool = False
+        # Wall-clock progress tracking for STA — mixer.Channel has no
+        # get_pos() equivalent of mixer.music's, so position() / duration()
+        # fall back to time.monotonic() arithmetic when STA is the active
+        # stream. Drifts during pause; tutorial seek bar hides during pause
+        # (is_sta_playing() returns False), so the drift is invisible.
+        self._sta_play_start_ts: Optional[float] = None
+        self._sta_duration_s: float = 0.0
 
     def play_pa(self, stop_index: int, pa_index: int) -> None:
         """Load and play PA announcement with loudness normalization.
@@ -232,6 +240,8 @@ class AudioPlayer:
             self._sta_channel.unpause()
             self._sta_channel.play(self._sta_sound, fade_ms=AUDIO_FADE_MS)
             self._sta_paused = False
+            self._sta_duration_s = self._sta_sound.get_length()
+            self._sta_play_start_ts = time.monotonic()
         except Exception as e:
             print(f"STA playback error: {type(e).__name__}: {e}")
 
@@ -272,22 +282,28 @@ class AudioPlayer:
         return self._sta_channel.get_busy() and not self._sta_paused
 
     def position(self) -> Optional[float]:
-        """Current PA playback position in file-time seconds, or None when
-        not playing. PA-only — STA runs on its own channel and does not
-        feed this getter (the tutorial seek bar consumes PA position only).
-        Returns None outside playback so callers can gate UI on it directly
-        without a separate is_pa_playing() check."""
-        if not mixer.music.get_busy():
-            return None
-        pos_ms = mixer.music.get_pos()
-        if pos_ms < 0:
-            return None
-        return self._current_start_offset + pos_ms / 1000.0
+        """Current playback position in seconds for whichever stream is live
+        (PA preferred when both somehow play). Returns None when neither
+        stream is producing audio — callers can gate UI on this directly
+        without a separate is_*_playing() check."""
+        if mixer.music.get_busy():
+            pos_ms = mixer.music.get_pos()
+            if pos_ms < 0:
+                return None
+            return self._current_start_offset + pos_ms / 1000.0
+        if self.is_sta_playing() and self._sta_play_start_ts is not None:
+            elapsed = time.monotonic() - self._sta_play_start_ts
+            return min(elapsed, self._sta_duration_s)
+        return None
 
     def duration(self) -> Optional[float]:
-        """Duration of the last-loaded track in seconds, or None if no track
-        has played yet."""
-        return self._current_duration if self._current_duration > 0 else None
+        """Duration in seconds for whichever stream is live (matches
+        ``position()``'s stream selection). None when nothing is playing."""
+        if mixer.music.get_busy() and self._current_duration > 0:
+            return self._current_duration
+        if self.is_sta_playing() and self._sta_duration_s > 0:
+            return self._sta_duration_s
+        return None
 
     def stop(self) -> None:
         """Stop both PA and STA streams."""
