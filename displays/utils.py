@@ -7,6 +7,7 @@ display package — every train-model module imports from here.
 """
 
 import re
+from contextlib import contextmanager
 from typing import List, Tuple
 
 import pygame
@@ -19,6 +20,25 @@ WHITE_BG = (230, 230, 230)
 # =============================================================================
 # Generic pygame primitives
 # =============================================================================
+
+
+@contextmanager
+def clip(surface: pygame.Surface, rect):
+    """Restrict drawing to ``rect`` for the duration of the with-block.
+
+    Pixels drawn outside ``rect`` are silently dropped at the pygame layer —
+    a hard guarantee that a region's draw cannot bleed into a neighbouring
+    region's territory. Pairs with the per-region rect manifest at the top
+    of each train-model's LCD module.
+
+    Restores the previous clip rect on exit (nested clips work correctly).
+    """
+    old = surface.get_clip()
+    surface.set_clip(rect)
+    try:
+        yield
+    finally:
+        surface.set_clip(old)
 
 
 def draw_aapolygon(

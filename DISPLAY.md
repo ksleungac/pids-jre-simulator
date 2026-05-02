@@ -264,58 +264,23 @@ All layout knobs live in the params block at the top of the method: `code_3_band
 
 JSON-side details (`stations.json` keying, the 22-station catalog rule) are in [DATA_FORMAT.md](DATA_FORMAT.md). Real-world rationale is in [CLAUDE.md](CLAUDE.md) "Mental Model → IRL display conventions".
 
-### Element Clear-Background Convention
+### Element confinement (clip-enforced)
 
-Every upper-LCD region has a declared **confinement** — a rectangle inside which everything the region draws must visually land. The clear rect is not special; it's just one of the things drawn for the region (alongside glyphs, decorations). The same containment rule applies to all of them.
+Every upper-LCD region has a declared rect — manifest at the top of `displays/train_models/e235_1000/upper_lcd.py` (`TRAIN_TYPE_RECT`, `DEST_RECT`, `PREFIX_RECT`, `STATION_RECT`, `CLOCK_RECT`, `BADGE_RECT`, `PA_HINT_RECT`). Each region's draw method wraps its body in `with clip(self.screen, RECT):` (helper at `displays/utils.py:clip`). Pixels drawn outside the rect are dropped at the pygame layer — bleed into a neighbour's territory is structurally impossible, no eyeball check needed.
 
-#### The principle
+**Tuning a region's bounds** — change the rect at module top. The clip wrap, the bg fill, and the debug-grid tint all read from the same constant.
 
-> Anything a region draws — bg fill, glyph pixels, shapes — must visually stay inside that region's confinement.
+**Debug-grid mode** — `uv run preview_display.py --debug-grid` swaps each region's bg to a unique tint via `_bg("<region>")` returning its `_DEBUG_COLORS` entry. Useful for verifying a NEW region's manifest entry covers the intended footprint; not load-bearing for catching bleed (clip handles that).
 
-That's it. Clear rect ⊆ confinement. Glyph visible pixels ⊆ confinement. Period.
+**Cross-mode parity** — all three mode renderers (Japanese / Furigana / English) share the same confinement per element. Internal content layout can differ; the boundary doesn't.
 
-#### Why declare confinements at all
+**Region map** — bounds + drawn-by + debug color for every region live as a comment block at the top of `displays/train_models/e235_1000/upper_lcd.py`, alongside `_DEBUG_COLORS`. Per-train-model — stays with the code, not in this doc.
 
-- **Correctness**: every frame's `pygame.draw.rect` for a region's bg should respect this; otherwise it clobbers a neighbor's bg.
-- **Debug visibility**: with `--debug-grid` enabled, each region's clear paints in a region-specific tint (red dest, blue prefix, etc.). Anything one region draws that lands on a *neighbor's tint* is a containment violation, surfaced visually.
-- **Cross-mode parity**: the three mode renderers (Japanese / Furigana / English) share the same confinement per element. Internal content layout can differ; the boundary doesn't.
+**Pygame rendering gotchas:**
 
-#### Two checks: D1 (cheap pre-check) and D2 (the rule)
-
-Pygame font surfaces have **leading** — empty (transparent) pixels above the visible glyph caps. Surface_top is at `blit_y`, but visible glyph caps appear `~10–15 px below` for big fonts. This causes the two-check distinction:
-
-- **D1 (surface containment, analytical)**: `blit_y ≥ confinement.top`. If true, no pixel — visible or transparent — is rendered above `confinement.top`. Sufficient for compliance, no probing needed.
-- **D2 (visible-pixel containment, empirical)**: actual visible glyph caps land at `y ≥ confinement.top`. Requires probing or per-font knowledge of leading. Tighter — allows surfaces to extend above confinement *as long as the leading absorbs the overshoot* and no painted pixel actually crosses.
-
-**D2 is the rule.** D1 is a useful pre-check: if it passes, you're done. If D1 fails, that's a *signal to probe*, not an automatic violation — the leading might absorb the overshoot. **Pixel-perfect tuning often requires D2** (e.g., 78pt kanji surfaces extend into the prefix's y-range, but visible caps stay at y≥35 thanks to leading; D1 would forbid the IRL-accurate font size unnecessarily).
-
-#### Probing methodology (gotcha)
-
-When pixel-probing a region's glyphs for containment, **isolate the region** so that neighboring regions' content can't masquerade as the target's:
-
-- Use a scenario where the neighbor is empty or short. For station containment vs prefix, test with the short "Next" prefix (x≤280) — that leaves x=302+ purely station territory. The long "Now stopping at" prefix overlaps station's x-range, and *its* text glyphs landing at y=20-something in the prefix-text overlap zone get mistaken for station glyphs.
-- Or probe at "exclusive x ranges" — for station, that's x=522–570 (between prefix right edge and clock left edge) and x=650–686 (right of clock). Any non-bg pixel in these strips at y<confinement.top must be the target region's drawing.
-
-#### Pygame rendering gotchas (recurring review false positives)
-
-Two facts about pygame text rendering that look like bugs to a fresh reviewer:
-
-- **Transparent leading does NOT clobber.** `font.render(text, True, color)` (no bg arg) returns an SRCALPHA surface. Default `blit` alpha-blends; transparent leading pixels don't overwrite the destination. So a station-glyph surface starting above `band_bottom_y` is safe — the prefix text underneath survives in the leading strip.
-- **`font.get_height()` is smaller than folk wisdom suggests** — roughly `pt_size × 0.92` for both HelveticaNeue-Medium and ShinGoPr6N-Medium, NOT `pt_size × 1.2`. Probed examples: 24pt → 22, 78pt → 78. **Probe via `pygame.font.Font(...).get_height()` before claiming overflow.**
-
-#### Other rules
-
-- All three mode renderers clear the **same** confinement for the same element. Internal layout can differ per mode; the boundary doesn't.
-- Sub-text-bg parameters (e.g., `font.render(text, True, fg, bg)`) inside a region should pass `_bg("<same region>")` as `bg` so they don't punch holes in the tint when debug-grid is on.
-- A region's clear rect must not extend into a neighbor's confinement. The `station` clear is clamped to `band_bottom_y=35` (top) and `UPPER_HEIGHT=117` (bottom) for this reason — same clamp pattern duplicated in all three mode renderers' `draw_station`.
-
-#### Debug-grid mode
-
-`uv run preview_display.py --debug-grid` flips `DEBUG_GRID` in `upper_lcd.py` so every region's `_bg("<region>")` returns its assigned tint instead of `DARK_BG`. Keys live in `_DEBUG_COLORS`. Adding a new region: register key in `_DEBUG_COLORS` AND in the Region Map comment. Forgetting either keeps debug-grid silent on the new region.
-
-#### Region map
-
-Bounds + drawn-by + debug color for every region live as a comment block at the top of `displays/train_models/e235_1000/upper_lcd.py`, alongside `_DEBUG_COLORS`. Per-train-model — different models will have different layouts, so the map stays with the code, not in this doc.
+- **Transparent leading does NOT clobber.** `font.render(text, True, color)` (no bg arg) returns an SRCALPHA surface; transparent pixels don't overwrite the destination on blit. A glyph surface whose top lands above its region's clip rect is safe — clip drops the transparent strip, the underlying bg survives.
+- **`font.get_height()` is ~`pt_size × 0.92`** for HelveticaNeue-Medium and ShinGoPr6N-Medium, NOT `pt_size × 1.2`. Probed examples: 24pt → 22, 78pt → 78.
+- **When passing a bg arg to `font.render()` inside a region**, use `_bg("<same region>")` not `DARK_BG` directly. Both render the same in normal mode, but `DARK_BG` punches solid-DARK_BG holes through the region's tint when debug-grid is on, defeating the visualization.
 
 ---
 
