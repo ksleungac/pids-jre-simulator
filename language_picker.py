@@ -11,16 +11,22 @@ import i18n
 class LanguagePicker:
     """Pick one of i18n.SUPPORTED_LANGS. Returns the chosen code, or None on quit/ESC.
 
-    Each row's label is locked to its own script's primary font so fonts don't
-    jump as the user hovers. Arial 28pt and CJK 24pt produce matching ~32px
-    rendered heights (Arial measures ~84% of CJK height at the same point size).
+    Each row's label is rendered in its own language's chrome font (via
+    ``i18n.font_for_lang``) regardless of which row is hovered. Picker chrome
+    (title, OK, hint) follows the active language and DOES font-jump on hover
+    — accepted tradeoff for using bundled HelveticaNeue on EN (consistent
+    Latin face across systems). HelveticaNeue 28pt and YaHei 24pt produce
+    matching ~32px rendered heights (Latin measures ~84% of CJK height at
+    the same point size).
     """
 
-    # (code, label, font_name, font_size) — sizes pre-tuned to match rendered height.
+    # (code, label, font_size) — point sizes pre-tuned to match rendered height
+    # across scripts. Font face is chosen by ``i18n.font_for_lang(code, ...)``
+    # at render time.
     LANGS = [
-        ("en",    "English",  "arial",         28),
-        ("zh_HK", "繁體中文", "microsoftyahei", 24),
-        ("zh_CN", "简体中文", "microsoftyahei", 24),
+        ("en",    "English",   28),
+        ("zh_HK", "繁體中文",  24),
+        ("zh_CN", "简体中文",  24),
     ]
 
     def __init__(self, screen: pygame.Surface):
@@ -61,23 +67,24 @@ class LanguagePicker:
         hint_y = 380
         # ────────────────────────────────────────────────────────────────────
 
-        # Picker chrome (title, OK button, hint) locks to JhengHei — handles all
-        # three scripts and stays put when the active language changes on hover.
-        title_font = i18n.font_named("microsoftjhenghei", 28, bold=True)
-        btn_font = i18n.font_named("microsoftjhenghei", 20, bold=True)
-        hint_font = i18n.font_named("microsoftjhenghei", 14, bold=True)
+        # Picker chrome follows the active language — bundled HelveticaNeue on
+        # EN, YaHei (SysFont) on HK/CN. Re-renders on hover as the user previews
+        # languages.
+        title_font = i18n.font(28, bold=True)
+        btn_font = i18n.font(20, bold=True)
+        hint_font = i18n.font(14, bold=True)
 
         title = title_font.render(i18n.t("picker.title"), True, self.text_color)
         self.screen.blit(title, ((w - title.get_width()) // 2, title_y))
 
         self._row_rects = []
-        for i, (_, label, font_name, font_size) in enumerate(self.LANGS):
+        for i, (code, label, font_size) in enumerate(self.LANGS):
             y = row_top + i * (row_h + row_gap)
             rect = pygame.Rect(row_margin, y, w - 2 * row_margin, row_h)
             self._row_rects.append(rect)
             bg = self.highlight_color if i == self.selected_idx else self.row_bg
             pygame.draw.rect(self.screen, bg, rect, border_radius=8)
-            row_font = i18n.font_named(font_name, font_size, bold=True)
+            row_font = i18n.font_for_lang(code, font_size, bold=True)
             label_img = row_font.render(label, True, self.text_color)
             self.screen.blit(
                 label_img,
