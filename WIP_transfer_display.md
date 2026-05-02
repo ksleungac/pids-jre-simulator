@@ -1,11 +1,12 @@
 # WIP — Transfer-info display (lower LCD)
 
-**Status:** Algorithm locked 2026-05-02. Three layered components:
-1. **Row-grouping** — lex-maximin over `h = (W − Σ widths)/(n+1)` (with `margin_x` floor) decides how many entries per row, respecting category-sort + `max_rows = 3`.
-2. **Column-anchored positioning** — Rule 1 / Rule 2 / Rule 3 cascade column-aligns rows against upper-row anchors when possible.
-3. **Equal-spacing fallback (Rule 4)** — when Rule 3's `right_edge_target` lands left of `head_right` (row above narrower than this row), place this row equal-spaced and track back rows above to align.
+**Status:** Algorithm locked 2026-05-03. Four layered components:
+1. **Row-grouping** — capped lex-maximin over `h = (W − Σ widths)/(n+1)` (with `margin_x` floor, gap capped at `2·margin_x`) decides how many entries per row. Sort key tiebreaks by fewer-rows so few-small-entries collapse onto a single row instead of spreading vertically.
+2. **Blueprint placement** — when the max-Σ row is NOT row 0 (i.e. some lower row needs more space than row 0 can seed), that row is placed first via equal-spacing as the cascade seed instead of waiting for reactive Rule 4 + track-back. When max-Σ IS row 0, behaviour is unchanged (top-down cascade with row 0 as seed).
+3. **Column-anchored positioning** — Rule 1 / Rule 2 / Rule 3 cascade column-aligns non-seed rows against the adjacent already-placed row toward the seed. Row 0 (when it is the seed) has two sub-paths: single-row layout uses equal-spacing with `(W−Σ)/divisor` side-padding; multi-row layout edge-pins head/tail.
+4. **Equal-spacing fallback (Rule 4)** — when cascade dies, place row equal-spaced. In standard mode (seed = row 0), tracks back earlier rows by delta. In blueprint mode (seed = max-Σ row > 0), track-back is skipped to preserve the seed.
 
-Validated structurally against Tokyo, Yokohama, Shinagawa IRL references. Remaining work is data population + private-operator icons + production wiring.
+Validated structurally against Tokyo, Yokohama, Shinagawa, Shimbashi, Hamamatsuchō, Ōsaki IRL references. Remaining work is data population + production wiring.
 
 ---
 
@@ -30,16 +31,22 @@ References: `lcd_references/transfer_tokyo.png`, `lcd_references/yokohama.png`.
 
 - **Icon assets** — 36 PNGs at 128×128 in `data/line_icons/`. Sources (33 SVGs + 2 Shinkansen variants + universal-fallback PNG) in `lcd_references/line_badges/` and `lcd_references/Shinkansen_jr*.svg`. Regen one-liner: `magick -background none <src.svg> -resize 128x128 <dst.png>`.
 
-- **Renderer prototype** (`preview_transfers.py`) — banner with bilingual "のりかえ案内 Transfer" (dim PASSED_COLOR bg, JA centered, EN bottom-anchored 7 px), mixed-script Latin/CJK font dispatch, two-tier JA compression (0.75 for 7-char like 上野東京ライン, 0.90 for 8+ char, none for ≤6), compact `・` (U+30FB → U+00B7 + 1 px side-pad), badge sized to 1.1 × JA height, margins per user spec (left = 1.6 × badge_h).
+- **Renderer prototype** (`preview_transfers.py`) — banner with bilingual "のりかえ案内 Transfer" (dim PASSED_COLOR bg, JA centered, EN bottom-anchored 7 px), mixed-script Latin/CJK font dispatch, per-line/per-variant JA compression via `name_ja_compress` field on `lines.json` (default 1.0; set per IRL measurement), compact `・` (U+30FB → U+00B7 + 1 px side-pad), badge sized to 1.1 × JA height, margins per user spec (left = 1.6 × badge_h).
 
-- **Row-grouping — lex-maximin.** Among splits respecting category-sort (shinkansen → jr_east → non_jr, no within-category reorder) and `max_rows = 3`, pick the split that maximizes `min(per-row gap)`, with ties broken by lex-comparing the sorted-ascending gap vector. Per-row gap formula:
+- **Row-grouping — capped lex-maximin.** Among splits respecting category-sort (shinkansen → jr_east → non_jr, no within-category reorder) and `max_rows = 3`, pick by 3-tuple sort key: `(capped_padded_gaps, -num_rows, uncapped_gaps)`. Larger tuple wins.
+  - **Capped** = each row's gap clamped to `gap_cap = 2·margin_x`. Beyond that, more whitespace is wasted canvas, not better layout.
+  - **Padded** to length `max_rows` with `gap_cap`. Lets fewer-row splits compete fairly with more-row splits (an "absent" row contributes a vacuous cap-equivalent gap).
+  - **`-num_rows` tiebreak** prefers fewer rows when capped tuples tie. Without this, 3 small entries would lex-prefer (1,1,1) over single-row layout because uncapped gaps are larger when split.
+  - **Uncapped** lex-maximin breaks final ties — picks the most-spread among row-count-equivalent splits.
+
+  Per-row gap formula `h`:
   - `n=1`: `h = (W − Σ widths) / 2`.
   - `n≥2` equal-spacing case (when `(W − Σ)/(n+1) ≥ margin_x`): `h = (W − Σ)/(n+1)` (sides == inters).
   - `n≥2` stretch case (sides bottom out at `margin_x`): `h = (W − 2·margin_x − Σ)/(n − 1)`.
 
   No shinkansen fence, no 4-entries-per-row cap — both dropped as count-based heuristics that maximin produces naturally from widths.
 
-  Validated splits: Tokyo (2,4,3); Yokohama (4,4,3); Shinagawa JY_inner (1,2,3).
+  Validated splits: Tokyo (2,4,3); Yokohama (4,4,3); Shinagawa JY_inner (1,2,3); Shimbashi flat (2,2,3); Shimbashi JY_inner (3) — single row (was (1,1,1) under uncapped lex-maximin; cap+tiebreak collapses it).
 
 - **Column-anchored positioning — Rule 1 / Rule 2 / Rule 3 cascade + Rule 4 fallback.** Each row's per-entry x positions are decided by this cascade. Rules 1–3 refactored 2026-05-02; Rule 4 added 2026-05-02; third-man verified.
 
@@ -56,9 +63,18 @@ References: `lcd_references/transfer_tokyo.png`, `lcd_references/yokohama.png`.
 
   ### Row 0 (no upper row to anchor against)
 
+  Row 0 branches by total row count.
+
+  **Multi-row layout (`len(rows) > 1`):** edge-pin so subsequent rows can column-align.
   - Head (entry 0) at `margin_x`.
   - Tail (entry N-1) right-edge at `right_edge_canvas` → `tail_x = right_edge_canvas - widths[N-1]`.
   - Middles (entries 1..N-2) distribute evenly between head's right edge and tail's anchor x.
+
+  **Single-row layout (`len(rows) == 1`):** use equal-spacing when `h_equal ≥ margin_x`, with sides padded slightly larger than inters per IRL preference. Falls through to multi-row's head/tail/distribute when `h_equal < margin_x`.
+  - Compute `h_equal = (W − Σ) / (n+1)` and `side_pad = max(0, (W − Σ) / single_row_side_pad_divisor)` where `single_row_side_pad_divisor = 14` (tuneable).
+  - For n≥2: `side_gap = h_equal + side_pad`; `inter_gap = h_equal − 2·side_pad/(n−1)`. Total still sums to W.
+  - For n=1: just center via `cursor = h_equal` (no inter to absorb side_pad).
+  - Sparse rows (small Σ) → larger side_pad → more visually-anchored sides. Crowded rows (Σ → W) → side_pad → 0 → true equal-spacing.
 
   ### Row R > 0 — Rule 1 (column alignment, fires only when N ≤ M)
 
@@ -152,16 +168,23 @@ References: `lcd_references/transfer_tokyo.png`, `lcd_references/yokohama.png`.
 
 - **Filter-line semantics**: drops any slug whose effective `badges[].code` matches active. For variants, effective badges are merged-from-base + variant-overrides. So `ueno_tokyo.tokaido` (JT-only variant) gets dropped on JT-active but not on JU-active; `ueno_tokyo` base (JT+JU) gets dropped on either.
 
-- **`transfers_by_view` slot — `drop` + `edit` ops.** Per-station map keyed by `<line>_<direction>` (e.g. `JY_inner`, `JT_south`). `drop` removes entries by base slug; `edit` swaps a base slug to a variant ref. Drop applied first, then edit. `add` reserved for future. Populated only when IRL evidence (LCD photo or audio) shows divergence from flat-list default. Schema in `DATA_FORMAT.md` § stations.json `transfers_by_view`. Today populated: 品川 JY_inner edits `keihin_tohoku → keihin_tohoku.oimachi_kamata`.
+- **`transfers_by_view` slot — `drop` + `edit` ops.** Per-station map keyed by `<line>_<direction>` (e.g. `JY_inner`, `JT_south`). `drop` removes entries by base slug; `edit` swaps a base slug to a variant ref. Drop applied first, then edit. `add` reserved for future. Populated only when IRL evidence (LCD photo or audio) shows divergence from flat-list default. Schema in `DATA_FORMAT.md` § stations.json `transfers_by_view`. Today populated: 東京 / 新橋 JY_inner drop parallel-runners; 品川 JY_inner edits `keihin_tohoku → keihin_tohoku.oimachi_kamata`.
 
-- **Tokyo + Yokohama + Shinagawa populated** under new schema:
+- **Tokyo + Yokohama + Shinagawa + Shimbashi + Hamamatsuchō + Ōsaki populated** under new schema:
   - 東京: 11 entries; through-service migrated (`yokosuka` → `yokosuka_sobu.yokosuka`, `sobu_rapid` → `yokosuka_sobu.sobu`).
   - 横浜: 12 entries (was 11; gap-fix added `yokosuka_sobu.yokosuka`); UT migrated (`ueno_tokyo_jt` → `ueno_tokyo.tokaido`).
   - 品川: 7 entries with plain `keihin_tohoku` (variant override fires only on JY_inner via `transfers_by_view.JY_inner.edit`), `ueno_tokyo.tokaido`, `yokosuka_sobu.yokosuka`. JY-filter render produces 6 visible.
+  - 新橋: 7 entries (JY/JK/JT/UT.tokaido + Ginza/Asakusa/Yurikamome). New line slugs added: `ginza`, `asakusa`, `yurikamome`. JY_inner drops JK/JT/UT (parallel-runners southbound).
+  - 浜松町: 4 entries (JY/JK/Tokyo Monorail/Toei Asakusa via 大門 walk). New line slugs: `tokyo_monorail`, `oedo`. JY_inner drops JK. Wide entries on row 1 ordered Monorail-first (left) so Ōedo (narrow) lands on the right anchor without canvas overflow.
+  - 大崎: 4 entries (JA/JS/sotetsu_through/Rinkai). New line slugs: `saikyo`, `sotetsu_through` (universal icon, "相鉄線直通 / Through service to Sōtetsu Line"), `rinkai` (icon at `data/line_icons/rinkai.png` extracted from `lcd_references/Rinkai_Line_symbol.svg`). JY_inner drops JA. IRL uses (2,1) split but current algorithm picks (1,2) — see follow-up #0.
 
 ---
 
 ## Open follow-ups (priority order)
+
+0. **Two enhancement candidates queued for tomorrow's discussion:**
+   - **Better row-grouping when biggest row sits below**: at 大崎 JY_inner (3 entries: JS/sotetsu_through/rinkai) IRL uses `(2,1)` split but algorithm picks `(1,2)` because uncapped lex-maximin tiebreaker prefers the first split's 124.7 over (2,1)'s 111.3. Candidate fix: category-respecting tiebreaker — `key = (capped_padded, -num_rows, -boundary_violations, uncapped)` where violations counts split points NOT at category transitions. Soft preference, not constraint (Yokohama/Tokyo splits already violate by necessity).
+   - **Better Rule 1 for sparse-row-against-wider-blueprint space distribution**: Shimbashi flat under blueprint mode places rows 0/1 at `[100, 300]` (cramp left) because Rule 1 walks leftmost upper anchors. Candidate: when N<M, place head at `upper[0]`, tail at `upper[-1]`, middles distribute; skip interior anchors. Would spread rows 0/1 to `[100, 500]`.
 
 1. **Promote to production.** Move `render_transfer` from `preview_transfers.py` into `displays/train_models/e235_1000/` — likely a new sibling module beside `lower_lcd.py` (the transfer view *replaces* the route bar conditionally, not an addition to it). Wire into `LowerDisplay`'s view-cycler so it triggers when `at_station=True` AND the current station has `transfers` data. Surfaces and font-loading patterns to mirror existing `lower_lcd.py` style.
 

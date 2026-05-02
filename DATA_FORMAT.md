@@ -251,6 +251,7 @@ Catalog of rail lines referenced as transfer entries on station displays. Stores
 | `name_ja` | Japanese display name. Required at base unless the slug is **only** referenced via variants (e.g. `yokosuka_sobu` — base never used directly). |
 | `name_en` | English display name (Hepburn-with-macrons). Same required-unless-variant-only rule as `name_ja`. |
 | `category` | One of `jr_east` / `shinkansen` / `non_jr`. Drives row-grouping. |
+| `name_ja_compress` | Optional float. Horizontal scale factor applied to `name_ja` at render time (e.g. `0.75`, `0.90`). Absent → 1.0 (natural width). Best-effort field — set per-line/per-variant when an IRL LCD photo is available to measure against; leave absent otherwise. |
 | `variants` | Optional. Map of `<variant_name> → {field overrides}`. Each variant overrides any subset of base fields; missing fields inherit from base. Used for zone-specific badge subsets (UT JT-only south, JU-only north), through-service display variants (Yokosuka vs Sōbu Rapid label on same JO physical line), and direction-qualified line names (Keihin-Tōhoku with `(大井町・蒲田方面)` suffix). Variants are referenced from `stations.json` via dot notation: `slug.variant_name`. |
 
 ### Variant resolution (one-level)

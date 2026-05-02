@@ -132,6 +132,7 @@ def render_mixed(text: str, latin_font, cjk_font, color, latin_fallback=None, ke
 def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
     # --- Tuneable params (adjust freely) ---
     margin_x_factor = 1.6          # Side margin = N × badge_h (user spec: 1.6 badge widths)
+    single_row_side_pad_divisor = 14  # Single-row equal-spacing: side_pad = (W − Σ) / divisor. Sparse rows get more side_pad; crowded rows → true equal-spacing.
 
     banner_size_ja = 16            # JA size (user spec: 16+ px)
     banner_size_en = 21            # EN size (user spec: +2 from 14)
@@ -144,10 +145,6 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
     name_size_ja = 23
     name_size_en = 12
     name_line_gap = -4             # Gap between badge bottom and EN text top (negative = overlap)
-    ja_compress_factor = 0.90      # Horizontal compression for entries with > 7 chars
-    ja_compress_factor_short = 0.75  # More aggressive compression for 7-char entries
-    ja_compress_threshold = 6      # Only compress JA when char count > this
-    ja_compress_short_max = 7      # Up to this length uses the more-aggressive factor
     badge_text_gap = 3             # Gap between badge group and JA/EN text (user spec: 3 px IRL)
     inter_badge_gap = 2
 
@@ -214,19 +211,11 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
                 x += dot_surf.get_width() + dot_side_pad
         return out
 
-    def render_ja(text: str):
-        natural_len = len(text)
+    def render_ja(text: str, compress: float = 1.0):
         text = compact_dots(text)
         surf = render_with_dot_pad(text, lambda s: font_ja.render(s, True, TEXT_COLOR))
-        # Two-tier compression: 7-char entries (e.g. 上野東京ライン) get a more
-        # aggressive squeeze; longer entries (shinkansens) get a gentler one.
-        # Short names (≤ threshold) stay natural width.
-        if natural_len > ja_compress_threshold and surf.get_width() > 0:
-            if natural_len <= ja_compress_short_max:
-                factor = ja_compress_factor_short
-            else:
-                factor = ja_compress_factor
-            new_w = max(1, int(round(surf.get_width() * factor)))
+        if compress != 1.0 and surf.get_width() > 0:
+            new_w = max(1, int(round(surf.get_width() * compress)))
             surf = pygame.transform.smoothscale(surf, (new_w, surf.get_height()))
         return surf
 
@@ -247,7 +236,7 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
         bw = sum(load_icon(b["icon"], badge_h, icon_cache).get_width() for b in badges)
         if len(badges) > 1:
             bw += (len(badges) - 1) * inter_badge_gap
-        ja_w = render_ja(entry["name_ja"]).get_width()
+        ja_w = render_ja(entry["name_ja"], entry.get("name_ja_compress", 1.0)).get_width()
         en_w = render_en(entry["name_en"]).get_width()
         return bw + badge_text_gap + max(ja_w, en_w)
 
@@ -265,7 +254,7 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
                 bx += inter_badge_gap
 
         text_x = bx + badge_text_gap
-        ja_surf = render_ja(entry["name_ja"])
+        ja_surf = render_ja(entry["name_ja"], entry.get("name_ja_compress", 1.0))
         en_surf = render_en(entry["name_en"])
 
         # JA top-aligned with badge top
@@ -314,21 +303,27 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
     positions = []  # list of (entry, x, y_rel)
     right_edge_canvas = W - margin_x
 
-    # Step 1: group entries into rows via lex-maximin row-grouping.
+    # Step 1: group entries into rows via capped lex-maximin row-grouping.
     # CONTRACT: among splits respecting category-sorted order (no within-category
-    # reorder) and max_rows cap, pick the split that maximizes min(per-row gap),
-    # ties broken by lex-comparing the sorted-ascending gap vector.
+    # reorder) and max_rows cap, pick by sort-key:
+    #   1. capped lex-maximin: each row's gap clamped to `gap_cap`, padded to
+    #      max_rows length with `gap_cap`, sorted ascending. Larger tuple wins.
+    #   2. -num_rows: when capped tuples tie, prefer fewer rows (avoids the
+    #      "few small entries spread across separate rows" regression).
+    #   3. uncapped lex-maximin: when above tie, the most-spread split wins.
     # Per-row gap formula (h):
     #   - n=1: h = (W - sum) / 2 (single-entry side margin).
     #   - n>=2 equal-spacing case (when (W - sum)/(n+1) >= margin_x):
     #       h = (W - sum) / (n + 1)  (sides == inters)
     #   - n>=2 stretch case (sides bottom out at margin_x):
     #       h = (W - 2*margin_x - sum) / (n - 1)
+    # `gap_cap = 2 * margin_x`: beyond this, more whitespace is wasted canvas.
     # See WIP_transfer_display.md § "Open follow-ups" for derivation.
     from itertools import combinations
     entries_seq = [e for _, e in ordered_entries]
     widths_seq = [measure_entry(e) for e in entries_seq]
     N_total = len(entries_seq)
+    gap_cap = 2 * margin_x
 
     def row_gap(widths_sum: float, n: int) -> float:
         if n <= 0:
@@ -341,7 +336,7 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
         return (W - 2 * margin_x - widths_sum) / (n - 1)
 
     best_counts = None
-    best_key = None  # tuple of sorted-ascending row gaps; larger tuple wins lex
+    best_key = None
     for num_rows in range(1, max_rows + 1):
         if num_rows > N_total:
             break
@@ -360,7 +355,8 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
             gaps = [row_gap(row_sums[i], counts[i]) for i in range(len(counts))]
             if any(g < 0 for g in gaps):
                 continue  # row physically overflows
-            key = tuple(sorted(gaps))
+            capped = [min(g, gap_cap) for g in gaps] + [gap_cap] * (max_rows - num_rows)
+            key = (tuple(sorted(capped)), -num_rows, tuple(sorted(gaps)))
             if best_key is None or key > best_key:
                 best_key = key
                 best_counts = counts
@@ -411,77 +407,146 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
                 return False
         return True
 
-    row_anchors_list: list = []  # per-row chosen left-edge x's
-    row_widths_list: list = []   # per-row entry widths
-    row_rights_list: list = []   # per-row right-edges (x + width)
+    # Blueprint enhancement: when the max-Σ row is NOT row 0, place it first
+    # via equal-spacing (proactive Rule 4-style seed) instead of waiting for
+    # reactive Rule 4 to fire + track-back. Rules 1-4 cascade unchanged for
+    # non-blueprint rows — only the row-placement seed changes. When max-Σ
+    # IS row 0, behavior is unchanged (top-down cascade).
+    rows_widths_pre = [[measure_entry(e) for e in row] for row in rows]
+    row_sums_pre = [sum(rw) for rw in rows_widths_pre]
+    blueprint_idx = max(range(len(rows)), key=lambda i: row_sums_pre[i])
+    blueprint_active = blueprint_idx > 0 and len(rows) > 1
+
+    row_anchors_list: list = [None] * len(rows) if blueprint_active else []
+    row_widths_list: list = list(rows_widths_pre) if blueprint_active else []
+    row_rights_list: list = [None] * len(rows) if blueprint_active else []
 
     # effective_margin_x can grow if Rule 4 (equal-spacing fallback) fires —
     # rows already placed get retroactively shifted to align with the new margin.
+    # In blueprint mode, effective_margin_x is set by blueprint placement upfront.
     effective_margin_x = margin_x
 
-    for r_idx, row in enumerate(rows):
-        widths = [measure_entry(e) for e in row]
+    if blueprint_active:
+        # Place blueprint via equal-spacing first.
+        bp_widths = rows_widths_pre[blueprint_idx]
+        bp_n = len(bp_widths)
+        bp_sum = row_sums_pre[blueprint_idx]
+        bp_h = (W - bp_sum) / (bp_n + 1)
+        if bp_h >= margin_x:
+            bp_xs = []
+            cursor = bp_h
+            for k in range(bp_n):
+                bp_xs.append(int(round(cursor)))
+                cursor += bp_widths[k] + bp_h
+        else:
+            # Stretch fallback when blueprint too crowded for equal-spacing.
+            bp_head = margin_x
+            bp_tail = W - margin_x - bp_widths[-1]
+            if bp_n == 1:
+                bp_xs = [margin_x]
+            elif bp_n == 2:
+                bp_xs = [bp_head, bp_tail]
+            else:
+                bp_mid = distribute_middles(bp_head + bp_widths[0], bp_tail, bp_widths[1:-1])
+                bp_xs = [bp_head] + (bp_mid or []) + [bp_tail]
+        row_anchors_list[blueprint_idx] = bp_xs
+        row_rights_list[blueprint_idx] = [bp_xs[k] + bp_widths[k] for k in range(bp_n)]
+        effective_margin_x = bp_xs[0]
+
+        # Iterate non-blueprint rows: above-blueprint bottom-up (closest first),
+        # then below-blueprint top-down. Each cascades against the adjacent
+        # already-placed row toward blueprint.
+        iter_order = (
+            list(range(blueprint_idx - 1, -1, -1))
+            + list(range(blueprint_idx + 1, len(rows)))
+        )
+    else:
+        iter_order = list(range(len(rows)))
+
+    for r_idx in iter_order:
+        row = rows[r_idx]
+        widths = rows_widths_pre[r_idx] if blueprint_active else [measure_entry(e) for e in row]
         n = len(row)
         chosen_xs = None
         right_edge_canvas = W - effective_margin_x
 
-        if r_idx == 0:
-            # Row 0 has no upper row to anchor against. First entry at margin,
-            # last right-edge-anchored, middles distribute.
-            if n == 1:
-                chosen_xs = [margin_x]
+        # Determine whether this is the "seed" row (no upper to anchor against)
+        # or a cascade row (has upper).
+        if blueprint_active:
+            # In blueprint mode: every iterated row has an upper (the adjacent
+            # row toward blueprint). Blueprint itself is skipped (already placed).
+            if r_idx < blueprint_idx:
+                upper_anchors = row_anchors_list[r_idx + 1]
             else:
-                head_x = margin_x
-                tail_x = right_edge_canvas - widths[-1]
-                mid_xs = distribute_middles(head_x + widths[0], tail_x, widths[1:-1])
-                if mid_xs is not None:
-                    attempt = [head_x] + mid_xs + [tail_x]
-                    if check_no_overlap(attempt, widths):
-                        chosen_xs = attempt
+                upper_anchors = row_anchors_list[r_idx - 1]
+            is_seed_row = False
         else:
-            upper_anchors = row_anchors_list[r_idx - 1]
+            # Standard mode: row 0 is the seed.
+            is_seed_row = (r_idx == 0)
+            if not is_seed_row:
+                upper_anchors = row_anchors_list[r_idx - 1]
+
+        if is_seed_row:
+            # Row 0 (standard mode) has no upper row.
+            # Single-row layout (len(rows) == 1): try equal-spacing first
+            # (sides == inters == h_equal) when h_equal >= margin_x. Multi-row
+            # row 0 skips this path so subsequent rows can column-align via
+            # upper anchors at margin_x / right_edge_canvas.
+            if len(rows) == 1:
+                sum_w = sum(widths)
+                h_equal = (W - sum_w) / (n + 1)
+                if h_equal >= margin_x:
+                    if n == 1:
+                        side_gap = h_equal
+                        inter_gap = 0
+                    else:
+                        side_pad = max(0, (W - sum_w) / single_row_side_pad_divisor)
+                        side_gap = h_equal + side_pad
+                        inter_gap = h_equal - 2 * side_pad / (n - 1)
+                    chosen_xs = []
+                    cursor = side_gap
+                    for k in range(n):
+                        chosen_xs.append(int(round(cursor)))
+                        cursor += widths[k] + inter_gap
+            if chosen_xs is None:
+                # head/tail/distribute (stretch).
+                if n == 1:
+                    chosen_xs = [margin_x]
+                else:
+                    head_x = margin_x
+                    tail_x = right_edge_canvas - widths[-1]
+                    mid_xs = distribute_middles(head_x + widths[0], tail_x, widths[1:-1])
+                    if mid_xs is not None:
+                        attempt = [head_x] + mid_xs + [tail_x]
+                        if check_no_overlap(attempt, widths):
+                            chosen_xs = attempt
+        else:
             m = len(upper_anchors)
 
             # Rule 1 — per-entry left-to-right sweep with asymmetric
-            # predecessor-intrusion check. Only fires when N ≤ M. Entry k
-            # anchors at upper[k] iff its predecessor's right edge ≤ upper[k].
-            # Successful entries stay anchored even if a later entry fails —
-            # failure is per-entry, not row-wide. The first failure stops
-            # the sweep; remaining entries fall to Rule 2 as a segment.
-            #
-            # When N > M, Rule 1 doesn't fire at all. Entry 0 is anchored at
-            # upper[0] to start Rule 2's segment from index 1; Rule 2 then
-            # places middles[1..N-2] + tail[N-1] via head+tail+distribute.
+            # predecessor-intrusion check + canvas-fit defensive check.
             rule1_xs: list = []
-            first_failed = n  # sentinel: no failure
+            first_failed = n
             if n <= m:
                 for k in range(n):
                     a = upper_anchors[k]
-                    if k == 0:
-                        rule1_xs.append(a)
-                    else:
+                    if k > 0:
                         prev_right = rule1_xs[-1] + widths[k - 1]
                         if prev_right > a:
                             first_failed = k
                             break
-                        rule1_xs.append(a)
+                        if a + widths[k] > right_edge_canvas:
+                            first_failed = k
+                            break
+                    rule1_xs.append(a)
             else:
-                # N > M: anchor entry 0 at upper[0], Rule 2 handles the rest.
                 rule1_xs.append(upper_anchors[0])
                 first_failed = 1
 
             if first_failed == n:
-                # All entries placed cleanly under Rule 1.
                 chosen_xs = rule1_xs
             else:
-                # Rule 2 — head + tail + distribute, applied to the failed
-                # segment [first_failed..n-1]. Head's right edge is the last
-                # Rule-1-successful entry's right edge (NOT row's first entry).
-                # Tail iterates upper anchors leftmost-first, picks the
-                # leftmost where (a) middles fit between head_right and the
-                # candidate (or — when no middles — head_right ≤ candidate),
-                # AND (b) candidate + tail_w fits canvas. If no candidate
-                # works → Rule 3.
+                # Rule 2 — head + tail + distribute, leftmost-fit tail.
                 f = first_failed
                 head_right = rule1_xs[f - 1] + widths[f - 1]
                 middle_widths = widths[f:n - 1]
@@ -506,36 +571,32 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
                 if tail_anchor is not None:
                     chosen_xs = rule1_xs + tail_mid_xs + [tail_anchor]
                 else:
-                    # Rule 3 — right-edge fallback. Tail's right edge aligns
-                    # to the rightmost edge of any row above. Middles
-                    # distribute between head's right edge and tail's anchor.
-                    # If head_right > tail_x (no-middles branch) or middles
-                    # don't fit (with-middles branch), tail_x is voided and
-                    # the last-ditch pack-from-margin path takes over.
-                    right_edge_target = max(
-                        row_rights_list[i][-1] for i in range(r_idx)
-                    )
-                    tail_x = right_edge_target - tail_w
-                    if middle_widths:
-                        mid_xs = distribute_middles(head_right, tail_x, middle_widths)
-                        if mid_xs is None:
-                            tail_x = None
+                    # Rule 3 — right-edge align with rightmost of any
+                    # already-placed row (generic, not blueprint-specific).
+                    if blueprint_active:
+                        placed_indices = [i for i in range(len(rows)) if row_rights_list[i] is not None]
                     else:
-                        if head_right > tail_x:
-                            tail_x = None
-                        mid_xs = []
-                    if tail_x is not None:
-                        chosen_xs = rule1_xs + mid_xs + [tail_x]
+                        placed_indices = list(range(r_idx))
+                    placed_rights = [row_rights_list[i][-1] for i in placed_indices]
+                    if placed_rights:
+                        right_edge_target = max(placed_rights)
+                        tail_x = right_edge_target - tail_w
+                        if middle_widths:
+                            mid_xs = distribute_middles(head_right, tail_x, middle_widths)
+                            if mid_xs is None:
+                                tail_x = None
+                        else:
+                            if head_right > tail_x:
+                                tail_x = None
+                            mid_xs = []
+                        if tail_x is not None:
+                            chosen_xs = rule1_xs + mid_xs + [tail_x]
 
-        if chosen_xs is None and r_idx > 0:
-            # Rule 4 — equal-spacing fallback. Fires when the cascade dies
-            # (Rule 3's right_edge_target lands left of head_right + tail_w,
-            # i.e. row above is narrower than this row). Place this row with
-            # h = (W − Σ widths) / (n+1) on each side and inter-gap, and
-            # shift all previously placed rows so their head_x = h. h must
-            # be ≥ margin_x for fallback to engage; below that, equal-spacing
-            # would degrade side margins below the floor and last-ditch is
-            # the safer outcome.
+        # Rule 4 — equal-spacing fallback. In standard mode includes track-back;
+        # in blueprint mode we skip track-back since blueprint is the seed and
+        # shifting it would break the layout (cascade rows accept the failure
+        # and equal-space themselves).
+        if chosen_xs is None and not is_seed_row:
             h = (W - sum(widths)) / (n + 1)
             if h >= margin_x:
                 cursor = h
@@ -544,38 +605,49 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict):
                     rule4_xs.append(int(round(cursor)))
                     cursor += widths[kk] + h
                 chosen_xs = rule4_xs
-                # Track back: shift previously placed rows by delta.
-                delta = int(round(h)) - effective_margin_x
-                if delta != 0:
-                    pos_cursor = 0
-                    for i in range(r_idx):
-                        prev_anchors = row_anchors_list[i]
-                        new_anchors = [x + delta for x in prev_anchors]
-                        row_anchors_list[i] = new_anchors
-                        row_rights_list[i] = [
-                            new_anchors[k] + row_widths_list[i][k]
-                            for k in range(len(new_anchors))
-                        ]
-                        for k in range(len(new_anchors)):
-                            e, _, y = positions[pos_cursor + k]
-                            positions[pos_cursor + k] = (e, new_anchors[k], y)
-                        pos_cursor += len(new_anchors)
-                effective_margin_x = int(round(h))
+                if not blueprint_active:
+                    # Track back: shift previously placed rows by delta.
+                    delta = int(round(h)) - effective_margin_x
+                    if delta != 0:
+                        pos_cursor = 0
+                        for i in range(r_idx):
+                            prev_anchors = row_anchors_list[i]
+                            new_anchors = [x + delta for x in prev_anchors]
+                            row_anchors_list[i] = new_anchors
+                            row_rights_list[i] = [
+                                new_anchors[k] + row_widths_list[i][k]
+                                for k in range(len(new_anchors))
+                            ]
+                            for k in range(len(new_anchors)):
+                                e, _, y = positions[pos_cursor + k]
+                                positions[pos_cursor + k] = (e, new_anchors[k], y)
+                            pos_cursor += len(new_anchors)
+                    effective_margin_x = int(round(h))
 
         if chosen_xs is None:
-            # Last-ditch (also catches the r_idx==0 path where row 0's
-            # head/tail/distribute didn't validate). Pack from margin with
-            # zero gap — readability suffers but no crash.
+            # Last-ditch — pack from margin.
             chosen_xs = [effective_margin_x]
             for kk in range(1, n):
                 chosen_xs.append(chosen_xs[-1] + widths[kk - 1])
 
-        row_anchors_list.append(chosen_xs)
-        row_widths_list.append(widths)
-        row_rights_list.append([chosen_xs[k] + widths[k] for k in range(n)])
-        row_y = r_idx * (entry_h + inter_row_gap)
-        for k in range(n):
-            positions.append((row[k], chosen_xs[k], row_y))
+        if blueprint_active:
+            row_anchors_list[r_idx] = chosen_xs
+            row_rights_list[r_idx] = [chosen_xs[k] + widths[k] for k in range(n)]
+        else:
+            row_anchors_list.append(chosen_xs)
+            row_widths_list.append(widths)
+            row_rights_list.append([chosen_xs[k] + widths[k] for k in range(n)])
+            row_y = r_idx * (entry_h + inter_row_gap)
+            for k in range(n):
+                positions.append((row[k], chosen_xs[k], row_y))
+
+    if blueprint_active:
+        # Build positions list at end (top-to-bottom) since iter_order wasn't sequential.
+        for r_idx, row in enumerate(rows):
+            chosen_xs = row_anchors_list[r_idx]
+            row_y = r_idx * (entry_h + inter_row_gap)
+            for k in range(len(row)):
+                positions.append((row[k], chosen_xs[k], row_y))
 
     # Content vertical extent (bottom edge of last entry)
     content_h = (max(p[2] for p in positions) + entry_h) if positions else 0
