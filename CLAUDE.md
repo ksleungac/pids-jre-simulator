@@ -97,13 +97,15 @@ Before doing anything else:
 
 This is a separate system from any auto-memory the host may provide. It lives in `memory/` and travels with the repo.
 
-- **Daily logs**: `memory/YYYY-MM-DD.md` — what happened, decisions, context for the day
-- **Curated index**: `memory/MEMORY.md` — one-line pointers to the daily logs worth keeping
+- **Daily logs**: `memory/YYYY-MM-DD.md` — narrative continuity for next-session pickup. What happened, decisions, why-context, dead ends.
+- **Curated index**: `memory/MEMORY.md` — one-line pointers to the daily logs worth keeping.
+
+**Memory files are informational only.** Rules, learnings, preferences, and behavioral patterns do NOT live here — they live in their canonical home (`principles.md` / `conventions.md` / `CLAUDE.md` / domain doc / inline `# CONTRACT:` / skill), **written synchronously during `/session-recap`, never deferred.** There is no `[log-only]` / `[promote-candidate]` middle bucket; codify-or-omit is the only path. Defer-and-distill is gone — `/distill-memory` is now a periodic safety-net audit, not a primary route.
 
 Rules:
 - Write it down. "Mental notes" do not survive session restarts; files do.
 - Capture WHY, not just WHAT. Git log already has what changed.
-- Use `/session-recap` at the end of a session to write the day's log and update the index.
+- Use `/session-recap` at the end of a session to codify learnings into their canonical homes AND write the day's narrative log.
 
 ## File Structure
 

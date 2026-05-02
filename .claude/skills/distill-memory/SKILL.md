@@ -1,60 +1,55 @@
 ---
 name: distill-memory
-description: Periodic pass over accumulated `[log-only]` daily-log entries — group by topic, cross-check against current rules, propose promotions / rejections / stale-rule removals. Discussion-first; user approves each decision before any rule/doc edit lands.
+description: Periodic safety-net audit — scan recent daily-log narrative for behavioral patterns that escaped synchronous codification, audit rules for staleness/contradiction, surface half-promoted both-shaped entries. Discussion-first; user approves each decision.
 triggers:
   - /distill-memory
   - distill memory
   - distill the daily logs
-  - audit preferences
+  - audit rules
 ---
 
 ## Purpose
 
-`/session-recap` writes `[log-only]` entries to `memory/YYYY-MM-DD.md`'s `## Preferences (jot)` section when an entry's permanence is unclear (ambiguous middle — see session-recap "Match the entry's shape to its home"). The log accumulates; many of those entries are genuinely one-off, but some are early sightings of a recurring pattern.
+Under the synchronous-codification model (`/session-recap` Step 3), every learning / preference / behavioral pattern is supposed to land in its canonical home **the same session it surfaced** — no log-only intermediate. This skill is the **safety net** for cases where that didn't happen:
 
-This skill is the **codify** operation that pairs with session-recap's **capture**. It runs the cross-log roll-up: groups entries by topic, cross-checks against current rules, and surfaces three kinds of action:
+1. **Escapes** — patterns that recurred across sessions but never got codified, because each individual instance felt one-off at recap time.
+2. **Half-promoted entries** — both-shaped corrections (per session-recap Rule 1) where only ONE half landed: canonical content in a domain doc but no behavioral binding in `principles.md` / `conventions.md`, or vice versa. The autodriver-vocabulary case (2026-04-30) is the canonical example: Layer 1/2/3 names lived in AUTO_INPUT.md but the binding rule was never added to conventions.md, so claude forgot to use them in chat.
+3. **Stale rules** — preloaded rules that lived practice has rendered obsolete or contradicted. Highest bar; explicit user confirmation.
+4. **Thin-support rules** — rules that landed during /session-recap on a single instance and never recurred; possible over-promotion, candidate for pruning.
 
-1. **Promote** — recurring topic with no rule home yet → land it in `principles.md` / `conventions.md` / skill / inline.
-2. **Retag** — topic already lives in a rule (often added directly by session-recap as rule-shaped or fact-shaped); update old `[log-only]` entries to `[promoted: <pointer>]` so future passes don't re-propose.
-3. **Reject** — considered and declined; mark `[rejected]` so future passes don't re-surface.
-4. **Complete half-promoted** — both-shaped item (per session-recap Rule 1) where only one half landed: canonical content in a domain doc but no behavioral binding in preloaded rules, or vice versa. Propose adding the missing half. The autodriver-vocabulary case (2026-04-30) is the canonical example: Layer 1/2/3 names lived in AUTO_INPUT.md but the binding rule was never added to conventions.md, so claude forgot to use them.
-
-A fifth, rarer action: **stale-rule removal** — a rule exists but lived evidence contradicts it. Highest bar; user confirms explicitly.
+This is a **logs → rules direction** audit. It does NOT promote single-instance candidates (that's `/session-recap`'s job, in-session). It does NOT audit rules without log-side evidence.
 
 ## When to run
 
-- Monthly, or when daily-log accumulation feels heavy (~10+ structured logs since last run).
-- When the user notices a correction repeating across sessions ("I keep telling you X").
-- After a stretch of new project area where conventions are still solidifying.
+- Every 4–6 weeks, or when daily-log accumulation feels heavy (~15+ logs since last run).
+- When the user notices a correction repeating across sessions ("I keep telling you X" — but `/session-recap` should have caught it; this is the failsafe).
+- After a stretch of dense work where conventions are still solidifying.
 
-NOT for one-off discovery — that's session-recap territory. NOT for general rule audit ("is `principles.md` still right?") — that's a different skill (rules→code direction). This is **logs→rules direction only**.
+NOT for one-off discovery — that's `/session-recap` Step 0/1 territory. NOT for rule audits without log-side evidence — that's a separate operation (rules→code direction).
 
-## Scope cutoff
+## Scope
 
-Only logs with a structured `## Preferences (jot)` section are in scope. Older prose-only daily logs (pre-2026-04-28) are history; their patterns were extracted in a one-time manual pilot and the resulting rules already live in `principles.md` / `conventions.md`.
+- **In scope:** narrative prose + `## Codifications this session` subsections of daily logs since the last distill pass.
+- **Also in scope (one-time, until cleared):** legacy `## Preferences (jot)` structured entries in pre-2026-05-02 daily logs that haven't been processed by the one-time sweep yet.
+- **Out of scope:** auditing rules without log-side evidence; one-off discovery.
 
-If a daily log lacks the section, skip silently — don't try to extract from prose.
+If a daily log lacks anything codification-related (smooth session, no codifications), skip silently.
 
 ## Process
 
-### Step 1 — Aggregate `## Preferences (jot)` entries
+### Step 1 — Aggregate evidence
 
-Glob `memory/2026-*.md` (extend year as time passes), filter to logs containing `## Preferences (jot)`. For each entry, parse:
+Glob `memory/2026-*.md` (extend year as time passes), filtered to logs newer than the last distill pass. For each log, extract:
 
-```
-- [<tag>] topic:<kebab-noun> — "<verbatim quote>" — context: <one-liner>
-```
+- **Codification pointers** — entries in the `## Codifications this session` subsection (where this session's rules landed).
+- **Recurring topics in prose** — keywords / themes that appear across multiple session narratives (ad-hoc Grep across `memory/*.md` for likely candidates).
+- **Legacy structured entries** — any `## Preferences (jot)` lines in pre-sweep logs (will dwindle to zero once the one-time sweep completes).
 
-Group entries by normalized `topic:` value (lowercase kebab). Per group, tally:
+Group by topic/theme.
 
-- `[log-only]` count (active candidates)
-- `[promote-candidate]` count (recap pre-flagged these)
-- `[promoted]` count (already settled in rules; included for completeness)
-- `[rejected]` count (already declined; do not re-propose)
+### Step 2 — Cross-check each topic against current rules
 
-### Step 2 — Cross-check each topic against current rules/docs
-
-For each topic with ≥1 `[log-only]` or `[promote-candidate]` entry, search:
+For each topic that surfaced in ≥2 sessions, search:
 
 - `.claude/rules/*.md`
 - `.claude/skills/*/SKILL.md`
@@ -66,45 +61,33 @@ Classify the topic:
 
 | Status | Meaning | Default action |
 |---|---|---|
-| `[in-rules-supported]` | already in rules, single-shape rule (or both halves of a both-shaped rule present); ≥1 log entry confirms it lives | retag old [log-only] → [promoted: <pointer>] |
-| `[half-promoted]` | both-shaped topic where only ONE half landed: canonical content in a domain doc but no preloaded binding in `conventions.md` / `principles.md` (or vice versa). Detection: topic appears in a domain doc AND log entries describe a behavioral directive ("always use", "prefer X", "don't") but `grep` of preloaded rules turns up nothing. | flag for user; propose adding the missing half |
-| `[in-rules-thin]` | in rules, but only one weak log datapoint supports it | flag for user review (over-promotion suspect) |
-| `[recurring-not-in-rules]` | ≥2 distinct sessions, no rule home | promotion candidate |
-| `[one-shot]` | single appearance, no rule | leave as `[log-only]`, no action |
-| `[stale]` | rule exists but evidence contradicts it | flag for user (stale-rule removal candidate) |
+| `[in-rules-supported]` | already codified, single-shape rule (or both halves of a both-shaped rule present); recent narrative confirms it lives | no action |
+| `[half-promoted]` | both-shaped topic where only ONE half landed: canonical content in a domain doc but no preloaded binding (or vice versa) | flag for user; propose adding the missing half |
+| `[in-rules-thin]` | in rules, but only one weak datapoint supports it; never recurred | flag for user review (over-promotion suspect) |
+| `[escape]` | ≥2 distinct sessions narrate the topic, no rule home | flag as missed-codification candidate |
+| `[stale]` | rule exists but lived practice contradicts it | flag for user (stale-rule removal candidate, highest bar) |
 
-### Step 3 — Propose homes via the placement table
-
-For promotion candidates, suggest a home from `/session-recap`'s placement table:
-
-| Shape | Home |
-|---|---|
-| Value / judgment rule | `principles.md` |
-| Naming / style / tooling rule | `conventions.md` |
-| Past-incident lesson | `critical_lessons.md` |
-| Decision-moment gate | relevant skill (e.g. `/commit`, `/sta-make`) |
-| Code contract | inline `# CONTRACT:` block |
-| Domain fact | CLAUDE.md mental model OR domain doc |
-
-### Step 4 — Present the proposal (discussion-first)
+### Step 3 — Present the audit (discussion-first)
 
 ```
-## Distill summary — <date range>
+## Distill audit — <date range>
 
 In-scope logs: N (from <oldest> to <newest>)
-Total preference entries: M
+Last distill pass: <date>
 
-### Promotion candidates ([recurring-not-in-rules])
-| topic | sessions | proposed home | one-line rule |
+### Escapes ([escape]) — missed-codification candidates
+| topic | sessions seen | proposed home | one-line rule |
 |---|---|---|---|
 | ... |
-
-### Already supported ([in-rules-supported]) — auto-retag pending
-N entries across K topics already in rules. Retag [log-only] → [promoted: <pointer>] in place.
 
 ### Half-promoted ([half-promoted]) — discuss
 | topic | half present | half missing | proposed home for missing half |
 |---|---|---|---|
+| ... |
+
+### Thin support ([in-rules-thin]) — discuss
+| rule | location | only datapoint |
+|---|---|---|
 | ... |
 
 ### Stale rules ([stale]) — discuss
@@ -112,84 +95,66 @@ N entries across K topics already in rules. Retag [log-only] → [promoted: <poi
 |---|---|---|
 | ... |
 
-### Thin support ([in-rules-thin]) — discuss
-| rule | location | weak evidence |
-|---|---|---|
-| ... |
-
-### Single-occurrence ([one-shot]) — leave as [log-only]
-N topics, no action.
+### Legacy log-only entries (one-time, until cleared)
+N entries across K topics in pre-sweep logs. Process per session-recap Rule 1 (rule-shaped → promote-with-dedup; passing remarks → strip from log).
 ```
 
-Wait for user decisions per candidate / per stale-rule / per thin rule. Don't apply anything until the user signs off, item by item.
+Wait for user decisions per item. Don't apply anything until sign-off.
 
-### Step 5 — Apply approved changes
+### Step 4 — Apply approved changes
 
-For each approved promotion:
+For each approved escape promotion:
 
-1. Edit the target rule/doc/skill file with the new entry. Use `principles.md`'s rule + **Why** + **How to apply** format for value-shaped rules; use `conventions.md`'s short-form for style/naming.
-2. Update each contributing log entry's tag from `[log-only]` (or `[promote-candidate]`) to `[promoted: <home pointer>]`. Example:
-   ```
-   - [promoted: conventions.md § "Naming"] topic:underscore-prefix — "..." — context: ...
-   ```
+1. **Mandatory dedup-by-re-read** of the target file (per `/session-recap` Rule 2). Re-read in full, search for overlapping entries, merge in place if overlap exists.
+2. Edit the target rule/doc/skill file with the new entry. Use `principles.md`'s rule + **Why** + **How to apply** format for value-shaped rules; `conventions.md`'s short-form for style/naming.
+3. The log entries that surfaced the pattern stay as-is — they're narrative, not promotion candidates.
 
-For each rejection:
+For each approved half-promotion completion:
 
-- Update each contributing log entry's tag to `[rejected: <one-line reason>]`. Reason is brief — "covered by existing X principle," "user decided context-specific," etc.
+- Re-read the target file. Add the missing half (canonical content OR binding rule) with dedup discipline.
 
-For each `[in-rules-supported]` retag (auto-action, no per-item approval needed once user OKs the batch):
+For each approved thin-support pruning:
 
-- Update `[log-only]` → `[promoted: <existing rule pointer>]`.
+- Remove the rule from its file.
+- Note the removal in the next daily log under `## Codifications this session`: `removed: <rule> — reason: thin support`.
 
 For each approved stale-rule removal:
 
-- Edit the rule file to remove/correct.
-- Note the removal in the most recent daily log under a new `## Distill notes` section: `- removed: <rule> — <reason>`. Future-you needs to know it was an explicit decision, not a regression.
+- Remove/correct the rule.
+- Note in next daily log: `stale-removed: <rule> — reason: <contradicting evidence>`.
 
-### Step 6 — Report
+For each legacy log-only entry processed:
+
+- Promote-with-dedup if rule-shaped, OR strip from the daily log if it's a passing remark.
+- Replace the entry with a brief narrative line in the log if it has historical value, or delete the line outright.
+
+### Step 5 — Report
 
 ```
 ## Distill applied
 
-- N promotions: <list of topic → home>
-- N retags: <count, summary>
-- N rejections: <list of topic — reason>
-- N stale removals: <list>
+- N escape promotions: <list of topic → home>
+- N half-promotions completed: <list>
+- N thin pruned: <list>
+- N stale removed: <list>
+- N legacy log-only processed (promote / strip)
 - Files touched: <list>
 ```
 
 Suggest committing via `/commit` — rule edits + log retags should travel in the same commit so the audit trail is intact.
 
-## Tag lifecycle (full picture)
-
-```
-session-recap writes:
-  [log-only]          — default for ambiguous middle
-  [promote-candidate] — pre-flagged for distill (forward-framing OR known prior surfacing)
-
-distill-memory transitions to:
-  [promoted: <pointer>] — rule landed (or was already there); pointer to home
-  [rejected: <reason>]  — considered, not promoted
-```
-
-Once an entry is `[promoted]` or `[rejected]`, future distill passes skip it. The decision is final unless the user explicitly re-opens it.
-
 ## Rules
 
-1. **Discussion-first per item.** Never apply a promotion / rejection / stale-removal without explicit user approval for that item. Batch-approval is fine for `[in-rules-supported]` retags (mechanical), not for new promotions or stale removals (judgment calls).
-2. **Single source of truth.** If a topic is already in rules, retag — don't add a second copy in a different home.
-3. **Respect the placement table.** Use `/session-recap`'s table; don't invent new homes (e.g. don't create a new top-level rules file).
-4. **Don't re-propose decided topics.** `[promoted]` and `[rejected]` are final. Surface them in summary counts only, not as candidates.
-5. **Stale-rule removal is the highest bar.** Requires explicit user "yes, remove" — not just lack of evidence. Some rules are load-bearing precisely because they're so internalized nobody comments on them in logs.
-6. **When unsure, defer.** If a `[recurring-not-in-rules]` topic feels borderline (only 2 sessions, both ambiguous in framing), leave as `[log-only]` — let one more session of evidence accumulate before promoting. Cost of premature promotion = bloat; cost of one extra distill pass = trivial.
+1. **Discussion-first per item.** Never apply a promotion / pruning / stale-removal without explicit user approval for that item.
+2. **Mandatory dedup-by-re-read.** Same as `/session-recap` Rule 2 — re-read target file before any write.
+3. **Single source of truth.** If a topic is already in rules, leave it; don't add a second copy in a different home.
+4. **Respect the placement table.** Use `/session-recap`'s table; don't invent new homes (e.g. don't create a new top-level rules file).
+5. **Stale-rule removal is the highest bar.** Requires explicit user "yes, remove" — not just lack of evidence in recent logs. Some rules are load-bearing precisely because they're so internalized nobody comments on them in narrative.
+6. **Don't re-propose user-rejected items.** If a previous distill pass rejected a candidate (recorded in a daily log's `## Codifications` block as `rejected: <topic>`), surface it in summary count only, not as a new candidate.
 
-## Scope
+## What this skill is NOT
 
-- **Does** scan structured `## Preferences (jot)` entries across all in-scope daily logs.
-- **Does** cross-check topics against current rules/docs/skills/inline contracts.
-- **Does** propose promotions, retags, rejections, stale removals — discussion-first, item by item.
-- **Does** edit rule files + retag log entries after user approval.
-- **Does not** scan prose sections of daily logs (out of scope; structured section only).
-- **Does not** audit current rules without log-side evidence (rules→code direction is a different skill).
-- **Does not** auto-commit. User runs `/commit` themselves.
-- **Does not** invent new rule files or rule homes — uses the existing taxonomy.
+- **Not** a primary route for codification. `/session-recap` Step 3 is the primary route — synchronous, same-session.
+- **Not** a scanner of structured `[log-only]` entries (the model that wrote them is retired; once the one-time sweep clears legacy entries, the skill scans prose only).
+- **Not** a rules → code audit. That's a different direction (rules → does code follow them?), not in scope here.
+- **Not** an auto-commit skill. User runs `/commit` themselves.
