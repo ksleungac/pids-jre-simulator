@@ -13,7 +13,10 @@ Present findings/learnings before making documentation updates or non-trivial ch
 
 **Why:** Plans that look right in isolation often miss user-side context (parallel work, priorities, constraints). Surfacing intent first catches the wrong path before time is sunk.
 
-**How to apply:** Before any non-trivial doc edit, code change, or batch operation, summarize what you'd do and why. Default no-skip; user can waive ("just do it") for a specific task.
+**How to apply:**
+
+- Before any non-trivial doc edit, code change, or batch operation, summarize what you'd do and why. Default no-skip; user can waive ("just do it") for a specific task.
+- **Analytical confirmation ≠ execution authorization.** When the user answers "yes" to a clarifying question about *intent or implication* ("was that the intent?", "did you mean X?"), that confirms the analysis only. It does NOT authorize the file mutation that would follow. The mutation requires its own ask — explicit, separate, after the analysis is settled. The shape "user confirmed my reading → I'll just apply it" is the trap; the analytical Yes and the execution Yes are different decisions. 2026-05-04: claude asked "Was that the intent (cap=83 fixes only 大船)?", user said "Yes" (confirming the analysis), claude applied the change to preview_transfers.py. User: *"I DIDN'T FUCKING APPROVED YOU."* Reverted immediately.
 
 ### Skip-confirmation when explicitly signaled
 When the user says "push directly" / "skip my confirmation" at session-end commit time, bypass the per-file confirmation gate within `/commit`. Still split logically into one commit per concern, still write meaningful messages — just don't pause for OK between commits or before push.
@@ -74,6 +77,7 @@ The shape is consistent: the smoothness of the autonomous fill is the trap. Each
 - **One gap per question.** Surface the gap in the same turn it's detected. Don't batch unrelated gaps into a single multi-part question — each loses its own context and the user has to triage them.
 - This applies during: design discussions, refactors, doc writing, rule codification, edge-case implementation, algorithm spec — anywhere Claude is converting user-stated rule shapes into concrete artifacts.
 - **Recursive trap:** this principle applies to its own meta-rules. When the user doesn't specify whether to codify a pattern, the bias is "classify rule-shaped" per session-recap Rule 1 — don't fill the "should we codify?" gap with a cautious "wait for more data" that itself becomes the recorded decision. If genuinely uncertain whether to codify, ask.
+- **Scope fidelity for codified feedback.** When codifying corrective user feedback into a rule, the rule's scope MUST match the feedback's scope. "Don't use X for Y" does not become "always use Z everywhere"; "never default" does not become "always explicitly specify." If unsure how broadly the rule should fire, ask before codifying. Auto-broadening narrow feedback into universal obligations is the inverse of autonomous gap-filling — same pathology, different surface. 2026-05-04: AM session codified "don't use unfiltered default render as IRL ref" as "direction-loop lines ALWAYS need a direction view"; PM session enforced the broadened rule on 目黒 by asking "which view?" — fabricating a spec gap. User: *"a view is NOT A MUST. damn fuck me, totally wrong understandings of my data format."* Required /third-man + memory + WIP rewrite to unwind.
 
 ### Commit to a recommendation, don't offer menus
 
