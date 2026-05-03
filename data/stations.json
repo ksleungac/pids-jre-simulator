@@ -49,7 +49,7 @@
         ],
         "transfers_by_view": {
             "JK_south": {"drop": ["shonan_shinjuku", "ueno_tokyo"]},
-            "JA_south": {"drop": ["ueno_tokyo"]}
+            "JA_north": {"drop": ["ueno_tokyo"]}
         }
     },
     "大崎": {
@@ -61,7 +61,8 @@
             "rinkai"
         ],
         "transfers_by_view": {
-            "JY_inner": {"drop": ["saikyo_kawagoe"]}
+            "JY_inner": {"drop": ["saikyo_kawagoe"]},
+            "JA_north": {"drop": ["sotetsu_through"]}
         }
     },
     "大船": {
@@ -376,7 +377,7 @@
             "tokyu_toyoko",
             "sotetsu",
             "minatomirai",
-            "yokohama_subway_blue.scale(0.80)"
+            "yokohama_subway_blue.scale(0.75)"
         ]
     },
     "武蔵小杉": {
@@ -471,15 +472,15 @@
         "code_3": "ABN",
         "transfers": [
             "keihin_tohoku",
-            "saikyo_kawagoe.saikyo",
             "utsunomiya_takasaki.utsunomiya",
             "utsunomiya_takasaki.takasaki",
             "shonan_shinjuku",
+            "saikyo_kawagoe.saikyo",
             "ueno_tokyo.tohoku"
         ],
         "transfers_by_view": {
             "JK_south": {"drop": ["ueno_tokyo"]},
-            "JA_south": {"drop": ["ueno_tokyo"]}
+            "JA_north": {"drop": ["ueno_tokyo"]}
         }
     },
     "高輪ゲートウェイ": {"code_3": "TGW"}
