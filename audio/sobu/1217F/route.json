@@ -1,5 +1,7 @@
 {
     "route": "総武快速線・成田線直通",
+    "line_code": "JO",
+    "transfer_view": "JO_east",
     "color": [22, 64, 152],
     "contrast_color": [116, 18, 34],
     "type_color": [22, 64, 152],

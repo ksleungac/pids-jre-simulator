@@ -21,6 +21,10 @@ Project-local style and naming choices. These don't shape major decisions; they 
 - **`.otf` fonts only.** `.ttf` cuts (Helvetica Neue specifically) have macron/diacritic artifacts at large sizes. The `fonts/` folder should never gain a `.ttf`.
 - **`old_version.py`** — keep. Intentionally retained as the pre-refactor monolithic reference even though nothing imports it. Don't propose deleting it during tidy passes.
 
+## Display module structure
+
+- **Shared display logic uses parent + per-model concrete.** When a display module has logic shared across train models, factor a parent into `displays/<module>.py` + a per-model concrete subclass into `displays/train_models/{model}/<module>.py` — real inheritance from day one even with one concrete model. Per-model tuneables (canvas sizes, fonts) stay in the concrete (per [Data layout](#data-layout)); only shared logic moves up. Counter-example: `UpperDisplay` / `LowerDisplay` are concrete-only because their bodies are entirely per-model rendering. First instance: `displays/transfer_info.py` (parent) + `displays/train_models/e235_1000/transfer_info.py` (concrete).
+
 ## UI code style
 
 - **Tuneable-params block.** Every UI draw method must expose its magic numbers (positions, sizes, offsets, gaps) as labeled local variables at the top of the method. All downstream coordinates derive from those. No scattered magic numbers. Rationale: the user fine-tunes visuals by nudging these values — they must be discoverable AND reactive (changing `badge_w` should recompute interior width, centering, text positions automatically).

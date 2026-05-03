@@ -11,7 +11,10 @@ Usage:
 import argparse
 import json
 import os
+import re
 from pathlib import Path
+
+SCALE_SUFFIX_RE = re.compile(r"\.scale\(([0-9]*\.?[0-9]+)\)$")
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
@@ -40,14 +43,23 @@ def load_icon(slug: str, target_h: int, cache: dict) -> pygame.Surface:
 
 
 def resolve_entry(slug_ref: str, lines: dict) -> dict:
-    """Resolve 'slug' or 'slug.variant' to effective entry dict.
+    """Resolve 'slug', 'slug.variant', or '...scale(N)' to effective entry dict.
 
     Variant fields override base fields; missing fields inherit from base.
-    Dot-notation is one-level only — `slug.variant.subvariant` is invalid.
+    Dot-notation is one-level only for variants — `slug.variant.subvariant`
+    is invalid. A trailing `.scale(N)` modifier (parsed first) overrides
+    `name_ja_compress` for this reference only; default is 1.0 if neither
+    suffix nor any inherited field provides one.
     Fails loud (KeyError) on missing base or unknown variant; per
     `critical_lessons.md` § runtime-required artifacts, silent fallback on
     missing data hides bugs at the worst time.
     """
+    scale_override = None
+    m = SCALE_SUFFIX_RE.search(slug_ref)
+    if m:
+        scale_override = float(m.group(1))
+        slug_ref = slug_ref[: m.start()]
+
     if "." in slug_ref:
         base_slug, variant_name = slug_ref.split(".", 1)
         if "." in variant_name:
@@ -64,10 +76,14 @@ def resolve_entry(slug_ref: str, lines: dict) -> dict:
             )
         merged = {k: v for k, v in base.items() if k != "variants"}
         merged.update(variants[variant_name])
-        return merged
-    if slug_ref not in lines:
-        raise KeyError(f"Slug '{slug_ref}' not in lines.json")
-    return {k: v for k, v in lines[slug_ref].items() if k != "variants"}
+    else:
+        if slug_ref not in lines:
+            raise KeyError(f"Slug '{slug_ref}' not in lines.json")
+        merged = {k: v for k, v in lines[slug_ref].items() if k != "variants"}
+
+    if scale_override is not None:
+        merged["name_ja_compress"] = scale_override
+    return merged
 
 
 def render_mixed(text: str, latin_font, cjk_font, color, latin_fallback=None, kern=True):

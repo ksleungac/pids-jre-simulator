@@ -512,11 +512,28 @@ Computed in `_get_window(curr_stop, cursor_pos)`. The two args differ only durin
 
 #### View cycler (`LowerDisplay`)
 
-24s alternation: 12s full-route, 12s 8-station. Lives on `LowerDisplay` (NOT shared with upper's 4s language cycler — they're orthogonal concerns).
+Slot rotation. Three slots with per-slot durations: `FULL` 12s / `EIGHT` 12s / `TRANSFER` 6s. Lives on `LowerDisplay` (NOT shared with upper's 4s language cycler — orthogonal concerns).
 
-**Critical invariant** — `_tick_view_cycle(current_time)` is called from `LowerDisplay.draw()` UNCONDITIONALLY (subject only to the lock check), BEFORE language-mode dispatch. It must NOT live inside the `KANJI/FURIGANA` branch — if it does, the timer pauses while the upper is in ENGLISH (≈ 1/3 of every language cycle) and the 24s cadence drifts longer than spec'd. The renderer picker `_pick_japanese_renderer()` is a pure function of state — no time arg, no side effects.
+**Slot membership** is computed per-frame from state via `_available_slots`:
 
-When `_should_lock_to_eight(curr_stop)` is True, the cycler is frozen on 8-station permanently for the rest of the trip — no point cycling back to a full-route view that no longer fits.
+| in transfer window? | 8-station locked? | Slots in rotation |
+|---|---|---|
+| no  | no  | `[FULL, EIGHT]` |
+| no  | yes | `[EIGHT]` |
+| yes | no  | `[FULL, EIGHT, TRANSFER]` |
+| yes | yes | `[EIGHT, TRANSFER]` |
+
+`TRANSFER` is also dropped when the current station has no transfers (post-filter) — the cycle just rotates without a blank slot.
+
+**Window predicate** (`_in_transfer_window`): `at_station=True` OR `cnt_pa >= len(pa)-1`. Derived from `cnt_pa` rather than `state.is_last_pa` — single-PA stations auto-fire `pa[0]` via `_advance_to_next_stop` which hardcodes `is_last_pa=False`, so the flag misses them. The `cnt_pa` check covers both single-PA and multi-PA paths.
+
+**Two transitions matter:**
+- transfer-window rising edge (passive join) — `TRANSFER` enters slot list mid-stream as the predicate flips True (last PA fired); cycle naturally rotates to it on its next turn. No timer reset.
+- `at_station` rising edge (force-switch) — `_handle_at_station_edge` sets `_current_slot = TRANSFER` and resets `_slot_start`. Boot's initial `at_station=True` is captured as the first observation without firing the edge (so boot doesn't auto-jump to transfer).
+
+**Slot reconciliation**: when `_current_slot` is no longer in the available slot list (lock kicked in mid-FULL, window closed mid-TRANSFER, station with no transfers reached mid-TRANSFER), `_tick_cycle` snaps to `slots[0]` and resets the timer.
+
+**Critical invariant** — `_tick_cycle(current_time)` is called from `LowerDisplay.draw()` UNCONDITIONALLY, BEFORE language-mode dispatch. Nesting it in the `KANJI/FURIGANA` branch pauses the timer during `ENGLISH` (≈1/3 of every language cycle) and cadence drifts long. `_pick_renderer(mode)` is a pure function of `_current_slot` + mode (TRANSFER overrides language; otherwise Japanese slots dispatch to full/eight, ENGLISH falls back to japanese_display while EnglishDisplay is a stub).
 
 #### Per-cell mini badge
 

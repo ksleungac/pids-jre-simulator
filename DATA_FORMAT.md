@@ -247,21 +247,24 @@ Catalog of rail lines referenced as transfer entries on station displays. Stores
 
 | Field | Description |
 |-------|-------------|
-| `badges` | Optional. Array of badge objects rendered left-to-right before the line name. Each badge carries `icon` (required — slug naming a PNG asset under `data/line_icons/<slug>.png`) and optionally `code` (1-2 letter line code, e.g. `JY` — used by the runtime transfer-filter rule to match against the active route's line code). One badge for typical JR East lines; multiple for through-running compound services (e.g. UT base = JT + JU); `icon`-only without `code` for Shinkansen / non-JR operators. **If absent** → universal fallback icon (`_universal.png`). |
+| `badges` | Optional. Array of badge objects rendered left-to-right before the line name. Each badge carries `icon` (required — slug naming a PNG asset under `data/line_icons/<slug>.png`), optionally `code` (1-2 letter line code, e.g. `JY` — used by the runtime transfer-filter rule to match against the active route's line code), and optionally `color` (`[r, g, b]` — line-brand color used by the per-train-model badge rendering policy that swaps icon for color-square on certain trains; renderer ignores when policy not active, see WIP_transfer_display.md § follow-up #3a). One badge for typical JR East lines; multiple for through-running compound services (e.g. UT base = JT + JU); `icon`-only without `code` for Shinkansen / non-JR operators. **If absent** → universal fallback icon (`_universal.png`). |
 | `name_ja` | Japanese display name. Required at base unless the slug is **only** referenced via variants (e.g. `yokosuka_sobu` — base never used directly). |
 | `name_en` | English display name (Hepburn-with-macrons). Same required-unless-variant-only rule as `name_ja`. |
 | `category` | One of `jr_east` / `shinkansen` / `non_jr`. Drives row-grouping. |
-| `name_ja_compress` | Optional float. Horizontal scale factor applied to `name_ja` at render time (e.g. `0.75`, `0.90`). Absent → 1.0 (natural width). Best-effort field — set per-line/per-variant when an IRL LCD photo is available to measure against; leave absent otherwise. |
 | `variants` | Optional. Map of `<variant_name> → {field overrides}`. Each variant overrides any subset of base fields; missing fields inherit from base. Used for zone-specific badge subsets (UT JT-only south, JU-only north), through-service display variants (Yokosuka vs Sōbu Rapid label on same JO physical line), and direction-qualified line names (Keihin-Tōhoku with `(大井町・蒲田方面)` suffix). Variants are referenced from `stations.json` via dot notation: `slug.variant_name`. |
 
-### Variant resolution (one-level)
+### Reference resolution (variant + scale)
 
-`stations.json` `transfers` entries can be plain `"slug"` or dotted `"slug.variant"`. Resolver (`preview_transfers.py:resolve_entry`):
+`stations.json` `transfers` entries can be plain `"slug"`, dotted `"slug.variant"`, or carry a trailing `.scale(N)` modifier (e.g. `"ueno_tokyo.tokaido.scale(0.75)"`). Resolver (`preview_transfers.py:resolve_entry`):
 
-1. Split on first `.` → `(base_slug, variant_name)`.
-2. **Dot-notation is one level only.** `slug.variant.subvariant` raises ValueError.
-3. **Fail loud** on missing base or unknown variant — never silently fall back to `_universal` or skip. (Per `critical_lessons.md` runtime-required-artifacts rule: silent no-op hides bugs.)
-4. Merge: variant fields override base; missing fields inherit. The `variants` key itself is stripped from the resolved output.
+1. Strip optional trailing `.scale(N)` suffix; remember N.
+2. Split remainder on first `.` → `(base_slug, variant_name)`.
+3. **Dot-notation is one level only** for variants. `slug.variant.subvariant` raises ValueError.
+4. **Fail loud** on missing base or unknown variant — never silently fall back. (Per `critical_lessons.md` runtime-required-artifacts rule.)
+5. Merge: variant fields override base; missing fields inherit. The `variants` key is stripped from the resolved output.
+6. If `.scale(N)` was present, override `name_ja_compress` with N; otherwise it defaults to 1.0 (natural width).
+
+**When to apply `.scale(N)`** — only at busy stations whose visible entry count after view-filtering is high enough to crowd a row. Sparse stations have horizontal budget to render at natural width; over-applying compression kills legibility for no benefit. Curate per-station against the IRL reference photo.
 
 ### Notes
 
@@ -328,6 +331,7 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 - Stations without a 3-letter code simply omit the `code_3` key.
 - 3-letter Roman codes (`code_3`) are distinct from 2-character katakana telegraph codes (電略) — the latter is a separate internal JR system and is not stored here.
 - `transfers` populated only for stations with `code_3` in v1 scope (the 22 major interchange catalog). Other stations may gain `transfers` later as data is collected.
+- **Typical category ordering** (within IRL reading order — use as a starting guess, override per IRL reference photo): Shinkansen → own JR line → JR runners (other JR East lines through the station) → private operators (Tōkyū / Keiō / Odakyū / Tōbu / Seibu / Keisei / Tsukuba Express / Yurikamome / monorails) → Tokyo Metro → Toei. Sub-order *within* a category is IRL-driven and varies per station — don't enforce it algorithmically. New stations: list candidates by category as a draft, then reorder against the reference photo.
 
 ---
 
@@ -340,6 +344,8 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 ```json
 {
     "route": "路線名",              // Route name (e.g., 中央線快速電車，埼京線)
+    "line_code": "JY",             // Optional. Active-line badge code (JY/JK/JC/JO/JU/JT/JJ/JE/JN/JA). Drives transfer-info active-line filter — entries whose badges include this code are dropped. Absent → no filter (renders raw transfers).
+    "transfer_view": "JY_inner",   // Optional. Key into each station's `transfers_by_view` map (e.g. JY_inner, JK_south, JO_east). Selects per-station drop/edit ops for this train direction. Absent → no view ops applied.
     "color": [R, G, B],            // Main route color for UI elements
     "contrast_color": [R, G, B],   // Contrast color for pointers/highlights (optional, default: [224, 54, 37] JR red)
     "type_color": [R, G, B],       // Color for train type text (optional, default: black)
