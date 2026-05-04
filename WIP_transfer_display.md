@@ -1,22 +1,24 @@
 # WIP — Transfer-info display (lower LCD)
 
-**Status:** Step 2 design **firmed 2026-05-04 PM (resume)** — see § "Algorithm redesign — design firmed 2026-05-04 PM" below. The four layered components below describe what's currently in `preview_transfers.py`; row-grouping will be replaced by a greedy walk in Step 2; positioning (Rules 1-4 + blueprint widening + track-back) preserved unchanged.
+**Status (2026-05-04 evening — saving point):** GOLDEN-rule row-grouping pipeline **landed in `preview_transfers.py`**. Verification corpus: **19/22 in-spec ✓** (E235-0/1000 lines: JY, JO). 3 deferred failures, 2 classes:
 
-Four layered components (current implementation):
-1. **Row-grouping** — capped lex-maximin over `h = (W − Σ widths)/(n+1)` (with `margin_x` floor, gap capped at `2·margin_x`) decides how many entries per row. Sort key tiebreaks by fewer-rows so few-small-entries collapse onto a single row instead of spreading vertically.
-2. **Blueprint margin widening** — proactively widens `effective_margin_x` so row 0 seeds at the position needed to accommodate the narrowest-gap (= max-Σ) row. Formula: `effective_margin_x = max(margin_x, h_narrowest)` where `h_narrowest = min over all rows of (W − Σ_r) / (n_r + 1)`. When `h_narrowest ≤ margin_x`, blueprint is inert and standard cascade runs at default margin. Blueprint is a margin-setter only — row 0 remains the cascade seed.
-3. **Column-anchored positioning** — Rule 1 / Rule 2 / Rule 3 cascade column-aligns non-seed rows against the row directly above. Row 0 (the seed) has two sub-paths: single-row layout uses equal-spacing with `(W−Σ)/divisor` side-padding; multi-row layout edge-pins head/tail at `effective_margin_x` and `W − effective_margin_x`. **Rule 3 distinguishes two failure modes from Rule 2:** Case A (anchor existed but tail overflowed canvas) → canvas-right placement; Case B (no usable anchor) → skip Rule 3, fall directly to Rule 4. The distinction prevents Rule 3 from preempting Rule 4 in cases that genuinely need equal-spacing widening (e.g. Shinagawa row 1's 東海道線).
-4. **Equal-spacing fallback (Rule 4)** — when cascade dies (Case B from Rule 2 OR Case A's Rule 3 also fails), place row equal-spaced and track back earlier rows by delta to align with the new effective margin. Cooperates with blueprint: blueprint pre-widens to absorb most of the shift; Rule 4 handles the remaining delta when cascade hits a row that needs even more space than blueprint anticipated.
+- **Greedy-too-strict on row 0** (秋葉原, 成田) — IRL accepts inter < `inter_element_margin` floor; greedy walk rejects. No-floor would fix both, but regresses 目黒 → moves it into the stylistic-preference class. Tradeoff to revisit.
+- **IRL stylistic preference** (新橋; 目黒 if no-floor adopted) — 3 entries fit comfortably on row 0; IRL splits anyway. Rule unknown without more IRL data.
 
-Validated structurally against Tokyo, Yokohama, Shinagawa, Shimbashi, Hamamatsuchō, Ōsaki IRL references. Remaining work is data population + production wiring.
+**Out of scope:** 武蔵小杉 JN (E233-8000, not E235-0/1000). Per-N scaling ladder + thresholds calibrated against E235 IRL refs only; out-of-spec lines get best-effort fidelity floors per [CLAUDE.md § Per-model IRL line scope](CLAUDE.md). MKG-on-JN render uses MKG's E235-ordered transfers list (tokyu before sotetsu) — IRL E233-8000 has the opposite order; per-view ordering deferred.
+
+**Pipeline (current):** Step 1 (per-N scaling) → Step 2 (row-grouping GOLDEN rule) → Step 3 (blueprint widening, unchanged) → Step 4 (real-render Rules 1-4 cascade + track-back, unchanged). See sections below for each.
+
+**Next session resume points:**
+- Refine greedy threshold model (秋葉原/成田 vs 目黒 tradeoff) — possibly differentiate "tight-squeeze" splits from "stylistic" splits with width-budget heuristic.
+- Recalibrate Step-1 N=5 tier against more IRL refs (currently extrapolated from N=7/N=9 anchors).
+- Promote `render_transfer` to production under `displays/train_models/e235_1000/`.
 
 ---
 
-## Algorithm redesign — design firmed 2026-05-04 PM
+## Algorithm
 
-**Background.** Pre-scaling row-grouping had a hard contradiction on any single global comfort threshold (no value satisfies 大船 (3,) split AND 池袋 (3,3,1) packing). Discovery: IRL scales badge/text size with N per station — under-shoot and misalignment may be the same problem viewed from opposite ends. Two-step redesign agreed.
-
-### Step 1 — per-N scaling (done-enough)
+### Step 1 — per-N scaling
 
 4-tier ladder in `preview_transfers.py:render_transfer` lines ~166-186:
 
@@ -27,32 +29,109 @@ Validated structurally against Tokyo, Yokohama, Shinagawa, Shimbashi, Hamamatsuc
 | Mid | 6-9 | 26 / 14 | 1.6× |
 | Dense | ≥10 OR ≥2 shinkansen | 22 / 11 | 1.375× |
 
-EN derived: `round(JA × 12/23)`. `name_line_gap = -4 − (EN − 12)`. "Both shinkansen" overrides N (only fires on Tokyo JO today). IRL anchor points: Tokyo JO (N=9, both shink) = 1.32×; Ueno JY_inner (N=7) = 1.5×.
+EN derived: `round(JA × 12/23)`. `name_line_gap = -4 − (EN − 12)`. "Both shinkansen" overrides N (only fires on Tokyo JO today). IRL anchor points: Tokyo JO (N=9, both shink) = 1.32×; Ueno JY_inner (N=7) = 1.5×. N=5 tier (1.8×) extrapolated — needs more IRL refs.
 
-**2026-05-04 PM resume-check (10 stations rendered post-scaling):** under-shoot dissolved — 目黒 / 大船 correctly (2,1) at sparse tier, (3,) now physically rejected at step 1 of row-grouping. 池袋 shifted (1,3,3) → (2,2,3), still bottom-heavy. 渋谷 / 上野 / 千葉 still residual. See § Open follow-ups #0 for current shapes.
+### Step 2 — row-grouping (GOLDEN rule)
 
-### Step 2 — row-grouping → greedy walk (firmed, not yet implemented)
+> **The agreed pipeline. Refer back here when discussing row-grouping behavior.**
 
-**Replace** the combinatorial split-search at `preview_transfers.py` ~lines 361-426 **with a left-to-right greedy walk.** Two threshold parameters:
+**Three thresholds (post-implementation):**
 
-- `margin_x = 1.6 × badge_h` (unchanged from today; fixed per N-tier).
-- `inter_element_margin = 0.7 × margin_x` (new; smaller than margin_x → entries cluster center, sides feel roomier — "cramped-centered" look).
+- `margin_x = 1.6 × badge_h` (fixed per N-tier from Step 1).
+- `inter_element_margin = 0.7 × margin_x` — "cramped-centered" greedy-walk target (row 0 + row-1+ greedy capacity gate).
+- `min_inter_gap = 0.5 × margin_x` — cascade Rule 2/3 floor (distribute_middles rejects gaps below this). Distinct from `inter_element_margin`: cascade has anchor structure, so its tolerance for tighter inter-spacing is lower than unanchored greedy needs.
 
-**Walk** entries in category-sort order (shinkansen → JR East → non-JR). For each entry: drop into current row if it fits at `inter_element_margin` from predecessor AND `margin_x` from canvas right edge. Otherwise start a new row. No `-inversions` / `-num_rows` tiebreakers — top-heaviness emerges from L→R packing (first row fills first); bottom-heavy emerges when widths force overflow downward.
+**Pipeline:**
 
-**Downstream pipeline unchanged.** After greedy commits rows:
+1. **Per-N scaling** — Step 1 above. Sets `margin_x` for the rest of the pipeline.
 
-1. **Blueprint widening** runs on greedy's rows: `effective_margin_x = max(margin_x, h_narrowest)` where `h_narrowest = min over rows of (W − Σ_row)/(n_row + 1)`. Widening lands at row 0's seed positions; subsequent rows inherit via column-alignment (Rule 1) + canvas-edge (`right_edge_canvas = W − effective_margin_x` used by all rules' canvas checks).
-2. **Rule 1 / 2 / 3 / 4 cascade + track-back** unchanged.
+2. **Row-grouping (greedy seed → cascade dry-run with greedy capacity gate).**
 
-**Why Path 2** (out of three discussed: 1 = both fixed per-N, 2 = inter fixed per-N + margin_x data-derived, 3 = both pre-greedy formula): inter must be stable to avoid greedy ↔ blueprint circularity, while margin_x widening already works well today and just needs greedy's rows fed in instead of the combinatorial picker's.
+   **(a) Row 0 seeding.**
+   - If shinkansen entries exist → they take row 0 directly, in category-sort order. **No greedy walk anywhere in the pipeline** — shinkansen entries on row 0 are enough of a seed for cascade to start from row 1.
+   - Else → L→R greedy walk fills row 0 with non-shinkansen entries: drop entries while each fits at `inter_element_margin` from predecessor AND `margin_x` from canvas right edge. First entry that doesn't fit closes row 0.
 
-**Diagnostic.** The 4 still-broken cases above share the same shape: today's maximin pushes equal-distribution; IRL prefers "fill earlier rows, overflow later." L→R greedy is exactly that IRL pattern, so all four likely fix by construction once Step 2 lands.
+   **(b) Row 1+ via cascade dry-run.** For each remaining entry in category-sort order:
+   - Try Rule 1 → Rule 2 → Rule 3 against the current in-progress row's upper anchors (= row directly above's positions, computed provisionally at `margin_x = 40`).
+   - **If all three fail, greedy capacity check** (replaces Rule 4 in this phase): does the entry fit at `inter_element_margin` from the rightmost-already-placed element on the current row, AND within `margin_x` of canvas right?
+     - Yes → entry joins the current row (provisional positions; real render will redo placement with Rule 4 + track-back available).
+     - No → entry opens a new row; cascade dry-run continues with the new row.
 
-### Implementation pointers
+   **Provisional `margin_x`** (default 40) used throughout dry-run — blueprint not yet computed. **Rule 4 / track-back NEVER invoked during dry-run.** This keeps row-grouping decisions stable: no retroactive shifts during discovery.
 
-- `preview_transfers.py:render_transfer` — replace ~lines 361-426 (combinatorial picker) with greedy walk; add `inter_element_margin` to tuneable params block.
-- WIP § "Done > Row-grouping plain-English priority order" + "Row-grouping code-level details" — describe today's combinatorial; rewrite after Step 2 lands.
+3. **Blueprint margin widening.** Compute `effective_margin_x = max(margin_x, h_narrowest)` where `h_narrowest = min over rows of (W − Σ_row) / (n_row + 1)`. Inert when `h_narrowest ≤ margin_x`.
+
+4. **Column-anchored positioning (real render).**
+   - **Row 0 placement** under widened margin:
+     - Multi-row layout (other rows below): head at `effective_margin_x`; tail right-edge at `W − effective_margin_x`; middles distribute evenly between head's right edge and tail's anchor x.
+     - Single-row layout (row 0 is the only row): equal-spacing + `side_pad = (W − Σ)/14` bias when `(W − Σ)/(n+1) ≥ effective_margin_x`; else fall through to multi-row edge-pin path.
+   - **Row 1+ via Rule 1/2/3 cascade + Rule 4 fallback** (with track-back). Track-back is safe here because row groups are finalized — no retroactive membership change.
+
+**Asymmetry between dry-run and real render:**
+
+| Phase | Row 1+ overflow gate | Rule 4 / track-back |
+|---|---|---|
+| Dry-run (Step 2b) | Greedy capacity check at `0.7·margin_x` | NEVER invoked |
+| Real render (Step 4) | Rule 4 absorbs almost anything that fits at `margin_x` equal-spacing | Active (e.g. Shinagawa JY_inner row 1) |
+
+**Key insight.** Dry-run and real-render are deliberately asymmetric. Dry-run uses a tighter capacity gate (greedy at 0.7·margin_x) so it doesn't over-pack rows; real-render uses Rule 4's looser gate so genuine cascade-deaths still get placed. Track-back is reserved for real render because shifting a finalized row group is safe; shifting during discovery would reopen membership decisions.
+
+**Resolved spec gaps:**
+
+- Q5 (multi-shinkansen row 0, e.g. Tokyo JO + JR Central): shinkansen entries take row 0 by category-sort; no greedy walk needed.
+- Q6 (greedy capacity predecessor): rightmost already-placed element on the current row.
+- Q3 (track-back during dry-run): moot — Rule 4 not invoked, no track-back during dry-run.
+
+**Parked (revisit later):**
+
+- Fine-tuning `inter_element_margin` (per N-tier? per-row context?). Currently fixed at `0.7·margin_x`. Flagged for future iteration once GOLDEN-rule outputs are observed against IRL.
+- Comfort-floor concern on Rule 4's near-universal absorber behavior in real render: deferred. Today Rule 4 only fires for Shinagawa; observe behavior post-implementation, fix specific bad outputs case-by-case.
+
+### Code map
+
+- `preview_transfers.py:render_transfer` — params block at top of function defines `margin_x`, `inter_element_margin`, `min_inter_gap`.
+- `cascade_test(widths, upper_anchors)` — pure-test variant of Rules 1/2/3 placement, no Rule 4. Used by dry-run.
+- `compute_row0_provisional(row_widths)` — edge-pin row 0 positions for dry-run upper-anchor purposes.
+- `dry_run_cascade()` — driver: shinkansen pre-seed OR greedy walk row 0 + cascade dry-run for row 1+ with greedy capacity gate. Outputs `rows`.
+- Real-render path (Rules 1-4 + blueprint widening + track-back) consumes `rows` from dry-run; semantics unchanged from pre-GOLDEN-rule. See § "Done > Column-anchored positioning" below for full Rules 1-4 spec.
+
+---
+
+## Verification corpus (IRL grouping decisions)
+
+Pre-implementation reference set for validating the GOLDEN-rule pipeline. `N` computed from `data/stations.json` (own-line filter + `transfers_by_view` drops). IRL groupings sourced from station LCD reference photos. Algorithm-output column captures GOLDEN-rule behavior post-implementation.
+
+**Scope:** corpus is **E235-0/1000 in-spec only** (JY, JO). Per-N scaling ladder + algorithm thresholds are calibrated against IRL refs from those lines. Out-of-spec entries (e.g. 武蔵小杉 JN runs E233-8000) are kept below as best-effort comparison points but **don't drive tuning** — by [CLAUDE.md § Per-model IRL line scope](CLAUDE.md), out-of-spec routes get best-effort fidelity floors (no crashes / sane layout), not IRL match.
+
+| # | Station | Line | View | N | IRL | Current algo | Notes |
+|---|---|---|---|---|---|---|---|
+| 1 | 浜松町 | JY | JY_inner | 2 | (1,1) | TBD | drops {keihin_tohoku} → Monorail + Ōedo |
+| 2 | 渋谷 | JY | JY_inner | 8 | (3,3,2) | (3,2,3) ✗ | row-distrib mismatch (smaller row in middle) |
+| 3 | 恵比寿 | JY | JY_inner | 2 | (2,) | TBD | drops {saikyo_kawagoe} |
+| 4 | 目黒 | JY | JY_inner | 3 | (2,1) | (2,1) ✓ | dissolved post-scaling (sparse tier 2.0×) |
+| 5 | 五反田 | JY | JY_inner | 2 | (2,) | TBD | flat, no view drops |
+| 6 | 大崎 | JY | JY_inner | 3 | (2,1) | (2,1) ✓ | fixed via -inversions tiebreaker |
+| 7 | 品川 | JY | JY_inner | 6 | (1,2,3) | (1,2,3) ✓ | edits keihin_tohoku→.oimachi_kamata |
+| 8 | 原宿 | JY | JY_inner | 2 | (2,) | TBD | flat |
+| 9 | 有楽町 | JY | JY_inner | 2 | (2,) | TBD | drops {keihin_tohoku} |
+| 10 | 新橋 | JY | JY_inner | 3 | (2,1) | (2,1) ✓ | drops {keihin_tohoku, tokaido, ueno_tokyo} |
+| 11 | 新宿 | JY | JY_inner | 9 | (3,3,3) | (3,3,3) ✓ | within-row spacing flagged (separate class) |
+| 12 | 日暮里 | JY | JY_inner | 3 | (2,1) | (2,1) ✓ | row-grouping correct (verified 2026-05-04) |
+| 13 | 上野 | JY | JY_inner | 7 | (1,3,3) | (1,3,3) ✓? | row-grouping likely correct; anchoring-rules problem |
+| 14 | 秋葉原 | JY | JY_inner | 3 | (2,1) | (2,1) ✓ | row-grouping correct (verified 2026-05-04) |
+| 15 | 神田 | JY | JY_inner | 2 | (2,) | TBD | drops {keihin_tohoku} |
+| 16 | 東京 | JY | JY_inner | 7 | (2,4,1) | TBD | drops {keihin_tohoku, chuo_rapid, ueno_tokyo} |
+| 17 | 東京 | JO | JO_east | 9 | (2,4,3) | (2,4,3) ✓ | WIP validated split (multi-shinkansen row 0) |
+| 18 | 横浜 | JO | JO_east | 11 | (4,4,3) | (4,4,3) ✓ | WIP validated split |
+| 19 | 武蔵小杉 | JN | JN_north | 5 | (3,2) | (2,2,1) | **out-of-spec** (E233-8000 line). Note: E233-8000 IRL puts tokyu after sotetsu, opposite of E235's order; data uses E235 order, JN render is best-effort |
+| 20 | 武蔵小杉 | JO | JO_north | 4 | (3,1) | (3,1) ✓ | added 2026-05-04; JO_north drops shonan_shinjuku; reorder + sotetsu_through reclassified non_jr |
+| 21 | 千葉 | JO | JO_east | 5 | (3,2) | (3,2) ✓ | added 2026-05-04; JO_east drops sobu_local |
+| 22 | 大船 | JO | JO_north | 3 | (2,1) | (2,1) ✓ | added 2026-05-04; JO_north drops ueno_tokyo + shonan_shinjuku |
+| 23 | 成田 | JO | JO_east | 2 | (2,) | (1,1) ✗ | added 2026-05-04; same class as 秋葉原 — 2 wide entries (322+290) fit row 0 only at inter=6 (greedy walk inter floor 39 rejects) |
+
+**Currently-broken stations in this corpus:** 渋谷 (row 17 of IRL has middle-heavy distribution algo can't produce), 武蔵小杉 (algo over-shoots row count). Both share the "fill earlier rows, overflow later" IRL pattern — primary targets to validate the GOLDEN rule against.
+
+**TBD entries** are 8 stations needing post-implementation re-render to confirm algorithm output. Most are small-N stations (N=2) where the question is whether algo collapses to single-row `(2,)` or splits to `(1,1)` based on width-fitting.
 
 ---
 
@@ -61,11 +140,10 @@ EN derived: `round(JA × 12/23)`. `name_line_gap = -4 − (EN − 12)`. "Both sh
 `preview_transfers.py` (project root) is the working prototype. Run with:
 
 ```bash
-uv run preview_transfers.py --filter-line JO --out _visual_iter/v_neue_world.png
-./compare_transfer.sh _visual_iter/v_neue_world.png "<label>"
+uv run preview_transfers.py --station 東京 --filter-line JO --view JO_east --out _visual_iter/<label>.png --debug
 ```
 
-Tuneable params live in a labeled block at the top of `render_transfer()`.
+`--debug` prints widths + dry-run cascade trace + per-row rule taken. Tuneable params at top of `render_transfer()`.
 
 References: `lcd_references/transfer_tokyo.png`, `lcd_references/yokohama.png`.
 
@@ -93,37 +171,7 @@ Every render referenced as an IRL comparison point MUST correspond to a real-wor
 
 - **Renderer prototype** (`preview_transfers.py`) — banner with bilingual "のりかえ案内 Transfer" (dim PASSED_COLOR bg, JA centered, EN bottom-anchored 7 px), mixed-script Latin/CJK font dispatch, per-line/per-variant JA compression via `name_ja_compress` field on `lines.json` (default 1.0; set per IRL measurement), compact `・` (U+30FB → U+00B7 + 1 px side-pad), badge sized to 1.1 × JA height, margins per user spec (left = 1.6 × badge_h).
 
-- **Row-grouping — plain-English priority order** (added 2026-05-04 for discussion clarity):
-
-  Each step decides the chosen split. If two splits tie at a step, the next step takes over.
-
-  1. **Throw out splits that don't physically fit.** Any row whose entries can't fit on the canvas at minimum margin gets rejected.
-  2. **Prefer splits where every row has comfortable breathing room.** For each candidate split, find the *most-cramped row* (the one with the smallest gap between entries). Whichever split's most-cramped row has the largest gap wins. Cap "breathing room" at `2·margin_x` — beyond that it's empty canvas, more doesn't matter. The cap is **N-adaptive** because `margin_x = 1.6 × badge_h` and `badge_h` follows the per-N font size: sparse N≤5 → cap≈112, mid N=6-9 → cap≈92, dense N≥10 → cap≈77.
-  3. **If tied, prefer fewer rows.** A 1-row layout beats a 2-row one. A 2-row beats a 3-row.
-  4. **(2026-05-04) If still tied, prefer top-heaviness.** Count "weight inversions" = pairs of rows where a row above has less total width than a row below. Fewer inversions = more top-heavy = preferred. **Mental model — shinkansen-row-0 exemption:** when row 0 is shinkansen-only (category sort guarantees this whenever any shinkansen entry exists), top-heaviness is conceptually a property of the *body* rows; row 0's identity is fixed by category sort, so its Σ (1-2 wide badges) shouldn't pollute the body-row signal. (Current code counts row 0; not fixing because Step 2 redesign drops the `-inversions` tiebreaker entirely.)
-  5. **If still tied, prefer the most-spread layout overall.** Full uncapped gap comparison.
-
-  Known residue (post-scaling, captured 2026-05-04 PM resume-check):
-  - 池袋 (N=7) IRL `(3,3,1)` — algo now picks `(2,2,3)` (was `(1,3,3)` pre-scaling). Still bottom-heavy. At N=7 mid-tier the cap is 92; IRL's `(3,3,1)` packs 3 widest entries on row 0 with smaller breathing room than `(2,2,3)`'s most-cramped row, so step 2 separates them in `(2,2,3)`'s favor. Step 4's top-heaviness tiebreaker never gets to vote.
-  - ~~目黒 / 大船 (3 entries, IRL `(2,1)`)~~ — **dissolved by scaling.** Under sparse N≤5 tier (2.0×), (3,) Σ exceeds canvas → physically rejected at step 1; algo correctly picks (2,1). No tiebreaker needed.
-
-- **Row-grouping — code-level details (capped lex-maximin).** Among splits respecting category-sort (shinkansen → jr_east → non_jr, no within-category reorder) and `max_rows = 3`, pick by 4-tuple sort key: `(capped_padded_gaps, -num_rows, -inversions, uncapped_gaps)`. Larger tuple wins.
-  - **Capped** = each row's gap clamped to `gap_cap = 2·margin_x`. Beyond that, more whitespace is wasted canvas, not better layout.
-  - **Padded** to length `max_rows` with `gap_cap`. Lets fewer-row splits compete fairly with more-row splits (an "absent" row contributes a vacuous cap-equivalent gap).
-  - **`-num_rows` tiebreak** prefers fewer rows when capped tuples tie. Without this, 3 small entries would lex-prefer (1,1,1) over single-row layout because uncapped gaps are larger when split.
-  - **`-inversions` tiebreak** (added 2026-05-04) prefers top-heavy. `inversions = number of (i, j) pairs with i < j AND row_sums[i] < row_sums[j]`. Fixes 大崎 JY_inner (was bottom-heavy `(1,2)`, now top-heavy `(2,1)`). **Mental model:** when row 0 is shinkansen-only, top-heaviness is conceptually a body-row property — row 0 should be exempt (`i` from index 1). Current code counts row 0; soon-moot because Step 2 redesign drops this tiebreaker.
-  - **Uncapped** lex-maximin breaks final ties — picks the most-spread among row-count-equivalent splits.
-
-  Per-row gap formula `h`:
-  - `n=1`: `h = (W − Σ widths) / 2`.
-  - `n≥2` equal-spacing case (when `(W − Σ)/(n+1) ≥ margin_x`): `h = (W − Σ)/(n+1)` (sides == inters).
-  - `n≥2` stretch case (sides bottom out at `margin_x`): `h = (W − 2·margin_x − Σ)/(n − 1)`.
-
-  No 4-entries-per-row cap, no forced shinkansen row-break — both dropped as count-based heuristics that maximin produces naturally from widths. (The shinkansen-row-0 inversion exemption above is separate — a tiebreaker carve-out, not a row-break rule.)
-
-  Validated splits: Tokyo (2,4,3); Yokohama (4,4,3); Shinagawa JY_inner (1,2,3); Shimbashi flat (2,2,3); Shimbashi JY_inner (3) — single row (was (1,1,1) under uncapped lex-maximin; cap+tiebreak collapses it).
-
-- **Column-anchored positioning — Rule 1 / Rule 2 / Rule 3 cascade + Rule 4 fallback.** Each row's per-entry x positions are decided by this cascade. Rules 1–3 refactored 2026-05-02; Rule 4 added 2026-05-02; third-man verified.
+- **Column-anchored positioning — Rule 1 / Rule 2 / Rule 3 cascade + Rule 4 fallback.** Real-render's per-entry x placement (Step 4 of the pipeline). Rules 1-3 also called from dry-run via `cascade_test`; Rule 4 + track-back is real-render only.
 
   ### Definitions
 
@@ -270,23 +318,10 @@ Every render referenced as an IRL comparison point MUST correspond to a real-wor
 
 ## Open follow-ups (priority order)
 
-0. **Row-distribution issues (likely dissolve under Step 2 redesign — see § "Algorithm redesign — design firmed 2026-05-04 PM" above; bug list below pre-dates per-N scaling, post-scaling shapes captured in 2026-05-04 PM resume-check).**
-
-   **Enhancement candidates queued:**
-   - **Better Rule 1 for sparse-row-against-wider-blueprint space distribution**: Shimbashi flat under blueprint mode places rows 0/1 at `[100, 300]` (cramp left) because Rule 1 walks leftmost upper anchors. Candidate: when N<M, place head at `upper[0]`, tail at `upper[-1]`, middles distribute; skip interior anchors. Would spread rows 0/1 to `[100, 500]`.
-   - ~~Better row-grouping when biggest row sits below (大崎 (2,1) vs (1,2))~~ — fixed 2026-05-04 via `-inversions` tiebreaker.
-   - **(2026-05-03, JY_inner expansion observations)** — defer detail collection until fix-time (user to provide reference photos / specifics then):
-     - 秋葉原 JY_inner: row-grouping correct (verified 2026-05-04 with proper JY_inner view) — reclassified to within-row-distribution class. Specifics TBD at fix-time.
-     - 上野 JY_inner: anchoring-rules problem (distinct class from the two above; specifics TBD).
-     - 日暮里 JY_inner: row-grouping correct (verified 2026-05-04 with proper JY_inner view) — reclassified to within-row-distribution class. Specifics TBD at fix-time.
-     - 池袋 JY_inner (N=7): IRL (3,3,1), algorithm picks (1,3,3). Row-grouping misalignment — biggest row should sit on top per IRL; algorithm bottom-heavy. See "Known residue" under Row-grouping plain-English priority order: cap=80 rejects IRL's 75.2px row-0 gap. Candidate: lower `gap_cap` to ~60 (risk: may flip 船橋 JO_east — needs IRL ref to decide).
-     - 新宿 JY_inner (N=9): row count + anchoring correct. **Within-row spacing distribution** could be improved (new class of follow-up — distinct from row-grouping and anchoring buckets above). Specifics TBD at fix-time.
-     - 渋谷 JY_inner (N=8): IRL (3,3,2), algorithm picks (3,2,3). Row-distribution misalignment — top + bottom rows correct sizes but middle row should be the heavier one. Distinct from 池袋's bottom-heavy class; here algo puts smaller-row in the middle. Also within-row distribution slightly off — IRL uses smaller left/right margins to screen edges than the algorithm allots (same class as 新宿 within-row observation).
-     - 目黒 JY (N=3): IRL (2,1), algorithm fits all 3 in one row. New sub-class — row-count *under-shoot* (algorithm thinks they fit, IRL splits anyway). Distinct from the (2,1)-vs-(1,2) tiebreaker class above. Possibly a width-budget threshold issue.
-     - 大船 JO_north (N=3): IRL (2,1), algorithm fits all 3 in one row. Same row-count under-shoot class as 目黒 — second confirmed instance, strengthens the pattern.
-     - 武蔵小杉 JN (N=5): IRL (3,2), algorithm picks (2,1,2). Row-count *over-shoot* this time (3 rows instead of 2) AND wrong distribution. Inverse of the under-shoot class — algorithm fragments when IRL consolidates. Possibly the same width-budget threshold issue tuned wrong in both directions.
-     - 赤羽 JK_south / JA_south (N=4 visible, both views): row count + grouping correct (2,2) — but **within-row horizontal spacing too wide** (elements too spread apart inside each row). Same class as 新宿/渋谷 within-row observation.
-     - 千葉 JO_east (N=5 visible: uchibo, sotobo, narita_line, keisei_chiba, chiba_urban_monorail): row 0 too cramped. IRL `chiba_urban_monorail` anchors next to `narita_line` at end of row 0 (i.e., row 0 carries an extra entry beyond what algorithm allows). Within-row distribution / cramping class.
+0. **Post-GOLDEN-rule deferred failures** — see § "Verification corpus" for full table. 3 in-scope failures, 2 classes:
+   - **Greedy-too-strict on row 0** (秋葉原, 成田): real render's row-0 head/tail-distribute has no inter floor; greedy walk's `inter_element_margin = 0.7·margin_x` rejects placements IRL accepts (秋葉原 needs gap=30 at margin_x=56; 成田 needs gap=6 at margin_x=56). Tradeoff: switching to no-floor / lower threshold fixes both but regresses 目黒. Refinement candidates: width-budget heuristic distinguishing "tight-squeeze" (秋葉原/成田) from "stylistic-split" (目黒/新橋); per-N tier-specific threshold; or a comfort gradient instead of a binary floor.
+   - **IRL stylistic preference** (新橋): 3 entries fit row 0 comfortably; IRL splits (2,1) anyway. No identifiable rule from current data.
+   - **Within-row distribution observations (deferred to post-fix-time):** 新宿 JY_inner spacing slightly off; 赤羽 JK/JA inner spacing too wide; 千葉 JO_east row 0 cramped. Distinct from row-grouping class — algorithm produces correct row counts but inter-element spacing isn't IRL-perfect. Specifics TBD at fix-time with IRL refs.
 
 1. **Promote to production.** Move `render_transfer` from `preview_transfers.py` into `displays/train_models/e235_1000/` — likely a new sibling module beside `lower_lcd.py` (the transfer view *replaces* the route bar conditionally, not an addition to it). Wire into `LowerDisplay`'s view-cycler so it triggers when `at_station=True` AND the current station has `transfers` data. Surfaces and font-loading patterns to mirror existing `lower_lcd.py` style.
 
@@ -308,12 +343,13 @@ Every render referenced as an IRL comparison point MUST correspond to a real-wor
 
 ## Files touched (this work)
 
-- `data/lines.json` (rail-line catalog)
-- `data/stations.json` (`東京` / `横浜` / `品川` populated; `品川` also has `transfers_by_view.JY_inner.edit`)
+- `data/lines.json` (rail-line catalog, 36+ slugs)
+- `data/stations.json` (~48 stations populated; many with `transfers_by_view`)
 - `data/line_icons/*.png` (36 PNGs)
 - `lcd_references/line_badges/*.svg`, `lcd_references/Shinkansen_jr*.svg` (icon sources)
-- `lcd_references/transfer_tokyo.png` (IRL reference)
-- `preview_transfers.py` (prototype renderer; will move to `displays/`)
+- `lcd_references/transfer_*.png` (IRL references)
+- `preview_transfers.py` (prototype renderer with GOLDEN-rule pipeline; will move to `displays/`)
+- `displays/transfer_info.py` + `displays/train_models/e235_1000/transfer_info.py` (LCD hookup; see [DISPLAY.md § View cycler](DISPLAY.md))
 - `DATA_FORMAT.md` (lines.json + stations.json `transfers` / `transfers_by_view` sections)
 
 ## Where the canonical layout knowledge lives
@@ -322,7 +358,6 @@ The single source of truth for IRL-derived layout decisions is the params block 
 
 ## What was NOT tested
 
-- **Private-operator icons at runtime** (all 5 fall back to `_universal` placeholder).
-- **Other ~19 stations' data** (only Tokyo + Yokohama + Shinagawa populated).
-- **Through-service variants beyond `ueno_tokyo.tokaido` + `yokosuka_sobu.{yokosuka,sobu}` + `keihin_tohoku.oimachi_kamata`** (e.g. `ueno_tokyo.tohoku` for stations north of Tokyo — slug not yet defined; will be when a north-of-Tokyo station gets populated).
+- **Private-operator icons at runtime** — some still fall back to `_universal` placeholder.
+- **Stations beyond the verification corpus** — corpus covers 21 in-spec stations; ~25+ other populated stations (大宮, 川崎, 浦和, 赤羽, JO Sōbu Rapid east stations) not yet sweeped against IRL groupings.
 - **Last-ditch pack-from-margin** — Rule 4 catches the case Shinagawa would have fallen into; last-ditch never fires on real data now.

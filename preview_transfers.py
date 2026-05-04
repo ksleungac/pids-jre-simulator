@@ -153,6 +153,8 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict, debug: b
 
     # --- Tuneable params (adjust freely) ---
     margin_x_factor = 1.6          # Side margin = N × badge_h (user spec: 1.6 badge widths)
+    inter_element_margin_ratio = 0.7  # Greedy walk comfort TARGET: predecessor inter-spacing = ratio × margin_x. < 1.0 → "cramped-centered" look.
+    min_inter_gap_ratio = 0.5      # Cascade Rule 2/3 absolute FLOOR: distribute_middles rejects gap < ratio × margin_x. Lower than inter_element_margin_ratio because cascade has anchor structure (column-aligned tighter spacing is visually OK).
     single_row_side_pad_divisor = 14  # Single-row equal-spacing: side_pad = (W − Σ) / divisor. Sparse rows get more side_pad; crowded rows → true equal-spacing.
 
     banner_size_ja = 16            # JA size (user spec: 16+ px)
@@ -211,6 +213,8 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict, debug: b
     badge_h = int(round(1.1 * font_ja.get_height()))
     inter_row_gap = int(badge_h * inter_row_gap_factor)
     margin_x = int(badge_h * margin_x_factor)
+    inter_element_margin = int(round(margin_x * inter_element_margin_ratio))
+    min_inter_gap = int(round(margin_x * min_inter_gap_ratio))
     # Banner height = tallest banner text rendered surface height + 2 × padding.
     # Using get_height() (not get_ascent()) so the surfaces actually fit and JA
     # vertical-centering is accurate.
@@ -345,113 +349,15 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict, debug: b
     positions = []  # list of (entry, x, y_rel)
     right_edge_canvas = W - margin_x
 
-    # Step 1: group entries into rows via capped lex-maximin row-grouping.
-    # CONTRACT: among splits respecting category-sorted order (no within-category
-    # reorder) and max_rows cap, pick by sort-key:
-    #   1. capped lex-maximin: each row's gap clamped to `gap_cap`, padded to
-    #      max_rows length with `gap_cap`, sorted ascending. Larger tuple wins.
-    #   2. -num_rows: when capped tuples tie, prefer fewer rows (avoids the
-    #      "few small entries spread across separate rows" regression).
-    #   3. uncapped lex-maximin: when above tie, the most-spread split wins.
-    # Per-row gap formula (h):
-    #   - n=1: h = (W - sum) / 2 (single-entry side margin).
-    #   - n>=2 equal-spacing case (when (W - sum)/(n+1) >= margin_x):
-    #       h = (W - sum) / (n + 1)  (sides == inters)
-    #   - n>=2 stretch case (sides bottom out at margin_x):
-    #       h = (W - 2*margin_x - sum) / (n - 1)
-    # `gap_cap = 2 * margin_x`: beyond this, more whitespace is wasted canvas.
-    # See WIP_transfer_display.md § "Open follow-ups" for derivation.
-    from itertools import combinations
-    entries_seq = [e for _, e in ordered_entries]
-    widths_seq = [measure_entry(e) for e in entries_seq]
-    N_total = len(entries_seq)
-    gap_cap = 2 * margin_x
-
-    def row_gap(widths_sum: float, n: int) -> float:
-        if n <= 0:
-            return float("inf")
-        if n == 1:
-            return (W - widths_sum) / 2
-        h_equal = (W - widths_sum) / (n + 1)
-        if h_equal >= margin_x:
-            return h_equal
-        return (W - 2 * margin_x - widths_sum) / (n - 1)
-
-    best_counts = None
-    best_key = None
-    grouping_candidates: list = []  # (counts, key, row_sums, gaps) for debug
-    for num_rows in range(1, max_rows + 1):
-        if num_rows > N_total:
-            break
-        for splits in combinations(range(1, N_total), num_rows - 1) if num_rows > 1 else [()]:
-            counts = []
-            prev = 0
-            for s in splits:
-                counts.append(s - prev)
-                prev = s
-            counts.append(N_total - prev)
-            row_sums = []
-            idx = 0
-            for c in counts:
-                row_sums.append(sum(widths_seq[idx:idx + c]))
-                idx += c
-            gaps = [row_gap(row_sums[i], counts[i]) for i in range(len(counts))]
-            if any(g < 0 for g in gaps):
-                continue  # row physically overflows
-            capped = [min(g, gap_cap) for g in gaps] + [gap_cap] * (max_rows - num_rows)
-            # Top-heaviness tiebreaker: count (i, j) pairs with i < j AND
-            # row_sums[i] < row_sums[j] (a Σ-inversion). Fewer inversions =
-            # heavier rows toward the top. Negated so larger key wins.
-            inversions = sum(
-                1
-                for i in range(len(row_sums))
-                for j in range(i + 1, len(row_sums))
-                if row_sums[i] < row_sums[j]
-            )
-            key = (tuple(sorted(capped)), -num_rows, -inversions, tuple(sorted(gaps)))
-            grouping_candidates.append((tuple(counts), key, tuple(row_sums), tuple(gaps)))
-            if best_key is None or key > best_key:
-                best_key = key
-                best_counts = counts
-
-    rows = []
-    if best_counts is not None:
-        idx = 0
-        for c in best_counts:
-            rows.append(entries_seq[idx:idx + c])
-            idx += c
-    else:
-        # Fallback: pack max_rows greedily even if overflowing — shouldn't happen
-        # on real data; kept defensive.
-        per = max(1, (N_total + max_rows - 1) // max_rows)
-        for i in range(0, N_total, per):
-            rows.append(entries_seq[i:i + per])
-        rows = rows[:max_rows]
-
-    if debug:
-        _dprint("\n=== layout debug ===")
-        _dprint(f"canvas: W={W}  margin_x={margin_x}  gap_cap={gap_cap}")
-        names_widths = [(e.get("name_ja", "?"), measure_entry(e)) for e in entries_seq]
-        _dprint(f"entries: {N_total}  total_w={sum(widths_seq)}")
-        for i, (nm, w) in enumerate(names_widths):
-            _dprint(f"  [{i}] {nm}  w={w}")
-        _dprint(f"\n--- grouping candidates (top 6 by sort key, ✓ = chosen) ---")
-        sorted_cands = sorted(grouping_candidates, key=lambda c: c[1], reverse=True)
-        for counts, key, row_sums, gaps in sorted_cands[:6]:
-            mark = "✓" if list(counts) == best_counts else " "
-            gaps_fmt = tuple(round(g, 1) for g in gaps)
-            capped_fmt = tuple(round(c, 1) for c in key[0])
-            _dprint(
-                f"  {mark} shape={counts}  Σ_per_row={row_sums}  "
-                f"gaps={gaps_fmt}  capped_sorted={capped_fmt}  -nrows={key[1]}"
-            )
-
-    # Step 2: per-row positioning, threading anchors row-to-row.
-
-    def distribute_middles(left_x, right_x, mid_widths):
+    # Helpers used by both row-grouping (dry-run) and per-row positioning (real render).
+    def distribute_middles(left_x, right_x, mid_widths, min_gap=0):
         """Place mid entries between left_x (start cursor) and right_x (must
         end before this) with equal whitespace gaps both sides + between.
-        Returns list of x positions, or None if any gap < 0."""
+        Returns list of x positions, or None if any gap < min_gap.
+
+        Real render passes min_gap=0 (only rejects negative — physical overlap).
+        Dry-run cascade passes min_gap=inter_element_margin (rejects too-tight
+        spacing that would over-pack rows beyond the comfort threshold)."""
         n_mid = len(mid_widths)
         if n_mid == 0:
             return []
@@ -459,7 +365,7 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict, debug: b
         sum_w = sum(mid_widths)
         n_gaps = n_mid + 1
         gap = (span - sum_w) / n_gaps
-        if gap < 0:
+        if gap < min_gap:
             return None
         xs = []
         cursor = left_x + gap
@@ -470,13 +376,269 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict, debug: b
 
     def check_no_overlap(xs, widths):
         """Full-width check: previous entry's text right edge must not reach
-        into the next entry's badge. Required because the next entry's badge
-        sitting on top of trailing text from the prior entry would render
-        unreadably."""
+        into the next entry's badge."""
         for k in range(1, len(xs)):
             if xs[k - 1] + widths[k - 1] > xs[k]:
                 return False
         return True
+
+    entries_seq = [e for _, e in ordered_entries]
+    widths_seq = [measure_entry(e) for e in entries_seq]
+    N_total = len(entries_seq)
+
+    # Step 1: row-grouping via dry-run cascade (GOLDEN rule, see
+    # WIP_transfer_display.md § "Step 2 — row-grouping"). Pure capacity
+    # decision — no Rule 4 / track-back during discovery; real render
+    # (Step 4 in WIP) re-applies Rules 1-4 with effective_margin_x.
+    #
+    # CONTRACT: dry-run uses provisional margin_x (no blueprint widening).
+    # Cascade-test on every accepted entry re-evaluates the whole row;
+    # greedy gate is the fallback when Rules 1/2/3 reject. Track-back
+    # NEVER fires here — keeps row-grouping decisions stable.
+    right_edge_canvas_provisional = W - margin_x
+
+    def cascade_test(widths, upper_anchors):
+        """Pure-test variant of Rules 1/2/3 placement (no Rule 4).
+        Mirrors the real-render placement logic (lines below) without
+        actually placing — used during dry-run to test whether a trial
+        row would succeed under the cascade.
+        Returns chosen_xs on success, None on Case B (no usable anchor)
+        or unrecoverable canvas overflow.
+        """
+        n = len(widths)
+        m = len(upper_anchors)
+        rec = right_edge_canvas_provisional
+
+        # Rule 1
+        rule1_xs: list = []
+        first_failed = n
+        if n <= m:
+            for k in range(n):
+                a = upper_anchors[k]
+                if k > 0:
+                    prev_right = rule1_xs[-1] + widths[k - 1]
+                    if prev_right > a:
+                        first_failed = k
+                        break
+                    if a + widths[k] > rec:
+                        first_failed = k
+                        break
+                rule1_xs.append(a)
+        else:
+            rule1_xs.append(upper_anchors[0])
+            first_failed = 1
+
+        if first_failed == n:
+            return rule1_xs
+
+        # Rule 2 — head + tail + distribute, leftmost-fit tail.
+        # Pass min_gap=inter_element_margin so distribute_middles rejects
+        # over-packed configurations (matches greedy capacity threshold).
+        f = first_failed
+        head_right = rule1_xs[f - 1] + widths[f - 1]
+        middle_widths = widths[f:n - 1]
+        tail_w = widths[n - 1]
+        predecessor_clean_seen = False
+        tail_anchor = None
+        tail_mid_xs: list = []
+        for cand in upper_anchors:
+            if middle_widths:
+                mid_xs = distribute_middles(head_right, cand, middle_widths, min_gap=min_inter_gap)
+                if mid_xs is None:
+                    continue
+            else:
+                if cand - head_right < min_inter_gap:
+                    continue
+                mid_xs = []
+            predecessor_clean_seen = True
+            if cand + tail_w > rec:
+                continue
+            tail_anchor = cand
+            tail_mid_xs = mid_xs
+            break
+
+        if tail_anchor is not None:
+            return rule1_xs + tail_mid_xs + [tail_anchor]
+
+        # Rule 3 (Case A only) — canvas-right tail. Same min_gap floor.
+        if predecessor_clean_seen:
+            tail_x = rec - tail_w
+            if middle_widths:
+                mid_xs = distribute_middles(head_right, tail_x, middle_widths, min_gap=min_inter_gap)
+                if mid_xs is None:
+                    return None
+            else:
+                if tail_x - head_right < min_inter_gap:
+                    return None
+                mid_xs = []
+            if tail_x - head_right < min_inter_gap:
+                return None
+            return rule1_xs + mid_xs + [tail_x]
+
+        return None  # Case B — no usable anchor, dry-run signals row close
+
+    def compute_row0_provisional(row_widths):
+        """Edge-pin row 0 positions for dry-run upper-anchor purposes only.
+        Real render redoes row 0 with effective_margin_x; this is throwaway."""
+        n = len(row_widths)
+        if n == 0:
+            return []
+        if n == 1:
+            return [margin_x]
+        head_x = margin_x
+        tail_x = W - margin_x - row_widths[-1]
+        if n == 2:
+            return [head_x, tail_x]
+        mid_xs = distribute_middles(head_x + row_widths[0], tail_x, row_widths[1:-1])
+        if mid_xs is None:
+            # Degenerate: equal-space fallback
+            h = (W - sum(row_widths)) / (n + 1)
+            cursor = h
+            xs = []
+            for w in row_widths:
+                xs.append(int(round(cursor)))
+                cursor += w + h
+            return xs
+        return [head_x] + mid_xs + [tail_x]
+
+    def dry_run_cascade():
+        """GOLDEN-rule row grouping. Returns (rows, debug_trace) where rows
+        is list[list[entry]] and debug_trace is list[str] explaining each
+        decision."""
+        trace: list = []
+        if N_total == 0:
+            return [], trace
+
+        # Identify shinkansen prefix (category-sort guarantees they lead).
+        shinkansen_prefix = 0
+        for i, e in enumerate(entries_seq):
+            if e.get("category") == "shinkansen":
+                shinkansen_prefix = i + 1
+            else:
+                break
+
+        rows_out: list = []
+        rows_xs_out: list = []  # provisional positions for upper-anchor lookups
+
+        if shinkansen_prefix > 0:
+            r0_entries = entries_seq[:shinkansen_prefix]
+            r0_widths = widths_seq[:shinkansen_prefix]
+            r0_xs = compute_row0_provisional(r0_widths)
+            rows_out.append(r0_entries)
+            rows_xs_out.append(r0_xs)
+            trace.append(f"row 0 = {shinkansen_prefix} shinkansen (no greedy walk)")
+            remaining_idx = shinkansen_prefix
+        else:
+            # Greedy walk for row 0. Uses inter_element_margin (cramped-centered
+            # comfort target). 2026-05-04: tried lowering to min_inter_gap to fix
+            # 秋葉原 (1,2)→(2,1), but caused regression on 目黒 (2,1)→(3,) —
+            # 目黒/新橋 split IRL even when 3 entries fit comfortably, while 秋葉原
+            # splits because 3 don't fit. A single greedy threshold can't
+            # distinguish these two split-classes; needs more IRL data / model.
+            r0_entries: list = []
+            r0_widths: list = []
+            r0_xs: list = []
+            cursor = margin_x
+            for i in range(N_total):
+                w = widths_seq[i]
+                if not r0_entries:
+                    # First entry: always placed (degenerate-fit handled by real render).
+                    r0_entries.append(entries_seq[i])
+                    r0_widths.append(w)
+                    r0_xs.append(cursor)
+                    cursor = cursor + w + inter_element_margin
+                else:
+                    if cursor + w > right_edge_canvas_provisional:
+                        break
+                    r0_entries.append(entries_seq[i])
+                    r0_widths.append(w)
+                    r0_xs.append(cursor)
+                    cursor = cursor + w + inter_element_margin
+            rows_out.append(r0_entries)
+            rows_xs_out.append(r0_xs)
+            trace.append(f"row 0 = greedy walk → {len(r0_entries)} entries (xs={r0_xs})")
+            remaining_idx = len(r0_entries)
+
+        # Row 1+: cascade dry-run with greedy capacity gate.
+        cur_entries: list = []
+        cur_widths: list = []
+        cur_xs: list = []
+        upper_anchors = rows_xs_out[-1]
+
+        def close_current_row():
+            nonlocal cur_entries, cur_widths, cur_xs, upper_anchors
+            if cur_entries:
+                rows_out.append(cur_entries)
+                rows_xs_out.append(cur_xs)
+                upper_anchors = cur_xs
+                cur_entries = []
+                cur_widths = []
+                cur_xs = []
+
+        for i in range(remaining_idx, N_total):
+            entry = entries_seq[i]
+            w = widths_seq[i]
+
+            # Try cascade with current row + this entry.
+            trial_widths = cur_widths + [w]
+            cascade_xs = cascade_test(trial_widths, upper_anchors)
+
+            if cascade_xs is not None:
+                cur_entries.append(entry)
+                cur_widths.append(w)
+                cur_xs = cascade_xs
+                trace.append(f"  entry [{i}] cascade ✓ on row {len(rows_out)} (xs={cascade_xs})")
+                continue
+
+            # Cascade failed. Try greedy capacity gate.
+            if cur_entries:
+                pred_right = cur_xs[-1] + cur_widths[-1]
+                new_x = pred_right + inter_element_margin
+                if new_x + w <= right_edge_canvas_provisional:
+                    cur_entries.append(entry)
+                    cur_widths.append(w)
+                    cur_xs = cur_xs + [int(round(new_x))]
+                    trace.append(f"  entry [{i}] greedy ✓ on row {len(rows_out)} (provisional x={int(round(new_x))})")
+                    continue
+
+            # Both failed. Opening a new row would normally happen here — but
+            # respect max_rows. If current row is the last allowed row,
+            # force-pack remaining entries onto it (real render's last-ditch
+            # / Rule 4 handles physical placement at effective_margin_x).
+            if cur_entries and len(rows_out) + 1 >= max_rows:
+                cur_entries.append(entry)
+                cur_widths.append(w)
+                # Provisional greedy spacing for predecessor tracking; real
+                # render redoes positioning under blueprint widening.
+                pred_right = cur_xs[-1] + cur_widths[-2]
+                cur_xs.append(int(round(pred_right + inter_element_margin)))
+                trace.append(f"  entry [{i}] force-pack on row {len(rows_out)} (max_rows cap)")
+                continue
+
+            # OK to open new row with this entry.
+            close_current_row()
+            cur_entries = [entry]
+            cur_widths = [w]
+            single_xs = cascade_test([w], upper_anchors)
+            cur_xs = single_xs if single_xs is not None else [margin_x]
+            trace.append(f"  entry [{i}] opens row {len(rows_out)} (provisional x={cur_xs[0]})")
+
+        close_current_row()
+        return rows_out, trace
+
+    rows, dry_run_trace = dry_run_cascade()
+
+    if debug:
+        _dprint("\n=== layout debug ===")
+        _dprint(f"canvas: W={W}  margin_x={margin_x}  inter_element_margin={inter_element_margin}")
+        names_widths = [(e.get("name_ja", "?"), measure_entry(e)) for e in entries_seq]
+        _dprint(f"entries: {N_total}  total_w={sum(widths_seq)}")
+        for i, (nm, w) in enumerate(names_widths):
+            _dprint(f"  [{i}] {nm}  w={w}")
+        _dprint(f"\n--- dry-run cascade trace ---")
+        for line in dry_run_trace:
+            _dprint(line)
+        _dprint(f"\nfinal rows: {[len(r) for r in rows]}")
 
     # Blueprint enhancement: proactively widen margin_x for row 0 based on the
     # narrowest-gap row (= the row with max Σ). This compensates for cases where

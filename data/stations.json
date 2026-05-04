@@ -386,10 +386,13 @@
             "nambu",
             "shonan_shinjuku",
             "yokosuka_sobu.yokosuka",
-            "sotetsu_through.hazawa",
             "tokyu_toyoko",
-            "tokyu_meguro"
-        ]
+            "tokyu_meguro",
+            "sotetsu_through.hazawa"
+        ],
+        "transfers_by_view": {
+            "JO_north": {"drop": ["shonan_shinjuku"]}
+        }
     },
     "池袋": {
         "code_3": "IKB",

@@ -71,9 +71,9 @@
         "badges": [{"icon": "_universal"}],
         "name_ja": "相鉄線直通",
         "name_en": "Through service to Sōtetsu Line",
-        "category": "jr_east",
+        "category": "non_jr",
         "variants": {
-            "hazawa": {"name_ja": "相鉄線 羽沢横浜国大方面", "name_en": "Sōtetsu Line (for Hazawa-Yokohama-kokudai)"}
+            "hazawa": {"name_ja": "相鉄線 羽沢横浜国大方面", "name_en": "Sōtetsu Line for Hazawa Yokohama-Kokudai"}
         }
     },
     "rinkai":             {"badges": [{"icon": "rinkai"}],           "name_ja": "りんかい線", "name_en": "Rinkai Line",                                                    "category": "non_jr"},
