@@ -1,6 +1,6 @@
 # WIP — Transfer-info display (lower LCD)
 
-**Status:** Algorithm work **paused 2026-05-04 PM** for direction shift — see § "Algorithm redesign — paused 2026-05-04 PM" below. The four layered components below describe what's currently in `preview_transfers.py` and remain in use; pending redesign may replace the row-grouping logic entirely.
+**Status:** Step 2 design **firmed 2026-05-04 PM (resume)** — see § "Algorithm redesign — design firmed 2026-05-04 PM" below. The four layered components below describe what's currently in `preview_transfers.py`; row-grouping will be replaced by a greedy walk in Step 2; positioning (Rules 1-4 + blueprint widening + track-back) preserved unchanged.
 
 Four layered components (current implementation):
 1. **Row-grouping** — capped lex-maximin over `h = (W − Σ widths)/(n+1)` (with `margin_x` floor, gap capped at `2·margin_x`) decides how many entries per row. Sort key tiebreaks by fewer-rows so few-small-entries collapse onto a single row instead of spreading vertically.
@@ -12,35 +12,47 @@ Validated structurally against Tokyo, Yokohama, Shinagawa, Shimbashi, Hamamatsuc
 
 ---
 
-## Algorithm redesign — paused 2026-05-04 PM
+## Algorithm redesign — design firmed 2026-05-04 PM
 
-While debugging the row-grouping misalignment cases (池袋 / 渋谷 IRL → algo wrong) and under-shoot cases (大船 / 目黒 / 新橋 IRL `(2,1)` → algo `(3,)`), an attempt to find a single comfort-threshold or cap value that satisfies all cases hit a hard contradiction:
+**Background.** Pre-scaling row-grouping had a hard contradiction on any single global comfort threshold (no value satisfies 大船 (3,) split AND 池袋 (3,3,1) packing). Discovery: IRL scales badge/text size with N per station — under-shoot and misalignment may be the same problem viewed from opposite ends. Two-step redesign agreed.
 
-- **大船 (3,) at h=80.75** — IRL says split → comfort floor must be > 80.
-- **池袋 (3,3,1) row 0 at h=75.25** — IRL accepts this packing → comfort floor must be ≤ 75.
+### Step 1 — per-N scaling (done-enough)
 
-No single global threshold works. The discriminator is N (entry count): IRL allows tighter packing when there are many entries, demands more spread when few.
+4-tier ladder in `preview_transfers.py:render_transfer` lines ~166-186:
 
-**Discovery** (mid-discussion 2026-05-04): IRL **scales badge / text size based on entry count N per station**. Shimbashi (N=3) renders visibly larger badges than Ikebukuro (N=7). The simulator currently renders all stations at fixed scale, so width inputs are identical regardless of N. This may be the missing signal: under-shoot and misalignment may be the *same* problem (missing per-station scale) viewed from opposite ends.
+| Tier | N | JA / EN | × banner JA |
+|---|---|---|---|
+| Sparse | ≤4 | 32 / 17 | 2.0× |
+| N=5 | 5 | 29 / 15 | 1.8× |
+| Mid | 6-9 | 26 / 14 | 1.6× |
+| Dense | ≥10 OR ≥2 shinkansen | 22 / 11 | 1.375× |
 
-If small-N stations get scale-up (e.g. N=3 → ~1.3× widths), under-shoot dissolves naturally — scaled (3,) gap drops below margin_x, forcing split. Large-N stations stay at today's scale, existing grouping handles them.
+EN derived: `round(JA × 12/23)`. `name_line_gap = -4 − (EN − 12)`. "Both shinkansen" overrides N (only fires on Tokyo JO today). IRL anchor points: Tokyo JO (N=9, both shink) = 1.32×; Ueno JY_inner (N=7) = 1.5×.
 
-**Direction agreed for when work resumes — two-step redesign:**
+**2026-05-04 PM resume-check (10 stations rendered post-scaling):** under-shoot dissolved — 目黒 / 大船 correctly (2,1) at sparse tier, (3,) now physically rejected at step 1 of row-grouping. 池袋 shifted (1,3,3) → (2,2,3), still bottom-heavy. 渋谷 / 上野 / 千葉 still residual. See § Open follow-ups #0 for current shapes.
 
-1. **Model per-N text/badge scaling.** Calibrate against IRL refs (Shimbashi vs Ikebukuro vs others). Open question: scale as a function of N? Σ widths? Some other signal? Will require new data on `lines.json` or per-render computation.
+### Step 2 — row-grouping → greedy walk (firmed, not yet implemented)
 
-2. **Row-grouping → parameter-only.** Today's row-grouping decides BOTH entries-per-row AND parameters (h_narrowest for blueprint widening). Redesign: row-grouping outputs ONLY parameters needed for placement (effective_margin_x, comfort floor, etc.). Entries-per-row decided independently by **greedy placement**: walk entries left-to-right with a min inter-element gap; if next entry won't fit, push to next row. No `-inversions` / `-num_rows` tiebreakers — top-heaviness emerges naturally from left-to-right packing. Bottom-heavy (Shinagawa) emerges naturally when widths force overflow downward.
+**Replace** the combinatorial split-search at `preview_transfers.py` ~lines 361-426 **with a left-to-right greedy walk.** Two threshold parameters:
 
-**Why paused:** before designing greedy placement rules, IRL scaling needs to be modeled — otherwise comfort threshold tuning chases its own tail. With proper scaling, the contradiction above may dissolve.
+- `margin_x = 1.6 × badge_h` (unchanged from today; fixed per N-tier).
+- `inter_element_margin = 0.7 × margin_x` (new; smaller than margin_x → entries cluster center, sides feel roomier — "cramped-centered" look).
 
-**Status as of pause:** a first-cut **per-N scaling ladder** for Step 1 has already landed in `preview_transfers.py:render_transfer` (lines ~166-186) as exploratory calibration: 3 tiers (sparse N≤5 → 2.0×, mid N=6-9 → 1.6×, dense N≥10 OR both shinkansen → 1.375×). The "both shinkansen" rule overrides N. EN text + `name_line_gap` derived proportionally. **Step 2 (greedy placement, row-grouping → parameter-only) has NOT started.** The in-code scaling is exploratory and may be refined / replaced when Step 1 calibration formally resumes.
+**Walk** entries in category-sort order (shinkansen → JR East → non-JR). For each entry: drop into current row if it fits at `inter_element_margin` from predecessor AND `margin_x` from canvas right edge. Otherwise start a new row. No `-inversions` / `-num_rows` tiebreakers — top-heaviness emerges from L→R packing (first row fills first); bottom-heavy emerges when widths force overflow downward.
 
-**Side note on placement aesthetic** (carry-forward into greedy design): preference for **inter-element gap > side margin** when possible — rows should feel cramped-centered rather than edge-pinned to canvas. Current single-row equal-spacing has a `side_pad` term that does similar; will carry into greedy.
+**Downstream pipeline unchanged.** After greedy commits rows:
 
-**Files of interest when resumed:**
-- `data/lines.json` — may need a per-N scaling analog to `name_ja_compress`.
-- `preview_transfers.py:render_transfer:measure_entry` — currently fixed-scale; would need a per-N scale factor.
-- This doc § "Open follow-ups" item #0 — the row-distribution misalignment / under-shoot / over-shoot classes will likely dissolve partially or wholly once scaling is in.
+1. **Blueprint widening** runs on greedy's rows: `effective_margin_x = max(margin_x, h_narrowest)` where `h_narrowest = min over rows of (W − Σ_row)/(n_row + 1)`. Widening lands at row 0's seed positions; subsequent rows inherit via column-alignment (Rule 1) + canvas-edge (`right_edge_canvas = W − effective_margin_x` used by all rules' canvas checks).
+2. **Rule 1 / 2 / 3 / 4 cascade + track-back** unchanged.
+
+**Why Path 2** (out of three discussed: 1 = both fixed per-N, 2 = inter fixed per-N + margin_x data-derived, 3 = both pre-greedy formula): inter must be stable to avoid greedy ↔ blueprint circularity, while margin_x widening already works well today and just needs greedy's rows fed in instead of the combinatorial picker's.
+
+**Diagnostic.** The 4 still-broken cases above share the same shape: today's maximin pushes equal-distribution; IRL prefers "fill earlier rows, overflow later." L→R greedy is exactly that IRL pattern, so all four likely fix by construction once Step 2 lands.
+
+### Implementation pointers
+
+- `preview_transfers.py:render_transfer` — replace ~lines 361-426 (combinatorial picker) with greedy walk; add `inter_element_margin` to tuneable params block.
+- WIP § "Done > Row-grouping plain-English priority order" + "Row-grouping code-level details" — describe today's combinatorial; rewrite after Step 2 lands.
 
 ---
 
@@ -86,20 +98,20 @@ Every render referenced as an IRL comparison point MUST correspond to a real-wor
   Each step decides the chosen split. If two splits tie at a step, the next step takes over.
 
   1. **Throw out splits that don't physically fit.** Any row whose entries can't fit on the canvas at minimum margin gets rejected.
-  2. **Prefer splits where every row has comfortable breathing room.** For each candidate split, find the *most-cramped row* (the one with the smallest gap between entries). Whichever split's most-cramped row has the largest gap wins. Cap "breathing room" at `2·margin_x = 80px` — beyond that it's empty canvas, more doesn't matter.
+  2. **Prefer splits where every row has comfortable breathing room.** For each candidate split, find the *most-cramped row* (the one with the smallest gap between entries). Whichever split's most-cramped row has the largest gap wins. Cap "breathing room" at `2·margin_x` — beyond that it's empty canvas, more doesn't matter. The cap is **N-adaptive** because `margin_x = 1.6 × badge_h` and `badge_h` follows the per-N font size: sparse N≤5 → cap≈112, mid N=6-9 → cap≈92, dense N≥10 → cap≈77.
   3. **If tied, prefer fewer rows.** A 1-row layout beats a 2-row one. A 2-row beats a 3-row.
-  4. **(2026-05-04) If still tied, prefer top-heaviness.** Count "weight inversions" = pairs of rows where a row above has less total width than a row below. Fewer inversions = more top-heavy = preferred.
+  4. **(2026-05-04) If still tied, prefer top-heaviness.** Count "weight inversions" = pairs of rows where a row above has less total width than a row below. Fewer inversions = more top-heavy = preferred. **Mental model — shinkansen-row-0 exemption:** when row 0 is shinkansen-only (category sort guarantees this whenever any shinkansen entry exists), top-heaviness is conceptually a property of the *body* rows; row 0's identity is fixed by category sort, so its Σ (1-2 wide badges) shouldn't pollute the body-row signal. (Current code counts row 0; not fixing because Step 2 redesign drops the `-inversions` tiebreaker entirely.)
   5. **If still tied, prefer the most-spread layout overall.** Full uncapped gap comparison.
 
-  Known residue:
-  - 池袋 IRL `(3,3,1)` — IRL accepts a row 0 below the 80px cap (75.2) to gain top-heaviness. Algo's `(1,3,3)` wins at step 2 because it respects the cap. Step 4 never gets to vote.
-  - 目黒 / 大船 (3 entries, IRL `(2,1)`) — both `(3,)` and `(2,1)` reach the 80px cap → tied at step 2. Step 3 picks `(3,)` (fewer rows). Step 4 (top-heavy) never gets to vote.
+  Known residue (post-scaling, captured 2026-05-04 PM resume-check):
+  - 池袋 (N=7) IRL `(3,3,1)` — algo now picks `(2,2,3)` (was `(1,3,3)` pre-scaling). Still bottom-heavy. At N=7 mid-tier the cap is 92; IRL's `(3,3,1)` packs 3 widest entries on row 0 with smaller breathing room than `(2,2,3)`'s most-cramped row, so step 2 separates them in `(2,2,3)`'s favor. Step 4's top-heaviness tiebreaker never gets to vote.
+  - ~~目黒 / 大船 (3 entries, IRL `(2,1)`)~~ — **dissolved by scaling.** Under sparse N≤5 tier (2.0×), (3,) Σ exceeds canvas → physically rejected at step 1; algo correctly picks (2,1). No tiebreaker needed.
 
 - **Row-grouping — code-level details (capped lex-maximin).** Among splits respecting category-sort (shinkansen → jr_east → non_jr, no within-category reorder) and `max_rows = 3`, pick by 4-tuple sort key: `(capped_padded_gaps, -num_rows, -inversions, uncapped_gaps)`. Larger tuple wins.
   - **Capped** = each row's gap clamped to `gap_cap = 2·margin_x`. Beyond that, more whitespace is wasted canvas, not better layout.
   - **Padded** to length `max_rows` with `gap_cap`. Lets fewer-row splits compete fairly with more-row splits (an "absent" row contributes a vacuous cap-equivalent gap).
   - **`-num_rows` tiebreak** prefers fewer rows when capped tuples tie. Without this, 3 small entries would lex-prefer (1,1,1) over single-row layout because uncapped gaps are larger when split.
-  - **`-inversions` tiebreak** (added 2026-05-04) prefers top-heavy. `inversions = number of (i, j) pairs with i < j AND row_sums[i] < row_sums[j]`. Fixes 大崎 JY_inner (was bottom-heavy `(1,2)`, now top-heavy `(2,1)`).
+  - **`-inversions` tiebreak** (added 2026-05-04) prefers top-heavy. `inversions = number of (i, j) pairs with i < j AND row_sums[i] < row_sums[j]`. Fixes 大崎 JY_inner (was bottom-heavy `(1,2)`, now top-heavy `(2,1)`). **Mental model:** when row 0 is shinkansen-only, top-heaviness is conceptually a body-row property — row 0 should be exempt (`i` from index 1). Current code counts row 0; soon-moot because Step 2 redesign drops this tiebreaker.
   - **Uncapped** lex-maximin breaks final ties — picks the most-spread among row-count-equivalent splits.
 
   Per-row gap formula `h`:
@@ -107,7 +119,7 @@ Every render referenced as an IRL comparison point MUST correspond to a real-wor
   - `n≥2` equal-spacing case (when `(W − Σ)/(n+1) ≥ margin_x`): `h = (W − Σ)/(n+1)` (sides == inters).
   - `n≥2` stretch case (sides bottom out at `margin_x`): `h = (W − 2·margin_x − Σ)/(n − 1)`.
 
-  No shinkansen fence, no 4-entries-per-row cap — both dropped as count-based heuristics that maximin produces naturally from widths.
+  No 4-entries-per-row cap, no forced shinkansen row-break — both dropped as count-based heuristics that maximin produces naturally from widths. (The shinkansen-row-0 inversion exemption above is separate — a tiebreaker carve-out, not a row-break rule.)
 
   Validated splits: Tokyo (2,4,3); Yokohama (4,4,3); Shinagawa JY_inner (1,2,3); Shimbashi flat (2,2,3); Shimbashi JY_inner (3) — single row (was (1,1,1) under uncapped lex-maximin; cap+tiebreak collapses it).
 
@@ -258,7 +270,7 @@ Every render referenced as an IRL comparison point MUST correspond to a real-wor
 
 ## Open follow-ups (priority order)
 
-0. **Row-distribution issues (likely dissolve under redesign — see § "Algorithm redesign — paused 2026-05-04 PM" above; the misalignment / under-shoot / over-shoot classes below may all be artifacts of missing per-N text scaling).**
+0. **Row-distribution issues (likely dissolve under Step 2 redesign — see § "Algorithm redesign — design firmed 2026-05-04 PM" above; bug list below pre-dates per-N scaling, post-scaling shapes captured in 2026-05-04 PM resume-check).**
 
    **Enhancement candidates queued:**
    - **Better Rule 1 for sparse-row-against-wider-blueprint space distribution**: Shimbashi flat under blueprint mode places rows 0/1 at `[100, 300]` (cramp left) because Rule 1 walks leftmost upper anchors. Candidate: when N<M, place head at `upper[0]`, tail at `upper[-1]`, middles distribute; skip interior anchors. Would spread rows 0/1 to `[100, 500]`.

@@ -166,7 +166,8 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict, debug: b
     # Per-N text scaling (calibrated 2026-05-04 from IRL refs):
     # - Dense (N≥10 OR both shinkansen present): 1.375 × banner_size_ja → 22
     # - Mid (N=6-9): 1.6 × banner_size_ja → 26
-    # - Sparse (N≤5): 2.0 × banner_size_ja → 32
+    # - N=5: 1.8 × banner_size_ja → 29
+    # - Sparse (N≤4): 2.0 × banner_size_ja → 32
     # IRL data points: Tokyo JO (9 lines, both shink) = 1.32x, Ueno JY_inner (7 lines) = 1.5x.
     # "Both shinkansen" rule overrides N (treats Tokyo-like density signal).
     _resolved = [resolve_entry(ref, lines) for ref in transfers]
@@ -176,13 +177,15 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict, debug: b
         name_size_ja = 22  # 1.375× banner JA
     elif _N >= 6:
         name_size_ja = 26  # 1.6× banner JA
+    elif _N == 5:
+        name_size_ja = 29  # 1.8× banner JA
     else:
         name_size_ja = 32  # 2.0× banner JA
     # EN scales proportionally with JA (baseline ratio 12/23 from pre-scaling settings).
-    # → JA=22 → EN=11; JA=26 → EN=14; JA=32 → EN=17.
+    # → JA=22 → EN=11; JA=26 → EN=14; JA=29 → EN=15; JA=32 → EN=17.
     name_size_en = round(name_size_ja * 12 / 23)
     # name_line_gap scales with EN size: larger EN → more negative (closer to JA visually).
-    # Formula: -4 (baseline at EN=12) − (EN − 12). → EN=11→-3, EN=14→-6, EN=17→-9.
+    # Formula: -4 (baseline at EN=12) − (EN − 12). → EN=11→-3, EN=14→-6, EN=15→-7, EN=17→-9.
     name_line_gap = -4 - (name_size_en - 12)
     badge_text_gap = 3             # Gap between badge group and JA/EN text (user spec: 3 px IRL)
     inter_badge_gap = 2
