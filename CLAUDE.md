@@ -2,13 +2,26 @@
 
 Japanese Train PA (Public Address) Simulator — pygame-based app simulating station announcements and arrival melodies with visual LCD display.
 
-## Quick Start
+## Session Startup
+
+Before doing anything else, every session:
+
+1. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context.
+2. Read [memory/MEMORY.md](memory/MEMORY.md) — long-term memory index.
+3. Skim [TODO.md](TODO.md) — centralized backlog grouped by area (auto-input / display / distribution / housekeeping + closed-off paths).
+
+`principles.md`, `conventions.md`, `critical_lessons.md`, `redlines.md` auto-load as memory files — already in context, no need to re-read.
+
+**Two unconditional rules:**
+
+- **Memory files are informational only.** Rules / learnings / preferences do NOT live in `memory/` — they live in their canonical home (`principles.md` / `conventions.md` / `CLAUDE.md` / domain doc / inline `# CONTRACT:` / skill), written synchronously during `/session-recap`, never deferred. Codify-or-omit; no `[log-only]` middle bucket. Defer-and-distill is gone — `/distill-memory` is now a periodic safety-net audit, not a primary route.
+- **Before any doc edit, check the placement table** in [.claude/skills/session-recap/SKILL.md](.claude/skills/session-recap/SKILL.md) — pick the narrowest-domain home (CLAUDE.md framing / DISPLAY.md gotcha / DATA_FORMAT.md schema / inline `# CONTRACT:` / skill).
+
+## Run
 
 ```bash
 uv run main.py
 ```
-
-Build executable (local test build): use `/build` skill. Cut a GitHub release: `.\release.ps1 v<version>` (tag first). Update READMEs / translations: use `/readme` skill. Code review: use `/review-dirty` or `/review-plus-fix-relentlessly`. Commit hygiene: use `/commit` skill.
 
 ## Mental Model
 
@@ -41,8 +54,8 @@ The project is in a **mature phase** — heavy architecture done, audio pipeline
 - **Steady state**: new train models (E235-0 Yamanote leaning next, then E231-500 / E233 series — re-skin work, not re-architecture) + display fidelity polish on the active model (ENGLISH lower-LCD still a stub, code_3 edge cases, continuity polish).
 - **Two speculative side-quests, both viable, competing for the same budget:**
   - **Automation via game-window OCR** — `TSimApp.log` confirmed empty (no streaming position). OCR of the game's "next stop / remaining meters" HUD is the realistic path. Template-match against pre-extracted glyph sprites at ~5 Hz on a window-bound capture (NOT full-desktop screenshot, NOT tesseract) mitigates privacy + performance concerns. Game HUD has been stable across versions historically and unlikely to change → calibration is effectively one-time, not a recurring maintenance burden. Closes the original 3-year companion-app loop.
-  - **Distribution polish** — signed Windows installer, Mac build investigation, first-run smoothness for the lightly-public audience (~1800 video plays, real users).
-- **Not directions** (closed-off, don't re-propose): memory hooking the game's `*saf.dll` modules, decrypting SimDATA assets, audio fingerprinting, full-desktop OCR, tesseract-based OCR, scaling to lines the game already covers.
+  - **Distribution polish** — signed Windows installer, first-run smoothness for the lightly-public audience (~1800 video plays, real users). Windows-only; the companion game doesn't run on Mac, so there's no Mac audience.
+- **Not directions** (closed-off, don't re-propose): memory hooking the game's `*saf.dll` modules, decrypting SimDATA assets, audio fingerprinting, full-desktop OCR, tesseract-based OCR, scaling to lines the game already covers, Mac build (game is Windows-only).
 
 ### Train family
 
@@ -85,22 +98,12 @@ Each stop advances through three press-driven sub-states: **APPROACHING_EARLY** 
 
 **Auto-fire asymmetry:** APPROACHING entry auto-fires `pa[0]` (the prev-stop departure announcement) — a passive-listening window where the user hasn't acted yet. STOPPING has no auto-fire; every `pa_at_station` entry plays only because the user pressed. UI cues that gate on "is the user being asked to act?" must respect this asymmetry.
 
-## Session Startup
-
-Before doing anything else:
-1. Read `memory/YYYY-MM-DD.md` (today and yesterday) for recent context
-2. Read [memory/MEMORY.md](memory/MEMORY.md) — long-term memory index
-3. Read [.claude/rules/principles.md](.claude/rules/principles.md) and [.claude/rules/conventions.md](.claude/rules/conventions.md) — values that shape judgment + project-local style/naming/tooling
-4. Skim [TODO.md](TODO.md) — centralized backlog grouped by area (auto-input / display / distribution / housekeeping + closed-off paths)
-
 ## Memory (project-level, in-repo)
 
-This is a separate system from any auto-memory the host may provide. It lives in `memory/` and travels with the repo.
+This is a separate system from any auto-memory the host may provide. It lives in `memory/` and travels with the repo. The "informational only / codify-or-omit" rule lives in Session Startup above.
 
 - **Daily logs**: `memory/YYYY-MM-DD.md` — narrative continuity for next-session pickup. What happened, decisions, why-context, dead ends.
 - **Curated index**: `memory/MEMORY.md` — one-line pointers to the daily logs worth keeping.
-
-**Memory files are informational only.** Rules, learnings, preferences, and behavioral patterns do NOT live here — they live in their canonical home (`principles.md` / `conventions.md` / `CLAUDE.md` / domain doc / inline `# CONTRACT:` / skill), **written synchronously during `/session-recap`, never deferred.** There is no `[log-only]` / `[promote-candidate]` middle bucket; codify-or-omit is the only path. Defer-and-distill is gone — `/distill-memory` is now a periodic safety-net audit, not a primary route.
 
 Rules:
 - Write it down. "Mental notes" do not survive session restarts; files do.
@@ -180,8 +183,9 @@ Yellow hint square = multiple PA tracks available.
 - **Auto-input / OCR / game-window capture** → [AUTO_INPUT.md](AUTO_INPUT.md) — companion module that reads JR EAST Train Sim's HUD via dxcam to fire PAs automatically. Lives in `auto_input.py` + `ocr.py` + `hud_layout.py` (in-process integration) and `_dev_scripts/capture_game.py` (separate-process variant).
 - **Cross-cutting code contracts** → live inline at their code site as `# CONTRACT:` blocks. Examples: PyInstaller path resolution at `displays/train_models/e235_1000/upper_lcd.py:get_base_dir`, countdown formula at `displays/train_models/e235_1000/lower_lcd.py:draw_times`, font-loading rule at the first font init in `upper_lcd.py`'s `JapaneseDisplay.__init__`.
 - **Testing / previewing** → `uv run preview_display.py` defaults to the mock catalog (see [`audio/_mock/main/README.md`](audio/_mock/main/README.md) for stop layout). Keys: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. `jump_to_stop` backward-rounding semantics are documented in its docstring at `app.py` `PASimulator.jump_to_stop`. Preview-mode swap inventory (audio, input, mixer, window) is at `PASimulator.__init__`'s ``preview`` parameter.
-- **Building/Releasing** → Use `/build` skill
-- **Codebase mess sweep** → Use `/vibe-check` skill (scan for duplicated logic, dead helpers, half-finished implementations, speculative architecture, stale comments — discussion-first, item-by-item, smoke-tests every fix). Distinct from `/review-dirty` (which reviews a single change for quality).
-- **Doc bloat sweep** → Use `/distill-docs` skill (scan DISPLAY.md / DATA_FORMAT.md / AUTO_INPUT.md for accumulated bloat the write-time `EDIT-CONTRACT` gate misses — history notes, code-snippet illustrations, speculative future sections, design-rationale prose, cross-doc duplication, cumulative staleness — discussion-first, item-by-item). Pairs with the `EDIT-CONTRACT` block at the top of each domain doc.
-
-**Editing docs?** Check the placement table in [.claude/skills/session-recap/SKILL.md](.claude/skills/session-recap/SKILL.md) before writing — pick the narrowest-domain home (CLAUDE.md framing / DISPLAY.md gotcha / DATA_FORMAT.md schema / inline code contract / skill).
+- **Building / releasing** → `/build` skill (local test build) or `.\release.ps1 v<version>` (cut a GitHub release; tag first).
+- **README / translation maintenance** → `/readme` skill.
+- **Code review** → `/review-dirty` skill (single change) or `/review-plus-fix-relentlessly` (review + fix loop).
+- **Commit hygiene** → `/commit` skill.
+- **Codebase mess sweep** → `/vibe-check` skill (duplicated logic, dead helpers, half-finished implementations, speculative architecture, stale comments — discussion-first, item-by-item, smoke-tests every fix). Distinct from `/review-dirty` (which reviews a single change for quality).
+- **Doc bloat sweep** → `/distill-docs` skill (scan DISPLAY.md / DATA_FORMAT.md / AUTO_INPUT.md for accumulated bloat the write-time `EDIT-CONTRACT` gate misses — discussion-first, item-by-item). Pairs with the `EDIT-CONTRACT` block at the top of each domain doc.

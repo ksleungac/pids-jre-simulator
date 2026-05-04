@@ -41,7 +41,6 @@ The OCR auto-PA feature shipped in `feat(auto-input): OCR-driven auto-PA — in-
 Speculative side-quest from the future-direction discussion. Competing for budget against further auto-input polish. (CLAUDE.md § "Direction of travel".)
 
 - [ ] **Signed Windows installer.** Replace the zip-extract distribution with a proper signed installer for the lightly-public audience.
-- [ ] **Mac build investigation.** Confirm whether pygame + win32-only deps (e.g. `keyboard` library, `win32gui`, `dxcam`) can be cleanly excluded behind `sys.platform == "win32"` guards.
 - [ ] **First-run smoothness.** Whatever needs polishing for the ~1800 video-play / occasional-railfan audience.
 
 ## Chrome / i18n / OOBE
@@ -68,5 +67,6 @@ Recording the ground we've explicitly decided NOT to walk, so future sessions do
 - **Audio fingerprinting** for stop detection. Replaced by HUD OCR which works.
 - **Full-desktop OCR** instead of window-bound capture. Privacy + perf concerns.
 - **Tesseract-based OCR.** Too heavy; pixel-perfect template match works.
+- **Mac build.** The companion game (JR EAST Train Sim Real) is Windows-only — no Mac audience exists for this app. Not worth the porting cost.
 - **Scaling to lines the game already covers** (Sobu local, Yokosuka, etc. — newer game routes ship with PA, don't duplicate).
 - **OCR-as-display-layer fidelity-purity argument.** OCR is an *input layer* (replaces PageDown press), not display. Don't recycle.
