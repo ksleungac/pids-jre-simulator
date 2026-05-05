@@ -21,8 +21,8 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame
 
+from app_paths import project_root
 from displays.transfer_info import apply_transfer_filter
-from displays.utils import project_root
 from displays.train_models.e235_1000.transfer_info import (
     W,
     H,

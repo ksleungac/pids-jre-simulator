@@ -45,8 +45,9 @@ def main():
     pygame.init()
     pygame.mixer.init()
 
-    # Get the directory where the executable is located
-    BASE_DIR = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
+    # Repo root (dev) / alongside-exe (frozen) — single canonical helper.
+    from app_paths import project_root
+    BASE_DIR = str(project_root())
 
     # Create screen for setup (also reused by the first-run language picker)
     SETUP_SIZE = (730, 420)

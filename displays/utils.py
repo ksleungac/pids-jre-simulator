@@ -12,9 +12,6 @@ from typing import List, Tuple
 
 import pygame
 
-# Re-exported for backward-compat — canonical home is app_paths.py.
-from app_paths import project_root  # noqa: F401
-
 
 BADGE_TEXT = (15, 15, 15)  # dark — text sits on white interior
 WHITE_BG = (230, 230, 230)

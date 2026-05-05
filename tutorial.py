@@ -632,10 +632,11 @@ class Tutorial:
     def tutorial_route_dir(cls) -> str:
         """Absolute path to the tutorial's route directory.
 
-        Resolved through ``i18n.app_root()`` so it works in both dev (project
-        root) and frozen builds (sys._MEIPASS). A relative path would fail
-        if the app is launched from a non-project cwd (e.g. installer-launched
-        with cwd=user home).
+        Resolved through ``app_paths.project_root()`` (via the ``i18n.app_root``
+        backward-compat alias) so it works in both dev (project root) and frozen
+        builds (alongside-exe via ``Path(sys.executable).parent``, NOT
+        ``sys._MEIPASS``). A relative path would fail if the app is launched
+        from a non-project cwd (e.g. installer-launched with cwd=user home).
         """
         return str(i18n.app_root() / "audio" / "tokaido" / "1865E")
 

@@ -20,7 +20,7 @@ from displays.transfer_info import (
     TransferInfoDisplay as _BaseTransferInfoDisplay,
     resolve_entry,
 )
-from displays.utils import project_root
+from app_paths import project_root
 
 
 # Canvas dimensions for the transfer-info body (lower-LCD region).
