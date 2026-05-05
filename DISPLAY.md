@@ -190,7 +190,7 @@ Click-to-jump (preview ←/→, future click-to-jump on lower LCD) lands in STOP
 
 ### Circular loop-back
 
-Yamanote-style routes have the same station name at idx 0 and idx N. The duplicate idx 0 is a structural marker for circularity, not a state to visit mid-loop. `_advance_to_next_stop`'s loop-back branch jumps `idx N → idx 1` directly, plays `pa[0]` of the new stop, and lands in APPROACHING. (Pre-unified-model code reset to idx 0 with no audio; that 2-press hop collapsed into 1 press here.)
+Yamanote-style routes have the same station name at idx 0 and idx N. The duplicate idx 0 is a structural marker for circularity, not a state to visit mid-loop. `_advance_to_next_stop`'s loop-back branch jumps `idx N → idx 1` directly, plays `pa[0]` of the new stop, and lands in APPROACHING.
 
 ### Skip animation
 
@@ -212,7 +212,7 @@ Skip animation lives in `_advance_to_next_stop`. Entering STOPPING and cycling p
 
 - **Position constants are inlined** as local variables in each draw method (e.g. `box_x, box_y = 15, 8`). Different train models may need different layouts; keeping positions per-method makes that explicit.
 - **Fonts are shared** as class members defined in `__init__` (e.g. `self.font_type_bold`). Fonts are consistent within a model.
-- **Tuneable-params block** (project-wide convention): every UI draw method exposes its magic numbers (positions, sizes, offsets, gaps) as labeled local variables at the top. All downstream coordinates derive from those. Rationale: visual tuning means nudging these values — they must be discoverable AND reactive.
+- See [conventions.md § "Tuneable-params block"](.claude/rules/conventions.md) for the project-wide rule on labeled-local-variables at the top of every draw method.
 
 ### Mode Renderer Design
 
@@ -232,9 +232,7 @@ For **horizontal centering inside a fixed-width cell** (e.g. passing-station che
 
 ### Destination Behavior
 
-- **Always kanji** in KANJI/FURIGANA modes (no cycling to furigana — IRL behavior).
-- **English mode** uses "Bound for" prefix + English destination from `translations.json`.
-- **Compound destinations** use `"StationA&\nStationB"` format; `&` indicates line break point (no space before `&`).
+Convention (always-kanji / "Bound for" English / `&` compound separator) lives in [CLAUDE.md](CLAUDE.md) "Mental Model → IRL display conventions"; JSON encoding in [DATA_FORMAT.md § Compound Destinations](DATA_FORMAT.md).
 
 ### Stop-Level Destination Override
 
@@ -310,11 +308,6 @@ Two facts about pygame text rendering that look like bugs to a fresh reviewer:
 - All three mode renderers clear the **same** confinement for the same element. Internal layout can differ per mode; the boundary doesn't.
 - Sub-text-bg parameters (e.g., `font.render(text, True, fg, bg)`) inside a region should pass `_bg("<same region>")` as `bg` so they don't punch holes in the tint when debug-grid is on.
 - A region's clear rect must not extend into a neighbor's confinement. The `station` clear is clamped to `band_bottom_y=35` (top) and `UPPER_HEIGHT=117` (bottom) for this reason — same clamp pattern duplicated in all three mode renderers' `draw_station`.
-
-#### Current state (E235-1000 upper, post-2026-04-25)
-
-- All 4 station modes (Kanji 78pt, Furigana 78pt, English 1-line 75pt, English 2-line 42pt) comply with **D2**: visible glyph caps land at y≥35 in every mode.
-- All 4 station modes' **clear rects** are clamped to `(302, 35, 384, ≤82)` — they fit inside the declared station confinement.
 
 #### Debug-grid mode
 
@@ -400,7 +393,7 @@ pygame.display.flip()
 
 **E235-1000 IRL is 14-per-line.** The previous "≤17 odd → single row of 17" fallback was a one-time concession to keep Keiyō (17 stops) on a single line even though that exceeds the real LCD's 14-cell-per-row layout. With the per-train-model split in place, the active model now honors its IRL grid; out-of-spec routes (Keiyō isn't an E235-1000 line) wrap to 2 rows under the best-effort policy. See [CLAUDE.md](CLAUDE.md) "Mental Model → Per-model IRL line scope".
 
-**Centering fix (2026-04-25):** the row x-offset uses `min(per_line, num_stops)`, not `per_line` alone. Under the post-2026-04-28 rule `per_line ≤ num_stops` always, so the `min()` is defensive — kept for code safety.
+**Centering:** the row x-offset uses `min(per_line, num_stops)`, not `per_line` alone. Under the current rule `per_line ≤ num_stops` always, so the `min()` is defensive — kept for code safety.
 
 ### Long-Route Window Refresh
 
@@ -412,7 +405,7 @@ Trigger: when `len(stops) - curr_stop < STOPS_QUANTITY`, `_get_stops_list_disp()
 
 Window carries tuples `(global_idx, stop)` — draw code doesn't need a separate `window_start` parameter to compare state, the global index travels with each cell.
 
-**`continuity[2]` sync (state-leak fix, 2026-04-26):** `_get_stops_list_disp` updates `continuity[2]` on **every call**, not just at the transition frame. Set to `0` whenever the window has slid (visible window includes the route's last stop, no more route past it); restored to `1` whenever the window is back at its original position and route has > 28 stops. The earlier "set once at `remaining == STOPS_QUANTITY - 1`" form left the flag stale at `[1,1,1]` after the user jumped further forward, causing slot-2 chevrons to render past the destination on Keihin (Ōfuna). Circular routes (Yamanote) keep `[1, 1, 1]` since the route always continues past the visible window via the loop.
+**`continuity[2]` sync:** `_get_stops_list_disp` updates `continuity[2]` on **every call**, not just at the transition frame. Set to `0` whenever the window has slid (visible window includes the route's last stop, no more route past it); restored to `1` whenever the window is back at its original position and route has > 28 stops. The earlier "set once at `remaining == STOPS_QUANTITY - 1`" form left the flag stale at `[1,1,1]` after the user jumped further forward, causing slot-2 chevrons to render past the destination on Keihin (Ōfuna). Circular routes (Yamanote) keep `[1, 1, 1]` since the route always continues past the visible window via the loop.
 
 ### Continuity arrows (full-route view)
 
@@ -477,8 +470,6 @@ Non-circular routes terminate at the route-level `dest`, not at `len(stops) - 1`
 
 `PASimulator.__init__` resolves `self.dest_stop_idx` once by name-matching `self.dest` against `self.stops`. `_next_pa` computes `terminus_idx = self.dest_stop_idx` (non-circular) or `len(self.stops) - 1` (circular — duplicate-name first-match would be wrong otherwise, but circular routes use the loop-back branch so it doesn't matter).
 
-Without this, PageDown at 磯子 advanced into 新杉田 → ... → 大船, well past the operational terminus. Fixed 2026-04-26.
-
 ### draw_times subtleties (recurring review false positives)
 
 Two things in `JapaneseDisplay.draw_times` that look wrong but aren't:
@@ -505,7 +496,7 @@ Computed in `_get_window(curr_stop, cursor_pos)`. The two args differ only durin
 
 **Why sliding is keyed on `cursor_pos` but lock on `curr_stop`:**
 
-- *Sliding on `cursor_pos`* keeps the "1 past cell on the cursor's left" contract honest mid-skip. If sliding were keyed on `curr_stop`, the visible cursor (at `cursor_pos < curr_stop` during a skip) would land at local index 0 with zero past context — observable as "the just-departed station vanishes the moment a passing-station skip starts." This was the bug fixed on 2026-04-26.
+- *Sliding on `cursor_pos`* keeps the "1 past cell on the cursor's left" contract honest mid-skip. If sliding were keyed on `curr_stop`, the visible cursor (at `cursor_pos < curr_stop` during a skip) would land at local index 0 with zero past context — observable as "the just-departed station vanishes the moment a passing-station skip starts."
 - *Lock on `curr_stop`* preserves destination visibility near route-end. If lock were keyed on `cursor_pos`, a brief skip animation just before the lock threshold would let the destination cell drop out of view for the duration of the animation. Lock entry is the moment "the route's tail fits in 8 cells regardless of cursor position" — that's a curr_stop fact.
 
 **Visual side effect:** anchoring sliding on `cursor_pos` means the window shifts left by exactly one cell at the frame `cursor_pos` catches up to `curr_stop` (skip animation completes). Single-frame snap; preserves the past-cell-always-visible contract.
@@ -662,13 +653,6 @@ uv run preview_display.py --lower-view {full,eight,cycle}
 - Centering: mock route (11 stops) renders with equal margins; multi-line routes unchanged.
 
 Preview-mode swap inventory is documented at `PASimulator.__init__`'s ``preview`` parameter in `app.py`. `jump_to_stop` semantics live in its docstring at `app.py` `PASimulator.jump_to_stop`. Mock-route stop layout is in [`audio/_mock/main/README.md`](audio/_mock/main/README.md).
-
----
-
-## Design Decisions
-
-1. **Duplication OK.** Mode renderers may have ~90% similar code, but stay separate for flexibility. Different trains may need different layouts.
-2. **No shared mode renderers across train models.** E235-1000's `JapaneseDisplay` is independent from a future E231-500's `JapaneseDisplay`.
 
 ---
 

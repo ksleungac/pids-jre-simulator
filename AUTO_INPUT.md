@@ -581,8 +581,7 @@ If the game runs at a different resolution:
 6. Run `uv run python ocr.py` to sanity-check the new templates load + cross-classify cleanly. Commit the `ocr_templates/` diff.
 
 Digit templates are resolution-specific because exact-pixel matching requires
-the same glyph dimensions. A future enhancement could resize templates by
-scaling factor, but pixel-perfect matching is more reliable.
+the same glyph dimensions.
 
 ## Limitations
 
