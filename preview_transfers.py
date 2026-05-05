@@ -146,7 +146,13 @@ def render_mixed(text: str, latin_font, cjk_font, color, latin_fallback=None, ke
     return out
 
 
-def render_transfer(surf: pygame.Surface, transfers: list, lines: dict, debug: bool = False):
+def render_transfer(
+    surf: pygame.Surface,
+    transfers: list,
+    lines: dict,
+    debug: bool = False,
+    rows_override: list | None = None,
+):
     def _dprint(*args, **kwargs):
         if debug:
             print(*args, **kwargs)
@@ -509,6 +515,42 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict, debug: b
         if N_total == 0:
             return [], trace
 
+        rows_out: list = []
+        rows_xs_out: list = []  # provisional positions for upper-anchor lookups
+
+        # --- Data-side override: explicit row partition from transfers_by_view.rows ---
+        # Bypasses both shinkansen-prefix and small-N structural rules. Real-render
+        # positioning (Rules 1-4 + track-back) still runs within each forced row.
+        if rows_override is not None:
+            if sum(rows_override) != N_total:
+                trace.append(
+                    f"⚠ rows_override {rows_override} sums to {sum(rows_override)} "
+                    f"but N_total={N_total}; ignored, falling back to algorithm"
+                )
+            else:
+                cursor_idx = 0
+                for r_idx, n in enumerate(rows_override):
+                    row_entries = list(entries_seq[cursor_idx:cursor_idx + n])
+                    row_widths = list(widths_seq[cursor_idx:cursor_idx + n])
+                    if r_idx == 0:
+                        row_xs = compute_row0_provisional(row_widths)
+                    else:
+                        row_xs = cascade_test(row_widths, rows_xs_out[-1])
+                        if row_xs is None:
+                            # Cascade can't fit at provisional margin; emit
+                            # greedy spacing for upper-anchor purposes only —
+                            # real render redoes via Rule 4 + track-back.
+                            row_xs = []
+                            cur = margin_x
+                            for w in row_widths:
+                                row_xs.append(int(cur))
+                                cur += w + inter_element_margin
+                    rows_out.append(row_entries)
+                    rows_xs_out.append(row_xs)
+                    cursor_idx += n
+                trace.append(f"rows override applied: {rows_override}")
+                return rows_out, trace
+
         # Identify shinkansen prefix (category-sort guarantees they lead).
         shinkansen_prefix = 0
         for i, e in enumerate(entries_seq):
@@ -516,9 +558,6 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict, debug: b
                 shinkansen_prefix = i + 1
             else:
                 break
-
-        rows_out: list = []
-        rows_xs_out: list = []  # provisional positions for upper-anchor lookups
 
         if shinkansen_prefix > 0:
             r0_entries = entries_seq[:shinkansen_prefix]
@@ -528,13 +567,39 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict, debug: b
             rows_xs_out.append(r0_xs)
             trace.append(f"row 0 = {shinkansen_prefix} shinkansen (no greedy walk)")
             remaining_idx = shinkansen_prefix
+        elif N_total == 2:
+            # Structural rule: N=2 → (2,) when both entries fit row 0 at any
+            # gap ≥ 0; else (1,1). Calibrated against corpus IRL (5/5 N=2 fit
+            # → (2,); 浜松町 doesn't fit → (1,1)).
+            if sum(widths_seq) <= W - 2 * margin_x:
+                r0_entries = list(entries_seq[:2])
+                r0_widths = list(widths_seq[:2])
+                r0_xs = compute_row0_provisional(r0_widths)
+                trace.append("row 0 = N=2 structural: both fit → (2,)")
+                remaining_idx = 2
+            else:
+                r0_entries = [entries_seq[0]]
+                r0_widths = [widths_seq[0]]
+                r0_xs = compute_row0_provisional(r0_widths)
+                trace.append("row 0 = N=2 structural: don't fit → (1,1)")
+                remaining_idx = 1
+            rows_out.append(r0_entries)
+            rows_xs_out.append(r0_xs)
+        elif N_total == 3:
+            # Structural rule: N=3 → (2,1) always. Calibrated against corpus
+            # IRL (5/5: 目黒 大崎 新橋 日暮里 秋葉原 all IRL (2,1)). Visual-
+            # weight rationale: 3 entries on one row reads too dense for IRL
+            # PIDS at sparse-tier sizing; (2,1) gives breathing room.
+            r0_entries = list(entries_seq[:2])
+            r0_widths = list(widths_seq[:2])
+            r0_xs = compute_row0_provisional(r0_widths)
+            rows_out.append(r0_entries)
+            rows_xs_out.append(r0_xs)
+            trace.append("row 0 = N=3 structural: (2,1) — first 2 on row 0")
+            remaining_idx = 2
         else:
-            # Greedy walk for row 0. Uses inter_element_margin (cramped-centered
-            # comfort target). 2026-05-04: tried lowering to min_inter_gap to fix
-            # 秋葉原 (1,2)→(2,1), but caused regression on 目黒 (2,1)→(3,) —
-            # 目黒/新橋 split IRL even when 3 entries fit comfortably, while 秋葉原
-            # splits because 3 don't fit. A single greedy threshold can't
-            # distinguish these two split-classes; needs more IRL data / model.
+            # Greedy walk for N=1 and N≥4. Uses inter_element_margin
+            # (cramped-centered comfort target).
             r0_entries: list = []
             r0_widths: list = []
             r0_xs: list = []
@@ -698,6 +763,8 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict, debug: b
                 sum_w = sum(widths)
                 h_equal = (W - sum_w) / (n + 1)
                 if h_equal >= margin_x:
+                    # Comfortable: equal-spacing with side_pad bias (sides
+                    # slightly larger than inter — anchors row to canvas).
                     if n == 1:
                         side_gap = h_equal
                         inter_gap = 0
@@ -707,6 +774,21 @@ def render_transfer(surf: pygame.Surface, transfers: list, lines: dict, debug: b
                         side_gap = h_equal + side_pad
                         inter_gap = h_equal - 2 * side_pad / (n - 1)
                         rule_taken = f"row 0 single-row equal-spacing (h_equal={h_equal:.1f}, side_pad={side_pad:.1f})"
+                    chosen_xs = []
+                    cursor = side_gap
+                    for k in range(n):
+                        chosen_xs.append(int(round(cursor)))
+                        cursor += widths[k] + inter_gap
+                elif h_equal >= min_inter_gap:
+                    # Tight: pure equal-spacing (sides = inter = h_equal).
+                    # Sides shrink below margin_x to maximize inter — better
+                    # visual than edge-pin's cramped center when sum just
+                    # barely fits canvas. Floor at min_inter_gap so sides
+                    # don't shrink too far. 2026-05-05: 成田 N=2 sum=612
+                    # gives h_equal=39 (vs margin_x=56, floor=28).
+                    side_gap = h_equal
+                    inter_gap = h_equal
+                    rule_taken = f"row 0 single-row tight equal-spacing (h_equal={h_equal:.1f}, no side_pad)"
                     chosen_xs = []
                     cursor = side_gap
                     for k in range(n):
@@ -953,12 +1035,14 @@ def main():
         ]
         print(f"Filter active line {active!r}: {len(transfers)} transfers remain")
 
+    rows_override = None
     if args.view:
         station_data = stations[args.station]
         view_map = station_data.get("transfers_by_view", {})
         view_ops = view_map.get(args.view, {})
         view_dropset = set(view_ops.get("drop", []))
         view_editmap = view_ops.get("edit", {})
+        rows_override = view_ops.get("rows")
         if view_dropset:
             before = len(transfers)
             transfers = [
@@ -984,14 +1068,16 @@ def main():
                 f"View {args.view!r} edits {edit_count} entries: "
                 f"{view_editmap}"
             )
-        if not view_dropset and not view_editmap:
+        if rows_override is not None:
+            print(f"View {args.view!r} rows override: {rows_override}")
+        if not view_dropset and not view_editmap and rows_override is None:
             print(f"View {args.view!r}: no ops defined (or view-key absent)")
 
     if args.limit > 0:
         transfers = transfers[: args.limit]
         print(f"Limit to first {args.limit}: {transfers}")
 
-    render_transfer(surf, transfers, lines, debug=args.debug)
+    render_transfer(surf, transfers, lines, debug=args.debug, rows_override=rows_override)
 
     out_path = root / args.out
     out_path.parent.mkdir(parents=True, exist_ok=True)
