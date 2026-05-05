@@ -81,7 +81,15 @@ def main():
     # Run setup screen to select route. The "? Tutorial" replay button shows
     # only when oobe_completed=True (it's a re-run affordance, not a first-run
     # gate). Loop in case the user clicks it: run tutorial, return to setup.
-    setup = SetupScreen(screen, show_tutorial_button=settings.get("oobe_completed", False))
+    # OCR Auto-PA UI hidden by default; opt in via `--auto-input` for dev /
+    # power-user runs. Code path + dxcam dep ship in every build; the flag
+    # only controls whether the setup-screen toggle/steppers render.
+    show_ocr_ui = "--auto-input" in sys.argv
+    setup = SetupScreen(
+        screen,
+        show_tutorial_button=settings.get("oobe_completed", False),
+        show_ocr_ui=show_ocr_ui,
+    )
     audio_dir = os.path.join(BASE_DIR, "audio")
     setup.scan_routes(audio_dir)
 

@@ -12,7 +12,7 @@ from displays.utils import draw_station_code_badge
 class SetupScreen:
     """Handles route and train selection before starting the simulator."""
 
-    def __init__(self, screen: pygame.Surface, show_tutorial_button: bool = False):
+    def __init__(self, screen: pygame.Surface, show_tutorial_button: bool = False, show_ocr_ui: bool = False):
         """Initialize the setup screen.
 
         Args:
@@ -22,9 +22,15 @@ class SetupScreen:
                 ``run()``. Caller (main.py) gates this on ``oobe_completed``
                 — first-launch users haven't seen the tutorial yet, so the
                 button is hidden until they finish (or skip) it.
+            show_ocr_ui: If True, render the OCR Auto-PA toggle pill +
+                lead/interval steppers. Off by default — release builds hide
+                the UI until OCR matures (1080p calibration, re-entry logic,
+                stability hardening, in-app tutorial). Code path + dxcam dep
+                stay intact regardless; main.py opts in via ``--auto-input``.
         """
         self.screen = screen
         self.show_tutorial_button = show_tutorial_button
+        self.show_ocr_ui = show_ocr_ui
         self.routes = []
         self.selected_idx = 0
         self.scroll_offset = 0
@@ -304,6 +310,11 @@ class SetupScreen:
         between the route list and the bottom instruction row. All layout
         magic numbers live in the tuneable-params block at the top of the body.
         """
+        if not self.show_ocr_ui:
+            self._toggle_rect = None
+            self._lead_minus_rect = self._lead_plus_rect = None
+            self._interval_minus_rect = self._interval_plus_rect = None
+            return
         # ── tuneable params ────────────────────────────────────────────────────
         band_y = self.screen.get_height() - 90  # band top
         band_h = 40
@@ -366,6 +377,8 @@ class SetupScreen:
     def _handle_band_click(self, pos: tuple[int, int]) -> bool:
         """Dispatch a mouse click to the OCR Auto-PA band. Returns True if any
         control was hit (caller can stop propagation / suppress sound)."""
+        if not self.show_ocr_ui:
+            return False
         if self._toggle_rect and self._toggle_rect.collidepoint(pos):
             self.auto_input_enabled = not self.auto_input_enabled
             return True
