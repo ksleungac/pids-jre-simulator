@@ -261,14 +261,8 @@ class PASimulator:
 
         Returns empty dict if not found.
         """
-        # Get project root by going up from work_dir (e.g., audio/chuo/1654T -> project root)
-        project_root = os.path.dirname(os.path.dirname(self.work_dir.rstrip(os.sep)))
-
-        # Handle case where work_dir is directly under audio/ (e.g., audio/keiyo)
-        if os.path.basename(project_root) == "audio":
-            project_root = os.path.dirname(project_root)
-
-        translations_path = os.path.join(project_root, "data", "translations.json")
+        from app_paths import project_root
+        translations_path = project_root() / "data" / "translations.json"
 
         if os.path.exists(translations_path):
             with open(translations_path, encoding="utf-8") as f:

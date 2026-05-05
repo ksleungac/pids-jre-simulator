@@ -16,7 +16,7 @@ import json
 import re
 from typing import List, Optional
 
-from displays.utils import project_root as _project_root
+from app_paths import project_root as _project_root
 
 
 _SCALE_SUFFIX_RE = re.compile(r"\.scale\(([0-9]*\.?[0-9]+)\)$")

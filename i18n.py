@@ -11,7 +11,6 @@ Three concerns colocated here:
 
 import json
 import locale
-import sys
 from pathlib import Path
 
 import pygame
@@ -26,8 +25,8 @@ DEFAULT_LANG = "en"
 # ---------------------------------------------------------------------------
 
 def settings_path() -> Path:
-    base = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
-    return base / "settings.json"
+    from app_paths import project_root
+    return project_root() / "settings.json"
 
 
 def load_settings() -> dict:
@@ -77,12 +76,10 @@ _translations: dict = {}
 _current_lang: str = DEFAULT_LANG
 
 
-def app_root() -> Path:
-    """Tree where read-only bundled files (data/, fonts/, etc) live.
-    Project root in dev; sys._MEIPASS in frozen builds."""
-    if getattr(sys, "frozen", False):
-        return Path(sys._MEIPASS)  # type: ignore[attr-defined]
-    return Path(__file__).parent
+# Backward-compat alias — canonical home is app_paths.project_root.
+# setup.py + tutorial.py reach through here; left aliased for now until
+# those call sites are updated to import project_root directly.
+from app_paths import project_root as app_root  # noqa: E402, F401
 
 
 def init(lang: str) -> None:

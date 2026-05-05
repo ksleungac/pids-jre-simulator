@@ -105,7 +105,9 @@ def badge_cell_from_surface(surf: pygame.Surface) -> np.ndarray:
     return crop_cell_from_surface(surf, BADGE_BBOX)
 
 
-DEFAULT_TEMPLATES_DIR = Path(__file__).parent / "ocr_templates"
+from app_paths import project_root
+
+DEFAULT_TEMPLATES_DIR = project_root() / "ocr_templates"
 
 
 def load_badge_anchors(assets_dir: Path | None = None) -> dict[str, list[np.ndarray]]:

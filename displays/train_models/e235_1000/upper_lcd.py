@@ -7,8 +7,6 @@ E235-1000 series Upper LCD.
 import pygame
 import json
 import time
-import sys
-from pathlib import Path
 
 from displays.base import DisplayMode, ModeCycler
 from displays.utils import clip, draw_text_given_width, draw_station_code_badge
@@ -135,27 +133,8 @@ def _bg(region: str, default=None):
 # =============================================================================
 
 
-def get_base_dir() -> Path:
-    """Get base directory — resolves data paths in dev AND in PyInstaller exe.
-
-    PyInstaller one-file mode extracts the bundle into a temp folder
-    (``_MEIxxxxx``), and ``__file__`` points there — NOT next to the user's
-    exe where ``data/`` and ``audio/`` live. Using ``__file__`` would silently
-    miss every JSON load at runtime. ``sys.executable`` resolves to the exe
-    location, which IS where the shipped folders sit.
-
-    The 4-parent climb in the dev branch corresponds to this file's location:
-    ``displays/train_models/e235_1000/upper_lcd.py`` → project root. If this
-    file moves, that count needs to update.
-
-    TODO: this helper is structurally a project-wide utility but currently
-    lives in a per-train-model file. When E231-500 / E233 train models land,
-    move it to ``utils.py`` and re-import from there. Keep the same contract.
-    """
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).parent
-    else:
-        return Path(__file__).parent.parent.parent.parent
+# Backward-compat alias — canonical home is app_paths.project_root.
+from app_paths import project_root as get_base_dir  # noqa: E402, F401
 
 
 def load_json_relative(filename: str) -> dict:

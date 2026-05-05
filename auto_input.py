@@ -84,7 +84,9 @@ class Layer3State:
 #
 # Local-only (gitignored). Crash-safe: each line flushed immediately. Plot
 # generator (separate script — TODO) reads all three record types.
-RECORDINGS_DIR = Path(__file__).parent / "_recordings"
+from app_paths import project_root
+
+RECORDINGS_DIR = project_root() / "_recordings"
 
 
 def _build_stops_meta(sim) -> list[dict]:
@@ -207,7 +209,7 @@ _panel_font: Optional[pygame.font.Font] = None
 def _get_panel_font() -> pygame.font.Font:
     global _panel_font
     if _panel_font is None:
-        _panel_font = pygame.font.Font(str(Path(__file__).parent / "fonts" / "ShinGoPr6N-Medium.otf"), 14)
+        _panel_font = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 14)
     return _panel_font
 
 
@@ -272,7 +274,7 @@ def _render_report_async(log_path: Path) -> None:
     """
     try:
         from plot_drive import render_html_report, load_jsonl
-        out_path = Path(__file__).parent / f"{log_path.stem}.html"
+        out_path = project_root() / f"{log_path.stem}.html"
         meta, events, samples = load_jsonl(log_path)
         render_html_report(meta, events, samples, 5, out_path)
         print(f"[Drive recorder] Report saved -> {out_path}")

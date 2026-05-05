@@ -38,7 +38,9 @@ from pathlib import Path
 
 import plotly.graph_objects as go
 
-ROOT = Path(__file__).parent
+from app_paths import project_root
+
+ROOT = project_root()
 RECORDINGS_DIR = ROOT / "_recordings"
 
 
