@@ -56,9 +56,10 @@ This project has codified rules and dormant-scaffolding patterns; surface findin
 - Style violations (project uses Black via pre-commit, .otf fonts only, `sta` terminology not 'departure_melody')
 - Inefficiencies that bite at runtime
 - Missing tests where the code path warrants one (rare in this project — preview screenshots + by-ear gates are the smoke harness)
+- **Deployment-frame / runtime-semantics verification.** If the diff touches PyInstaller path semantics (`sys.frozen`, `sys._MEIPASS`, `sys.executable`, `Path(__file__)` for behavior-dependent paths), threading primitives, file-I/O timing assumptions, library API behavior that differs between dev and frozen, OR any code where "correctness" depends on runtime conditions not visible from reading the file — verify against primary source (the build script's actual copy logic, the library's runtime-hook source, official docs, or actual exercise of the deployed artifact). Don't accept "intentional / standard / the way it's always done" claims from memory. The 2026-05-05 release-crash trace had a prior reviewer defend `i18n.app_root`'s `_MEIPASS` usage as "intentional semantics" — wrong, because the defense reasoned from generic PyInstaller mythology rather than checking THIS project's build script (which doesn't use `--add-data`, so `_MEIPASS` is empty). Per `principles.md` § "Verify deployment-frame and external-runtime semantics from primary source."
 
 ### Lens 2 — Vibe-check smells
-Apply ALL 10 categories from `.claude/skills/vibe-check/SKILL.md` Step 2:
+Apply ALL 12 categories from `.claude/skills/vibe-check/SKILL.md` Step 2:
 1. Duplicated logic / forked helpers
 2. Dead helpers / unreachable code (EXCEPTION: documented dormant scaffolding with multi-line `# NOTE: deliberately NOT called from ... yet` block — DO NOT flag)
 3. Half-finished implementations
@@ -69,6 +70,10 @@ Apply ALL 10 categories from `.claude/skills/vibe-check/SKILL.md` Step 2:
 8. Stale comments / docstrings contradicting code
 9. Trivial accessors with no derivation
 10. Production code (project root + `displays/`) importing from `_*/` paths
+11. **Local utility helper that should live in a shared module** (path resolver / JSON loader / slug parser / format helper / common regex / stdlib-only helper buried in a feature module instead of `app_paths.py` / `displays/utils.py` / `constants.py` / `i18n.py`). Per `principles.md` § "Search before authoring common utility code."
+12. **Deployment-frame / runtime-semantics primitive outside canonical home, without verification anchor** (`sys._MEIPASS`, `sys.frozen`, `sys.executable`, `Path(__file__)` for behavior-dependent paths, `if frozen:` branching outside `app_paths.py`; OR threading / I/O timing patterns without a comment explaining the invariant). Per `principles.md` § "Verify deployment-frame and external-runtime semantics from primary source." Sibling to Lens 1 verification — Lens 1 fires on the diff; Lens 2 fires on the standing pattern.
+
+**On Lens 2 categories #11 + #12 — pre-flight grep**: when reviewing a diff that introduces a small utility helper or a deployment-frame primitive, do a `grep -rn` cross-codebase pass for sibling implementations BEFORE approving. The duplication isn't visible from the diff alone — it's visible only from the codebase view.
 
 If uncertain whether a finding is a real smell or known-dead-feature / dormant-scaffolding, flag at severity `info` and ASK rather than confidently red-flagging.
 

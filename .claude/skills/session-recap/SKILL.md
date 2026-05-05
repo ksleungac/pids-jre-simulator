@@ -181,6 +181,8 @@ Preloaded files (`CLAUDE.md`, `.claude/rules/*`) hold what humans keep in their 
 
 7. **Be specific.** "Fixed display bug" → "Destination always displays as kanji (no furigana cycling) to match IRL behavior."
 
+8. **Cross-layer alignment when codifying a pattern.** When this session's learnings include a pattern that benefits from being caught at multiple stages of the workflow, **codify it at all three layers**: authoring time (`principles.md` / `conventions.md` — fires on claude every session), post-hoc audit (`/vibe-check` smell — fires when the user audits the codebase), per-diff review (`/review-dirty` Lens — fires on every PR-like review). The three layers have different focus and different timing; missing any one means the pattern can still slip through. **How to apply:** when proposing a new principle, ask "does the same pattern have a smell shape (post-hoc detectable) and a per-diff shape (review-time detectable)?" — if yes, write all three with reciprocal cross-citation. The 2026-05-05 pathology codification did this for both halves (authoring locality → principle "Search before authoring" + vibe-check #11 + review-dirty Lens 2 #11; deployment-frame mythology → principle "Verify deployment-frame ..." + vibe-check #12 + review-dirty Lens 1). Single-layer codifications are weaker; the codification work is mostly the principle, the smell + lens additions are cheap riders that close the recurrence path.
+
 ---
 
 ## Daily log format (`memory/YYYY-MM-DD.md`)

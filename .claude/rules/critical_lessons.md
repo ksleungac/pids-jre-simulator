@@ -142,3 +142,73 @@ When placing a new file:
 - `data_tools/` renamed → `_dev_scripts/`, matching the `_*/` convention so the dev-only status is visible in the folder name itself.
 - `/vibe-check` skill: new smell category #10 ("production code imports from `_*/` paths") — mechanical check for when the convention fails.
 - Codified: `CLAUDE.md` § "Distribution & deployment artifact"; `conventions.md` § "_*" prefix extended with the hard rule + pointer to this entry.
+
+---
+
+## ⚠️ CRITICAL: PyInstaller deployment-frame divergence — path resolution + bundle coverage
+
+**Date:** 2026-05-05
+
+### The Incident
+The v0.5.3 build hit **four separate release-build crashes within an hour**, all from the same family:
+
+1. **Wrong path-root semantic** — `i18n.py:app_root()` returned `Path(sys._MEIPASS)` for frozen builds. But `data/translations_app.json` is NOT bundled INTO the exe via `--add-data`; it ships ALONGSIDE the exe via `/build` Step 4 copy. So `_MEIPASS` was empty for our project. Crashed on launch.
+
+2. **Missing shipped asset (`data/line_icons/`)** — `/build` Step 4 was `Copy-Item "data\*.json"` (only JSON). The transfer-info renderer added in this release loads PNG icons from `data/line_icons/`. Crashed at first render.
+
+3. **Path-root semantic + missing asset, both** — `ocr.py:DEFAULT_TEMPLATES_DIR = Path(__file__).parent / "ocr_templates"` resolved to `_MEIPASS/ocr_templates/` in frozen mode (wrong root). AND `/build` Step 4 didn't copy `ocr_templates/` at all. Double-broken; crashed on `--auto-input`.
+
+4. **Wrong path-root in fonts** — `auto_input.py:_get_panel_font` used `Path(__file__).parent / "fonts" / ...` which resolved to `_MEIPASS/fonts/` — wrong root, even though fonts WERE copied alongside-exe. Crashed on `--auto-input`.
+
+Investigation surfaced **8 path-resolver call sites across 6 files**: 5 broken (no `sys.frozen` check), 1 wrong-semantic (`_MEIPASS`), 1 inline-but-correct duplicate, 1 ad-hoc bypass. Plus 2 missing-asset classes in the build script.
+
+A prior `/review+fix` cycle had explicitly told claude to **leave `i18n.app_root` alone** with the rationale *"those `_MEIPASS` semantics are intentional for read-only bundled assets vs alongside-exe settings."* That defense reasoned from generic PyInstaller mythology (Stack Overflow conflates `--add-data` and alongside-exe staging) — true *sometimes*, wrong here. **Nothing in the codified rule corpus fired** on PyInstaller path resolution; vibe-check + review+fix corpus had no entry that would have made the reviewer verify rather than assume.
+
+### The Rule
+> **Two interlocking rules — both load-bearing.**
+>
+> **(a) Single canonical path resolver.** Every module that loads bundled assets MUST go through `app_paths.project_root()`. No new local `app_root()` / `get_base_dir()` / `_project_root()` helper. No inline `Path(sys.executable).parent if frozen else Path(__file__).parent`. No `sys._MEIPASS` references outside `app_paths.py` (we don't use `--add-data` for project assets — only `--collect-data plotly` for plotly's library bundle). Inventing a local resolver is the smell that produced this incident.
+>
+> **(b) Bundle script tracks program asset reads.** When the program adds a new top-level alongside-exe asset tree (or a new asset-class within an existing tree), `/build` Step 4's stage copy must cover it. Drift between "program reads X" and "build copies X" is silent in dev (both trees present) and explodes in the release exe. The 2026-05-05 fix inverted Step 4 from include-list to exclude-list (default-ship every top-level dir, maintain only what NOT to ship) so new asset folders ship automatically.
+
+### PyInstaller mechanism distinction (the actual semantics)
+
+- **`sys._MEIPASS`** — temp directory created at exe startup, populated by extracting files bundled INTO the exe via `--add-data` or `--collect-data <pkg>`. Lifetime = the exe's run.
+- **`Path(sys.executable).parent`** — directory containing the exe on disk. This is where `/build` Step 4 copies `data/`, `fonts/`, `audio/`, `ocr_templates/` next to the exe at stage time.
+
+**This codebase uses `_MEIPASS` ONLY for plotly's library bundle (via `--collect-data plotly`), never for project assets.** Therefore `_MEIPASS` is the wrong answer for any project-side asset load. If a future change adds `--add-data` for some asset class, that's a new contract that needs its own helper and its own CONTRACT block.
+
+### Applies To
+- All Python modules under project root + `displays/` that load JSON, fonts, images, audio, or any other bundled asset at runtime.
+- All future asset directories that get added under `data/` or as new top-level alongside-exe trees.
+- The `/build` skill's Step 4 stage-copy commands.
+
+### The Pattern (Use This Every Time)
+
+When adding a module that loads a bundled asset:
+1. **Import from `app_paths`.** `from app_paths import project_root` — never invent a local helper.
+2. **Resolve via `project_root() / "<dir>" / "<file>"`.** No `Path(__file__)` math, no `sys._MEIPASS`, no `Path(sys.executable).parent` re-implementation.
+3. **Fail loud at the load site** if the file is missing (`if not path.exists(): raise FileNotFoundError(...)` with the resolved path + a hint about the build/data fix). Silent no-ops are the worst-case mode.
+
+When adding a new asset directory or file class to `data/`, `fonts/`, `audio/`, or any new alongside-exe tree:
+1. **Smoke-test the release build, not just dev.** A new asset class only proves itself in the frozen exe — dev mode reads it through `Path(__file__).parent` which always works.
+2. **The default-ship build script** (Step 4 inversion landed 2026-05-05) handles new top-level dirs automatically. New subdirs under `data/`, `fonts/`, `ocr_templates/` ship via the recursive copy. New top-level dirs need no skill edit unless they should be excluded.
+
+When reviewing diffs that touch deployment-frame primitives:
+- Verify against primary source (the build script's actual behavior, the library's runtime hook, official docs) — not cached impression. "Leave it alone, semantics are intentional" is a load-bearing claim; confirm before saying it.
+
+### Why This Matters
+- **Each individual misclassification was locally defensible.** "_MEIPASS is for bundled assets" sounds right; "data/*.json is what data/ contains" sounds right. Only the deployment-frame view (what does Step 4 actually copy? what does `_MEIPASS` actually contain?) makes the contradiction visible.
+- **Dev mode hides every variant.** `Path(__file__).parent` always resolves to project root in dev; `data/line_icons/` is always present in dev. The release exe is the only environment that exercises the divergence.
+- **Cached PyInstaller impressions are unreliable.** The ecosystem has multiple bundling mechanisms (`--add-data`, `--collect-data`, `--onefile` extraction, alongside-exe copy via stage script). A reviewer reasoning about "what `_MEIPASS` is for" without checking which mechanism THIS project uses produces wrong classifications.
+- **Authoring locality compounds the risk.** Each module's author solved the path-resolution problem in isolation; nobody noticed they were all solving the same problem. The duplication wasn't visible from any single file's view — only cross-codebase grep surfaced the four siblings.
+- **Sibling lessons** (2026-04-27, 2026-04-30 above): runtime-required materials must be committed; lazy import ≠ optional dep. Today's incident is the third sibling: **path resolution + shipped-bundle coverage are deployment-frame contracts, not dev-time correctness checks.** All three lessons share the same root: **claude reasons about code as text rather than as a deployed artifact.**
+
+### Concrete fix applied (this incident)
+- **`app_paths.py` created** at project root — single canonical `project_root()` helper with PyInstaller-aware branching + terse `# CONTRACT:` block pointing here.
+- **5 broken/wrong path-resolvers consolidated**: `displays/utils.py:project_root`, `upper_lcd.py:get_base_dir`, `i18n.py:app_root` collapsed to thin re-exports/aliases of `app_paths.project_root`. `i18n.py:settings_path()` inline duplicate replaced with `project_root()` call. `app.py:_load_station_db` ad-hoc resolver replaced with `project_root()`.
+- **3 broken-Path(__file__) sites in auto_input.py + 1 in ocr.py + 1 in plot_drive.py** all routed through `app_paths.project_root()`.
+- **`/build` skill Step 4 inverted** from include-list (`Copy-Item "data\*.json"` etc.) to exclude-list (default-ship every top-level dir, maintain `$shipExclude` for what NOT to ship). New asset folders ship automatically; misses are no longer possible by omission.
+- **`principles.md`**: two new entries — *"Search before authoring common utility code"* (authoring-time discipline) and *"Verify deployment-frame and external-runtime semantics from primary source"* (review-time discipline).
+- **`/vibe-check`**: smell #11 (utility-helper duplication) + smell #12 (deployment-frame primitive outside canonical home) added.
+- **`/review-dirty`**: Lens 1 extended with deployment-frame verification check; Lens 2 categories #11 + #12 added with cross-codebase grep pre-flight requirement.

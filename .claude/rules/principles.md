@@ -49,6 +49,27 @@ Recurred multiple times on 2026-05-02 across distinct substrates (code-comment c
 - **When the user reframes a concept** (e.g. "badge → per-press nag indicator"), sweep all related logic for cascading implications in one pass. Don't iterate point-fixes while the user surfaces each implication — the reframing is the trigger to re-walk the whole behavior tree.
 - **When the user pushes back** ("wrong place", "why is it only X", "no, that's not it"), the first move is to **re-read the source-of-truth** — file, doc, comment, skill text. NOT to re-justify the prior position from memory. Defense-from-memory after pushback is the most concerning shape because the source is usually already loaded in context, and the pushback is the strongest signal that cached impression diverged from what the source actually says.
 
+### Verify deployment-frame and external-runtime semantics from primary source
+
+When authoring or defending code whose behavior depends on the deployment frame (PyInstaller frozen vs dev), library runtime hooks, OS specifics, threading primitives, I/O timing, or other "happens-at-runtime" semantics — verify against the primary source (the library's own runtime-hook code, the build script's actual copy logic, official docs, or actual exercise of the deployed artifact). Not cached impression. Not Stack Overflow. Not "the way it's always done."
+
+**Why:** the 2026-05-05 release-crash incident had a knowledge-side cause as well as a structural one (sibling: "Search before authoring common utility code"). A prior `/review+fix` reviewer defended `i18n.app_root`'s `Path(sys._MEIPASS)` as "intentional semantics for read-only bundled assets vs alongside-exe settings." That defense was reasoned from generic PyInstaller mythology — true *sometimes* (when `--add-data` is used) — but wrong here, because THIS project doesn't use `--add-data`; data ships alongside-exe via build-script copy. The reviewer was confidently wrong because they didn't verify against THIS project's build mechanism. Cached impression is unreliable for behavior that isn't visible from reading the code. The same shape — runtime behavior assumed from memory rather than verified — is how all four release-build crashes today (path resolution × 2, missing line_icons, missing ocr_templates) slipped past previous review cycles.
+
+**How to apply:**
+
+- **Trigger heuristics** ("this code has deployment-frame / runtime semantics"):
+  - References `sys._MEIPASS`, `sys.frozen`, `sys.executable`, or `Path(__file__)` for behavior-dependent paths.
+  - Branching on `if frozen:` / `if dev:` / `os.environ.get(...)` for behavior switches.
+  - Threading / concurrency primitives (`threading.Lock`, queues, async ordering, locks held across yields).
+  - File-I/O timing assumptions (write-then-read, mtime checks, atomic-rename patterns).
+  - Library API behavior that differs between dev and production install, between versions, or between platforms.
+- **Verify against primary source, not memory:**
+  - **For PyInstaller**: check `/build` skill Step 4 (what's actually copied alongside-exe?) and the project's own `app_paths.py` CONTRACT. Don't assume `_MEIPASS` semantics from SO answers.
+  - **For library quirks**: check the library's own source (e.g. PyInstaller's `loader/pyiboot01_bootstrap.py`). SO answers conflate platforms / mechanisms.
+  - **For threading / I/O**: trace the actual call ordering with grep, not from memory.
+- **When reviewing**: if you're about to defend a behavior as "intentional" / "the standard pattern" / "leave it alone, those semantics are correct" — that phrase is **load-bearing**. Confirm against the primary source before saying it. Cached confidence is the failure mode this rule fights.
+- **Sibling**: `Verify before claiming` (above) covers reading source code in this codebase; this one covers external runtime / deployment behavior.
+
 ### Causal depth on diagnoses
 
 When a problem reveals an interesting causal failure (not just a bug to fix, but a pattern of mistake), develop the causal analysis fully before jumping to the fix. Surface-level "X things got conflated" or "three contributing factors" framings are usually shortcuts — push for the actual underlying frame mismatch or cognitive failure that explains all the symptoms.
@@ -189,6 +210,21 @@ Before running tools that re-encode / overwrite / delete files in place (e.g. `_
 **Why:** Destructive in-place modifications are unrecoverable without a snapshot. Re-deriving lost data from source mp3s is hours of work; the disk cost of a snapshot is seconds.
 
 **How to apply:** Snapshot before any tool that modifies its input file in place. Delete the snapshot only after the by-ear / smoke-test gate passes. Pure relocations (`mv` to `_archive/`) don't need a separate backup — the move itself is reversible.
+
+### Search before authoring common utility code
+
+Before writing a function that does something that "feels generic" — path resolution, JSON loading, slug parsing, regex over common strings, file existence checks, format helpers, settings persistence, anything that sounds like it could already exist somewhere — **grep the codebase for an existing implementation first**. If one exists: import it. If your case isn't covered: extend the existing one with your branch / argument. Only write a fresh helper when grep genuinely shows nothing.
+
+**Why:** The 2026-05-05 release-crash incident traced to four separate path-resolver helpers (`app_root`, `get_base_dir`, `project_root`, ad-hoc) authored independently in four files. Each author solved their local problem; nobody noticed they were all solving the same problem. One of the four had wrong PyInstaller semantics. The duplication wasn't visible from any single file's perspective — it took a release crash + cross-codebase grep to surface. Authoring locality (looking only at the file you're editing) is the failure mode.
+
+**How to apply:**
+
+- **Trigger heuristics** ("this might already exist"): function < 20 lines, body uses only stdlib (`pathlib`, `json`, `re`, `sys`, `os`), name like `load_*`, `resolve_*`, `parse_*`, `format_*`, `_*_root`, `_*_path`, `_*_dir`. No domain-specific imports.
+- **Cheap check before writing**: `grep -rn "<name-stem>\|<sibling-stems>" --include="*.py" .` excluding `.venv/`. Even imperfect grep catches obvious duplicates. Look first in shared modules: `app_paths.py`, `displays/utils.py`, `constants.py`, `i18n.py`.
+- **If found**: import it. If your case isn't covered, EXTEND the existing function (add a branch / parameter / overload) rather than fork.
+- **If genuinely not found**: write it in the most discoverable home — top-level utility module if cross-cutting, package `utils.py` if package-local. Don't bury it in the file you happen to be editing.
+- **Name for grep-discoverability**: `project_root` is searchable; `_my_root_helper` isn't. Future-you grepping "root" needs to find your helper, not skip past it.
+
 
 ---
 

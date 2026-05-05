@@ -98,32 +98,49 @@ uv run --no-dev --group build pyinstaller --onefile --console --name "JRE-PA-Sim
 
 The shipped zip ships the audio folder populated with all real route data (excluding `audio/_*/` — preserved-but-not-shipped). During smoke-test we want the staged folder to be **immediately runnable** without first copying ~600 MB of audio, so we use a **junction**: `dist-release/JRE-PA-Simulator/audio` points at the project's real `audio/`. At zip time, Step 6 breaks the junction and replaces it with a real directory containing the shippable subset.
 
-```powershell
-New-Item -ItemType Directory -Force -Path "dist-release\JRE-PA-Simulator\fonts" | Out-Null
-New-Item -ItemType Directory -Force -Path "dist-release\JRE-PA-Simulator\data" | Out-Null
-Copy-Item "dist\JRE-PA-Simulator.exe" "dist-release\JRE-PA-Simulator\"
-Copy-Item "fonts\*" "dist-release\JRE-PA-Simulator\fonts\"
+**Inclusion model — default-ship, not hand-picked.** Stage every top-level project-root directory by default; maintain only an exclusion list. This solves the recurring "we forgot to add the new asset folder" class (2026-05-05 line_icons + ocr_templates) — new folders ship automatically; if a folder shouldn't ship, you add it to `$shipExclude` in a single visible action. The cost asymmetry is heavy in favor of over-shipping: missing-required-asset = release crash; extra-shipped-folder = a few MB in the zip.
 
-# Copy everything under data/ except harness `_*` entries. Recursive — captures
-# JSON files (lines.json, stations.json, ...) AND subdirectories (line_icons/,
-# any future asset trees) without hand-picking. Matches the audio/_*/ exclusion
-# pattern from Step 6.
-Get-ChildItem -Path "data" | Where-Object { $_.Name -notmatch '^_' } | ForEach-Object {
-    Copy-Item -Path $_.FullName -Destination "dist-release\JRE-PA-Simulator\data\" -Recurse -Force
+```powershell
+New-Item -ItemType Directory -Force -Path "dist-release\JRE-PA-Simulator" | Out-Null
+Copy-Item "dist\JRE-PA-Simulator.exe" "dist-release\JRE-PA-Simulator\"
+
+# Default-ship every top-level directory at project root, excluding:
+# - `_*` prefix (preserved-not-shipped: _archive, _mock, _dev_scripts, ...)
+# - `.*` prefix (.git, .venv, .claude, .github, .vscode, .idea, ...)
+# - Hard-listed dev / repo-only / build-output folders below.
+$shipExclude = @(
+    'dist', 'dist-release', 'build',  # build outputs (would self-recurse)
+    'displays',                        # Python source — bundled INTO exe by PyInstaller, not alongside
+    'memory', 'lcd_references',        # repo-only / dev refs
+    'audio_src', 'data_tools', 'docs'  # dev tooling / repo-only
+)
+
+$shipDirs = Get-ChildItem -Path "." -Directory | Where-Object {
+    $_.Name -notmatch '^[_.]' -and $_.Name -notin $shipExclude
 }
 
-# OCR templates — required at runtime by auto_input + ocr modules when
-# OCR Auto-PA is enabled (--auto-input). Per CLAUDE.md § "Distribution
-# & deployment artifact", ocr_templates/ is a top-level bundled tree.
-Copy-Item "ocr_templates" "dist-release\JRE-PA-Simulator\" -Recurse -Force
+Write-Host "Shipping top-level directories:" -ForegroundColor Cyan
+$shipDirs | ForEach-Object { Write-Host "  $($_.Name)" }
 
-# audio/ — junction to project-root audio (transparent to the exe, no copy)
-$projectAudio = (Resolve-Path "audio").Path
-New-Item -ItemType Junction -Path "dist-release\JRE-PA-Simulator\audio" -Target $projectAudio | Out-Null
+foreach ($dir in $shipDirs) {
+    if ($dir.Name -eq 'audio') {
+        # audio/ — junction during smoke test (Step 6 breaks + replaces with real copy at zip time)
+        $projectAudio = (Resolve-Path "audio").Path
+        New-Item -ItemType Junction -Path "dist-release\JRE-PA-Simulator\audio" -Target $projectAudio | Out-Null
+    } else {
+        # Recursive copy, excluding `_*` harness subdirs (matches the audio/_*/ pattern)
+        $destDir = "dist-release\JRE-PA-Simulator\$($dir.Name)"
+        New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+        Get-ChildItem -Path $dir.FullName | Where-Object { $_.Name -notmatch '^_' } | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination $destDir -Recurse -Force
+        }
+    }
+}
 ```
 
-- Copy **all** non-harness entries under `data/` (recursive). Do not hand-pick files or subdirectories — `stations.json`, `line_icons/`, future asset trees should all ship without skill edits. The `_*` exclusion handles future `data/_*` harness files (none today).
-- **Bundle-script must track program asset reads.** If the program adds a new top-level alongside-exe asset tree (e.g. a new `data/<thing>/` subdirectory, or a new top-level `<thing>/` folder beside `data/`), the recursive copy above handles new `data/` subdirectories automatically — but a NEW top-level folder needs its own Copy-Item line here. Per `critical_lessons.md` § "PyInstaller — alongside-exe vs `_MEIPASS`" (2026-05-05 incident), drift between "program reads X" and "build copies X" is silent in dev and explodes in the release exe. Smoke-test the release build, not just dev, when extending asset coverage.
+- **The print-out of `$shipDirs`** is a soft guard — eyeball-confirm what's being staged at the start of every build. If something appears that shouldn't, add to `$shipExclude` (a deliberate, visible action) and re-run.
+- **Adding a new top-level dev-only folder** (e.g. `_visual_iter/`, `_recordings/`, `audio_src/`) — convention is `_*` prefix or `.*` prefix; otherwise add to `$shipExclude`. New shipped folders need no skill edit at all.
+- **The `_*` filter applies recursively** — `data/_*`, `fonts/_*`, `ocr_templates/_*` would all be excluded if added in future, matching the `audio/_*/` Step-6 pattern.
 - Junction caveats:
   - Works without admin rights (junctions ≠ symlinks on Windows).
   - The exe sees it as an ordinary `audio/` directory — `Path(sys.executable).parent / "audio" / ...` resolves through transparently.
@@ -203,7 +220,7 @@ Don't run `/release` automatically — wait for the user to invoke it. `/build` 
 
 ## `_*` folder convention (preserved-but-not-shipped)
 
-Folders prefixed with `_` under `audio/` (e.g. `audio/_mock/`, `audio/_archive/`) are preserved in the repo but **must not ship** to end users. Step 6 explicitly enforces this via the `Where-Object { $_.Name -notmatch '^_' }` filter when copying line folders into the staged audio directory. Same convention applies to any future `data/_*.json` (none today; if added, update the `Copy-Item "data\*.json"` step in Step 4 to exclude them).
+Folders prefixed with `_` under `audio/` (e.g. `audio/_mock/`, `audio/_archive/`) are preserved in the repo but **must not ship** to end users. Step 6 explicitly enforces this via the `Where-Object { $_.Name -notmatch '^_' }` filter when copying line folders into the staged audio directory. Same convention applies recursively to any future `data/_*`, `fonts/_*`, `ocr_templates/_*` — Step 4's per-dir `Get-ChildItem ... | Where-Object { $_.Name -notmatch '^_' }` block already excludes them, so no skill edit is needed when new harness subdirs appear under shipped trees.
 
 The smoke-test junction in Step 4 transparently includes `_*/` folders — that's intentional. The user can preview-test against the mock catalog from inside the staged folder before the zip excludes them.
 
