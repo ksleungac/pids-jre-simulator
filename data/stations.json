@@ -1,24 +1,490 @@
 {
-    "上野": {"code_3": "UEN"},
-    "品川": {"code_3": "SGW"},
-    "大宮": {"code_3": "OMY"},
-    "大崎": {"code_3": "OSK"},
-    "大船": {"code_3": "OFN"},
-    "川崎": {"code_3": "KWS"},
-    "恵比寿": {"code_3": "EBS"},
+    "上野": {
+        "code_3": "UEN",
+        "transfers": [
+            "tohoku_shinkansen",
+            "yamanote",
+            "keihin_tohoku",
+            "utsunomiya_takasaki.utsunomiya",
+            "utsunomiya_takasaki.takasaki",
+            "joban_rapid",
+            "ueno_tokyo.tohoku_joban",
+            "ginza",
+            "hibiya"
+        ],
+        "transfers_by_view": {
+            "JY_inner": {"drop": ["keihin_tohoku"]}
+        }
+    },
+    "品川": {
+        "code_3": "SGW",
+        "transfers": [
+            "tokaido_shinkansen",
+            "yamanote",
+            "keihin_tohoku",
+            "tokaido",
+            "ueno_tokyo.tokaido",
+            "yokosuka_sobu.yokosuka",
+            "keikyu"
+        ],
+        "transfers_by_view": {
+            "JY_inner": {
+                "edit": {"keihin_tohoku": "keihin_tohoku.oimachi_kamata"}
+            }
+        }
+    },
+    "大宮": {
+        "code_3": "OMY",
+        "transfers": [
+            "tohoku_shinkansen",
+            "keihin_tohoku",
+            "utsunomiya_takasaki.utsunomiya",
+            "utsunomiya_takasaki.takasaki",
+            "ueno_tokyo.tohoku",
+            "shonan_shinjuku",
+            "saikyo_kawagoe.saikyo",
+            "saikyo_kawagoe.kawagoe",
+            "tobu_noda",
+            "new_shuttle"
+        ],
+        "transfers_by_view": {
+            "JK_south": {"drop": ["shonan_shinjuku", "ueno_tokyo"]},
+            "JA_north": {"drop": ["ueno_tokyo"]}
+        }
+    },
+    "大崎": {
+        "code_3": "OSK",
+        "transfers": [
+            "saikyo_kawagoe.saikyo",
+            "shonan_shinjuku",
+            "sotetsu_through",
+            "rinkai"
+        ],
+        "transfers_by_view": {
+            "JY_inner": {"drop": ["saikyo_kawagoe"]},
+            "JA_north": {"drop": ["sotetsu_through"]}
+        }
+    },
+    "大船": {
+        "code_3": "OFN",
+        "transfers": [
+            "tokaido",
+            "yokosuka_sobu.yokosuka",
+            "ueno_tokyo.tokaido",
+            "shonan_shinjuku",
+            "negishi",
+            "shonan_monorail"
+        ],
+        "transfers_by_view": {
+            "JO_north": {"drop": ["ueno_tokyo", "shonan_shinjuku"]}
+        }
+    },
+    "川崎": {
+        "code_3": "KWS",
+        "transfers": [
+            "tokaido",
+            "keihin_tohoku",
+            "ueno_tokyo.tokaido",
+            "nambu"
+        ],
+        "transfers_by_view": {
+            "JK_south": {"drop": ["ueno_tokyo"]}
+        }
+    },
+    "恵比寿": {
+        "code_3": "EBS",
+        "transfers": [
+            "yamanote",
+            "saikyo_kawagoe.saikyo",
+            "shonan_shinjuku",
+            "hibiya"
+        ],
+        "transfers_by_view": {
+            "JY_inner": {"drop": ["saikyo_kawagoe"]}
+        }
+    },
     "戸塚": {"code_3": "TTK"},
-    "新宿": {"code_3": "SJK"},
-    "新橋": {"code_3": "SMB"},
-    "日暮里": {"code_3": "NPR"},
-    "東京": {"code_3": "TYO"},
-    "横浜": {"code_3": "YHM"},
-    "武蔵小杉": {"code_3": "MKG"},
-    "池袋": {"code_3": "IKB"},
-    "浜松町": {"code_3": "HMC"},
-    "浦和": {"code_3": "URW"},
-    "渋谷": {"code_3": "SBY"},
-    "神田": {"code_3": "KND"},
-    "秋葉原": {"code_3": "AKB"},
-    "赤羽": {"code_3": "ABN"},
+    "御徒町": {
+        "transfers": [
+            "yamanote",
+            "keihin_tohoku",
+            "oedo"
+        ],
+        "transfers_by_view": {
+            "JY_inner": {"drop": ["keihin_tohoku"]}
+        }
+    },
+    "鶯谷": {
+        "transfers": [
+            "yamanote",
+            "keihin_tohoku"
+        ],
+        "transfers_by_view": {
+            "JY_inner": {"drop": ["keihin_tohoku"]}
+        }
+    },
+    "西日暮里": {
+        "transfers": [
+            "yamanote",
+            "keihin_tohoku",
+            "nippori_toneri",
+            "chiyoda"
+        ],
+        "transfers_by_view": {
+            "JY_inner": {"drop": ["keihin_tohoku"]}
+        }
+    },
+    "田端": {
+        "transfers": [
+            "yamanote",
+            "keihin_tohoku"
+        ]
+    },
+    "駒込": {
+        "transfers": [
+            "yamanote",
+            "namboku"
+        ]
+    },
+    "巣鴨": {
+        "transfers": [
+            "yamanote",
+            "mita"
+        ]
+    },
+    "大塚": {
+        "transfers": [
+            "yamanote",
+            "toden_arakawa"
+        ]
+    },
+    "高田馬場": {
+        "transfers": [
+            "yamanote",
+            "seibu_shinjuku",
+            "tozai"
+        ]
+    },
+    "代々木": {
+        "transfers": [
+            "yamanote",
+            "sobu_local",
+            "oedo"
+        ],
+        "transfers_by_view": {
+            "JY_inner": {"drop": ["sobu_local"]}
+        }
+    },
+    "原宿": {
+        "transfers": [
+            "yamanote",
+            "chiyoda",
+            "fukutoshin"
+        ]
+    },
+    "目黒": {
+        "transfers": [
+            "yamanote",
+            "tokyu_meguro",
+            "namboku",
+            "mita"
+        ]
+    },
+    "五反田": {
+        "transfers": [
+            "yamanote",
+            "tokyu_ikegami",
+            "asakusa"
+        ]
+    },
+    "田町": {
+        "transfers": [
+            "yamanote",
+            "keihin_tohoku"
+        ]
+    },
+    "有楽町": {
+        "transfers": [
+            "yamanote",
+            "keihin_tohoku",
+            "hibiya",
+            "yurakucho"
+        ],
+        "transfers_by_view": {
+            "JY_inner": {"drop": ["keihin_tohoku"]}
+        }
+    },
+    "新日本橋": {
+        "transfers": [
+            "yokosuka_sobu.sobu",
+            "ginza",
+            "hanzomon"
+        ]
+    },
+    "馬喰町": {
+        "transfers": [
+            "yokosuka_sobu.sobu",
+            "shinjuku",
+            "asakusa"
+        ]
+    },
+    "錦糸町": {
+        "transfers": [
+            "yokosuka_sobu.sobu",
+            "sobu_local",
+            "hanzomon"
+        ]
+    },
+    "新小岩": {
+        "transfers": [
+            "yokosuka_sobu.sobu",
+            "sobu_local"
+        ]
+    },
+    "市川": {
+        "transfers": [
+            "yokosuka_sobu.sobu",
+            "sobu_local"
+        ]
+    },
+    "船橋": {
+        "transfers": [
+            "yokosuka_sobu.sobu",
+            "sobu_local",
+            "tobu_noda",
+            "keisei"
+        ]
+    },
+    "津田沼": {
+        "transfers": [
+            "yokosuka_sobu.sobu",
+            "sobu_local",
+            "shin_keisei"
+        ]
+    },
+    "稲毛": {
+        "transfers": [
+            "yokosuka_sobu.sobu",
+            "sobu_local"
+        ]
+    },
+    "千葉": {
+        "transfers": [
+            "yokosuka_sobu.sobu",
+            "sobu_local",
+            "uchibo",
+            "sotobo",
+            "narita_line",
+            "keisei_chiba",
+            "chiba_urban_monorail"
+        ],
+        "transfers_by_view": {
+            "JO_east": {"drop": ["sobu_local"]}
+        }
+    },
+    "都賀": {
+        "transfers": [
+            "yokosuka_sobu.sobu",
+            "chiba_urban_monorail"
+        ]
+    },
+    "佐倉": {
+        "transfers": [
+            "yokosuka_sobu.sobu",
+            "sobu_main.naruto"
+        ]
+    },
+    "成田": {
+        "transfers": [
+            "yokosuka_sobu.sobu",
+            "narita_line.abiko",
+            "narita_line.sawara"
+        ]
+    },
+    "新宿": {
+        "code_3": "SJK",
+        "transfers": [
+            "yamanote",
+            "chuo_rapid",
+            "sobu_local",
+            "shonan_shinjuku",
+            "saikyo_kawagoe.saikyo",
+            "odakyu",
+            "keio",
+            "marunouchi",
+            "shinjuku",
+            "oedo"
+        ]
+    },
+    "新橋": {
+        "code_3": "SMB",
+        "transfers": [
+            "yamanote",
+            "keihin_tohoku",
+            "tokaido",
+            "ueno_tokyo.tokaido.scale(0.75)",
+            "ginza",
+            "asakusa",
+            "yurikamome"
+        ],
+        "transfers_by_view": {
+            "JY_inner": {"drop": ["keihin_tohoku", "tokaido", "ueno_tokyo"]}
+        }
+    },
+    "日暮里": {
+        "code_3": "NPR",
+        "transfers": [
+            "yamanote",
+            "keihin_tohoku",
+            "joban_rapid",
+            "keisei",
+            "nippori_toneri"
+        ],
+        "transfers_by_view": {
+            "JY_inner": {"drop": ["keihin_tohoku"]}
+        }
+    },
+    "東京": {
+        "code_3": "TYO",
+        "transfers": [
+            "tohoku_shinkansen.scale(0.90)",
+            "tokaido_shinkansen.scale(0.90)",
+            "yamanote",
+            "keihin_tohoku",
+            "chuo_rapid",
+            "tokaido",
+            "ueno_tokyo.tohoku_tokaido.scale(0.75)",
+            "yokosuka_sobu.yokosuka",
+            "yokosuka_sobu.sobu",
+            "keiyo",
+            "marunouchi"
+        ],
+        "transfers_by_view": {
+            "JY_inner": {"drop": ["keihin_tohoku", "chuo_rapid", "ueno_tokyo"]}
+        }
+    },
+    "横浜": {
+        "code_3": "YHM",
+        "transfers": [
+            "keihin_tohoku",
+            "tokaido",
+            "ueno_tokyo.tokaido.scale(0.75)",
+            "shonan_shinjuku.scale(0.75)",
+            "negishi",
+            "yokohama_line",
+            "yokosuka_sobu.yokosuka",
+            "keikyu",
+            "tokyu_toyoko",
+            "sotetsu",
+            "minatomirai",
+            "yokohama_subway_blue.scale(0.75)"
+        ]
+    },
+    "武蔵小杉": {
+        "code_3": "MKG",
+        "transfers": [
+            "nambu",
+            "shonan_shinjuku",
+            "yokosuka_sobu.yokosuka",
+            "tokyu_toyoko",
+            "tokyu_meguro",
+            "sotetsu_through.hazawa"
+        ],
+        "transfers_by_view": {
+            "JO_north": {"drop": ["shonan_shinjuku"]}
+        }
+    },
+    "池袋": {
+        "code_3": "IKB",
+        "transfers": [
+            "yamanote",
+            "shonan_shinjuku",
+            "saikyo_kawagoe.saikyo",
+            "tobu_tojo",
+            "seibu_ikebukuro",
+            "marunouchi",
+            "yurakucho",
+            "fukutoshin"
+        ]
+    },
+    "浜松町": {
+        "code_3": "HMC",
+        "transfers": [
+            "yamanote",
+            "keihin_tohoku",
+            "tokyo_monorail",
+            "oedo"
+        ],
+        "transfers_by_view": {
+            "JY_inner": {"drop": ["keihin_tohoku"]}
+        }
+    },
+    "浦和": {
+        "code_3": "URW",
+        "transfers": [
+            "keihin_tohoku",
+            "utsunomiya_takasaki.utsunomiya",
+            "utsunomiya_takasaki.takasaki",
+            "shonan_shinjuku",
+            "ueno_tokyo.tohoku"
+        ],
+        "transfers_by_view": {
+            "JK_south": {"drop": ["shonan_shinjuku", "ueno_tokyo"]}
+        }
+    },
+    "渋谷": {
+        "code_3": "SBY",
+        "transfers": [
+            "yamanote",
+            "shonan_shinjuku",
+            "saikyo_kawagoe.saikyo",
+            "tokyu_toyoko",
+            "tokyu_denentoshi",
+            "keio_inokashira",
+            "ginza",
+            "hanzomon",
+            "fukutoshin"
+        ]
+    },
+    "神田": {
+        "code_3": "KND",
+        "transfers": [
+            "yamanote",
+            "keihin_tohoku",
+            "chuo_rapid",
+            "ginza"
+        ],
+        "transfers_by_view": {
+            "JY_inner": {"drop": ["keihin_tohoku"]}
+        }
+    },
+    "秋葉原": {
+        "code_3": "AKB",
+        "transfers": [
+            "yamanote",
+            "keihin_tohoku",
+            "sobu_local",
+            "tsukuba_express",
+            "hibiya"
+        ],
+        "transfers_by_view": {
+            "JY_inner": {"drop": ["keihin_tohoku"]}
+        }
+    },
+    "赤羽": {
+        "code_3": "ABN",
+        "transfers": [
+            "keihin_tohoku",
+            "utsunomiya_takasaki.utsunomiya",
+            "utsunomiya_takasaki.takasaki",
+            "shonan_shinjuku",
+            "saikyo_kawagoe.saikyo",
+            "ueno_tokyo.tohoku"
+        ],
+        "transfers_by_view": {
+            "JK_south": {"drop": ["ueno_tokyo"]},
+            "JA_north": {"drop": ["ueno_tokyo"]}
+        }
+    },
     "高輪ゲートウェイ": {"code_3": "TGW"}
 }

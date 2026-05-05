@@ -7,7 +7,9 @@ display package — every train-model module imports from here.
 """
 
 import re
+import sys
 from contextlib import contextmanager
+from pathlib import Path
 from typing import List, Tuple
 
 import pygame
@@ -15,6 +17,18 @@ import pygame
 
 BADGE_TEXT = (15, 15, 15)  # dark — text sits on white interior
 WHITE_BG = (230, 230, 230)
+
+
+# CONTRACT: Resolve the repo root for asset loading in dev AND PyInstaller frozen builds.
+# In a frozen exe, __file__ points under sys._MEIPASS (NOT next to the user's exe where
+# bundled data/audio/fonts live), so we must branch on sys.frozen — see
+# displays/train_models/e235_1000/upper_lcd.py:get_base_dir for the original incident
+# and CLAUDE.md § "Distribution & deployment artifact" for why silent-fail is the worst case.
+def project_root() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    # displays/utils.py → repo root (2-parent climb).
+    return Path(__file__).resolve().parent.parent
 
 
 # =============================================================================

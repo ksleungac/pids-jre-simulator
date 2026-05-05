@@ -1,5 +1,7 @@
 {
     "route": "山手線",
+    "line_code": "JY",
+    "transfer_view": "JY_inner",
     "color": [116,193,30],
     "type": "内回り",
     "dest": "品川・東京",

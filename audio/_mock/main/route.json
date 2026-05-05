@@ -1,5 +1,7 @@
 {
     "route": "モック線",
+    "line_code": "JY",
+    "transfer_view": "JY_inner",
     "color": [150, 30, 120],
     "contrast_color": [255, 215, 0],
     "type": "各駅停車",

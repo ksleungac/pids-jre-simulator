@@ -29,7 +29,9 @@ This document defines the JSON data formats used by the PA Simulator for route c
 data/
 ├── translations.json        # Central translation database (furigana, english)
 ├── train_types.json         # Train type English translations (with optional english_short)
-└── stations.json            # Station metadata (3-letter codes; more fields over time)
+├── lines.json               # Rail line catalog (badges, colors, display names) for transfer entries
+├── line_icons/              # PNG assets for branded line logos (Shinkansen, etc.)
+└── stations.json            # Station metadata (3-letter codes, transfers; more fields over time)
 audio/[line]/[diagram]/route.json   # diagram folder may be omitted for single-diagram lines
 ```
 
@@ -195,6 +197,84 @@ English translations follow the same Hepburn-with-macrons convention as station 
 
 ---
 
+## lines.json Format (Rail Line Catalog)
+
+**Location:** `data/lines.json` (project root)
+
+### Purpose
+
+Catalog of rail lines referenced as transfer entries on station displays. Stores brand metadata (line code, icon asset, display name) once per line, referenced by slug from `stations.json` `transfers` arrays.
+
+### Structure
+
+```json
+{
+    "yamanote": {"badges": [{"code": "JY", "icon": "JY"}], "name_ja": "山手線", "name_en": "Yamanote Line", "category": "jr_east"},
+    "keihin_tohoku": {
+        "badges": [{"code": "JK", "icon": "JK"}],
+        "name_ja": "京浜東北線",
+        "name_en": "Keihin-Tōhoku Line",
+        "category": "jr_east",
+        "variants": {
+            "oimachi_kamata": {
+                "name_ja": "京浜東北線(大井町・蒲田方面)",
+                "name_en": "Keihin-Tōhoku Line (for Ōimachi/Kamata)"
+            }
+        }
+    },
+    "ueno_tokyo": {
+        "badges": [{"code": "JT", "icon": "JT"}, {"code": "JU", "icon": "JU"}],
+        "name_ja": "上野東京ライン",
+        "name_en": "Ueno-Tōkyō Line",
+        "category": "jr_east",
+        "variants": {
+            "tokaido": {"badges": [{"code": "JT", "icon": "JT"}]},
+            "tohoku":  {"badges": [{"code": "JU", "icon": "JU"}]}
+        }
+    },
+    "yokosuka_sobu": {
+        "badges": [{"code": "JO", "icon": "JO"}],
+        "category": "jr_east",
+        "variants": {
+            "yokosuka": {"name_ja": "横須賀線",   "name_en": "Yokosuka Line"},
+            "sobu":     {"name_ja": "総武線快速", "name_en": "Sōbu Rapid Line"}
+        }
+    }
+}
+```
+
+### Fields
+
+| Field | Description |
+|-------|-------------|
+| `badges` | Optional. Array of badge objects rendered left-to-right before the line name. Each badge carries `icon` (required — slug naming a PNG asset under `data/line_icons/<slug>.png`), optionally `code` (1-2 letter line code, e.g. `JY` — used by the runtime transfer-filter rule to match against the active route's line code), and optionally `color` (`[r, g, b]` — line-brand color used by the per-train-model badge rendering policy that swaps icon for color-square on certain trains; renderer ignores when policy not active, see [DISPLAY.md § Color-square policy](DISPLAY.md)). One badge for typical JR East lines; multiple for through-running compound services (e.g. UT base = JT + JU); `icon`-only without `code` for Shinkansen / non-JR operators. **If absent** → universal fallback icon (`_universal.png`). |
+| `name_ja` | Japanese display name. Required at base unless the slug is **only** referenced via variants (e.g. `yokosuka_sobu` — base never used directly). |
+| `name_en` | English display name (Hepburn-with-macrons). Same required-unless-variant-only rule as `name_ja`. |
+| `category` | One of `jr_east` / `shinkansen` / `non_jr`. Drives row-grouping. |
+| `variants` | Optional. Map of `<variant_name> → {field overrides}`. Each variant overrides any subset of base fields; missing fields inherit from base. Used for zone-specific badge subsets (UT JT-only south, JU-only north), through-service display variants (Yokosuka vs Sōbu Rapid label on same JO physical line), and direction-qualified line names (Keihin-Tōhoku with `(大井町・蒲田方面)` suffix). Variants are referenced from `stations.json` via dot notation: `slug.variant_name`. |
+
+### Reference resolution (variant + scale)
+
+`stations.json` `transfers` entries can be plain `"slug"`, dotted `"slug.variant"`, or carry a trailing `.scale(N)` modifier (e.g. `"ueno_tokyo.tokaido.scale(0.75)"`). Resolver (`preview_transfers.py:resolve_entry`):
+
+1. Strip optional trailing `.scale(N)` suffix; remember N.
+2. Split remainder on first `.` → `(base_slug, variant_name)`.
+3. **Dot-notation is one level only** for variants. `slug.variant.subvariant` raises ValueError.
+4. **Fail loud** on missing base or unknown variant — never silently fall back. (Per `critical_lessons.md` runtime-required-artifacts rule.)
+5. Merge: variant fields override base; missing fields inherit. The `variants` key is stripped from the resolved output.
+6. If `.scale(N)` was present, override `name_ja_compress` with N; otherwise it defaults to 1.0 (natural width).
+
+**When to apply `.scale(N)`** — only at busy stations whose visible entry count after view-filtering is high enough to crowd a row. Sparse stations have horizontal budget to render at natural width; over-applying compression kills legibility for no benefit. Curate per-station against the IRL reference photo.
+
+### Notes
+
+- **Slug keys are arbitrary IDs** — keep them stable so `stations.json` references don't churn.
+- **Slug names don't carry codes** — `yokosuka_sobu` not `jo_through`. Codes are filter-machinery; names are human-readable. Variant names follow the same rule (`tokaido`/`tohoku` not `jt`/`ju`).
+- **Naming asymmetry to watch**: route folder `audio/sobu/` ↔ lines slug `yokosuka_sobu`. Same physical line, different namespaces (route folder = sim-route diagram; lines slug = transfer catalog). Don't conflate when refactoring either.
+- **Icon slug = filename stem** under `data/line_icons/`. Convention: JR letter codes use the bare code (`JY`, `JK`, `JT`, …); Tokyo Metro / Toei use operator-prefixed slugs (`metro_marunouchi`, `toei_asakusa`, …); descriptive for others; `_universal` for the fallback. Source SVGs live in `lcd_references/line_badges/` and regenerate via `magick -background none <src.svg> -resize 128x128 <dst.png>`.
+
+---
+
 ## stations.json Format (Station Metadata)
 
 **Location:** `data/stations.json` (project root)
@@ -203,7 +283,7 @@ English translations follow the same Hepburn-with-macrons convention as station 
 
 Line-independent station metadata, keyed by Japanese station name. Shares the same key space as `translations.json` but separated by concern:
 - `translations.json` → display text (furigana, english)
-- `stations.json` → operational/physical facts (3-letter codes; future: transfer lines, platforms, etc.)
+- `stations.json` → operational/physical facts (3-letter codes, transfer-line lists; future: platforms, etc.)
 
 A station has a single entry even if it appears on multiple routes (e.g., 秋葉原 is on both Yamanote and Keihin-Tohoku — one row).
 
@@ -211,9 +291,29 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 
 ```json
 {
-    "東京": {"code_3": "TYO"},
-    "秋葉原": {"code_3": "AKB"},
-    "武蔵小杉": {"code_3": "MKG"}
+    "東京": {
+        "code_3": "TYO",
+        "transfers": [
+            "tohoku_shinkansen", "tokaido_shinkansen",
+            "yamanote", "keihin_tohoku", "chuo_rapid", "tokaido",
+            "ueno_tokyo", "keiyo",
+            "yokosuka_sobu.yokosuka", "yokosuka_sobu.sobu",
+            "marunouchi"
+        ]
+    },
+    "品川": {
+        "code_3": "SGW",
+        "transfers": [
+            "yamanote",
+            "keihin_tohoku.oimachi_kamata",
+            "tokaido",
+            "ueno_tokyo.tokaido",
+            "yokosuka_sobu.yokosuka",
+            "tokaido_shinkansen",
+            "keikyu"
+        ]
+    },
+    "秋葉原": {"code_3": "AKB"}
 }
 ```
 
@@ -222,12 +322,16 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 | Field | Description |
 |-------|-------------|
 | `code_3` | JR East 3-letter station code. Only 22 stations total have one — the rule is "3+ JR East systems converge" (with 浜松町 and 高輪ゲートウェイ as explicit exceptions). Absent on all other stations. |
+| `transfers` | Optional. Ordered array of slug references into `data/lines.json`. Each entry is either a plain slug `"yamanote"` or a dotted variant reference `"slug.variant"` (see `lines.json` § Variant resolution). Order matches IRL PIDS reading order (top-to-bottom, left-to-right). Include all lines reaching the station, including the user's active line — the runtime active-line filter drops slugs whose effective `badges[].code` matches the active route. |
+| `transfers_by_view` | Optional. Per-station map keyed by `"<line>_<direction>"` (e.g. `"JY_inner"`, `"JT_south"`). Value is an object with optional ops: `{"drop": [base-slug names...], "edit": {base-slug: replacement-slug-ref, ...}, "rows": [int, ...]}`. `drop` and `edit` match by base slug name — `drop: ["keihin_tohoku"]` drops both plain and any `keihin_tohoku.<variant>` references; `edit: {"keihin_tohoku": "keihin_tohoku.oimachi_kamata"}` replaces whatever `keihin_tohoku`-base entry the flat list has with the variant ref. Drop applied first, then edit. `rows` is an explicit row-partition override — list of ints summing to the post-drop/edit entry count, e.g. `[2, 1]` forces the first 2 entries onto row 0 and the 3rd onto row 1. Bypasses both shinkansen-prefix detection and small-N structural rules; real-render positioning (Rules 1-4 + track-back) still runs within each forced row. Use only when algorithm row-grouping doesn't match IRL — last-resort data hint, expected to be empty for most stations. Mismatched sum → warning + algorithm fallback (no crash). `add` op reserved for future. |
 
 ### Notes
 
 - Not every station needs an entry. Only add rows for stations with metadata to record.
 - Stations without a 3-letter code simply omit the `code_3` key.
 - 3-letter Roman codes (`code_3`) are distinct from 2-character katakana telegraph codes (電略) — the latter is a separate internal JR system and is not stored here.
+- `transfers` populated only for stations with `code_3` in v1 scope (the 22 major interchange catalog). Other stations may gain `transfers` later as data is collected.
+- **Typical category ordering** (within IRL reading order — use as a starting guess, override per IRL reference photo): Shinkansen → own JR line → JR runners (other JR East lines through the station) → private operators (Tōkyū / Keiō / Odakyū / Tōbu / Seibu / Keisei / Tsukuba Express / Yurikamome / monorails) → Tokyo Metro → Toei. Sub-order *within* a category is IRL-driven and varies per station — don't enforce it algorithmically. New stations: list candidates by category as a draft, then reorder against the reference photo.
 
 ---
 
@@ -240,6 +344,8 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 ```json
 {
     "route": "路線名",              // Route name (e.g., 中央線快速電車，埼京線)
+    "line_code": "JY",             // Optional. Active-line badge code (JY/JK/JC/JO/JU/JT/JJ/JE/JN/JA). Drives transfer-info active-line filter — entries whose badges include this code are dropped. Absent → no filter (renders raw transfers).
+    "transfer_view": "JY_inner",   // Optional. Key into each station's `transfers_by_view` map (e.g. JY_inner, JK_south, JO_east). Selects per-station drop/edit ops for this train direction. Absent → no view ops applied.
     "color": [R, G, B],            // Main route color for UI elements
     "contrast_color": [R, G, B],   // Contrast color for pointers/highlights (optional, default: [224, 54, 37] JR red)
     "type_color": [R, G, B],       // Color for train type text (optional, default: black)
@@ -280,8 +386,6 @@ Stations the train traversed **before** the simulator's active route begins — 
 - Window logic operates on `pre_stops + stops` combined. Long combined journeys (>28 cells) flip from a first-window view to a last-window view exactly once, same final shape as native long routes — but the trigger differs: native uses **early-flip** (when `remaining < STOPS_QUANTITY`); pre_stops routes use **late-flip** (when the train would scroll off the right edge of the first window). Late-flip keeps the through-service prefix visible at boot. See `_get_stops_list_disp` in `lower_lcd.py` for the branching.
 - App's `state.curr_stop` still indexes into `stops[]` (sim truth); display code shifts by `len(pre_stops)` internally.
 - Translations / furigana / English not required for pre-route stations — the lower LCD shows kanji only.
-
-**Out of scope (deferred):** display-range truncation. The combined frame currently shows `pre_stops + all of stops`, which can extend past the IRL displayed terminus (e.g. 1217F's IRL frame swaps at Chiba but the simulator's combined frame currently shows through to 成田空港). A `display_end` / range field is on the roadmap; track in conversation memory until a clear schema emerges.
 
 ### Stop-Level Fields
 

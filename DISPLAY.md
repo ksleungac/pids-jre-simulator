@@ -468,11 +468,28 @@ Computed in `_get_window(curr_stop, cursor_pos)`. The two args differ only durin
 
 #### View cycler (`LowerDisplay`)
 
-24s alternation: 12s full-route, 12s 8-station. Lives on `LowerDisplay` (NOT shared with upper's 4s language cycler — they're orthogonal concerns).
+Slot rotation. Three slots with per-slot durations: `FULL` 12s / `EIGHT` 12s / `TRANSFER` 6s. Lives on `LowerDisplay` (NOT shared with upper's 4s language cycler — orthogonal concerns).
 
-**Critical invariant** — `_tick_view_cycle(current_time)` is called from `LowerDisplay.draw()` UNCONDITIONALLY (subject only to the lock check), BEFORE language-mode dispatch. It must NOT live inside the `KANJI/FURIGANA` branch — if it does, the timer pauses while the upper is in ENGLISH (≈ 1/3 of every language cycle) and the 24s cadence drifts longer than spec'd. The renderer picker `_pick_japanese_renderer()` is a pure function of state — no time arg, no side effects.
+**Slot membership** is computed per-frame from state via `_available_slots`:
 
-When `_should_lock_to_eight(curr_stop)` is True, the cycler is frozen on 8-station permanently for the rest of the trip — no point cycling back to a full-route view that no longer fits.
+| in transfer window? | 8-station locked? | Slots in rotation |
+|---|---|---|
+| no  | no  | `[FULL, EIGHT]` |
+| no  | yes | `[EIGHT]` |
+| yes | no  | `[FULL, EIGHT, TRANSFER]` |
+| yes | yes | `[EIGHT, TRANSFER]` |
+
+`TRANSFER` is also dropped when the current station has no transfers (post-filter) — the cycle just rotates without a blank slot.
+
+**Window predicate** (`_in_transfer_window`): `at_station=True` OR `cnt_pa >= len(pa)-1`. Derived from `cnt_pa` rather than `state.is_last_pa` — single-PA stations auto-fire `pa[0]` via `_advance_to_next_stop` which hardcodes `is_last_pa=False`, so the flag misses them. The `cnt_pa` check covers both single-PA and multi-PA paths.
+
+**Two transitions matter:**
+- transfer-window rising edge (passive join) — `TRANSFER` enters slot list mid-stream as the predicate flips True (last PA fired); cycle naturally rotates to it on its next turn. No timer reset.
+- `at_station` rising edge (force-switch) — `_handle_at_station_edge` sets `_current_slot = TRANSFER` and resets `_slot_start`. Boot's initial `at_station=True` is captured as the first observation without firing the edge (so boot doesn't auto-jump to transfer).
+
+**Slot reconciliation**: when `_current_slot` is no longer in the available slot list (lock kicked in mid-FULL, window closed mid-TRANSFER, station with no transfers reached mid-TRANSFER), `_tick_cycle` snaps to `slots[0]` and resets the timer.
+
+**Critical invariant** — `_tick_cycle(current_time)` is called from `LowerDisplay.draw()` UNCONDITIONALLY, BEFORE language-mode dispatch. Nesting it in the `KANJI/FURIGANA` branch pauses the timer during `ENGLISH` (≈1/3 of every language cycle) and cadence drifts long. `_pick_renderer(mode)` is a pure function of `_current_slot` + mode (TRANSFER overrides language; otherwise Japanese slots dispatch to full/eight, ENGLISH falls back to japanese_display while EnglishDisplay is a stub).
 
 #### Per-cell mini badge
 
@@ -550,6 +567,137 @@ The function takes a single `x` (left edge of the widest char's column) and comp
 #### `arrow_points` chevron recipe (`utils.py`)
 
 The `stroke` parameter is the chevron's **body thickness**, NOT a typical line stroke. To resize without changing shape: scale `w`, `h`, AND `stroke` by the same factor. Bumping only `w` makes the chevron pointier (longer tip, same body). See "Pointer chevron — uniform halo recipe" above for the inner/outer halo math, plus the full docstring in `utils.py`.
+
+---
+
+## Transfer Info (E235-1000)
+
+Lower-LCD slot showing the station's transfer-info frame (banner + per-line entries) when at a station with `transfers` data. The parent `displays/transfer_info.py:TransferInfoDisplay` handles state binding + active-line filter + `transfers_by_view` drop/edit ops + variant resolution (`resolve_entry`); the E235-1000 concrete `displays/train_models/e235_1000/transfer_info.py` provides the renderer (`render_transfer`), wired into `LowerDisplay`'s view-cycler in `lower_lcd.py`.
+
+### Pipeline
+
+1. **Per-N text scaling** — JA size from `N_total` + shinkansen-count: Sparse (≤4) 32 / N=5 29 / Mid (6-9) 26 / Dense (≥10 OR ≥2 shinkansen) 22. EN derived `round(JA × 12/23)`. `name_line_gap` scales with EN. "Both shinkansen" (Tokyo JO) forces Dense regardless of N.
+2. **Row-grouping (dry-run cascade)** — decision order: `rows` data override → shinkansen prefix → small-N structural (N=2: `(2,)` if Σ widths ≤ W − 2·margin_x else `(1,1)`; N=3: always `(2,1)`) → greedy walk + cascade dry-run for N=1 and N≥4. `max_rows = 3` cap force-packs the rest onto the last allowed row.
+3. **Blueprint widening** — `effective_margin_x = max(margin_x, h_narrowest)` where `h_narrowest = min over rows of (W − Σ_row) / (n_row + 1)`. Inert when no row is narrower than default margin.
+4. **Real-render placement (per row)** — Rule 1 (column-align if N ≤ M; asymmetric predecessor-intrusion check) → Rule 2 (head + tail + leftmost-fit; tracks `predecessor_clean_seen` for Case A vs B) → Rule 3 (Case A only: canvas-right tail) → Rule 4 (equal-spacing + track-back of earlier rows). Anchor row uses **column-aware** placement (max width per column across non-shinkansen rows) when `slack ≥ 0`; falls back to geometric `head/tail/distribute` when `slack < 0` (品川, 横浜).
+
+### Definitions (used in Rules 1-4 below)
+
+- `N` = number of entries in current row.
+- `M` = number of upper anchors = `len(upper_anchors)` of the row directly above.
+- `upper_anchors[k]` = chosen x position of the k-th entry in the row directly above.
+- `widths[k]` = full entry width (badge group + gap + max(JA, EN) text width).
+- **predecessor of entry k** = entry k-1 (immediate left in the same row).
+- **predecessor's right edge** = `predecessor.x + predecessor.width`.
+- `effective_margin_x` = `margin_x` initially; can grow if Rule 4 fires.
+- `right_edge_canvas` = `W − effective_margin_x`.
+
+### Rule 1 — column alignment (fires only when N ≤ M)
+
+Per-entry left-to-right sweep. Entry k attempts to anchor at `upper_anchors[k]`. **Asymmetric predecessor-intrusion check** is the only validator: entry 0 has no predecessor → always succeeds at `upper_anchors[0]`; entry k (k ≥ 1) succeeds iff `predecessor's right edge ≤ upper_anchors[k]`. Otherwise blocked.
+
+**Asymmetry rationale.** Entry k overflowing rightward into entry k+1's territory is NOT entry k's concern — it doesn't block entry k. But entry k+1's anchor at `upper_anchors[k+1]` being intruded by entry k's text IS entry k+1's concern — it blocks entry k+1. The check is one-directional: the entry being placed cares only about whether its own predecessor intrudes into its own anchor.
+
+**Failure is per-entry, not row-wide.** Successful entries stay anchored. The first failure stops the sweep at index `first_failed`; entries `[first_failed..N-1]` proceed to Rule 2 as a segment.
+
+### Rule 2 — head + tail + distribute, leftmost-fit tail
+
+Triggered by either failed-segment case (Rule 1 partial success, fails at `f = first_failed > 0`) or N>M case (Rule 1 didn't fire). In failed-segment case: `head_right = chosen_xs[f-1] + widths[f-1]` (last Rule-1-successful entry's right edge — NOT reset to margin_x); tail = entry N-1; middles = entries `[f..N-2]`. In N>M case: head = entry 0 anchored at `upper_anchors[0]`; tail = entry N-1; middles = entries `[1..N-2]`.
+
+**Tail anchor — leftmost-fit.** Iterate `upper_anchors` in order. Cand `a` is "fitting" iff (1) middle-distribution check passes (`distribute_middles(head_right, a, middle_widths)` returns valid; if no middles, `head_right ≤ a`) AND (2) canvas check (`a + tail.width ≤ right_edge_canvas`). First fitting cand becomes tail's anchor; middles distribute evenly between `head_right` and tail's anchor. If no cand fits → Rule 3.
+
+### Rule 3 — canvas-right fallback (Case A only)
+
+Rule 2's failure mode determines whether Rule 3 fires:
+- **Case A** — at least one upper anchor passed the predecessor-intrusion check, but tail overflowed canvas. → Rule 3 fires (canvas was the constraint, not anchors).
+- **Case B** — every upper anchor failed the predecessor-intrusion check. No usable column-anchor; row genuinely needs more space than upper provides. → Rule 3 skipped; fall directly to Rule 4.
+
+Detection via `predecessor_clean_seen` flag (set to True whenever a cand passed the predecessor check, regardless of canvas).
+
+**Rule 3 (Case A).** `tail_x = (W − effective_margin_x) − tail.width` (tail's right edge = canvas right). Middles distribute between `head_right` and `tail_x`. If `tail_x < head_right` or middles don't fit → Rule 4.
+
+**Why Case A uses canvas-right and Case B doesn't.** In Case A the column-anchor system already proved insufficient; canvas-right is the most permissive remaining placement and visually matches IRL. In Case B (Shinagawa row 1's 東海道線 example), canvas-right would float the tail too far right (huge gap from predecessor); equal-spacing via Rule 4 produces a balanced layout instead.
+
+### Rule 4 — equal-spacing fallback + track-back
+
+Triggered when Rule 3 dies. `h = (W − Σ widths) / (n+1)`. If `h < margin_x`: fall to last-ditch (degenerate; sub-floor sides). Otherwise: row placed with **equal-spacing** (head at `h`, inter-gap `h`, tail right-edge at `W − h`; sides == inters == `h`). **Track back**: shift all rows already placed (0..R−1) by `delta = h − effective_margin_x` so their head_x aligns with the new effective margin. Anchors, right-edges, and the positions list update in lockstep. Set `effective_margin_x = h` for subsequent rows. Delta is often non-zero even when blueprint widening fired upstream — blueprint sets margin to `h_narrowest` (smallest h), but a different row may turn out to need an even wider gap; track-back covers the residual.
+
+### Shinkansen-prefix anchor row
+
+- **0 shinkansen** → anchor row = row 0.
+- **1 shinkansen** (上野) → anchor row = row 1 (column-aware override; row 0's single shinkansen can't seed column alignment).
+- **2+ shinkansen** (Tokyo JY/JO) → no override; cascade Rule 2 column-aligns naturally against the shinkansen positions.
+
+### Color-square policy
+
+E235-1000 only: a badge with `icon: "_universal"` AND a `color: [r, g, b]` field renders as a solid color square (badge_h × badge_h) instead of the universal icon. Lines using this today: 総武本線, 外房線, 内房線, 成田線. Detection in `is_color_square(b)` inside `render_transfer`. Future train models declare their own policy in their `transfer_info.py`.
+
+### Out-of-spec note
+
+武蔵小杉 JN runs E233-8000, not E235-0/1000 — out of E235 in-spec. Per [CLAUDE.md "Per-model IRL line scope"](CLAUDE.md), out-of-spec routes get best-effort fidelity floors (no crashes, sane layout) rather than IRL match. Per-N scaling ladder + algorithm thresholds are calibrated against E235 IRL refs only. MKG-on-JN render uses MKG's E235-ordered transfers list (tokyu before sotetsu) — IRL E233-8000 has the opposite order; per-view ordering deferred. The algorithm picks `(2,2,1)` for the 5 entries vs IRL `(3,2)` — accepted as out-of-spec drift.
+
+### Worked examples
+
+**Tokyo row 0** (shinkansen pair, N=2, no upper). `widths=[405, 201]`. Multi-row n=2 path: head at 40, tail at 690-201=489. → `[40, 489]`.
+
+**Tokyo row 1** (jr_east 4, N=4, M=2). `widths=[115, 143, 97, 120]`. N>M → Rule 2 (N>M case). Head at upper[0]=40, head_right=155. Middles=[143, 97]. Tail w=120. Iterate `upper_anchors=[40, 489]`:
+- upper[0]=40: distribute_middles(155, 40, [143,97]) → negative span. FAIL.
+- upper[1]=489: span 334, sum 240, gap 31. Canvas 489+120=609 ≤ 690. ✓.
+- mid_xs=[186, 360], tail at 489 → `[40, 186, 360, 489]`.
+
+**Tokyo row 2** (3 entries, N=3, M=4). `widths=[176, 97, 126]`. N≤M → Rule 1. k=0: anchor at upper[0]=40, right=216. k=1 (keiyo): try upper[1]=186, predecessor right 216 > 186 → BLOCKED. first_failed=1. Rule 2 failed-segment with head_right=216, middles=[97], tail w=126. Iterate:
+- upper[0]=40, upper[1]=186: distribute_middles fails.
+- upper[2]=361: span 145, gap (145-97)/2=24. Canvas 361+126=487 ≤ 690. ✓.
+- mid_xs=[240], tail at 361 → `[40, 240, 361]`.
+
+**Yokohama JO row 2** (Case A, N=3, M=4 with blue line at .scale(0.75) → w=267). `widths=[99, 189, 267]`. Rule 1: k=0 (相鉄) anchor 40 right 139; k=1 (みなとみらい) upper[1]=210 ✓ right 399; k=2 (BL) upper[2]=357, 399 > 357 → BLOCKED. first_failed=2. Rule 2 failed-segment, head_right=399, no middles, tail=267. upper[0..2] all fail predecessor; upper[3]=533 predecessor-clean (`predecessor_clean_seen=True`) BUT canvas 533+267=800>690 → canvas overflow. No fitting cand → Case A. Rule 3: target=730−40=690, tail_x=423, head_right 399 ≤ 423 ✓. → `[40, 210, 423]`.
+
+**Shinagawa JY_inner row 1** (Case B, N=2, M=1). `widths=[302, 120]`. N>M → Rule 2. Head at upper[0]=81, head_right=383. Iterate `upper_anchors=[81]`: head_right 383 > 81 → predecessor intrusion. Only one cand fails → `predecessor_clean_seen=False` → Case B. Skip Rule 3; Rule 4. h=(730−452)/3=92.67. Row 1 at `[93, 518]`. Track back row 0: delta=12, shinkansen shifts `[81]→[93]`. effective_margin_x=93.
+
+### Verification corpus
+
+Pre-implementation reference set for validating the row-grouping pipeline. `N` computed from `data/stations.json` (own-line filter + `transfers_by_view` drops). IRL groupings sourced from station LCD reference photos. **22/22 in-spec ✓** as of 2026-05-05; 武蔵小杉 JN is out-of-spec (E233-8000, not E235) and kept as a best-effort comparison point only.
+
+| # | Station | Line | View | N | IRL | Current algo | Path | Notes |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 浜松町 | JY | JY_inner | 2 | (1,1) | (1,1) ✓ | N=2 structural | drops keihin_tohoku → Monorail (422) + Ōedo (230); sum 652 > canvas 618 → fall-back |
+| 2 | 渋谷 | JY | JY_inner | 8 | (3,3,2) | (3,3,2) ✓ | greedy + cascade | within-row spacing observations remain |
+| 3 | 恵比寿 | JY | JY_inner | 2 | (2,) | (2,) ✓ | N=2 structural | drops saikyo_kawagoe |
+| 4 | 目黒 | JY | JY_inner | 3 | (2,1) | (2,1) ✓ | N=3 structural | (was passing by greedy-coincidence pre-rule) |
+| 5 | 五反田 | JY | JY_inner | 2 | (2,) | (2,) ✓ | N=2 structural | flat, no view drops |
+| 6 | 大崎 | JY | JY_inner | 3 | (2,1) | (2,1) ✓ | N=3 structural | drops JA on JY_inner |
+| 7 | 品川 | JY | JY_inner | 6 | (1,2,3) | (1,2,3) ✓ | shinkansen + cascade | edits keihin_tohoku→.oimachi_kamata |
+| 8 | 原宿 | JY | JY_inner | 2 | (2,) | (2,) ✓ | N=2 structural | flat |
+| 9 | 有楽町 | JY | JY_inner | 2 | (2,) | (2,) ✓ | N=2 structural | drops keihin_tohoku |
+| 10 | 新橋 | JY | JY_inner | 3 | (2,1) | (2,1) ✓ | N=3 structural | drops {keihin_tohoku, tokaido, ueno_tokyo} |
+| 11 | 新宿 | JY | JY_inner | 9 | (3,3,3) | (3,3,3) ✓ | greedy + cascade | within-row spacing observations remain |
+| 12 | 日暮里 | JY | JY_inner | 3 | (2,1) | (2,1) ✓ | N=3 structural | |
+| 13 | 上野 | JY | JY_inner | 7 | (1,3,3) | (1,3,3) ✓ | shinkansen + cascade | within-row anchoring observations remain |
+| 14 | 秋葉原 | JY | JY_inner | 3 | (2,1) | (2,1) ✓ | N=3 structural | drops keihin_tohoku |
+| 15 | 神田 | JY | JY_inner | 2 | (2,) | (2,) ✓ | N=2 structural | drops keihin_tohoku |
+| 16 | 東京 | JY | JY_inner | 7 | (2,4,1) | (2,4,1) ✓ | shinkansen + cascade | drops {keihin_tohoku, chuo_rapid, ueno_tokyo} |
+| 17 | 東京 | JO | JO_east | 9 | (2,4,3) | (2,4,3) ✓ | shinkansen + cascade | multi-shinkansen row 0 |
+| 18 | 横浜 | JO | JO_east | 11 | (4,4,3) | (4,4,3) ✓ | greedy + cascade | |
+| 19 | 武蔵小杉 | JN | JN_north | 5 | (3,2) | (2,2,1) | (out-of-spec) | E233-8000 line, not E235; best-effort fidelity per CLAUDE.md |
+| 20 | 武蔵小杉 | JO | JO_north | 4 | (3,1) | (3,1) ✓ | greedy + cascade | JO_north drops shonan_shinjuku |
+| 21 | 千葉 | JO | JO_east | 5 | (3,2) | (3,2) ✓ | greedy + cascade | JO_east drops sobu_local |
+| 22 | 大船 | JO | JO_north | 3 | (2,1) | (2,1) ✓ | N=3 structural | JO_north drops ueno_tokyo + shonan_shinjuku |
+| 23 | 成田 | JO | JO_east | 2 | (2,) | (2,) ✓ | N=2 structural | sum 612 ≤ canvas 618 → packed |
+
+### Where layout knobs live
+
+The params block at the top of `render_transfer` (font sizes, margins, scaling tiers, banner spec) is the canonical home for IRL-derived tuning. Each value carries a one-line "why" comment. When changing tuning, adjust the named constant — don't redo the IRL math elsewhere.
+
+### Discussion conventions for IRL-valid renders
+
+Every render referenced as an IRL comparison point MUST correspond to a real-world train's perspective: a specific active line (`--filter-line`) AND that line's own direction view when applicable (`--view <line>_<direction>`). Default render (no filter) is invalid as IRL reference — it's the simulator's superset. View follows from line: don't ask "which view?" once the line is chosen. Auto-memory carries the same rule as a feedback binding.
+
+### Known gaps / not-yet-validated
+
+- Stations beyond the verification corpus (~25+ populated stations in 大宮, 川崎, 浦和, 赤羽, JO Sōbu Rapid east) not yet visually swept against IRL groupings.
+- 赤羽 JK/JA inner spacing observation pending verification once added to corpus.
+- Last-ditch `pack-from-margin` path never fires on real corpus data — Rule 4 always catches first.
+- Private-operator icons at runtime still partly fall back to `_universal` placeholder for lines without dedicated icons.
 
 ---
 

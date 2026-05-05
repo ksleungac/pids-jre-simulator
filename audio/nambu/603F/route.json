@@ -1,5 +1,6 @@
 {
     "route": "南武線",
+    "line_code": "JN",
     "color": [255, 212, 0],
     "type": "各駅停車",
     "type_color": [0, 0, 0],

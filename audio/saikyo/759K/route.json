@@ -1,5 +1,7 @@
 {
     "route": "埼京線",
+    "line_code": "JA",
+    "transfer_view": "JA_north",
     "color": [
         46,
         139,

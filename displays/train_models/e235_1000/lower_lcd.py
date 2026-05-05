@@ -41,6 +41,7 @@ from displays.train_models.e235_1000 import (
     DARK_BG,
     WHITE_BG,
 )
+from displays.train_models.e235_1000.transfer_info import TransferInfoDisplay
 from displays.base import DisplayMode
 from displays.utils import (
     draw_aapolygon,
@@ -1448,10 +1449,22 @@ class LowerDisplay:
     furigana the route map).
     """
 
-    # 24-second view cycle: 12s full-route ↔ 12s 8-station. Independent of
-    # the upper's language cycler — drives only Japanese modes. Locks to
-    # 8-station permanently once remaining stops ≤ 8.
-    VIEW_CYCLE_HALF_INTERVAL = 12.0
+    # View-cycle slots (rotated in order, with per-slot durations).
+    # Default 2-slot cycle is full-route 12s / 8-station 12s (24s total).
+    # When the train is in the transfer-info window (see _in_transfer_window
+    # — derived from cnt_pa rather than state.is_last_pa for single-PA-stop
+    # correctness), TRANSFER joins as a 3rd slot at 6s. The 8-station lock
+    # (remaining stops ≤ 7) drops FULL from rotation, leaving EIGHT alone
+    # outside the window and EIGHT↔TRANSFER inside it. TRANSFER is also
+    # dropped when the current station has no transfers to render.
+    _SLOT_FULL = 0
+    _SLOT_EIGHT = 1
+    _SLOT_TRANSFER = 2
+    _SLOT_DURATIONS = {
+        _SLOT_FULL: 12.0,
+        _SLOT_EIGHT: 12.0,
+        _SLOT_TRANSFER: 6.0,
+    }
 
     def __init__(self, screen, route_data, stops, mode_cycler):
         self.screen = screen
@@ -1461,17 +1474,23 @@ class LowerDisplay:
         self.japanese_display = JapaneseDisplay(screen, route_data, stops)
         self.japanese_eight_display = JapaneseEightStationDisplay(screen, route_data, stops)
         self.english_display = EnglishDisplay(screen, route_data, stops)
+        self.transfer_display = TransferInfoDisplay(screen, route_data, stops)
 
         self.mode_cycler = mode_cycler
         self._state = None
 
-        # View-cycle state (Japanese only)
-        self._view_last_toggle: float | None = None
-        self._is_eight_view = False  # start on full-route view
+        # View-cycle state. _slot_start = wall-clock when current slot began;
+        # _prev_at_station = last-frame at_station (None until first observed —
+        # boot's at_station=True must NOT fire a rising-edge force-switch).
+        self._current_slot: int = self._SLOT_FULL
+        self._slot_start: float | None = None
+        self._prev_at_station: bool | None = None
 
     def set_state(self, state) -> None:
         """Bind to an AppState instance. Subsequent draws read live state."""
         self._state = state
+        # Forward to subordinate renderers that need state binding too.
+        self.transfer_display.set_state(state)
 
     # NOTE: deliberately a no-op TODAY, but kept as scaffolding for a future
     # split where the lower LCD owns its own mode cycler (e.g. lower cycles on
@@ -1492,72 +1511,155 @@ class LowerDisplay:
         """When remaining stops ≤ LOCK_THRESHOLD (=7), drop the full-route view permanently."""
         return (len(self.stops) - curr_stop) <= JapaneseEightStationDisplay.LOCK_THRESHOLD
 
-    # CONTRACT: must be called BEFORE language-mode dispatch (not inside the
-    # KANJI/FURIGANA branch). The lock-state guard at the call site is separate.
-    # See DISPLAY.md § "View cycler (`LowerDisplay`)".
-    # Nesting in the language branch pauses the timer during ENGLISH; 24 s cadence drifts long.
-    def _tick_view_cycle(self, current_time: float) -> None:
-        """Toggle full ↔ 8-station every VIEW_CYCLE_HALF_INTERVAL seconds."""
-        if self._view_last_toggle is None:
-            self._view_last_toggle = current_time
-            return
-        if current_time - self._view_last_toggle >= self.VIEW_CYCLE_HALF_INTERVAL:
-            self._is_eight_view = not self._is_eight_view
-            self._view_last_toggle = current_time
+    def _in_transfer_window(self, state) -> bool:
+        """True when transfer-info should be in the cycle rotation.
 
-    def _pick_japanese_renderer(self):
-        """Pick which Japanese renderer to draw this frame.
-
-        Pure function of state: locked → 8-station; otherwise reads the
-        cycler boolean. The cycler is ticked separately in `draw()` so the
-        24 s cadence is independent of language mode.
+        Window = APPROACHING_FINAL (cnt_pa is at the last index of pa[])
+        through STOPPING. Derived directly from cnt_pa rather than reading
+        ``state.is_last_pa`` because the flag is only set inside
+        ``_next_in_approaching`` (multi-PA path) — single-PA stations
+        auto-fire pa[0] via ``_advance_to_next_stop`` which hardcodes
+        is_last_pa = False even though pa[0] is already the last (and only)
+        PA. The derived check correctly fires for both cases.
         """
-        if self._state is not None and self._should_lock_to_eight(self._state.curr_stop):
-            return self.japanese_eight_display
-        return self.japanese_eight_display if self._is_eight_view else self.japanese_display
+        if state.at_station:
+            return True
+        pa_tracks = self.stops[state.curr_stop].get("pa", [])
+        if not pa_tracks:
+            return False
+        return state.cnt_pa >= len(pa_tracks) - 1
+
+    def _station_has_transfers(self, state) -> bool:
+        """True when the current station has at least one transfer to render
+        after active-line filter + view-drop are applied.
+
+        Cheap enough to call per-frame: dict lookup + two list comps inside
+        TransferInfoDisplay._resolve_transfers. If this becomes a hot spot,
+        cache against (curr_stop, transfer_view) — but don't pre-optimize.
+        """
+        if not (0 <= state.curr_stop < len(self.stops)):
+            return False
+        name = self.stops[state.curr_stop].get("name", "")
+        return bool(self.transfer_display._resolve_transfers(name))
+
+    def _available_slots(self, state) -> list:
+        """Slots in rotation order for the current state.
+
+        Combinations (× transfer-available toggle):
+          - not in window, not locked  → [FULL, EIGHT]
+          - not in window, locked      → [EIGHT]
+          - in window,    not locked   → [FULL, EIGHT, TRANSFER]
+          - in window,    locked       → [EIGHT, TRANSFER]
+
+        TRANSFER is dropped from the list when the current station has no
+        transfers (or filtering wipes them out) — the cycle simply rotates
+        without a blank slot.
+        """
+        locked = self._should_lock_to_eight(state.curr_stop)
+        in_window = self._in_transfer_window(state) and self._station_has_transfers(state)
+        if locked and in_window:
+            return [self._SLOT_EIGHT, self._SLOT_TRANSFER]
+        if locked:
+            return [self._SLOT_EIGHT]
+        if in_window:
+            return [self._SLOT_FULL, self._SLOT_EIGHT, self._SLOT_TRANSFER]
+        return [self._SLOT_FULL, self._SLOT_EIGHT]
+
+    # CONTRACT: must be called BEFORE language-mode dispatch (not inside the
+    # KANJI/FURIGANA branch). Nesting in the language branch pauses the timer
+    # during ENGLISH; cycle cadence drifts long. See DISPLAY.md § "View cycler".
+    def _tick_cycle(self, current_time: float) -> None:
+        """Advance the slot cycle. Reconciles slot membership and per-slot durations."""
+        slots = self._available_slots(self._state)
+        # Reconcile: if current slot dropped out (lock kicked in, or window
+        # closed mid-TRANSFER), snap to the first available slot and reset timer.
+        if self._current_slot not in slots:
+            self._current_slot = slots[0]
+            self._slot_start = current_time
+            return
+        # Single-slot cycle (locked, no window): nothing to advance.
+        if len(slots) == 1:
+            return
+        # Initialize timer on first observation.
+        if self._slot_start is None:
+            self._slot_start = current_time
+            return
+        if current_time - self._slot_start >= self._SLOT_DURATIONS[self._current_slot]:
+            idx = slots.index(self._current_slot)
+            self._current_slot = slots[(idx + 1) % len(slots)]
+            self._slot_start = current_time
+
+    def _handle_at_station_edge(self, state, current_time: float) -> None:
+        """STOPPING entry: force-switch to TRANSFER (if available), reset timer.
+
+        Only fires on the at_station False→True transition. Boot's initial
+        at_station=True is captured as the first observation without firing
+        the edge, so the cycle starts on its default slot rather than
+        force-jumping to transfer.
+        """
+        if self._prev_at_station is None:
+            self._prev_at_station = state.at_station
+            return
+        if state.at_station and not self._prev_at_station:
+            slots = self._available_slots(state)
+            if self._SLOT_TRANSFER in slots:
+                self._current_slot = self._SLOT_TRANSFER
+                self._slot_start = current_time
+        self._prev_at_station = state.at_station
+
+    def _pick_renderer(self, mode):
+        """Pick the renderer for the current slot + language mode.
+
+        TRANSFER slot wins over language (transfer-info is dual-language —
+        renders identically regardless of upper's KANJI/FURIGANA/ENGLISH).
+        Other slots fall through to the existing language dispatch:
+        Japanese → full-route or 8-station per slot; ENGLISH → falls back
+        to japanese_display while EnglishDisplay is a stub.
+        """
+        if self._current_slot == self._SLOT_TRANSFER:
+            return self.transfer_display
+        if mode in (DisplayMode.KANJI, DisplayMode.FURIGANA):
+            return (
+                self.japanese_eight_display
+                if self._current_slot == self._SLOT_EIGHT
+                else self.japanese_display
+            )
+        return self.japanese_display
 
     def draw(self, current_time: float = 0.0) -> None:
-        """Dispatch to the active mode's renderer.
+        """Dispatch to the active slot's renderer.
 
-        Language mode (KANJI / FURIGANA / ENGLISH) → renderer family.
-        Within Japanese, the 24s view-cycler picks full-route vs 8-station.
-        ENGLISH falls back to the Japanese full-route while EnglishDisplay
-        is a stub.
+        Per-frame: detect at_station rising edge → maybe force-switch to
+        TRANSFER. Tick cycle. Pick renderer for (slot, language). Draw.
 
-        The view-cycler timer ticks regardless of language mode so the 24 s
-        full ↔ 8-station cadence doesn't drift while the upper is in
-        ENGLISH (which would otherwise pause the timer for ~1/3 of every
-        upper-mode cycle).
+        Cycle ticks regardless of language mode so cadence doesn't drift
+        while the upper is in ENGLISH (which would otherwise pause the
+        timer for ~1/3 of every upper-mode cycle).
         """
         if self._state is None:
             return
-        # Tick view-cycle timer unconditionally; lock state suppresses the toggle.
-        if not self._should_lock_to_eight(self._state.curr_stop):
-            self._tick_view_cycle(current_time)
+
+        self._handle_at_station_edge(self._state, current_time)
+        self._tick_cycle(current_time)
 
         mode = self.mode_cycler.get_current_mode()
-        if mode in (DisplayMode.KANJI, DisplayMode.FURIGANA):
-            renderer = self._pick_japanese_renderer()
-        else:
-            renderer = self.japanese_display
+        renderer = self._pick_renderer(mode)
         renderer.show_stops(self._state, current_time)
 
     def hit_test(self, mx: int, my: int) -> Optional[int]:
         """Dispatch a click in LCD-local coords to the active renderer's hit_test.
 
         Returns sim_index for clickable cells, None for non-clickable
-        (pre_stops, padding). ENGLISH mode falls back to the Japanese
-        full-route renderer's hit_test — clicks DO work in ENGLISH. Past-dest
-        filter lives in the caller (`PASimulator._click_target`) since
-        `dest_stop_idx` is on the simulator, not the renderer.
+        (pre_stops, padding, transfer-info — no clickable elements there).
+        ENGLISH mode falls back to the Japanese full-route renderer's
+        hit_test — clicks DO work in ENGLISH. Past-dest filter lives in
+        the caller (`PASimulator._click_target`) since `dest_stop_idx` is
+        on the simulator, not the renderer.
         """
         if self._state is None:
             return None
         mode = self.mode_cycler.get_current_mode()
-        if mode in (DisplayMode.KANJI, DisplayMode.FURIGANA):
-            renderer = self._pick_japanese_renderer()
-        else:
-            renderer = self.japanese_display
+        renderer = self._pick_renderer(mode)
         if hasattr(renderer, "hit_test"):
             return renderer.hit_test(self._state, mx, my)
         return None

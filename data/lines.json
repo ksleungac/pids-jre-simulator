@@ -1,0 +1,137 @@
+{
+    "yamanote":           {"badges": [{"code": "JY", "icon": "JY"}], "name_ja": "山手線",     "name_en": "Yamanote Line",                                                  "category": "jr_east"},
+    "keihin_tohoku": {
+        "badges": [{"code": "JK", "icon": "JK"}],
+        "name_ja": "京浜東北線",
+        "name_en": "Keihin-Tōhoku Line",
+        "category": "jr_east",
+        "variants": {
+            "oimachi_kamata": {
+                "name_ja": "京浜東北線(大井町・蒲田方面)",
+                "name_en": "Keihin-Tōhoku Line (for Ōimachi/Kamata)"
+            }
+        }
+    },
+    "chuo_rapid":         {"badges": [{"code": "JC", "icon": "JC"}], "name_ja": "中央線",     "name_en": "Chūō Line",                                                      "category": "jr_east"},
+    "tokaido":            {"badges": [{"code": "JT", "icon": "JT"}], "name_ja": "東海道線",   "name_en": "Tōkaidō Line",                                                   "category": "jr_east"},
+    "ueno_tokyo": {
+        "badges": [
+            {"code": "JT", "icon": "JT"},
+            {"code": "JU", "icon": "JU"},
+            {"code": "JJ", "icon": "JJ"}
+        ],
+        "name_ja": "上野東京ライン",
+        "name_en": "Ueno-Tōkyō Line",
+        "category": "jr_east",
+        "variants": {
+            "tokaido":        {"badges": [{"code": "JT", "icon": "JT"}]},
+            "tohoku":         {"badges": [{"code": "JU", "icon": "JU"}]},
+            "tohoku_tokaido": {"badges": [{"code": "JT", "icon": "JT"}, {"code": "JU", "icon": "JU"}]},
+            "tohoku_joban":   {"badges": [{"code": "JU", "icon": "JU"}, {"code": "JJ", "icon": "JJ"}]}
+        }
+    },
+    "utsunomiya_takasaki": {
+        "badges": [{"code": "JU", "icon": "JU"}],
+        "category": "jr_east",
+        "variants": {
+            "utsunomiya": {"name_ja": "宇都宮線（東北線）", "name_en": "Utsunomiya Line (Tōhoku Line)"},
+            "takasaki":   {"name_ja": "高崎線",            "name_en": "Takasaki Line"}
+        }
+    },
+    "joban_rapid":        {"badges": [{"code": "JJ", "icon": "JJ"}], "name_ja": "常磐線",     "name_en": "Jōban Line",                                                     "category": "jr_east"},
+    "keiyo":              {"badges": [{"code": "JE", "icon": "JE"}], "name_ja": "京葉線",     "name_en": "Keiyō Line",                                                     "category": "jr_east"},
+    "yokosuka_sobu": {
+        "badges": [{"code": "JO", "icon": "JO"}],
+        "category": "jr_east",
+        "variants": {
+            "yokosuka": {"name_ja": "横須賀線",   "name_en": "Yokosuka Line"},
+            "sobu":     {"name_ja": "総武線快速", "name_en": "Sōbu Rapid Line"}
+        }
+    },
+    "sobu_main": {
+        "badges": [{"icon": "_universal", "color": [228, 200, 40]}],
+        "name_ja": "総武本線",
+        "name_en": "Sōbu Main Line",
+        "category": "jr_east",
+        "variants": {
+            "naruto": {"name_ja": "総武本線(成東方面)", "name_en": "Sōbu Main Line (for Naruto)"}
+        }
+    },
+    "sobu_local":         {"badges": [{"code": "JB", "icon": "JB"}], "name_ja": "総武線各駅停車", "name_en": "Sōbu Line (Local)",                                              "category": "jr_east"},
+    "saikyo_kawagoe": {
+        "badges": [{"code": "JA", "icon": "JA"}],
+        "category": "jr_east",
+        "variants": {
+            "saikyo":  {"name_ja": "埼京線", "name_en": "Saikyō Line"},
+            "kawagoe": {"name_ja": "川越線", "name_en": "Kawagoe Line"}
+        }
+    },
+    "shonan_shinjuku":    {"badges": [{"code": "JS", "icon": "JS"}], "name_ja": "湘南新宿ライン", "name_en": "Shōnan-Shinjuku Line",                                           "category": "jr_east"},
+    "sotetsu_through": {
+        "badges": [{"icon": "_universal"}],
+        "name_ja": "相鉄線直通",
+        "name_en": "Through service to Sōtetsu Line",
+        "category": "non_jr",
+        "variants": {
+            "hazawa": {"name_ja": "相鉄線 羽沢横浜国大方面", "name_en": "Sōtetsu Line for Hazawa Yokohama-Kokudai"}
+        }
+    },
+    "rinkai":             {"badges": [{"icon": "rinkai"}],           "name_ja": "りんかい線", "name_en": "Rinkai Line",                                                    "category": "non_jr"},
+    "negishi":            {"badges": [{"code": "JK", "icon": "JK"}], "name_ja": "根岸線",     "name_en": "Negishi Line",                                                   "category": "jr_east"},
+    "yokohama_line":      {"badges": [{"code": "JH", "icon": "JH"}], "name_ja": "横浜線",     "name_en": "Yokohama Line",                                                  "category": "jr_east"},
+    "nambu":              {"badges": [{"code": "JN", "icon": "JN"}], "name_ja": "南武線",     "name_en": "Nambu Line",                                                     "category": "jr_east"},
+    "sotobo":             {"badges": [{"icon": "_universal", "color": [187, 66, 88]}],   "name_ja": "外房線",     "name_en": "Sōtobō Line",                                                    "category": "jr_east"},
+    "uchibo":             {"badges": [{"icon": "_universal", "color": [65, 143, 195]}],  "name_ja": "内房線",     "name_en": "Uchibō Line",                                                    "category": "jr_east"},
+    "narita_line": {
+        "badges": [{"icon": "_universal", "color": [44, 145, 121]}],
+        "name_ja": "成田線",
+        "name_en": "Narita Line",
+        "category": "jr_east",
+        "variants": {
+            "abiko":  {"name_ja": "成田線(我孫子方面)", "name_en": "Narita Line (for Abiko)"},
+            "sawara": {"name_ja": "成田線(佐原方面)",   "name_en": "Narita Line (for Sawara)"}
+        }
+    },
+    "tohoku_shinkansen":  {"badges": [{"icon": "shinkansen_jr_east"}],    "name_ja": "東北・山形・秋田・北海道・上越・北陸新幹線", "name_en": "Tōhoku・Yamagata・Akita・Hokkaido・Jōetsu・Hokuriku Shinkansen",                           "category": "shinkansen"},
+    "tokaido_shinkansen": {"badges": [{"icon": "shinkansen_jr_central"}], "name_ja": "東海道・山陽新幹線", "name_en": "Tōkaidō・Sanyō Shinkansen",                                                          "category": "shinkansen"},
+    "marunouchi":         {"badges": [{"icon": "metro_marunouchi"}],      "name_ja": "丸ノ内線",   "name_en": "Marunouchi Line",                                            "category": "non_jr"},
+    "ginza":              {"badges": [{"icon": "metro_ginza"}],           "name_ja": "銀座線",     "name_en": "Ginza Line",                                                 "category": "non_jr"},
+    "hibiya":             {"badges": [{"icon": "metro_hibiya"}],          "name_ja": "日比谷線",   "name_en": "Hibiya Line",                                                "category": "non_jr"},
+    "chiyoda":            {"badges": [{"icon": "metro_chiyoda"}],         "name_ja": "千代田線",   "name_en": "Chiyoda Line",                                               "category": "non_jr"},
+    "namboku":            {"badges": [{"icon": "metro_namboku"}],         "name_ja": "南北線",     "name_en": "Namboku Line",                                               "category": "non_jr"},
+    "tozai":              {"badges": [{"icon": "metro_tozai"}],           "name_ja": "東西線",     "name_en": "Tōzai Line",                                                 "category": "non_jr"},
+    "yurakucho":          {"badges": [{"icon": "metro_yurakucho"}],       "name_ja": "有楽町線",   "name_en": "Yūrakuchō Line",                                             "category": "non_jr"},
+    "fukutoshin":         {"badges": [{"icon": "metro_fukutoshin"}],      "name_ja": "副都心線",   "name_en": "Fukutoshin Line",                                            "category": "non_jr"},
+    "hanzomon":           {"badges": [{"icon": "metro_hanzomon"}],        "name_ja": "半蔵門線",   "name_en": "Hanzōmon Line",                                              "category": "non_jr"},
+    "asakusa":            {"badges": [{"icon": "toei_asakusa"}],          "name_ja": "都営浅草線", "name_en": "Toei Asakusa Line",                                          "category": "non_jr"},
+    "oedo":               {"badges": [{"icon": "toei_oedo"}],             "name_ja": "都営大江戸線", "name_en": "Toei Ōedo Line",                                           "category": "non_jr"},
+    "tokyo_monorail":     {"badges": [{"icon": "tokyo_monorail"}],        "name_ja": "東京モノレール羽田空港線", "name_en": "Tokyo Monorail Haneda Airport Line",                  "category": "non_jr"},
+    "yurikamome":         {"badges": [{"icon": "_universal"}],            "name_ja": "ゆりかもめ", "name_en": "Yurikamome",                                                 "category": "non_jr"},
+    "tsukuba_express":    {"badges": [{"icon": "_universal"}],            "name_ja": "つくばエクスプレス", "name_en": "Tsukuba Express",                                       "category": "non_jr"},
+    "tobu_noda":          {"badges": [{"icon": "_universal"}],            "name_ja": "東武野田線", "name_en": "Tōbu Noda Line",                                             "category": "non_jr"},
+    "new_shuttle":        {"badges": [{"icon": "_universal"}],            "name_ja": "ニューシャトル", "name_en": "New Shuttle",                                            "category": "non_jr"},
+    "shonan_monorail":    {"badges": [{"icon": "_universal"}],            "name_ja": "湘南モノレール", "name_en": "Shōnan Monorail",                                       "category": "non_jr"},
+    "keisei":             {"badges": [{"icon": "_universal"}],            "name_ja": "京成線",     "name_en": "Keisei Line",                                                "category": "non_jr"},
+    "shin_keisei":        {"badges": [{"icon": "_universal"}],            "name_ja": "新京成線",   "name_en": "Shin-Keisei Line",                                           "category": "non_jr"},
+    "keisei_chiba":       {"badges": [{"icon": "_universal"}],            "name_ja": "京成千葉線", "name_en": "Keisei Chiba Line",                                          "category": "non_jr"},
+    "keisei_narita_sky":  {"badges": [{"icon": "_universal"}],            "name_ja": "京成成田スカイアクセス線", "name_en": "Keisei Narita Sky Access Line",                            "category": "non_jr"},
+    "chiba_urban_monorail":{"badges": [{"icon": "_universal"}],           "name_ja": "千葉都市モノレール", "name_en": "Chiba Urban Monorail",                                  "category": "non_jr"},
+    "nippori_toneri":     {"badges": [{"icon": "_universal"}],            "name_ja": "日暮里・舎人ライナー", "name_en": "Nippori-Toneri Liner",                                "category": "non_jr"},
+    "tobu_tojo":          {"badges": [{"icon": "_universal"}],            "name_ja": "東武東上線", "name_en": "Tōbu Tōjō Line",                                             "category": "non_jr"},
+    "seibu_ikebukuro":    {"badges": [{"icon": "_universal"}],            "name_ja": "西武池袋線", "name_en": "Seibu Ikebukuro Line",                                       "category": "non_jr"},
+    "seibu_shinjuku":     {"badges": [{"icon": "_universal"}],            "name_ja": "西武新宿線", "name_en": "Seibu Shinjuku Line",                                        "category": "non_jr"},
+    "odakyu":             {"badges": [{"icon": "_universal"}],            "name_ja": "小田急線",   "name_en": "Odakyū Line",                                                "category": "non_jr"},
+    "keio":               {"badges": [{"icon": "_universal"}],            "name_ja": "京王線",     "name_en": "Keiō Line",                                                  "category": "non_jr"},
+    "shinjuku":           {"badges": [{"icon": "toei_shinjuku"}],         "name_ja": "都営新宿線", "name_en": "Toei Shinjuku Line",                                         "category": "non_jr"},
+    "mita":               {"badges": [{"icon": "toei_mita"}],             "name_ja": "都営三田線", "name_en": "Toei Mita Line",                                             "category": "non_jr"},
+    "toden_arakawa":      {"badges": [{"icon": "_universal"}],            "name_ja": "都電荒川線", "name_en": "Toden Arakawa Line",                                         "category": "non_jr"},
+    "keikyu":              {"badges": [{"icon": "_universal"}], "name_ja": "京急線",                "name_en": "Keikyū Line",                          "category": "non_jr"},
+    "tokyu_toyoko":        {"badges": [{"icon": "_universal"}], "name_ja": "東急東横線",              "name_en": "Tōkyū Tōyoko Line",                    "category": "non_jr"},
+    "tokyu_denentoshi":    {"badges": [{"icon": "_universal"}], "name_ja": "東急田園都市線",          "name_en": "Tōkyū Den-en-toshi Line",              "category": "non_jr"},
+    "tokyu_meguro":        {"badges": [{"icon": "_universal"}], "name_ja": "東急目黒線",              "name_en": "Tōkyū Meguro Line",                    "category": "non_jr"},
+    "tokyu_ikegami":       {"badges": [{"icon": "_universal"}], "name_ja": "東急池上線",              "name_en": "Tōkyū Ikegami Line",                   "category": "non_jr"},
+    "keio_inokashira":     {"badges": [{"icon": "_universal"}], "name_ja": "京王井の頭線",            "name_en": "Keiō Inokashira Line",                 "category": "non_jr"},
+    "sotetsu":             {"badges": [{"icon": "_universal"}], "name_ja": "相鉄線",                  "name_en": "Sōtetsu Line",                "category": "non_jr"},
+    "minatomirai":         {"badges": [{"icon": "_universal"}], "name_ja": "みなとみらい線",         "name_en": "Minatomirai Line",                                      "category": "non_jr"},
+    "yokohama_subway_blue":{"badges": [{"icon": "_universal"}], "name_ja": "横浜市営地下鉄(ブルーライン)", "name_en": "Yokohama Subway Blue Line",                                "category": "non_jr"}
+}

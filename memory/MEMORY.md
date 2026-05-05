@@ -4,7 +4,15 @@ Long-term curated memories. One-line pointers — daily logs hold the detail.
 
 ---
 
+- [2026-05-05 PM](2026-05-05.md) — transfer-info: render_transfer promoted to production (E235-1000 concrete); E235-1000 color-square policy (`_universal+color`) shipped; WIP_transfer_display.md dissolved into DISPLAY.md (~215 lines); `project_root()` consolidated to displays/utils.py; review+fix Ralph loop 2 cycles (1 critical + 9 warnings fixed)
+- [2026-05-05](2026-05-05.md) — transfer-info: N=2/N=3 structural row-grouping rules + `rows` data override + Step 4 column-aware anchor row placement (with 1-vs-2 shinkansen dispatch); corpus 22/22 in-spec ✓; Preserve-named-user-frameworks extended with vocabulary-framing recurrence
+- [2026-05-04 evening](2026-05-04.md) — transfer-info: GOLDEN-rule pipeline implementation + 19/22 corpus ✓; cascade vs greedy threshold split (min_inter_gap 0.5× / inter_element_margin 0.7×); sotetsu_through reclassified non_jr; MKG JO_north populated
+- [2026-05-04 PM](2026-05-04.md) — transfer-info: per-N text scaling discovery (IRL ladder ≤5/6-9/≥10) + algorithm work paused pending Step 1 calibration; Scope-fidelity + Analytical-confirmation principles codified
 - [2026-05-03 eve](2026-05-03.md) — Upper-LCD clip-rect refactor: region-rect manifest + `clip()` context manager → bleed structurally impossible; DISPLAY.md tightened ~58→12 lines; Verify-before-claiming recurrence note extended (3 more substrates)
+- [2026-05-03 PM](2026-05-03.md) — transfer-info: name_ja_compress migration + 4 algorithm enhancements (capped row-grouping, single-row equal-spacing + side_pad formula, Rule 1 canvas-fit, blueprint placement) + 新橋/浜松町/大崎 populated; Preserve-named-user-frameworks principle codified
+- [2026-05-03](2026-05-03.md) — OOBE action-history feature + ActionFlow refactor + STA seek bar + bundled-EN-fonts; Step 0 codified scope-expansion + weirdness-as-signal patterns
+- [2026-05-02 PM cont 3](2026-05-02.md) — transfer-info layout: lex-maximin row-grouping + Rule 4 equal-spacing fallback + `transfers_by_view.edit` op; Pre-stated scope fences codified
+- [2026-05-02 PM cont 2](2026-05-02.md) — transfer-info schema: nested variants, dot-notation refs, drop-only `transfers_by_view`
 - [2026-05-02 PM cont](2026-05-02.md) — memory-system overhaul: killed log-only middle, sync codification + dedup gate, Step 0 friction loop + third-man behavioral review
 - [2026-05-02 PM](2026-05-02.md) — transfer-info Rule 1/2/3 algorithm correction (per-entry asymmetric / leftmost-fit / per-segment) + implementation-completion-as-spec promoted to principles.md (recurrence #4)
 - [2026-05-02](2026-05-02.md) — yellow-square nag indicator (blink + disappear-on-acknowledged + audio-busy gate) + dual-stream audio (PA on music, STA on Channel) + APPROACHING/STOPPING auto-fire asymmetry promoted to CLAUDE.md

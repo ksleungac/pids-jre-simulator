@@ -14,6 +14,12 @@ __pycache__/
 /real/
 screenshot_*.png
 
+# Transfer-display visual iteration outputs — render PNGs + side-by-side
+# compare composites. Throwaway artifacts; preview_transfers.py regenerates
+# them on demand. IRL reference photos under lcd_references/ are committed
+# (those drive iteration); generated outputs under _visual_iter/ are not.
+/_visual_iter/
+
 # Audio cutting workspace — source mp3s + timestamps + per-route splitter scripts.
 # Local-only "in-progress" archive: keep around in case a cut/timing issue surfaces
 # later, but not committed (sources are big, recipe is reproducible from the script).

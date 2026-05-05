@@ -1,5 +1,7 @@
 {
     "route": "京浜東北・根岸線",
+    "line_code": "JK",
+    "transfer_view": "JK_south",
     "color": [
         29,
         174,

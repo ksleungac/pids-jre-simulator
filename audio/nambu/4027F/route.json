@@ -1,5 +1,6 @@
 {
     "route": "南武線",
+    "line_code": "JN",
     "color": [255, 212, 0],
     "type": "快速",
     "type_color": [206, 0, 0],
