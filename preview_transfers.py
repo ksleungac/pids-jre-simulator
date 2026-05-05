@@ -725,12 +725,64 @@ def render_transfer(
     row_rights_list: list = []
     iter_order = list(range(len(rows)))
 
+    # Anchor row = first non-shinkansen row. Its xs become upper anchors for
+    # the cascade below. Column-aware placement uses all non-shinkansen rows'
+    # max width per column to bias the anchor row's xs so Rule 1 succeeds
+    # naturally on rows below.
+    #
+    # Shinkansen-prefix handling differs by count:
+    # - 0 shinkansen → anchor row = row 0.
+    # - 1 shinkansen (上野) → cascade Rule 2 has only 1 upper anchor and
+    #   can't column-align row 1+; override with column-aware on row 1.
+    # - 2+ shinkansen (Tokyo JY/JO) → shinkansen positions already define
+    #   2+ upper anchors; Rule 2 column-aligns naturally (e.g. row 1 entry 3
+    #   anchors at the 2nd shinkansen). Don't override.
+    anchor_row_idx = 0
+    if rows and rows[0] and all(e.get("category") == "shinkansen" for e in rows[0]):
+        if len(rows[0]) == 1:
+            anchor_row_idx = 1
+        else:
+            # 2+ shinkansen — leave cascade in charge.
+            anchor_row_idx = -1
+
+    column_aware_xs = None
+    column_aware_M = 0
+    column_aware_col_max_widths: list = []
+    if anchor_row_idx >= 0 and anchor_row_idx < len(rows) and len(rows) - anchor_row_idx >= 2:
+        # At least 2 non-shinkansen rows exist (anchor + at least 1 to align).
+        non_shink_rows_widths = rows_widths_pre[anchor_row_idx:]
+        column_aware_M = max(len(rw) for rw in non_shink_rows_widths)
+        column_aware_col_max_widths = []
+        for k in range(column_aware_M):
+            in_col = [rw[k] for rw in non_shink_rows_widths if k < len(rw)]
+            column_aware_col_max_widths.append(max(in_col))
+        # Pack columns left-to-right at effective_margin_x.
+        col_x_packed = [effective_margin_x]
+        for k in range(1, column_aware_M):
+            col_x_packed.append(col_x_packed[k - 1] + column_aware_col_max_widths[k - 1])
+        last_right_packed = col_x_packed[column_aware_M - 1] + column_aware_col_max_widths[column_aware_M - 1]
+        col_slack = (W - effective_margin_x) - last_right_packed
+        if col_slack >= 0:
+            # Distribute slack evenly across the M-1 inter-column gaps.
+            col_x_final = [col_x_packed[0]]
+            if column_aware_M >= 2:
+                for k in range(1, column_aware_M):
+                    col_x_final.append(int(round(col_x_packed[k] + col_slack * k / (column_aware_M - 1))))
+            n_anchor = len(rows[anchor_row_idx])
+            column_aware_xs = col_x_final[:n_anchor]
+
     if debug:
         _dprint(f"\n--- blueprint (margin-only widening) ---")
         h_fmt = [round(h, 2) for h in row_h_required]
         _dprint(f"row sums: {row_sums_pre}  h_per_row: {h_fmt}")
         _dprint(f"h_narrowest = min(h) = {h_narrowest:.2f}  (row {row_h_required.index(min(row_h_required))})")
         _dprint(f"effective_margin_x = max({margin_x}, {int(round(h_narrowest))}) = {effective_margin_x}  widened={blueprint_widened}")
+        _dprint(f"\n--- column-aware anchor placement ---")
+        _dprint(f"anchor_row_idx={anchor_row_idx}  M={column_aware_M}  col_max_widths={column_aware_col_max_widths}")
+        if column_aware_xs is not None:
+            _dprint(f"col_slack={col_slack}  → anchor row xs={column_aware_xs}")
+        else:
+            _dprint(f"column-aware not applied (single-row layout, single anchor row, or slack<0)")
         _dprint(f"\n--- row layout (iter order: {iter_order}) ---")
 
     for r_idx in iter_order:
@@ -744,16 +796,26 @@ def render_transfer(
         # Standard top-down cascade: row 0 is the seed; every other row anchors
         # against the row directly above.
         is_seed_row = (r_idx == 0)
+        is_anchor_row = (r_idx == anchor_row_idx and column_aware_xs is not None)
         if not is_seed_row:
             upper_anchors = row_anchors_list[r_idx - 1]
 
         if debug:
             role = "seed (row 0)" if is_seed_row else f"cascade vs row {r_idx - 1}"
+            if is_anchor_row:
+                role = f"anchor row (column-aware), {role}"
             _dprint(f"\n[row {r_idx}] {role}  N={n}  widths={widths}  Σ={sum(widths)}")
             if not is_seed_row:
                 _dprint(f"  upper_anchors={upper_anchors}  M={len(upper_anchors)}")
 
-        if is_seed_row:
+        if is_anchor_row:
+            # Column-aware anchor row placement — overrides both seed-row
+            # geometric and Rule 1-4 cascade. Picks xs that downstream rows can
+            # column-align under naturally, computed from non-shinkansen rows'
+            # max width per column.
+            chosen_xs = list(column_aware_xs)
+            rule_taken = f"column-aware anchor row (col_x={column_aware_xs})"
+        elif is_seed_row:
             # Row 0 (standard mode) has no upper row.
             # Single-row layout (len(rows) == 1): try equal-spacing first
             # (sides == inters == h_equal) when h_equal >= margin_x. Multi-row

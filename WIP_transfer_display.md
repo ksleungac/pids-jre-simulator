@@ -58,15 +58,39 @@ EN derived: `round(JA × 12/23)`. `name_line_gap = -4 − (EN − 12)`. "Both sh
 
 **Why the `rows` override exists.** Last-resort fall-back when neither structural rules nor cascade match IRL — a per-station data hint. Currently unused (algorithm covers all 22 in-spec corpus stations). The slot exists so that future stylistic-outlier discoveries can be encoded as data without re-tuning rules.
 
-### Step 3 / Step 4 (unchanged)
+### Step 3 (unchanged)
 
 3. **Blueprint margin widening.** Compute `effective_margin_x = max(margin_x, h_narrowest)` where `h_narrowest = min over rows of (W − Σ_row) / (n_row + 1)`. Inert when `h_narrowest ≤ margin_x`.
 
-4. **Column-anchored positioning (real render).**
-   - **Row 0 placement** under widened margin:
-     - Multi-row layout (other rows below): head at `effective_margin_x`; tail right-edge at `W − effective_margin_x`; middles distribute evenly between head's right edge and tail's anchor x.
-     - Single-row layout (row 0 is the only row): equal-spacing + `side_pad = (W − Σ)/14` bias when `(W − Σ)/(n+1) ≥ effective_margin_x`; else fall through to multi-row edge-pin path.
-   - **Row 1+ via Rule 1/2/3 cascade + Rule 4 fallback** (with track-back). Track-back is safe here because row groups are finalized — no retroactive membership change.
+### Step 4 — column-anchored positioning (real render)
+
+**Anchor row identification.** The anchor row is the row whose xs become upper anchors for the cascade below. Shinkansen-prefix handling differs by count:
+- **0 shinkansen** → anchor row = row 0.
+- **1 shinkansen** (上野) → anchor row = row 1. Cascade Rule 2 has only 1 upper anchor at this point and can't column-align row 1+; column-aware override on row 1 gives row 2+ a column-aligned upper.
+- **2+ shinkansen** (東京 JY/JO) → no column-aware override. Shinkansen positions already define 2+ upper anchors; cascade Rule 2 column-aligns row 1+ naturally (e.g. row 1 entry 3 anchors at the 2nd shinkansen via leftmost-fit tail).
+- Single-row layout (only one row total) or only one non-shinkansen row → no anchor-row step.
+
+**Anchor row placement — column-aware (main path).** Use all non-shinkansen rows' max width per column to bias the anchor row's xs so Rule 1 succeeds naturally on rows below.
+1. `M` = max number of entries on any non-shinkansen row.
+2. `col_max_width[k]` = max width of any entry that lands in column `k` across all non-shinkansen rows.
+3. Pack columns left-to-right: `col_x[0] = effective_margin_x`; `col_x[k] = col_x[k−1] + col_max_width[k−1]`.
+4. `slack = (W − effective_margin_x) − (col_x[M−1] + col_max_width[M−1])`.
+5. **If `slack ≥ 0`:** distribute slack evenly across the `M−1` inter-column gaps (`col_x[k] += slack × k / (M−1)`). Anchor row's `chosen_xs = col_x[:n_anchor_row]`. Done.
+6. **If `slack < 0`:** fall back to the existing geometric placement below.
+
+**Anchor row placement — fallback (geometric).** When column-aware can't fit (rare; on in-spec corpus only 品川 + 横浜 hit this).
+- Multi-row layout: head at `effective_margin_x`, tail right-edge at `W − effective_margin_x`, middles via `distribute_middles` (geometric equal-distribute).
+- Single-row layout (whole layout is one row): equal-spacing branches — comfortable (`h_equal ≥ margin_x`) → equal-spacing with `side_pad` bias; tight (`min_inter_gap ≤ h_equal < margin_x`) → pure equal-spacing; else edge-pin via multi-row path.
+- Shinkansen prefix row 0 (when row 0 is shinkansen): single-entry placement at `effective_margin_x`.
+
+**Row R below anchor row.** Cascade Rules 1 → 2 → 3 → 4 + track-back, **unchanged.** With column-aware upper anchors, Rule 1 succeeds far more often (predecessor checks pass because anchors match downstream widths); Rule 3/4 + track-back only fire on the slack<0 fallback path.
+
+**Why column-aware is a strict improvement on the original `head/tail/distribute`.** Original spec (line 170 pre-change): "edge-pin so subsequent rows can column-align" — the *goal*. Geometric distribute picks middles at the row's geometric center, which doesn't account for downstream entries' widths, causing Rule 4 / Rule 3 fallbacks (上野's 日比谷 mis-aligned under JJ; 渋谷 row 1 falling to Rule 4). Column-aware picks middles based on the widest entry in each column, so Rule 1 naturally succeeds. The cascade rules don't change because they were never the problem — they correctly column-align *when given good anchors*.
+
+**Visible effects.**
+- 渋谷: row 0 JA shifts from x=336 → x=297. Rows 1+2 column-align via Rule 1 (was Rule 4 + Rule 1 with mis-aligned column 2).
+- 新宿: row 0 Sobu shifts from x=206 → x=224. Inter[1] shrinks from 48 → 30 (Sobu closer to JS — IRL behavior). Falls out from col 0's smaller max width vs cols 1+2.
+- 上野: row 1 column-aware (anchor_row_idx=1 because shinkansen on row 0). 日比谷 column-aligns under 常磐 at x=536 (was 26 px LEFT, now matched).
 
 ### Code map
 
@@ -110,7 +134,7 @@ Pre-implementation reference set for validating the GOLDEN-rule pipeline. `N` co
 | 22 | 大船 | JO | JO_north | 3 | (2,1) | (2,1) ✓ | N=3 structural | JO_north drops ueno_tokyo + shonan_shinjuku |
 | 23 | 成田 | JO | JO_east | 2 | (2,) | (2,) ✓ | N=2 structural | sum 612 ≤ canvas 618 → packed |
 
-**Row-grouping: 22/22 in-spec ✓.** Within-row distribution observations (新宿, 上野, 渋谷 noted) are a separate class — row counts match IRL; inter-element spacing within rows isn't always pixel-perfect. Tracked under follow-up #0.
+**Row-grouping: 22/22 in-spec ✓.** Within-row anchoring (post-2026-05-05 column-aware): 新宿 / 上野 / 渋谷 now align via Rule 1 (was Rule 4 / Rule 3 fallbacks). 品川 + 横浜 hit slack<0 → fall back to geometric `head/tail/distribute` (final shapes still match IRL).
 
 ---
 
@@ -297,7 +321,7 @@ Every render referenced as an IRL comparison point MUST correspond to a real-wor
 
 ## Open follow-ups (priority order)
 
-0. **Within-row distribution polish.** Algorithm produces correct row counts (22/22 in-spec) but inter-element spacing within rows isn't always pixel-perfect IRL. Known observations: 新宿 JY_inner spacing slightly off; 赤羽 JK/JA inner spacing too wide; 千葉 JO_east row 0 cramped; 上野 JY_inner anchoring rules problem. Distinct from row-grouping class — needs visual sweep against IRL refs at fix-time, likely refinements in Step 4 cascade Rules 2/3 distribute_middles or single-row equal-spacing biasing.
+0. **Within-row distribution polish.** Row-grouping is 22/22 in-spec ✓ and column-aware anchor placement (2026-05-05) fixed the major within-row alignment cases (新宿's "smaller gap to JS"; 上野's 日比谷-under-JJ; 渋谷's row 1 column-alignment). Remaining known observations: 赤羽 JK/JA inner spacing too wide; 千葉 JO_east row 0 cramped. Both stations don't benefit from column-aware (千葉 has no row below; 赤羽 not yet in corpus). Plus 品川 + 横浜 hit slack<0 fall-back to geometric distribute — visually OK but not column-aware-optimized. Distinct from row-grouping class — needs visual sweep against IRL refs at fix-time.
 
 1. **Promote to production.** Move `render_transfer` from `preview_transfers.py` into `displays/train_models/e235_1000/` — likely a new sibling module beside `lower_lcd.py` (the transfer view *replaces* the route bar conditionally, not an addition to it). Wire into `LowerDisplay`'s view-cycler so it triggers when `at_station=True` AND the current station has `transfers` data. Surfaces and font-loading patterns to mirror existing `lower_lcd.py` style.
 
