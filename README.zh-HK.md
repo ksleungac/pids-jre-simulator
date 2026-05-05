@@ -12,6 +12,10 @@ JR 東日本風格列車廣播與車內 LCD 顯示模擬器。
 |---|---|---|
 | ![](docs/screenshots/01-keihin-tohoku-compact.png) | ![](docs/screenshots/02-sobu-skip-animation.png) | ![](docs/screenshots/03-sobu-full-route.png) |
 
+| 轉車資訊 | 選擇畫面 |
+|---|---|
+| ![](docs/screenshots/04-tokyo-transfer-info.png) | ![](docs/screenshots/05-setup-screen.png) |
+
 ---
 
 ## 下載

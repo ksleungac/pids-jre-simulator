@@ -109,9 +109,9 @@ def parse_args():
     parser.add_argument(
         "--lower-view",
         type=str,
-        choices=("full", "eight", "cycle"),
+        choices=("full", "eight", "transfer", "cycle"),
         default="cycle",
-        help="Force lower-LCD view: 'full' = full-route, 'eight' = 8-station zoom, 'cycle' = normal 24s alternation (default).",
+        help="Force lower-LCD view: 'full' = full-route, 'eight' = 8-station zoom, 'transfer' = transfer-info panel (requires station with transfers + at_station=True), 'cycle' = normal alternation (default).",
     )
     return parser.parse_args()
 
@@ -154,12 +154,16 @@ def main():
         sim.upper.mode_cycler.current_mode = MODE_MAP[args.mode]
         sim.upper.mode_cycler.enabled = False
 
-    # Force lower-LCD view if requested. Setting both `_is_eight_view` and
-    # `_view_last_toggle = +inf` keeps the cycler frozen on whichever view
-    # we picked. Skipped for 'cycle' so the natural 24s alternation runs.
+    # Force lower-LCD view by setting the slot directly. Cycle ticker won't
+    # advance within a single screenshot frame.
     if args.lower_view != "cycle":
-        sim.lower._is_eight_view = (args.lower_view == "eight")
-        sim.lower._view_last_toggle = float("inf")
+        slot_map = {
+            "full": sim.lower._SLOT_FULL,
+            "eight": sim.lower._SLOT_EIGHT,
+            "transfer": sim.lower._SLOT_TRANSFER,
+        }
+        sim.lower._current_slot = slot_map[args.lower_view]
+        sim.lower._slot_start = None
 
     if args.screenshot:
         timestamp = time.time()
