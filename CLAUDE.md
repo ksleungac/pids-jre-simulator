@@ -183,7 +183,7 @@ Yellow hint square = multiple PA tracks available.
 - **Auto-input / OCR / game-window capture** → [AUTO_INPUT.md](AUTO_INPUT.md) — companion module that reads JR EAST Train Sim's HUD via dxcam to fire PAs automatically. Lives in `auto_input.py` + `ocr.py` + `hud_layout.py` (in-process integration) and `_dev_scripts/capture_game.py` (separate-process variant).
 - **Cross-cutting code contracts** → live inline at their code site as `# CONTRACT:` blocks. Examples: PyInstaller path resolution at `displays/train_models/e235_1000/upper_lcd.py:get_base_dir`, countdown formula at `displays/train_models/e235_1000/lower_lcd.py:draw_times`, font-loading rule at the first font init in `upper_lcd.py`'s `JapaneseDisplay.__init__`.
 - **Testing / previewing** → `uv run preview_display.py` defaults to the mock catalog (see [`audio/_mock/main/README.md`](audio/_mock/main/README.md) for stop layout). Keys: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. `jump_to_stop` backward-rounding semantics are documented in its docstring at `app.py` `PASimulator.jump_to_stop`. Preview-mode swap inventory (audio, input, mixer, window) is at `PASimulator.__init__`'s ``preview`` parameter.
-- **Building / releasing** → `/build` skill (local test build) or `.\release.ps1 v<version>` (cut a GitHub release; tag first).
+- **Building / releasing** → `/build <version>` produces the staged exe + zip; `/release <version>` picks up to draft notes, tag, and hand off the `gh release create` upload.
 - **README / translation maintenance** → `/readme` skill.
 - **Code review** → `/review-dirty` skill (single change) or `/review-plus-fix-relentlessly` (review + fix loop).
 - **Commit hygiene** → `/commit` skill.

@@ -103,14 +103,27 @@ New-Item -ItemType Directory -Force -Path "dist-release\JRE-PA-Simulator\fonts" 
 New-Item -ItemType Directory -Force -Path "dist-release\JRE-PA-Simulator\data" | Out-Null
 Copy-Item "dist\JRE-PA-Simulator.exe" "dist-release\JRE-PA-Simulator\"
 Copy-Item "fonts\*" "dist-release\JRE-PA-Simulator\fonts\"
-Copy-Item "data\*.json" "dist-release\JRE-PA-Simulator\data\"
+
+# Copy everything under data/ except harness `_*` entries. Recursive — captures
+# JSON files (lines.json, stations.json, ...) AND subdirectories (line_icons/,
+# any future asset trees) without hand-picking. Matches the audio/_*/ exclusion
+# pattern from Step 6.
+Get-ChildItem -Path "data" | Where-Object { $_.Name -notmatch '^_' } | ForEach-Object {
+    Copy-Item -Path $_.FullName -Destination "dist-release\JRE-PA-Simulator\data\" -Recurse -Force
+}
+
+# OCR templates — required at runtime by auto_input + ocr modules when
+# OCR Auto-PA is enabled (--auto-input). Per CLAUDE.md § "Distribution
+# & deployment artifact", ocr_templates/ is a top-level bundled tree.
+Copy-Item "ocr_templates" "dist-release\JRE-PA-Simulator\" -Recurse -Force
 
 # audio/ — junction to project-root audio (transparent to the exe, no copy)
 $projectAudio = (Resolve-Path "audio").Path
 New-Item -ItemType Junction -Path "dist-release\JRE-PA-Simulator\audio" -Target $projectAudio | Out-Null
 ```
 
-- Copy **all** JSON from `data/` (matches `release.ps1`). Do not hand-pick files — `stations.json`, future data files, etc. should all ship.
+- Copy **all** non-harness entries under `data/` (recursive). Do not hand-pick files or subdirectories — `stations.json`, `line_icons/`, future asset trees should all ship without skill edits. The `_*` exclusion handles future `data/_*` harness files (none today).
+- **Bundle-script must track program asset reads.** If the program adds a new top-level alongside-exe asset tree (e.g. a new `data/<thing>/` subdirectory, or a new top-level `<thing>/` folder beside `data/`), the recursive copy above handles new `data/` subdirectories automatically — but a NEW top-level folder needs its own Copy-Item line here. Per `critical_lessons.md` § "PyInstaller — alongside-exe vs `_MEIPASS`" (2026-05-05 incident), drift between "program reads X" and "build copies X" is silent in dev and explodes in the release exe. Smoke-test the release build, not just dev, when extending asset coverage.
 - Junction caveats:
   - Works without admin rights (junctions ≠ symlinks on Windows).
   - The exe sees it as an ordinary `audio/` directory — `Path(sys.executable).parent / "audio" / ...` resolves through transparently.
@@ -176,9 +189,15 @@ The `_*` exclusion is critical: `_archive/` (working backups, Sobu reference rec
 
 **After zipping**: the staged folder now has a populated real `audio/` directory (~600 MB), not the junction. If the user wants to keep iterating with the staged folder against live audio edits, re-run `/build` to recreate the junction in Step 4. Mention zip size in the final report — typical ship: ~660 MB (exe + fonts + data + audio); GitHub release file limit is 2 GB so there's headroom.
 
+## Next step (when user wants to publish)
+
+After the user has confirmed the smoke test and zipped (Step 6), the publish flow continues in `/release`. That skill picks up here: pre-flights the build artifacts, drafts `release_notes.md` with the criteria below, tags the commit, and hands the `gh release create` command to the user.
+
+Don't run `/release` automatically — wait for the user to invoke it. `/build` ends at "zip ready on disk."
+
 ## Out of scope
 
-- **GitHub release**: never run `gh release create` from this skill. That's `release.ps1`'s job. If the user wants a release, point them at `release.ps1 v<version>`.
+- **GitHub release**: never run `gh release create` from this skill. That's `/release`'s job. If the user wants a release, point them at `/release <version>`.
 - **Committing/pushing**: do not touch git.
 - **Version bumping**: this skill does not modify `pyproject.toml` or any other source. The version is a build-time label only.
 
