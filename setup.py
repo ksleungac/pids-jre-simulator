@@ -5,6 +5,7 @@ import json
 import pygame
 
 import i18n
+from app_paths import project_root
 from constants import SETUP_KEY_REPEAT_DELAY, SETUP_KEY_REPEAT_INTERVAL
 from displays.utils import draw_station_code_badge
 
@@ -55,7 +56,7 @@ class SetupScreen:
         self.route_font_cjk = i18n.font_for_lang("zh_HK", 18, bold=True)
         # Line badge re-uses NeueFrutigerWorld-Bold (PIDS-canon, same font as the
         # LCD's station-code badges) for visual consistency with the LCD.
-        self.badge_font = pygame.font.Font(str(i18n.app_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 18)
+        self.badge_font = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 18)
 
         # Translation tables for EN mode lookup of route-level data fields.
         # zh_HK / zh_CN modes keep route-data text in kanji (no source data exists
@@ -92,7 +93,7 @@ class SetupScreen:
 
     @staticmethod
     def _load_data_json(filename: str) -> dict:
-        path = i18n.app_root() / "data" / filename
+        path = project_root() / "data" / filename
         try:
             with open(path, encoding="utf-8") as f:
                 return json.load(f)

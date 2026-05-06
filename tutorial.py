@@ -21,6 +21,7 @@ import pygame
 
 import i18n
 from app import AppState, PASimulator
+from app_paths import project_root
 from displays.train_models.e235_1000 import S_HEIGHT, S_WIDTH
 
 # ── tuneable params (window / layout) ───────────────────────────────────────
@@ -68,7 +69,7 @@ def _font_helv(size: int, *, bold: bool = False, medium: bool = False) -> pygame
     key = ("helv", fname, size)
     cached = _FONT_CACHE.get(key)
     if cached is None:
-        cached = pygame.font.Font(str(i18n.app_root() / "fonts" / fname), size)
+        cached = pygame.font.Font(str(project_root() / "fonts" / fname), size)
         _FONT_CACHE[key] = cached
     return cached
 
@@ -79,7 +80,7 @@ def _font_shingo(size: int, *, heavy: bool = False) -> pygame.font.Font:
     key = ("shingo", fname, size)
     cached = _FONT_CACHE.get(key)
     if cached is None:
-        cached = pygame.font.Font(str(i18n.app_root() / "fonts" / fname), size)
+        cached = pygame.font.Font(str(project_root() / "fonts" / fname), size)
         _FONT_CACHE[key] = cached
     return cached
 
@@ -632,13 +633,13 @@ class Tutorial:
     def tutorial_route_dir(cls) -> str:
         """Absolute path to the tutorial's route directory.
 
-        Resolved through ``app_paths.project_root()`` (via the ``i18n.app_root``
-        backward-compat alias) so it works in both dev (project root) and frozen
-        builds (alongside-exe via ``Path(sys.executable).parent``, NOT
-        ``sys._MEIPASS``). A relative path would fail if the app is launched
-        from a non-project cwd (e.g. installer-launched with cwd=user home).
+        Resolved through ``app_paths.project_root()`` so it works in both dev
+        (project root) and frozen builds (alongside-exe via
+        ``Path(sys.executable).parent``, NOT ``sys._MEIPASS``). A relative path
+        would fail if the app is launched from a non-project cwd (e.g.
+        installer-launched with cwd=user home).
         """
-        return str(i18n.app_root() / "audio" / "tokaido" / "1865E")
+        return str(project_root() / "audio" / "tokaido" / "1865E")
 
     def __init__(self, screen: pygame.Surface):
         """Initialize tutorial chrome. Caller has already created the display.

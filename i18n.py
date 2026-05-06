@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pygame
 
+from app_paths import project_root
+
 SUPPORTED_LANGS = ("en", "zh_HK", "zh_CN")
 DEFAULT_LANG = "en"
 
@@ -25,7 +27,6 @@ DEFAULT_LANG = "en"
 # ---------------------------------------------------------------------------
 
 def settings_path() -> Path:
-    from app_paths import project_root
     return project_root() / "settings.json"
 
 
@@ -76,12 +77,6 @@ _translations: dict = {}
 _current_lang: str = DEFAULT_LANG
 
 
-# Backward-compat alias — canonical home is app_paths.project_root.
-# setup.py + tutorial.py reach through here; left aliased for now until
-# those call sites are updated to import project_root directly.
-from app_paths import project_root as app_root  # noqa: E402, F401
-
-
 def init(lang: str) -> None:
     """Set the active language. First call also loads the translations file;
     later calls only switch `_current_lang` (the JSON is not re-read)."""
@@ -90,7 +85,7 @@ def init(lang: str) -> None:
         lang = DEFAULT_LANG
     _current_lang = lang
     if not _translations:
-        path = app_root() / "data" / "translations_app.json"
+        path = project_root() / "data" / "translations_app.json"
         with open(path, encoding="utf-8") as f:
             _translations = json.load(f)
 
@@ -156,7 +151,7 @@ def font_for_lang(lang: str, size: int, *, bold: bool = False) -> pygame.font.Fo
         fname = "HelveticaNeue-Bold.otf" if bold else "HelveticaNeue-Roman.otf"
         key = ("bundled", fname, size)
         if key not in _font_cache:
-            _font_cache[key] = pygame.font.Font(str(app_root() / "fonts" / fname), size)
+            _font_cache[key] = pygame.font.Font(str(project_root() / "fonts" / fname), size)
         return _font_cache[key]
     name = _LANG_CHROME_SYSFONT.get(lang, "microsoftyahei")
     return font_named(name, size, bold=bold)
