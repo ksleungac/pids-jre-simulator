@@ -128,20 +128,22 @@ English translations use **modified Hepburn romanization with macrons** to indic
 
 ### Stop-Level Destination Override
 
-Routes can override the route-level `dest` at individual stops using the `dest` field:
+Stops can carry their own `dest` field to override the route-level value:
 
 ```json
 {
     "name": "田町",
     "pa": ["3"],
-    "dest": "東京・上野",  // Overrides route-level destination
+    "dest": "東京・上野",
     "time": 3
 }
 ```
 
-This allows displaying different destinations at different points along the route (useful for circular lines like Yamanote). Display semantics (fallback rule, kanji-only, translation lookup) live in [DISPLAY.md § Stop-Level Destination Override](DISPLAY.md).
+**Sticky semantic.** An override sets the displayed dest from that stop onward, until the next override. Route-level `dest` is the value before any override. Used by circular routes (Yamanote) where the displayed dest cycles as the train traverses the loop.
 
-**Yamanote Line example:** route-level `dest` is `品川・東京`; stops sprinkle overrides (`田町` → `東京・上野`, `神田` → `上野・池袋`, …) so the displayed destination shifts as the train traverses the loop, matching real PIDS.
+**Loader-time closure.** `route_loader.finalize_route` walks the stops list once at load time and fills `dest` on every stop with its effective value. After load, every stop has a `dest` field; renderers read it directly with no fallback logic. JSON is input grammar — only the irreducible overrides are authored; the runtime structure is the closure.
+
+**Yamanote example:** route-level `dest = 品川・東京`; overrides at 田町 / 神田 / 鶯谷 / 目白 / 代々木 / 恵比寿 cycle through the next-2-major-terminals window. Display semantics (kanji always; English uses translation lookup) live in [DISPLAY.md § Destination Behavior](DISPLAY.md).
 
 ---
 

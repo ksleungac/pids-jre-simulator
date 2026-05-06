@@ -232,18 +232,7 @@ For **horizontal centering inside a fixed-width cell** (e.g. passing-station che
 
 ### Destination Behavior
 
-Convention (always-kanji / "Bound for" English / `&` compound separator) lives in [CLAUDE.md](CLAUDE.md) "Mental Model → IRL display conventions"; JSON encoding in [DATA_FORMAT.md § Compound Destinations](DATA_FORMAT.md).
-
-### Stop-Level Destination Override
-
-Used by circular routes (Yamanote) to show changing destinations. Implementation:
-
-- Check stop-level `dest` first; fallback to route-level `dest`.
-- The `dest` value is read from the current stop when drawing the upper display.
-- The kanji `dest` is looked up in `data/translations.json` for English mode rendering.
-- Example: at 田町, show "東京・上野" instead of route-level "品川・東京".
-
-JSON-side details (where the override field lives, how compound names are encoded) are in [DATA_FORMAT.md](DATA_FORMAT.md). Real-world motivation is in [CLAUDE.md](CLAUDE.md) "Mental Model → IRL display conventions".
+Convention (always-kanji / "Bound for" English / `&` compound separator) lives in [CLAUDE.md](CLAUDE.md) "Mental Model → IRL display conventions"; JSON encoding + sticky-override closure in [DATA_FORMAT.md § Stop-Level Destination Override](DATA_FORMAT.md). The renderer reads `stops[curr_stop]["dest"]` directly — the loader (`route_loader.finalize_route`) has already filled it on every stop at load time.
 
 ### English Station Name (E235-1000)
 

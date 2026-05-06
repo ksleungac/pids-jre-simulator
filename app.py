@@ -226,28 +226,26 @@ class PASimulator:
         self.drive_log_path: Optional[Path] = None
 
     def _load_route_data(self) -> None:
-        """Load route.json configuration and merge with data/translations.json."""
-        if self.route_data is None:
-            json_path = os.path.join(self.work_dir, "route.json")
-            with open(json_path, encoding="utf-8") as f:
-                self.route_data = json.load(f)
+        """Load route.json configuration via the route_loader module.
 
-        # Load translations.json (furigana, english names) for stop merging
+        Loader-time computations (dest closure, station translation merge,
+        dest_furigana lookup) live in ``route_loader.finalize_route``; this
+        method just plumbs the result onto the simulator.
+        """
+        from route_loader import finalize_route, load_route_from_dir
+
         self.station_db = self._load_station_db()
 
-        # Merge station database into stops
-        self.stops = self._merge_station_data()
+        if self.route_data is None:
+            self.route_data = load_route_from_dir(self.work_dir, self.station_db)
+        else:
+            self.route_data = finalize_route(self.route_data, self.station_db)
+
+        self.stops = self.route_data.get("stops", [])
         self.route_name = self.route_data.get("route", "Unknown")
         self.train_type = self.route_data.get("type", "")
         self.dest = self.route_data.get("dest", "")
-
-        # Lookup destination furigana from translations (fallback to route.json if present)
         self.dest_furigana = self.route_data.get("dest_furigana", "")
-        if not self.dest_furigana and self.dest and self.dest in self.station_db:
-            self.dest_furigana = self.station_db[self.dest].get("furigana", "")
-
-        # Add dest_furigana to route_data so UpperDisplay can access it
-        self.route_data["dest_furigana"] = self.dest_furigana
 
         self.color = self.route_data.get("color", [255, 255, 255])
         self.contrast_color = self.route_data.get("contrast_color", [224, 54, 37])
@@ -255,9 +253,6 @@ class PASimulator:
 
     def _load_station_db(self) -> Dict:
         """Load central translations.json from data/ directory.
-
-        Loads from project root: data/translations.json
-        This file contains furigana/english translations keyed by Japanese station name.
 
         Returns empty dict if not found.
         """
@@ -269,31 +264,6 @@ class PASimulator:
                 return json.load(f)
 
         return {}
-
-    def _merge_station_data(self) -> list:
-        """Merge translation data into stops from central translations.json.
-
-        Lookup is by station name (Japanese kanji/kana).
-        Adds furigana and english fields to each stop.
-        """
-        stops = self.route_data.get("stops", [])
-        merged = []
-
-        for stop in stops:
-            stop_copy = stop.copy()
-            station_name = stop.get("name", "")
-
-            # Lookup by station name in central translations
-            if station_name and station_name in self.station_db:
-                translation = self.station_db[station_name]
-                if "furigana" not in stop_copy and "furigana" in translation:
-                    stop_copy["furigana"] = translation["furigana"]
-                if "english" not in stop_copy and "english" in translation:
-                    stop_copy["english"] = translation["english"]
-
-            merged.append(stop_copy)
-
-        return merged
 
     def _init_pygame(self) -> None:
         """Initialize pygame display.

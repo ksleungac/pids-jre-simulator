@@ -4,6 +4,7 @@ Long-term curated memories. One-line pointers — daily logs hold the detail.
 
 ---
 
+- [2026-05-06 evening](2026-05-06.md) — Yamanote dest-switching loader seed: route_loader.py + sticky-override closure at load time; "JSON is input grammar; runtime is closure" principle; validator gap-fills + `audio/_*/` fixture-skip; new principles.md § "Engineering rigor" with "Test the change, not just the bug" (distinct from claim-defense Verify-before-claiming)
 - [2026-05-06](2026-05-06.md) — v0.5.3 release shipped + PyInstaller deployment-frame pathology codified across 3 layers (principles + vibe-check #11/#12 + review-dirty Lens 1/2); `app_paths.py` canonical helper consolidates 8 sites across 6 modules; /build Step 4 inverted to default-ship + exclusion list; /release skill replaces release.ps1; session-recap Rule 8 (cross-layer alignment)
 - [2026-05-05 PM](2026-05-05.md) — transfer-info: render_transfer promoted to production (E235-1000 concrete); E235-1000 color-square policy (`_universal+color`) shipped; WIP_transfer_display.md dissolved into DISPLAY.md (~215 lines); `project_root()` consolidated to displays/utils.py; review+fix Ralph loop 2 cycles (1 critical + 9 warnings fixed)
 - [2026-05-05](2026-05-05.md) — transfer-info: N=2/N=3 structural row-grouping rules + `rows` data override + Step 4 column-aware anchor row placement (with 1-vs-2 shinkansen dispatch); corpus 22/22 in-spec ✓; Preserve-named-user-frameworks extended with vocabulary-framing recurrence

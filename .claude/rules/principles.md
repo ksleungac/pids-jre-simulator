@@ -193,6 +193,18 @@ Pitch shifts, station-specific arrangements, closing-door-announcement differenc
 
 **How to apply:** When adding new recordings, give each its own slug (`tsuga_2_gota-del-vient` ≠ `monoi_1_gota-del-vient`). Don't try to dedupe.
 
+### JSON is input grammar; runtime is the closure
+
+Treat JSON files as input grammar — the irreducible authored content. The runtime structure is the closure: what the loader computes at load time, with all derived fields filled in. Renderers consume the closure via direct key access, not raw JSON with per-call fallback logic.
+
+**Why.** Quoting the user (2026-05-06): *"imagine the json dicts as a hint for re-creating the route data, not a one-to-one match."* The Yamanote dest-switching bug surfaced from treating route.json as runtime state — renderers did `stop.get("dest") or self.route_dest` per draw, which broke sticky-override semantics across inherit stops. The fix wasn't a smarter fallback in renderers; it was a forward-pass at load time (`route_loader.finalize_route`) that fills `dest` on every stop. Renderers became direct-read, no fallback.
+
+**How to apply:**
+
+- Loader-time computations live in `route_loader.finalize_route`. Add new derived fields there as forward-passes. Keep JSON minimal — only the irreducible overrides / authored content.
+- Renderers do direct key access. `stop.get("X") or default` is a smell — promote the fallback into the loader.
+- Sibling to "Pragmatic over perfect" + "Filename-as-store" — those minimize authored grammar; this one adds: make the runtime closure explicit, so renderers don't re-derive on every draw.
+
 ---
 
 ## Tooling workflow
@@ -225,6 +237,27 @@ Before writing a function that does something that "feels generic" — path reso
 - **If genuinely not found**: write it in the most discoverable home — top-level utility module if cross-cutting, package `utils.py` if package-local. Don't bury it in the file you happen to be editing.
 - **Name for grep-discoverability**: `project_root` is searchable; `_my_root_helper` isn't. Future-you grepping "root" needs to find your helper, not skip past it.
 
+
+---
+
+## Engineering rigor
+
+### Test the change, not just the bug
+
+After applying a code change, exercise the change's full blast radius before saying it's done. This fires even with no user in the loop — it's engineering hygiene, not collaboration.
+
+The shape: I changed code, I ran the bug-fix smoke test, I said "ready to commit." The smoke test confirmed the bug is gone; it did NOT confirm the change didn't regress anything else. The change's blast radius is typically wider than the bug's surface — a fix in a shared loader / base class / common util touches every consumer, not just the one that surfaced the bug.
+
+This is distinct from `Collaboration § Verify before claiming`. That rule fires when I'm defending a claim under conversational momentum and re-justifying from memory instead of re-reading. This rule fires earlier in the chain — when I don't even think to check thoroughly, not when I defend a claim I made. The fix isn't "re-read before defending"; it's "run the broader test before saying done."
+
+**Why:** 2026-05-06 evening. Created `route_loader.py` (new) + refactored `app.py`'s load path + simplified 3 renderer sites. Change touched every route's load path (16 routes). Smoke-tested only Yamanote (the bug-fix target). Said "ready to commit." User: *"How come you change something, especially it's a program already, and not re-running."* End-to-end test across all 16 routes was actually clean — no regression — but I shipped the claim on inadequate evidence.
+
+**How to apply:**
+
+- **Identify the change's blast radius before saying done.** What code paths does this change touch? "Every route's load path" → exercise every route. "Every PA stop" → walk the stop list. The smoke-test on the bug-fix target is necessary but not sufficient.
+- **Distinguish structural from behavioral checks.** Grep + code-read prove "the path exists." They do NOT prove behavioral properties (stickiness across stops, mode cycling, message ordering). Behavioral correctness needs runtime simulation — preview, headless render, screenshot, end-to-end exercise.
+- **Cost asymmetry.** Running the broader test takes ~30 seconds; finding a regression post-commit costs orders of magnitude more (debug, fix, re-deploy, trust). The cheap insurance is always worth it.
+- **Mental shape to fight.** "Smoke test on bug target → change verified" is the trap. The smoke-test pass at one point does not generalize to the whole change.
 
 ---
 

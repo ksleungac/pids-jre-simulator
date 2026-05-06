@@ -538,10 +538,13 @@ class JapaneseDisplay:
         # (matches UpperDisplay._get_current_dest). Yamanote's mid-loop dest
         # cycling depends on this to keep the active bar range correct. Reads
         # against sim's stops[] (not display_stops) since stop-level dest
-        # overrides only live on active stops.
+        # overrides only live on active stops. Loader fills dest on every
+        # stop via sticky closure (route_loader); direct read, no fallback.
         sim_curr_stop = state.curr_stop
-        stop_dest = self.stops[sim_curr_stop].get("dest") if 0 <= sim_curr_stop < len(self.stops) else None
-        effective_dest = stop_dest or self.dest
+        if 0 <= sim_curr_stop < len(self.stops):
+            effective_dest = self.stops[sim_curr_stop]["dest"]
+        else:
+            effective_dest = self.dest
 
         dest_idx = self._find_dest_index(f_stops, effective_dest)
 
@@ -1338,10 +1341,13 @@ class JapaneseEightStationDisplay:
         window = self._get_window(curr_stop, cursor_pos)
         self._last_window = window
 
-        # stop_dest reads from sim's stops[] (pre_stops can't override dest).
+        # Loader fills dest on every stop via sticky closure (route_loader);
+        # direct read, no fallback. pre_stops can't override dest.
         sim_curr_stop = state.curr_stop
-        stop_dest = self.stops[sim_curr_stop].get("dest") if 0 <= sim_curr_stop < len(self.stops) else None
-        effective_dest = stop_dest or self.dest
+        if 0 <= sim_curr_stop < len(self.stops):
+            effective_dest = self.stops[sim_curr_stop]["dest"]
+        else:
+            effective_dest = self.dest
         dest_idx = self._find_dest_index(window, effective_dest)
         window_start = window[0][0] if window else 0
 

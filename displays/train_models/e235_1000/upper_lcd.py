@@ -495,11 +495,12 @@ class UpperDisplay:
         }
 
     def _get_current_dest(self) -> str:
-        """Get current destination with stop-level override support."""
-        if self.stops and self.curr_stop < len(self.stops):
-            stop_dest = self.stops[self.curr_stop].get("dest")
-            if stop_dest:
-                return stop_dest
+        """Get current destination. Loader fills ``dest`` on every stop via
+        sticky-override closure (``route_loader.finalize_route``); this is
+        a direct read, no fallback logic. Route-level ``self.dest`` is the
+        backstop only for ``curr_stop`` out of range."""
+        if self.stops and 0 <= self.curr_stop < len(self.stops):
+            return self.stops[self.curr_stop]["dest"]
         return self.dest
 
     def _get_destination_display(self) -> str:
