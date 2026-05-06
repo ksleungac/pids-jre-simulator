@@ -160,19 +160,18 @@ Push the tag AND any unpushed master commits — the tag annotates a specific SH
 
 Print the exact `gh release create` command for the user to copy-paste. **Do not run it** — release upload is the user's call.
 
-```
-Tag v$VERSION pushed. Run this to publish the release:
+**Format rule** — emit a SINGLE LINE with the version literal already substituted. No backticks, no backslashes, no shell variables. The user runs git ops in Git Bash; backtick-continuations (PowerShell line break) are eaten by Bash and cause only the first line to execute, creating an empty release. A single line works in PowerShell, Git Bash, and cmd identically. Substituting the literal (`v0.5.3` not `v$VERSION`) avoids variable-expansion mismatch between shells.
 
-gh release create v$VERSION `
-    --title "v$VERSION" `
-    --notes-file release_notes.md `
-    --verify-tag `
-    "dist/JRE-PA-Simulator.exe" `
-    "dist-release/JRE-PA-Simulator-v$VERSION-distribution.zip"
+```
+Tag v<VERSION> pushed. Run this to publish the release (works in PowerShell or Git Bash):
+
+gh release create v<VERSION> --title "v<VERSION>" --notes-file release_notes.md --verify-tag "dist/JRE-PA-Simulator.exe" "dist-release/JRE-PA-Simulator-v<VERSION>-distribution.zip"
 
 After it succeeds, view the release at:
-https://github.com/ksleungac/pids-jre-simulator/releases/tag/v$VERSION
+https://github.com/ksleungac/pids-jre-simulator/releases/tag/v<VERSION>
 ```
+
+`<VERSION>` is the literal value resolved in Step 1 — substitute before printing.
 
 ## Out of scope
 
