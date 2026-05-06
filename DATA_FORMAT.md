@@ -562,16 +562,38 @@ PYTHONUTF8=1 python validate_data.py
 
 Exits 0 if clean, 1 if issues found (suitable for pre-commit / CI). Checks performed:
 
+**Shape rules** (apply to all routes including fixtures under `audio/_*/`):
+
+- Every stop has `pa` field (required — without it, downstream rules would silently bypass)
 - Every stop has `sta_code` (value or `null`); value has no `_XX` suffix
-- Every `name` has an entry in `data/translations.json`
+- Passing stations (`pa: []`, non-first) have NO `sta`, NO `sta_cut`, NO `time`, NO `pa_at_station`
+- First station has `time: 0`; all other non-passing stops have `time` set
+- `pre_stops[]` entries have required `name` + `sta_code`; forbidden `pa` / `pa_at_station` / `sta` / `sta_cut` / `time`
+- Compound translations (key contains `・`) encode `english` as `"A&\nB"` form (no space before `&`, newline immediately after)
+
+**Cross-reference rules** (skipped for fixtures under `audio/_*/` — those use out-of-scope strings + lack real audio by design):
+
+- Every stop `name` has an entry in `data/translations.json`
 - Route-level `dest` and stop-level `dest` overrides are translated
 - Route-level `type` has an entry in `data/train_types.json`
-- Passing stations (`pa: []`, non-first) have NO `sta`, NO `sta_cut`, NO `time`
-- First station has `time: 0`
 - Every file referenced by `pa` / `pa_at_station` / `sta` exists on disk (`pa/<name>.mp3`, `sta/<name>.mp3`)
+
+**Lines + transfers** (apply at `data/` level — fixture-skip not applicable):
+
+- `lines.json` `category` is one of `jr_east` / `shinkansen` / `non_jr`
+- `lines.json` badge `icon` slugs resolve to PNGs under `data/line_icons/<icon>.png` (base + variants)
+- `stations.json` `transfers[]` entries: base slug exists in `lines.json`; `slug.variant` matches a declared variant; dot-notation depth ≤ 1 (e.g. `slug.variant` OK; `slug.variant.subvariant` rejected)
+- `stations.json` `transfers_by_view[VIEW]` ops:
+  - `drop` entries match a base slug already in `transfers[]` (typo + stale-data guard)
+  - `edit` keys match a base slug in `transfers[]`; edit values resolve in `lines.json` (base + variant if dotted)
+  - `rows` array sums to `len(transfers) - len(drop)` — promotes the runtime-fallback warning to authoring-time error
+- `route.json` `transfer_view`: at least one stop on the route has a `stations.json` `transfers_by_view` entry for it. Direction is route → stop → station (NOT station → route). The reverse direction would false-positive on station configs that are forward-looking or test-only (e.g. `大船`/`武蔵小杉`'s `JO_north`).
+
+**Inventory check:**
+
 - `stations.json` `code_3` count matches the documented 22
 
-Issues are grouped by route with stop index + name. **Add new checks by editing `validate_data.py` — don't re-embed them here.**
+Issues are grouped by location (route or top-level data file). **Add new checks by editing `validate_data.py` — don't re-embed them here.**
 
 ### Things the validator can't catch (verify by eye)
 

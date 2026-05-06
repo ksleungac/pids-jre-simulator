@@ -19,7 +19,7 @@ from typing import List, Optional
 from app_paths import project_root as _project_root
 
 
-_SCALE_SUFFIX_RE = re.compile(r"\.scale\(([0-9]*\.?[0-9]+)\)$")
+SCALE_SUFFIX_RE = re.compile(r"\.scale\(([0-9]*\.?[0-9]+)\)$")
 
 
 def resolve_entry(slug_ref: str, lines: dict) -> dict:
@@ -35,7 +35,7 @@ def resolve_entry(slug_ref: str, lines: dict) -> dict:
     missing data hides bugs at the worst time.
     """
     scale_override = None
-    m = _SCALE_SUFFIX_RE.search(slug_ref)
+    m = SCALE_SUFFIX_RE.search(slug_ref)
     if m:
         scale_override = float(m.group(1))
         slug_ref = slug_ref[: m.start()]

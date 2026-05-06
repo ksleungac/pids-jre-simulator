@@ -13,6 +13,7 @@
             "pa": ["1", "2"],
             "sta": [""],
             "sta_cut": 0,
+            "time": 0,
             "sta_code": "JO19"
         },
         {
@@ -26,7 +27,6 @@
         {
             "name": "秋葉原",
             "pa": [],
-            "sta_cut": 0,
             "sta_code": "JM03"
         },
         {
@@ -48,13 +48,11 @@
         {
             "name": "日暮里",
             "pa": [],
-            "sta_cut": 0,
             "sta_code": "JM06"
         },
         {
             "name": "西日暮里",
             "pa": [],
-            "sta_cut": 0,
             "sta_code": "JM07"
         },
         {
