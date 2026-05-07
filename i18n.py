@@ -6,7 +6,7 @@ LCD station-name rendering is unrelated and stays on its own translations.json.
 Three concerns colocated here:
 - Settings persistence (alongside-exe writable file, one field for now).
 - Locale detection (OS user locale → one of SUPPORTED_LANGS).
-- Translation lookup + locale-aware font (SysFont fallback chain).
+- Translation lookup + per-language bundled-OTF font.
 """
 
 import json
@@ -114,32 +114,33 @@ def t(key: str, **fmt) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Font — per-language chrome font.
+# Font — per-language chrome font, all bundled OTFs.
 #
-# EN routes to the bundled HelveticaNeue OTFs (consistent across systems —
-# same Latin face the LCD + setup screen + tutorial use). zh-HK / zh-CN
-# route to YaHei via SysFont — Windows ships it; non-Windows falls back to
-# pygame's default sans (acceptable since the project's primary distribution
-# is Windows).
+# Every language routes to a file under fonts/ — never pygame.font.SysFont().
+# SysFont scans the Windows font registry, which raises TypeError on
+# Chinese-locale Windows (2026-03-14 incident). The same CONTRACT block in
+# displays/train_models/*/upper_lcd.py codifies the rule for the LCD path;
+# this module enforces it for app-chrome.
 #
-# One CJK font per language (not a comma-fallback chain): pygame.font.SysFont
-# treats comma lists as font-installation fallback only, NOT glyph-level
-# fallback. So a Latin-leading list would render Latin for everything and
-# CJK glyphs come out as .notdef boxes. Single SysFont sidesteps this.
+# Per-language bundled face:
+#   en    — HelveticaNeue (Latin, Latin Extended for macrons).
+#   zh_HK — ShinGoPr6N (JIS overlap covers Traditional Chinese).
+#   zh_CN — Noto Sans CJK SC (Simplified-specific glyphs ShinGoPr6N tofus).
 # ---------------------------------------------------------------------------
 
-_LANG_CHROME_SYSFONT = {
-    "zh_HK": "microsoftyahei",
-    "zh_CN": "microsoftyahei",
+# {lang: (regular_filename, bold_filename)} — both files must exist in fonts/.
+_LANG_CHROME_FONT: dict[str, tuple[str, str]] = {
+    "en":    ("HelveticaNeue-Roman.otf",   "HelveticaNeue-Bold.otf"),
+    "zh_HK": ("ShinGoPr6N-Medium.otf",     "ShinGoPr6N-Heavy.otf"),
+    "zh_CN": ("NotoSansCJKsc-Regular.otf", "NotoSansCJKsc-Bold.otf"),
 }
 
 _font_cache: dict = {}
 
 
 def font(size: int, *, bold: bool = False) -> pygame.font.Font:
-    """Cached chrome font for the active language. EN uses bundled
-    HelveticaNeue (deterministic across systems); zh-HK / zh-CN use SysFont
-    YaHei. Requires pygame.font.init() (called by pygame.init())."""
+    """Cached chrome font for the active language. Requires
+    pygame.font.init() (called by pygame.init())."""
     return font_for_lang(_current_lang, size, bold=bold)
 
 
@@ -147,22 +148,9 @@ def font_for_lang(lang: str, size: int, *, bold: bool = False) -> pygame.font.Fo
     """Cached chrome font for an explicit language code, bypassing the
     active language. Used by the picker to render each row's label in its
     own script's font regardless of which row is hovered."""
-    if lang == "en":
-        fname = "HelveticaNeue-Bold.otf" if bold else "HelveticaNeue-Roman.otf"
-        key = ("bundled", fname, size)
-        if key not in _font_cache:
-            _font_cache[key] = pygame.font.Font(str(project_root() / "fonts" / fname), size)
-        return _font_cache[key]
-    name = _LANG_CHROME_SYSFONT.get(lang, "microsoftyahei")
-    return font_named(name, size, bold=bold)
-
-
-def font_named(name: str, size: int, *, bold: bool = False) -> pygame.font.Font:
-    """Direct SysFont access by name. Lower-level than ``font()`` /
-    ``font_for_lang()``; reserve for cases where a specific OS font is
-    needed regardless of language (currently unused — kept for the rare
-    case where chrome wants a non-language-mapped face)."""
-    key = (name, size, bold)
+    regular, bold_fname = _LANG_CHROME_FONT.get(lang, _LANG_CHROME_FONT["en"])
+    fname = bold_fname if bold else regular
+    key = (fname, size)
     if key not in _font_cache:
-        _font_cache[key] = pygame.font.SysFont(name, size, bold=bold)
+        _font_cache[key] = pygame.font.Font(str(project_root() / "fonts" / fname), size)
     return _font_cache[key]

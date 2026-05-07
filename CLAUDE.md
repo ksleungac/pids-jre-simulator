@@ -146,7 +146,7 @@ pids_jre_simulator/
 | `displays/` | Modular per-train-model UpperDisplay + LowerDisplay (E235-1000): set_state(), update(), draw() |
 | `displays/train_models/{model}/__init__.py` | Per-model manifest: dimensions, palette, exported display classes. Where each train series declares its physical LCD shape. |
 | `app.py` | PASimulator, AppState, translation loading, PA/STA handling |
-| `i18n.py` | App-chrome i18n: settings persistence (alongside-exe), locale detection, `t()` translation lookup, per-language SysFont helper. NOT used for LCD station-name rendering. |
+| `i18n.py` | App-chrome i18n: settings persistence (alongside-exe), locale detection, `t()` translation lookup, per-language bundled-OTF font helper. NOT used for LCD station-name rendering. |
 | `language_picker.py` / `setup.py` | First-run language picker + route-selection screen. Both consume `i18n.t()` / `i18n.font()`. |
 | `main.py` | Entry point, picker → setup screen orchestration, error handling |
 

@@ -43,12 +43,11 @@ class SetupScreen:
         available_height = screen.get_height() - 160
         self.max_visible = max(3, available_height // self.row_height)
 
-        # Chrome fonts via i18n.font() — bundled HelveticaNeue on EN (PIDS-canon
-        # Latin, clean macron rendering for Tōkyō/Chūō; deterministic across
-        # systems), YaHei (SysFont) on HK/CN. `route_font_cjk` is pinned to a
-        # CJK language explicitly because route names on line 1 are Japanese
-        # kanji today (translation deferred); used for the kanji portion of
-        # line 1 in EN mode (two-pass with tail Latin).
+        # Chrome fonts via i18n.font() — bundled OTFs per language: HelveticaNeue
+        # (en, PIDS-canon Latin), ShinGoPr6N (zh_HK), Noto Sans CJK SC (zh_CN).
+        # `route_font_cjk` is pinned to a CJK language explicitly because route
+        # names on line 1 are Japanese kanji today (translation deferred); used
+        # for the kanji portion of line 1 in EN mode (two-pass with tail Latin).
         self.title_font = i18n.font(28, bold=True)
         self.route_font = i18n.font(18, bold=True)
         self.instruction_font = i18n.font(16, bold=True)

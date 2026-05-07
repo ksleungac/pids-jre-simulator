@@ -49,10 +49,12 @@ DOT_FUTURE = (70, 76, 92)                         # fill for not-yet-reached pha
 
 # ── fonts ───────────────────────────────────────────────────────────────────
 # Tutorial chrome uses the project's bundled OTFs:
-#   - HelveticaNeue: Latin + Latin Extended (covers macron ō in 'Kōzu' which
-#     SysFont JhengHei tofus). Frutiger is also bundled but only as Bold —
-#     using the Helvetica family keeps Roman/Medium/Bold consistent.
+#   - HelveticaNeue: Latin + Latin Extended (covers macron ō in 'Kōzu').
+#     Frutiger is also bundled but only as Bold — using the Helvetica family
+#     keeps Roman/Medium/Bold consistent.
 #   - ShinGoPr6N: kanji + kana for embedded Japanese (国府津, ただいま).
+#   - Noto Sans CJK SC: zh_CN chrome (ShinGoPr6N is JIS-only and tofus
+#     Simplified-specific glyphs).
 # Mixed strings render via ``_render_mixed`` which switches font per-codepoint
 # and baseline-aligns the runs.
 
@@ -86,18 +88,18 @@ def _font_shingo(size: int, *, heavy: bool = False) -> pygame.font.Font:
 
 
 def _font_cjk(size: int, *, heavy: bool = False) -> pygame.font.Font:
-    """Language-aware CJK font for chrome rendering.
+    """Language-aware CJK font for chrome rendering — bundled OTFs only.
 
-    zh_CN routes through Microsoft YaHei Bold (a SysFont) — ShinGoPr6N is
-    built from Japanese JIS and tofus Simplified-only glyphs (开, 进, 这, etc.)
-    that aren't in JIS. Always bold even for body weight: YaHei Regular reads
-    visibly thinner than ShinGoPr6N Medium at the same point size, and the
-    tutorial's body text needs strokes thick enough to scan. Other languages
-    keep ShinGoPr6N: Japanese forms read correctly for embedded JP kanji on
-    the LCD line (国府津, 鴨宮), and Traditional Chinese (zh-HK) chars overlap
-    with JIS so render fine."""
+    zh_CN routes to Noto Sans CJK SC (always Bold — Regular reads thinner
+    than ShinGoPr6N Medium at the same point size, and body text needs
+    strokes thick enough to scan). ShinGoPr6N is built from Japanese JIS
+    and tofus Simplified-only glyphs (开, 进, 这).
+
+    Other languages keep ShinGoPr6N: Japanese forms render correctly for
+    embedded JP kanji on the LCD line (国府津, 鴨宮); Traditional Chinese
+    (zh-HK) chars overlap with JIS so render fine."""
     if i18n.current_lang() == "zh_CN":
-        return i18n.font_named("microsoftyahei", size, bold=True)
+        return i18n.font_for_lang("zh_CN", size, bold=True)
     return _font_shingo(size, heavy=heavy)
 
 
@@ -335,9 +337,9 @@ def _measure_mixed(text: str, latin_font: pygame.font.Font, cjk_font: pygame.fon
     return total
 
 # Phase progress-bar i18n keys. Labels are looked up via i18n.t() each frame
-# (cheap — the SysFont surfaces are cached separately). Plain text values, no
-# emoji prefix; JhengHei doesn't ship emoji glyphs and the color + highlight
-# already carries the "current vs done" distinction cleanly.
+# (cheap — the bundled-font surfaces are cached separately). Plain text values,
+# no emoji prefix; the bundled CJK faces don't ship emoji glyphs and the color
+# + highlight already carries the "current vs done" distinction cleanly.
 PHASE_KEYS = (
     "tutorial.phase.at_station",
     "tutorial.phase.pre_departure",

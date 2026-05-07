@@ -15,9 +15,11 @@ class LanguagePicker:
     ``i18n.font_for_lang``) regardless of which row is hovered. Picker chrome
     (title, OK, hint) follows the active language and DOES font-jump on hover
     — accepted tradeoff for using bundled HelveticaNeue on EN (consistent
-    Latin face across systems). HelveticaNeue 28pt and YaHei 24pt produce
-    matching ~32px rendered heights (Latin measures ~84% of CJK height at
-    the same point size).
+    Latin face across systems). Latin 28pt and CJK 24pt produce matching
+    ~32px rendered heights (Latin measures ~84% of CJK height at the same
+    point size). The ratio was calibrated against YaHei; ShinGoPr6N (zh_HK)
+    and Noto Sans CJK SC (zh_CN) replaced YaHei in the SysFont→bundled-OTF
+    refactor — re-eyeball the row heights if they look uneven.
     """
 
     # (code, label, font_size) — point sizes pre-tuned to match rendered height
@@ -67,8 +69,8 @@ class LanguagePicker:
         hint_y = 380
         # ────────────────────────────────────────────────────────────────────
 
-        # Picker chrome follows the active language — bundled HelveticaNeue on
-        # EN, YaHei (SysFont) on HK/CN. Re-renders on hover as the user previews
+        # Picker chrome follows the active language via bundled OTFs (see
+        # i18n._LANG_CHROME_FONT). Re-renders on hover as the user previews
         # languages.
         title_font = i18n.font(28, bold=True)
         btn_font = i18n.font(20, bold=True)
