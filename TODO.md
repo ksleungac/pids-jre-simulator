@@ -29,6 +29,7 @@ The OCR auto-PA feature shipped in `feat(auto-input): OCR-driven auto-PA — in-
 ## Display / LCD fidelity
 
 - [ ] **New train models — re-skin work, not re-architecture.** Priority order: E235-0 Yamanote (lowest-modification re-skin, leaning next), then E231-500, then E233 series. Each model lives under `displays/train_models/{model}/`. (CLAUDE.md § "Mental Model — Direction of travel".)
+- [x] **~~Triage-policy rewrite for `/review+fix` deferred findings.~~** Shipped 2026-05-07. All deferred findings now route to TODO.md `## Deferred review findings` (memory daily logs are narrative-only). 22 entries migrated from past daily logs (2026-04-30 through 2026-05-04). `.claude/skills/review-plus-fix-relentlessly/SKILL.md` triage policy rewritten to match.
 - [ ] **ENGLISH lower-LCD.** Still a stub — falls back to Japanese rendering. View-cycler timer already ticks regardless of language mode, so wiring an English renderer should be additive. (`memory/2026-04-25.md` § "Open follow-ups".)
 - [ ] **`code_3` (3-letter Roman badge) edge cases.** Catalog is finite (~22 stations). General polish around fonts / placement / fallback for stations without a code. (CLAUDE.md § "Direction of travel".)
 - [ ] **Continuity-arrow reconciliation** between the 8-station view's reserved-space arrows (`side_margin = 44`) and the user's existing buggy full-route helper. `JapaneseEightStationDisplay._draw_continuation_marker` is defined-but-deliberately-uncalled, awaiting that review. When wiring it in, also switch its `len(self.stops) - 1` early-return guard to `len(self.display_stops) - 1` for pre_stops compatibility (flagged inline in the dormant-scaffolding comment block above the method). (`memory/2026-04-25.md` § "Open follow-ups".)
@@ -65,6 +66,51 @@ The chrome i18n foundation shipped 2026-04-29 evening: `i18n.py`, language picke
 
 - [ ] **Decide 1b debug-frame dump behaviour.** `_dev_scripts/capture_game.py:320` saves a HUD crop every sample interval to `_experiments/live_captures/`. Gitignored, but disk spam if 1b runs long. Options: leave (debugging tool), gate behind `--save-frames` flag (default off), or remove. (Discussed 2026-04-27, deferred.)
 - [ ] **Re-grab `passing_en.png` at native 2560×1440.** Current capture is 2559×1439 — pygame blit handles it, classifier diff=0.00, but a clean re-capture is tidier.
+
+---
+
+## Deferred review findings
+
+Open items surfaced by `/review+fix` that were deferred (not blocking, scope-creep, or dead-in-practice). Dedup by `<file>:<line>` + summary; bump recurrence counts when re-flagged. Mark `[x]` and strikethrough when fixed; remove entirely when user says "not real".
+
+### From 2026-04-30 (post-commit `51c7b07` + dep-misclassification cleanup)
+
+- [ ] **Severity-tier overlap in review-dirty: Lens 2 #10 IS a Lens 3 violation** — `.claude/skills/review-dirty/SKILL.md:86` (lens 1, warning; first flagged 2026-04-30) — Need explicit "deepest applicable lens wins" rule, OR reframe Lens 2 #10 as a mechanical safety net for the Lens 3 rule.
+- [ ] **Stale `_dev_scripts/validate_pa.py` reference** — `.claude/skills/sta-make/SKILL.md:602` (lens 1, warning; first flagged 2026-04-30) — points to a file that doesn't exist anywhere in the repo. Likely just delete the line.
+- [ ] **Stale `_dev_scripts/` description** — `.claude/rules/conventions.md:9` (lens 2, warning; first flagged 2026-04-30) — still lists "drive-recorder CLI" as content, but `plot_drive.py` was moved to project root.
+- [ ] **Silent except-Exception swallows traceback** — `auto_input.py:273` (lens 3, warning; first flagged 2026-04-30) — Lazy `from plot_drive import …` wrapped in `except Exception` silently swallows all failure modes. Should add `traceback.print_exc()`.
+- [ ] **`info` severity auto-defer "Drop" silently buries unanswered ASK-flagged findings** — `.claude/skills/review-plus-fix-relentlessly/SKILL.md:126` (lens 2, info; first flagged 2026-04-30). NOTE: triage policy fully rewritten 2026-05-07 — verify whether this still applies under the new "all → TODO.md" routing.
+- [ ] **JSON schema example hard-codes single severity** — `.claude/skills/review-dirty/SKILL.md:117` (lens 2, info; first flagged 2026-04-30) — should show full enum.
+- [ ] **Recurrence-detection step implies unbounded scan** — `.claude/skills/review-plus-fix-relentlessly/SKILL.md:134` (lens 1, info; first flagged 2026-04-30) — "Already in any `memory/2026-*.md`" should be bound to last 30 days. NOTE: triage policy rewritten 2026-05-07 — recurrence step itself was simplified, may be obsolete.
+- [ ] **Bash regex extraction contradicts skill's PowerShell-only directive** — `.claude/skills/review-plus-fix-relentlessly/SKILL.md:67` (lens 1, info; first flagged 2026-04-30) — Show PowerShell variant alongside.
+- [ ] **Promote-out example chronologically inaccurate** — `.claude/rules/conventions.md:10` (lens 3, info; first flagged 2026-04-30) — reads `_dev_scripts/plot_drive.py` → `plot_drive.py`; was actually in `data_tools/` pre-rename.
+
+### From 2026-04-30 (meta — broader release-readiness gap)
+
+- [ ] **Smell #10 only fires on already-`_`-prefixed paths** — `.claude/rules/conventions.md` + `.claude/skills/vibe-check/SKILL.md` (meta, post-2026-04-30 dep-misclassification) — A fresh `tools/` or `helpers/` folder created for dev-only purposes could repeat the exact same chain. Closing requires a `conventions.md` rule about top-level non-`_`-prefixed folders, OR a vibe-check smell extending #10.
+
+### From 2026-05-02 (dual-stream audio)
+
+- [ ] **PA paused-state asymmetry vs STA's explicit `_sta_paused` flag** — `app.py:489` (lens 1, info; first flagged 2026-05-02) — `is_pa_playing()` returns True even while PA is paused (pygame `mixer.music.get_busy()` quirk). Pause is idempotent so no live-incorrect behavior, but mental model is asymmetric. Revisit when an unpause UI key is added.
+- [ ] **`_load_and_play_sta` exception branch doesn't reset `_sta_paused`** — `audio.py:200` (lens 1, info; first flagged 2026-05-02) — If a fresh `play_sta` call hits an exception before the explicit reset, the flag stays True from the prior pause. Low priority — exception path only fires on genuinely unrecoverable errors.
+- [ ] **`mixer.Channel(0)` hardcoded without `mixer.set_reserved(1)`** — `audio.py:83` (lens 3, info; first flagged 2026-05-02) — No collision today (only `mixer.music` + `_sta_channel` use audio). Fix when a second `Sound`-based caller is added.
+- [ ] **PageUp lacks `KEY_REPEAT_DELAY` throttle** — `app.py:487` (lens 1, info; first flagged 2026-05-02) — Held PageUp restarts STA from `sta_cut` every frame at 15 Hz. Pre-existing behavior, not introduced by dual-stream-audio session.
+
+### From 2026-05-02 (transfer-info schema)
+
+- [ ] **Variant-only base slugs raise KeyError downstream rather than at resolver** — `DATA_FORMAT.md:254` (lens 1, info; first flagged 2026-05-02) — `yokosuka_sobu` has no `name_ja`/`name_en` at base; if referenced plain (no `.variant` suffix), the entry resolves without name fields → KeyError downstream. Today's data always uses variants for these slugs. Revisit when validator pass surfaces, or add explicit resolver guard.
+- [ ] **`ueno_tokyo.tohoku` variant inherits non-IRL `name_ja`/`name_en`** — `data/lines.json:27` (lens 1, info; first flagged 2026-05-02) — IRL on JU-zone (Takasaki/Utsunomiya) the LCD typically labels by 宇都宮線/高崎線, not "Ueno-Tōkyō Line". Out of scope until first JU-zone station with `transfers` is added.
+
+### From 2026-05-03 (transfer-info LowerDisplay hookup)
+
+- [ ] **`_resolve_transfers` called twice per frame at LowerDisplay layer** — `displays/train_models/e235_1000/lower_lcd.py:_station_has_transfers` (lens 1, info; first flagged 2026-05-03) — Once for slot-membership decision in `_available_slots`, again on render in `TransferInfoDisplay.show_stops`. Reaches past underscore-prefix private boundary. Perf is fine (dict lookup + small list comps); cache once per frame at LowerDisplay level if needed.
+- [ ] **Speculative `del current_time` in `_render`** — `displays/train_models/e235_1000/transfer_info.py:_render` (lens 2, info; first flagged 2026-05-03) — Comment says "animations may consume it later" but no concrete plan. Drop the param if no animations land within a few months.
+- [ ] **`jump_to_stop`'s at_station semantics ambiguous for cross-stop jumps** — `displays/train_models/e235_1000/lower_lcd.py:_handle_at_station_edge` (lens 1, info; first flagged 2026-05-03) — When user click-jumps from STOPPING@A → STOPPING@B, `_prev_at_station` was already True so no rising edge fires → no force-switch to TRANSFER at the new stop. Mid-route → click-stop fires the edge correctly. User judgment needed on whether cross-stop jumps should also trigger TRANSFER.
+
+### From 2026-05-04 (transfer-info per-N scaling)
+
+- [ ] **`resolve_entry(ref, lines)` called 3× per render for the same slug refs** — `preview_transfers.py:172` (lens 1, info; vibe-check #1; first flagged 2026-05-04) — Line 172 (shinkansen count), line 312 (cat_order sort), per-badge at line 786. Cheap (no I/O). Pre-existing pattern doubled by 2026-05-04 PM edit. Per-N scaling block may be replaced under algorithm-redesign Step 1+2 work — no point optimizing throwaway code. Revisit when algorithm work resumes.
+- [ ] **`_N >= 10` clause in dense-tier scaling is anticipatory** — `preview_transfers.py:175` (lens 1, info; principles.md § Implementation-completion-as-spec; first flagged 2026-05-04) — Max station N in current dataset is ~9; the `N >= 10` branch is uncalibrated. Defer until either (a) an N=10+ station enters the dataset, or (b) algorithm-redesign Step 1 formally calibrates the full ladder.
 
 ---
 

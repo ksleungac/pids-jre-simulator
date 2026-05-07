@@ -114,37 +114,23 @@ done
 
 ## Triage policy for deferred findings
 
-When you (main agent) decide to defer a finding rather than fix it during a cycle, route it per its severity:
+When you (main agent) decide to defer a finding rather than fix it during a cycle, route it to **TODO.md `## Deferred review findings`** regardless of severity. The daily-log routing path (`memory/YYYY-MM-DD.md`) is **not used** — daily logs are narrative continuity / metacognitive observations only per `session-recap/SKILL.md`. Code-related obligations live as forward state in TODO.md.
 
-### Routing rules
+### Routing rule
 
-| Severity | If user explicitly defers | If you auto-defer (uncertain / out-of-scope / parallel WIP) |
-|---|---|---|
-| `architectural-critical` | TODO.md `## Deferred review findings` (real obligation, must surface at startup) | TODO.md (same — these block release-quality, do not silently bury in daily log) |
-| `critical` | TODO.md `## Deferred review findings` | TODO.md (same) |
-| `warning` | Daily log with `[review-deferred]` tag (recurrence may promote later) | Daily log with `[review-deferred]` tag |
-| `info` | Daily log with `[review-deferred]` tag | Drop (the ASK-flag was answered "not real") |
+| Severity | Where it goes |
+|---|---|
+| `architectural-critical` | TODO.md `## Deferred review findings` (real obligation, must surface at startup) |
+| `critical` | TODO.md `## Deferred review findings` |
+| `warning` | TODO.md `## Deferred review findings` |
+| `info` | TODO.md `## Deferred review findings` if user explicitly defers OR you auto-defer with a real reason. **Drop** if the ASK-flag was answered "not real" (no value tracking these). |
 
 ### Dedup logic
 
 For each finding to be logged, dedup by `<file>:<line>` + issue summary:
 
-1. **Already in today's `memory/<today>.md` under `## Deferred from /review+fix [HH:MM]`?** → skip (no within-session duplicates).
-2. **Already in TODO.md `## Deferred review findings`?** → skip (no duplicate in backlog).
-3. **Already in any `memory/2026-*.md` from prior days under `[review-deferred]`?** → recurrence detected. Propose promotion to TODO.md, ask user:
-   - **Approved**: add to TODO.md `## Deferred review findings`; retag prior daily-log entries `[review-deferred]` → `[review-promoted: TODO.md § "Deferred review findings"]`.
-   - **Declined**: append today's entry as `[review-deferred]` with new reason captured.
-4. **Otherwise (first occurrence)**: append per the routing table above.
-
-This keeps the recurrence-promotion ladder self-contained in the loop — no separate distill pass needed for review-backlog management. The loop is self-promoting.
-
-### Daily-log entry format
-
-Append to `memory/<today>.md` under section heading `## Deferred from /review+fix <HH:MM>` (create section if not present):
-
-```
-- [review-deferred] <file>:<line> [lens N, severity] [rule_citation if any] — <issue summary> — Deferred reason: <why>
-```
+1. **Already in TODO.md `## Deferred review findings`?** → skip (no duplicate in backlog). Optionally bump a recurrence counter in the existing entry's parenthetical (`recurred X times across [date list]`).
+2. **Otherwise (first occurrence)**: append per the format below.
 
 ### TODO.md entry format
 
@@ -154,19 +140,9 @@ Append to TODO.md under section `## Deferred review findings` (create section if
 - [ ] **<issue summary>** — `<file>:<line>` (lens N, severity; rule: <citation if any>; first flagged YYYY-MM-DD; recurred X times across [date list]) — Deferred because: <why>
 ```
 
-### Tag lifecycle (for `[review-deferred]`)
+### Lifecycle
 
-```
-review-plus-fix-relentlessly writes:
-  [review-deferred] — first occurrence of a deferred finding
-
-Loop's own recurrence detection transitions to:
-  [review-promoted: TODO.md § "Deferred review findings"] — promoted after recurrence
-  [review-resolved] — manual retag when subsequent review confirms gone (optional, low-priority)
-  [review-rejected: <reason>] — manual retag when user explicitly says "not a real issue"
-```
-
-Once an entry is `[review-promoted]`, future loop runs skip its dedup check (it lives in TODO.md now). `[review-resolved]` and `[review-rejected]` are manual retags — the loop doesn't need to enforce them, they exist so future-you knows the item was decided not just dropped.
+Entries are checkbox-tracked in TODO.md; mark `[x]` and move to `## Closed-off paths` (with a `~~strikethrough~~` line + brief resolution note) when fixed. If the user explicitly says "not a real issue", remove the entry rather than tag it — matches the project's "no log-only middle bucket" rule.
 
 ### Step 3: Final summary
 ```bash
