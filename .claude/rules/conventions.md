@@ -19,6 +19,7 @@ Project-local style and naming choices. These don't shape major decisions; they 
 
 - **Black formatting via pre-commit hook** (`.venv/Scripts/python -m black`). Don't run Black manually unless the hook isn't firing.
 - **`.otf` fonts only.** `.ttf` cuts (Helvetica Neue specifically) have macron/diacritic artifacts at large sizes. The `fonts/` folder should never gain a `.ttf`.
+- **Never `pygame.font.SysFont()` in production code.** Crashes on Chinese-locale Windows (`TypeError: expected str, bytes or os.PathLike object, not int`) because SysFont scans the Windows font registry, which fails on non-EN locales — original 2026-03-14 incident, recurred 2026-05-07 after the i18n chrome refactor regressed it. All chrome + LCD fonts load via `pygame.font.Font(str(project_root() / "fonts" / fname), ...)`. Enforcement points: CONTRACT blocks at `displays/train_models/*/upper_lcd.py`, comment block + `_LANG_CHROME_FONT` mapping in `i18n.py`. Calibration tools (`compare_fonts.py`, `compare_grid.py`) and `_dev_scripts/` may keep SysFont — they don't ship.
 - **`old_version.py`** — keep. Intentionally retained as the pre-refactor monolithic reference even though nothing imports it. Don't propose deleting it during tidy passes.
 
 ## Display module structure
