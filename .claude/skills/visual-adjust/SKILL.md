@@ -72,6 +72,15 @@ see "Side-by-side composites" below.
   take screenshots and compare against ground truth yourself. Don't ask the user to
   review every intermediate screenshot — iterate autonomously until it looks right,
   then present the final result. Only show intermediates if the user specifically asks.
+- **When the user IS in the loop, don't re-read the PNG.** The previous rule covers
+  claude-alone iteration against fixed ground truth. The opposite mode — user providing
+  rapid feedback ("color bar wider", "stroke 2px narrower", "10px more gap") — has the
+  user as the eye. Render, save the PNG, present to user; do NOT Read the PNG yourself
+  to verify. The user already opened it. Reading it adds latency without adding signal,
+  and the user has named this costly: "u no need to read the png, this is slowing you
+  down" (2026-05-07, circular full-route iteration). Mode tell: if claude's last action
+  was "applied user's tweak request, rendered" → next action is "present to user", NOT
+  "Read the PNG."
 - **Loose iteration language is approximate**: when the user says "half" or "5–10 px
   more", treat it as approximate — verify with screenshots, don't over-fit to the
   literal number. The user is describing an outcome, not specifying an exact value.
