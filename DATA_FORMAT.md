@@ -143,7 +143,7 @@ Stops can carry their own `dest` field to override the route-level value:
 
 **Loader-time closure.** `route_loader.finalize_route` walks the stops list once at load time and fills `dest` on every stop with its effective value. After load, every stop has a `dest` field; renderers read it directly with no fallback logic. JSON is input grammar — only the irreducible overrides are authored; the runtime structure is the closure.
 
-**Yamanote example:** route-level `dest = 品川・東京`; overrides at 田町 / 神田 / 鶯谷 / 目白 / 代々木 / 恵比寿 cycle through the next-2-major-terminals window. Display semantics (kanji always; English uses translation lookup) live in [DISPLAY.md § Destination Behavior](DISPLAY.md).
+**Yamanote example:** route-level `dest = 品川・東京`; overrides at 田町 / 神田 / 鶯谷 / 目白 / 代々木 / 恵比寿 cycle through the next-2-major-terminals window. Display semantics (kanji always; English uses translation lookup) live in [DISPLAY_E235.md § Destination Behavior](DISPLAY_E235.md).
 
 ---
 

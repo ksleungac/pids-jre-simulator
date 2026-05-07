@@ -1,6 +1,6 @@
 ---
 name: distill-docs
-description: Periodic audit of domain docs (DISPLAY.md, DATA_FORMAT.md, AUTO_INPUT.md) — scan for accumulated bloat (history notes, code-snippet illustrations, speculative future sections, design-rationale prose, cross-doc duplication, cumulative staleness). Discussion-first, item-by-item; user approves each removal before any edit lands.
+description: Periodic audit of domain docs (DISPLAY.md, DISPLAY_E235.md, DATA_FORMAT.md, AUTO_INPUT.md, plus future per-series DISPLAY_*.md) — scan for accumulated bloat (history notes, code-snippet illustrations, speculative future sections, design-rationale prose, cross-doc duplication, cumulative staleness). Discussion-first, item-by-item; user approves each removal before any edit lands.
 triggers:
   - /distill-docs
   - distill docs
@@ -13,7 +13,7 @@ triggers:
 
 ## Purpose
 
-Domain docs (`DISPLAY.md`, `DATA_FORMAT.md`, `AUTO_INPUT.md`) are written under feature-flow pressure. Even with each doc's `EDIT-CONTRACT` block at the top doing heavy lifting at write-time, three failure modes accumulate that the gate structurally can't catch:
+Domain docs (`DISPLAY.md`, `DISPLAY_E235.md`, `DATA_FORMAT.md`, `AUTO_INPUT.md`, plus future per-series `DISPLAY_*.md` as new train models land) are written under feature-flow pressure. Even with each doc's `EDIT-CONTRACT` block at the top doing heavy lifting at write-time, three failure modes accumulate that the gate structurally can't catch:
 
 1. **Cross-doc drift** — a fact gets stated in DISPLAY.md, then later (correctly) added to CLAUDE.md mental model, or a skill, or an inline `# CONTRACT:`. Each edit looks fine in isolation; the duplicate only shows up reading both.
 2. **Cumulative staleness** — a feature commit makes half of an old section obsolete, but the editor was focused on the new content. Old content remains as background noise.

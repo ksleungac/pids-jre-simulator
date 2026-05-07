@@ -136,7 +136,7 @@ def render_transfer(
     against a freshly-allocated surface.
     """
     # CONTRACT: Pipeline = scaling → row-grouping → blueprint → Rules 1-4 + track-back.
-    # See DISPLAY.md § "Transfer Info (E235-1000)" for definitions + worked examples.
+    # See DISPLAY_E235.md § "Transfer Info" for definitions + worked examples.
     # Tuning lives in the params block below — adjust named constants, not the IRL math.
     def _dprint(*args, **kwargs):
         if debug:

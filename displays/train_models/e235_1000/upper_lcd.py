@@ -17,7 +17,7 @@ from displays.utils import clip, draw_text_given_width, draw_station_code_badge
 # CONTRACT: each region's draw method clips to its rect (see manifest below
 # this comment block: TRAIN_TYPE_RECT, DEST_RECT, PREFIX_RECT, STATION_RECT,
 # CLOCK_RECT, BADGE_RECT, PA_HINT_RECT). The clip is a hard guarantee — pixels
-# drawn outside the rect are dropped by pygame. See DISPLAY.md § "Element
+# drawn outside the rect are dropped by pygame. See DISPLAY_E235.md § "Element
 # confinement (clip-enforced)" for the rationale and gotchas.
 #
 # Coordinates are within the upper LCD area (y=0..UPPER_HEIGHT=117).

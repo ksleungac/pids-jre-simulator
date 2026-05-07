@@ -146,7 +146,8 @@ This table applies *always*, not only at recap time. Whenever you write or edit 
 | Lessons from past mistakes | `.claude/rules/critical_lessons.md` | anywhere else |
 | Build/distribution details, PyInstaller invocation, version metadata, junction handling | `.claude/skills/build/SKILL.md` | CLAUDE.md, inline comments |
 | JSON field definitions, validation rules, data format encoding | `DATA_FORMAT.md` | CLAUDE.md, inline comments |
-| LCD architecture, mode rendering, skip animation, layout gotchas | `DISPLAY.md` | CLAUDE.md, inline comments |
+| LCD cross-model infrastructure (mode system, unified state machine, lower-LCD interface, adding new train model) | `DISPLAY.md` | CLAUDE.md, inline comments |
+| LCD per-sub-series renderer details (continuity arrows, transfer-info pipeline, sub-series diffs, layout tables) | `DISPLAY_E235.md` (and future per-series `DISPLAY_*.md`) | DISPLAY.md, CLAUDE.md, inline comments |
 | Daily session logs (narrative continuity only) | `memory/YYYY-MM-DD.md` | rules / preferences / learnings (those went to canonical homes) |
 | Long-term memory index (one-line pointers only) | `memory/MEMORY.md` | — |
 | Open work items, follow-ups, deferred design Qs (one-line each + source pointer) | `TODO.md` | daily logs (logs capture history; TODO captures forward state) |

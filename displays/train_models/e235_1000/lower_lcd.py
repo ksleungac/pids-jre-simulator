@@ -508,7 +508,7 @@ class JapaneseDisplay:
 
     # CONTRACT: row_head_extra / row_tail_extra magic numbers MUST stay in sync
     # with draw_ptr's pentagon `head_extra` and draw_times' 分-marker `cell_extra`.
-    # See DISPLAY.md § "Row-end / row-head bar extension" — change one, change all.
+    # See DISPLAY_E235.md § "Row-end / row-head bar extension" — change one, change all.
     def show_stops(self, state, current_time: float = 0.0) -> None:
         """Render the full lower LCD frame for this mode.
 
@@ -840,7 +840,7 @@ class JapaneseEightStationDisplay:
     # ------------------------------------------------------------------
 
     # CONTRACT: window invariant — exactly 8 cells, three regimes (short / sliding / locked).
-    # See DISPLAY.md § "Window invariant — always exactly 8 cells" for the
+    # See DISPLAY_E235.md § "Window invariant — always exactly 8 cells" for the
     # cursor-local-index table. Past regressions came from editing without consulting it.
     def _get_window(self, curr_stop: int, cursor_pos: int) -> List[Tuple[int, Dict]]:
         """Return (global_index, stop) pairs for the visible 8-cell window.
@@ -1573,7 +1573,7 @@ class LowerDisplay:
 
     # CONTRACT: must be called BEFORE language-mode dispatch (not inside the
     # KANJI/FURIGANA branch). Nesting in the language branch pauses the timer
-    # during ENGLISH; cycle cadence drifts long. See DISPLAY.md § "View cycler".
+    # during ENGLISH; cycle cadence drifts long. See DISPLAY_E235.md § "View cycler".
     def _tick_cycle(self, current_time: float) -> None:
         """Advance the slot cycle. Reconciles slot membership and per-slot durations."""
         slots = self._available_slots(self._state)

@@ -177,15 +177,15 @@ Yellow hint square = multiple PA tracks available.
 **Don't read these upfront — consult when needed:**
 
 - **Data/JSON** → [DATA_FORMAT.md](DATA_FORMAT.md) — `route.json` / `translations.json` / `stations.json` shapes, validation rules
-- **LCD displays** (upper or lower) → [DISPLAY.md](DISPLAY.md) — architecture, mode rendering, skip animation, layout gotchas, draw-method subtleties
+- **LCD displays** (upper or lower) → [DISPLAY.md](DISPLAY.md) — cross-model infrastructure (mode system, unified state machine, lower-LCD interface, adding-new-train-model recipe). For per-sub-series renderer details: [DISPLAY_E235.md](DISPLAY_E235.md) (E235-0 + E235-1000); future per-series docs as new models land.
 - **Real-world JR East context** → already in this doc's "Mental Model" section above (preloaded — keep it in head, don't re-read each session)
 - **Audio/Diagram** → Use `/pa-make` skill (PA splitting + naming + route.json updates) or `/sta-make` skill (STA splitting + sta_cut validation + by-ear verifier)
 - **Auto-input / OCR / game-window capture** → [AUTO_INPUT.md](AUTO_INPUT.md) — companion module that reads JR EAST Train Sim's HUD via dxcam to fire PAs automatically. Lives in `auto_input.py` + `ocr.py` + `hud_layout.py` (in-process integration) and `_dev_scripts/capture_game.py` (separate-process variant).
-- **Cross-cutting code contracts** → live inline at their code site as `# CONTRACT:` blocks. Examples: PyInstaller path resolution at `displays/train_models/e235_1000/upper_lcd.py:get_base_dir`, countdown formula at `displays/train_models/e235_1000/lower_lcd.py:draw_times`, font-loading rule at the first font init in `upper_lcd.py`'s `JapaneseDisplay.__init__`.
+- **Cross-cutting code contracts** → live inline at their code site as `# CONTRACT:` blocks. Examples: PyInstaller path resolution at `app_paths.py:project_root`, countdown formula at `displays/train_models/e235_1000/lower_lcd.py:draw_times`, font-loading rule at the first font init in `upper_lcd.py`'s `JapaneseDisplay.__init__`.
 - **Testing / previewing** → `uv run preview_display.py` defaults to the mock catalog (see [`audio/_mock/main/README.md`](audio/_mock/main/README.md) for stop layout). Keys: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. `jump_to_stop` backward-rounding semantics are documented in its docstring at `app.py` `PASimulator.jump_to_stop`. Preview-mode swap inventory (audio, input, mixer, window) is at `PASimulator.__init__`'s ``preview`` parameter.
 - **Building / releasing** → `/build <version>` produces the staged exe + zip; `/release <version>` picks up to draft notes, tag, and hand off the `gh release create` upload.
 - **README / translation maintenance** → `/readme` skill.
 - **Code review** → `/review-dirty` skill (single change) or `/review-plus-fix-relentlessly` (review + fix loop).
 - **Commit hygiene** → `/commit` skill.
 - **Codebase mess sweep** → `/vibe-check` skill (duplicated logic, dead helpers, half-finished implementations, speculative architecture, stale comments — discussion-first, item-by-item, smoke-tests every fix). Distinct from `/review-dirty` (which reviews a single change for quality).
-- **Doc bloat sweep** → `/distill-docs` skill (scan DISPLAY.md / DATA_FORMAT.md / AUTO_INPUT.md for accumulated bloat the write-time `EDIT-CONTRACT` gate misses — discussion-first, item-by-item). Pairs with the `EDIT-CONTRACT` block at the top of each domain doc.
+- **Doc bloat sweep** → `/distill-docs` skill (scan DISPLAY.md / DISPLAY_E235.md / DATA_FORMAT.md / AUTO_INPUT.md for accumulated bloat the write-time `EDIT-CONTRACT` gate misses — discussion-first, item-by-item). Pairs with the `EDIT-CONTRACT` block at the top of each domain doc.
