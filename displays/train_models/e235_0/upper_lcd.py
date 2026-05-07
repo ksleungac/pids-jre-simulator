@@ -1,7 +1,10 @@
-"""E235-1000 series Upper LCD display implementation.
+"""E235-0 series Upper LCD display implementation.
 
 Contains all display modes (Japanese, Furigana, English) for the
-E235-1000 series Upper LCD.
+E235-0 series Upper LCD. Forked from E235-1000 with the train-type
+cell removed — Yamanote runs a single service type, so IRL PIDS
+doesn't render one. The 150×31 top-left area that previously held
+the train-type box is now plain DARK_BG; no other elements reflow.
 """
 
 import pygame
@@ -12,12 +15,12 @@ from displays.base import DisplayMode, ModeCycler
 from displays.utils import clip, draw_text_given_width, draw_station_code_badge
 
 # =============================================================================
-# Region Map — E235-1000 upper LCD layout (descriptive)
+# Region Map — E235-0 upper LCD layout (descriptive)
 #
 # CONTRACT: each region's draw method clips to its rect (see manifest below
-# this comment block: TRAIN_TYPE_RECT, DEST_RECT, PREFIX_RECT, STATION_RECT,
-# CLOCK_RECT, BADGE_RECT, PA_HINT_RECT). The clip is a hard guarantee — pixels
-# drawn outside the rect are dropped by pygame. See DISPLAY.md § "Element
+# this comment block: DEST_RECT, PREFIX_RECT, STATION_RECT, CLOCK_RECT,
+# BADGE_RECT, PA_HINT_RECT). The clip is a hard guarantee — pixels drawn
+# outside the rect are dropped by pygame. See DISPLAY_E235.md § "Element
 # confinement (clip-enforced)" for the rationale and gotchas.
 #
 # Coordinates are within the upper LCD area (y=0..UPPER_HEIGHT=117).
@@ -31,7 +34,6 @@ from displays.utils import clip, draw_text_given_width, draw_station_code_badge
 # ----------   -------------------------   -----------------   --------------
 # upper_bg     UpperDisplay.draw           (full LCD area)     gray
 # ribbon       UpperDisplay.draw           (route color band)  — (route color)
-# train_type   *Display.draw_train_type    TRAIN_TYPE_RECT     — (WHITE_BG)
 # dest         *Display.draw_destination   DEST_RECT           red
 # prefix       *Display.draw_prefix        PREFIX_RECT         blue
 # clock        *Display.draw_clock         CLOCK_RECT          yellow
@@ -43,11 +45,11 @@ from displays.utils import clip, draw_text_given_width, draw_station_code_badge
 
 # =============================================================================
 # Per-model dimensions / palette — single source of truth lives in this
-# model's package __init__.py (so lower_lcd.py and app.py read the same
-# values without one LCD module being "the boss" over the other).
+# model's package __init__.py (so app.py reads the same values without one
+# LCD module being "the boss" over the other).
 # =============================================================================
 
-from displays.train_models.e235_1000 import (
+from displays.train_models.e235_0 import (
     S_WIDTH,
     S_HEIGHT,
     UPPER_HEIGHT,
@@ -69,7 +71,6 @@ from displays.train_models.e235_1000 import (
 # bg fill, and the debug-grid tint all read from the same constant.
 # =============================================================================
 
-TRAIN_TYPE_RECT = pygame.Rect(15, 8, 150, 31)
 DEST_RECT       = pygame.Rect(0, 50, 180, UPPER_HEIGHT - 50)
 PREFIX_RECT     = pygame.Rect(222, 5, 300, 30)
 STATION_RECT    = pygame.Rect(302, 35, 384, 82)
@@ -92,7 +93,7 @@ PA_HINT_RECT    = pygame.Rect(S_WIDTH - 20, UPPER_HEIGHT - 20, 20, 20)
 #     should be fully painted)
 #   - Spot clipping (text/glyphs cut off at the boundary of a tinted region)
 # The dict literal also serves as the lightweight region manifest for upper
-# E235-1000 — keys here are the region names referenced in draw methods.
+# E235-0 — keys here are the region names referenced in draw methods.
 # =============================================================================
 
 DEBUG_GRID: bool = False  # flipped by preview_display.py --debug-grid
@@ -104,28 +105,20 @@ _DEBUG_COLORS = {
     "clock":      (200, 170, 30),  # bright yellow
     "station":    (140, 40, 170),  # bright magenta/purple
     "pa_hint":    (220, 110, 0),   # bright orange
-    # Note: train_type is intentionally absent — its WHITE_BG box is already
-    # visually distinct from every other region's tint, so keep it WHITE_BG in
-    # debug mode too. The _bg("train_type", default=WHITE_BG) call resolves
-    # to WHITE_BG in both modes via the default-fallback path.
 }
 
 
-def _bg(region: str, default=None):
+def _bg(region: str):
     """Return the region's normal background color, or its debug tint when DEBUG_GRID is on.
 
-    Most regions clear to DARK_BG normally — pass no `default` and it'll use
-    DARK_BG. Some regions clear to a different baseline (e.g. train_type uses
-    WHITE_BG); pass `default=WHITE_BG` for those so normal-mode appearance is
-    preserved. Region keys must match _DEBUG_COLORS — adding a new region
-    means adding it here too, which keeps the manifest in sync with the draw
-    code by construction.
+    All regions in E235-0 clear to DARK_BG — the train-type cell (which used
+    WHITE_BG in E235-1000) is omitted. Region keys must match _DEBUG_COLORS;
+    adding a new region means adding it here too, keeping the manifest in sync
+    with the draw code by construction.
     """
-    if default is None:
-        default = DARK_BG
     if DEBUG_GRID:
-        return _DEBUG_COLORS.get(region, default)
-    return default
+        return _DEBUG_COLORS.get(region, DARK_BG)
+    return DARK_BG
 
 
 # =============================================================================
@@ -134,7 +127,7 @@ def _bg(region: str, default=None):
 
 
 class JapaneseDisplay:
-    """Upper LCD Japanese (KANJI) rendering for E235-1000."""
+    """Upper LCD Japanese (KANJI) rendering for E235-0."""
 
     def __init__(self, screen, route_data, stops):
         self.screen = screen
@@ -145,26 +138,11 @@ class JapaneseDisplay:
         # SysFont scans the Windows font registry, which fails on Chinese/Japanese
         # locale Windows with `TypeError: expected str, bytes or os.PathLike object,
         # not int`. All fonts in this project ship in fonts/ and load via Font(path).
-        # E235-1000 specific fonts (shared across methods) - load from fonts/ folder
-        self.font_type_bold = pygame.font.Font("fonts/ShinGoPr6N-Heavy.otf", 26)
-        self.font_type_bold.set_bold(True)
-        self.font_type_bold.set_italic(True)
         self.font_dest = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 35)
         self.font_prefix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 25)
         self.font_station = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 78)
         self.font_clock = pygame.font.Font("fonts/HelveticaNeue-Roman.otf", 27)
         self.font_suffix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 18)
-
-    def draw_train_type(self, train_type: str, type_color: tuple) -> None:
-        """Draw train type box."""
-        with clip(self.screen, TRAIN_TYPE_RECT):
-            box_x, box_y, box_w, box_h = 15, 8, 150, 31
-            pygame.draw.rect(self.screen, _bg("train_type", default=WHITE_BG), pygame.Rect(box_x, box_y, box_w, box_h), 0, 2)
-            text_x, text_y = 15, 10
-            if len(train_type) > 2:
-                draw_text_given_width(text_x, text_y, box_w, self.font_type_bold, train_type, type_color, self.screen, collapse=True)
-            else:
-                draw_text_given_width(text_x, text_y, box_w, self.font_type_bold, train_type, type_color, self.screen)
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
         """Draw destination with suffix (ゆき/方面)."""
@@ -227,7 +205,7 @@ class JapaneseDisplay:
 
 
 class FuriganaDisplay(JapaneseDisplay):
-    """Upper LCD Furigana rendering for E235-1000.
+    """Upper LCD Furigana rendering for E235-0.
 
     Inherits all draw methods from JapaneseDisplay — no rendering divergence
     today. Furigana-specific text translation happens upstream in
@@ -246,17 +224,13 @@ class FuriganaDisplay(JapaneseDisplay):
 
 
 class EnglishDisplay:
-    """Upper LCD English rendering for E235-1000."""
+    """Upper LCD English rendering for E235-0."""
 
     def __init__(self, screen, route_data, stops):
         self.screen = screen
         self.route_data = route_data
         self.stops = stops
 
-        # E235-1000 specific English fonts (shared across methods) - load from fonts/ folder
-        self.font_type_bold = pygame.font.Font("fonts/ShinGoPr6N-Heavy.otf", 26)
-        self.font_type_bold.set_bold(True)
-        self.font_type_bold.set_italic(True)
         self.font_dest = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 24)
         self.font_main_prefix = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 27)
         self.font_station = pygame.font.Font("fonts/HelveticaNeue-Bold.otf", 75)
@@ -266,13 +240,6 @@ class EnglishDisplay:
         self.font_station_2line = pygame.font.Font("fonts/HelveticaNeue-Bold.otf", 42)
         self.font_clock = pygame.font.Font("fonts/HelveticaNeue-Roman.otf", 27)
         self.font_suffix = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 20)
-
-    def draw_train_type(self, train_type: str, type_color: tuple) -> None:
-        """Draw train type box."""
-        with clip(self.screen, TRAIN_TYPE_RECT):
-            box_x, box_y, box_w, box_h = 15, 8, 150, 31
-            pygame.draw.rect(self.screen, _bg("train_type", default=WHITE_BG), pygame.Rect(box_x, box_y, box_w, box_h), 0, 2)
-            draw_text_given_width(box_x, 10, box_w, self.font_type_bold, train_type, type_color, self.screen, collapse=True, script="latin")
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
         """Draw destination with 'for' label above."""
@@ -411,7 +378,7 @@ class EnglishDisplay:
 
 class UpperDisplay:
     """
-    E235-1000 Upper LCD manager.
+    E235-0 Upper LCD manager.
 
     Handles mode cycling and delegates rendering to mode-specific displays.
     """
@@ -432,10 +399,8 @@ class UpperDisplay:
 
         # Extract route data
         self.route_name = route_data.get("route", "Unknown")
-        self.train_type = route_data.get("type", "")
         self.dest = route_data.get("dest", "")
         self.color = route_data.get("color", [255, 255, 255])
-        self.type_color = route_data.get("type_color", [0, 0, 0])
 
         # Create mode-specific displays
         self.japanese_display = JapaneseDisplay(screen, route_data, stops)
@@ -456,9 +421,6 @@ class UpperDisplay:
 
         # Load translations (station names, destinations)
         self.translations = load_json_relative("data/translations.json")
-
-        # Load train type translations
-        self.train_types = load_json_relative("data/train_types.json")
 
         # Load station metadata (3-letter codes, future fields)
         self.stations = load_json_relative("data/stations.json")
@@ -498,22 +460,6 @@ class UpperDisplay:
 
         return dest_key
 
-    def _get_train_type_display(self) -> str:
-        """Get train type text based on current display mode."""
-        mode = self.mode_cycler.get_current_mode()
-
-        if mode == DisplayMode.ENGLISH:
-            translation = self.train_types.get(self.train_type, {})
-            # Check for short version first (for narrow box), then full english
-            english_type = translation.get("english_short", "")
-            if not english_type:
-                english_type = translation.get("english", "")
-            if english_type:
-                return english_type
-            return self.train_type
-
-        return self.train_type
-
     def _get_prefix_display(self) -> str:
         """Get prefix text based on current display mode."""
         mode = self.mode_cycler.get_current_mode()
@@ -541,7 +487,7 @@ class UpperDisplay:
             return self.stops[self.curr_stop].get("name", "").replace(" ", "")
 
     def _draw_station_code_badge(self) -> None:
-        """Draw station code badge (e.g. JO01, JY03) between color ribbon and station name.
+        """Draw station code badge (e.g. JY03) between color ribbon and station name.
 
         If the station has a `code_3` entry in data/stations.json (3-letter Roman code,
         e.g. AKB, SJK, TYO), the outer black rect extends upward to form a top band
@@ -657,9 +603,6 @@ class UpperDisplay:
 
         pygame.draw.rect(self.screen, _bg("upper_bg"), pygame.Rect(0, 0, S_WIDTH, UPPER_HEIGHT))
         pygame.draw.rect(self.screen, self.color, pygame.Rect(int(S_WIDTH * 0.25), 0, 30, UPPER_HEIGHT - 7))
-
-        train_type_text = self._get_train_type_display()
-        display.draw_train_type(train_type_text, self.type_color)
 
         dest_text = self._get_destination_display()
         display.draw_destination(dest_text, self.route_name)

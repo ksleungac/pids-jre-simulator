@@ -181,6 +181,55 @@ def draw_1col_text(
         screen.blit(img, (int(x_pos), int(y_pos)))
 
 
+def draw_1col_text_plain(
+    font: pygame.font.Font,
+    text: str,
+    x: int,
+    top_y: int,
+    text_color: Tuple[int, int, int],
+    screen: pygame.Surface,
+    line_gap: int = 0,
+) -> int:
+    """Draw text vertically (one column), tight stacking, no compression / distribution.
+
+    Sibling of ``draw_1col_text``. Each character renders at the font's natural
+    height (``font.get_height()``); pitch = ``font.get_height() + line_gap``
+    so chars stack from ``top_y`` downward with optional ``line_gap`` of extra
+    pixels between them. No fitting to a vert_space, no per-char compression.
+    Long strings overflow rather than squish.
+
+    Per-char horizontal centering: narrow glyphs (digits, small katakana like
+    ゲ ー) are centered relative to the widest character's column width so
+    mixed strings don't drift left of their column.
+
+    Args:
+        font: Pygame font object
+        text: Text to draw vertically
+        x: X position (left edge of the column for the WIDEST char)
+        top_y: Y position (TOP of the column — chars stack downward from here)
+        text_color: RGB color tuple
+        screen: Pygame surface to draw on
+        line_gap: Extra pixels between adjacent characters (default 0 = touching).
+
+    Returns:
+        Y-coordinate immediately after the last character.
+    """
+    if not text:
+        return top_y
+
+    line_pitch = font.get_height() + line_gap
+    char_widths = [font.size(c)[0] for c in text]
+    col_w = max(char_widths)
+
+    for i, c in enumerate(text):
+        ch_img = font.render(c, True, text_color)
+        ch_x = x + (col_w - char_widths[i]) // 2
+        ch_y = top_y + i * line_pitch
+        screen.blit(ch_img, (ch_x, ch_y))
+
+    return top_y + len(text) * line_pitch
+
+
 def draw_stops_text(
     font: pygame.font.Font,
     stop_text: str,

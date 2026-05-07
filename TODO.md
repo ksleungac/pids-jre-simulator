@@ -28,7 +28,14 @@ The OCR auto-PA feature shipped in `feat(auto-input): OCR-driven auto-PA — in-
 
 ## Display / LCD fidelity
 
-- [ ] **New train models — re-skin work, not re-architecture.** Priority order: E235-0 Yamanote (lowest-modification re-skin, leaning next), then E231-500, then E233 series. Each model lives under `displays/train_models/{model}/`. (CLAUDE.md § "Mental Model — Direction of travel".)
+- [ ] **New train models — re-skin work, not re-architecture.** Priority order: E235-0 Yamanote (in progress — see below), then E231-500, then E233 series. Each model lives under `displays/train_models/{model}/`. (CLAUDE.md § "Mental Model — Direction of travel".)
+  - [x] E235-0 upper LCD — forked from E235-1000, train-type cell removed (Yamanote runs single service type IRL). Shipped 2026-05-07. (`displays/train_models/e235_0/upper_lcd.py` + DISPLAY_E235.md.)
+  - [x] E235-0 lower LCD — circular full-route renderer for Yamanote (rounded-rect track, JY-code row mapping, breath-animated pentagon, chevron arrow when between stations, major-station bold for Ueno/Tokyo/Shinagawa/Shinjuku/Shibuya). Linear E235-1000 fallback when route ≠ 山手線. Shipped 2026-05-07.
+  - [ ] E235-0 lower LCD — **5-station zoomed view** (replaces inherited 8-station). Universal replacement for the EIGHT slot on E235-0 (used for Yamanote AND any other route loaded into the model). Currently the EIGHT slot inherits E235-1000's `JapaneseEightStationDisplay` as interim. Design discussion deferred per "full-route first." (DISPLAY_E235.md § "Sub-series catalog".)
+  - [ ] E235-0 lower LCD — ENGLISH renderer (still falls back to JapaneseDisplay; same gap as E235-1000 § "ENGLISH lower-LCD" below).
+  - [ ] E235-0 lower LCD — transfer-info slot integration. The full-route + 8-station slots ship in `LowerDisplay` subclass; transfer-info inherits from E235-1000 parent unchanged but hasn't been visually verified for E235-0.
+- [x] **~~Yamanote 東京・上野 destination `\n` cleanup.~~** Shipped 2026-05-07. `data/translations.json` updated; `DATA_FORMAT.md § Compound Destinations` rule reframed as case-by-case based on length, not always-newline.
+- [x] **~~Clock font + position fine-tune.~~** Shipped 2026-05-07. CLOCK_RECT shifted 10px left (`S_WIDTH - 170`), font 26→27pt. Applied to both E235-1000 and E235-0.
 - [x] **~~Triage-policy rewrite for `/review+fix` deferred findings.~~** Shipped 2026-05-07. All deferred findings now route to TODO.md `## Deferred review findings` (memory daily logs are narrative-only). 22 entries migrated from past daily logs (2026-04-30 through 2026-05-04). `.claude/skills/review-plus-fix-relentlessly/SKILL.md` triage policy rewritten to match.
 - [ ] **ENGLISH lower-LCD.** Still a stub — falls back to Japanese rendering. View-cycler timer already ticks regardless of language mode, so wiring an English renderer should be additive. (`memory/2026-04-25.md` § "Open follow-ups".)
 - [ ] **`code_3` (3-letter Roman badge) edge cases.** Catalog is finite (~22 stations). General polish around fonts / placement / fallback for stations without a code. (CLAUDE.md § "Direction of travel".)
@@ -111,6 +118,12 @@ Open items surfaced by `/review+fix` that were deferred (not blocking, scope-cre
 
 - [ ] **`resolve_entry(ref, lines)` called 3× per render for the same slug refs** — `preview_transfers.py:172` (lens 1, info; vibe-check #1; first flagged 2026-05-04) — Line 172 (shinkansen count), line 312 (cat_order sort), per-badge at line 786. Cheap (no I/O). Pre-existing pattern doubled by 2026-05-04 PM edit. Per-N scaling block may be replaced under algorithm-redesign Step 1+2 work — no point optimizing throwaway code. Revisit when algorithm work resumes.
 - [ ] **`_N >= 10` clause in dense-tier scaling is anticipatory** — `preview_transfers.py:175` (lens 1, info; principles.md § Implementation-completion-as-spec; first flagged 2026-05-04) — Max station N in current dataset is ~9; the `N >= 10` branch is uncalibrated. Defer until either (a) an N=10+ station enters the dataset, or (b) algorithm-redesign Step 1 formally calibrates the full ladder.
+
+### From 2026-05-07 (E235-0 circular full-route + clock fine-tune)
+
+- [ ] **Cycler-lock lambda fragility in preview** — `preview_display.py:200` (lens 1, info; first flagged 2026-05-07) — `sim.lower._tick_cycle = lambda current_time: None` and `sim.lower._handle_at_station_edge = lambda state, current_time: None` duplicate the bound-method signatures and will silently rot if those methods gain a parameter. Deferred because: preview-only; the clean fix would add a `_cycler_locked` boolean to the production `LowerDisplay` class for a preview-only feature.
+- [ ] **Wrap-around minute undercount at loop terminal** — `displays/train_models/e235_0/lower_lcd.py:569` (lens 1, info; first flagged 2026-05-07) — `_compute_minutes_for_ahead` dedups by `sta_code`; when the duplicate JY24 marker at the loop terminal (Yamanote's `stops[0] = stops[-1]`) is skipped, its `time` value isn't credited to the next surviving entry's first-cumulative. Deferred because: dead in practice — IRL the wrap-back marker is `at_station=True` which uses the static branch.
+- [ ] **CLOCK_RECT magic-number duplication** — `displays/train_models/e235_1000/upper_lcd.py:215` + `e235_0/upper_lcd.py:214` (lens 2, info; smell #5 within-file constant duplication; first flagged 2026-05-07) — `S_WIDTH - 170` and `80` repeat as both `CLOCK_RECT` const + inline `clock_x` / `clock_w` magic numbers in both `draw_clock` methods of each model. Deferred because: pre-existing pattern in e235_1000, not introduced by this session's diff. Worth a `/vibe-check` sweep to refactor inline references to `CLOCK_RECT.x` / `CLOCK_RECT.width`.
 
 ---
 

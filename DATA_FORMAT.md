@@ -88,7 +88,7 @@ Centralized translation lookup for **any Japanese text** used in the simulator:
 
 ### Compound Destinations (e.g., Yamanote Line)
 
-For routes that display multiple destinations (like 品川・東京), use the `&` character as a separator with a newline after it for multi-line display:
+For routes that display multiple destinations (like 品川・東京), use `&` as the separator. Whether to insert `\n` after `&` is case-by-case — match IRL: short compound dests fit on a single line and omit `\n`; longer ones break onto two lines.
 
 ```json
 {
@@ -96,12 +96,12 @@ For routes that display multiple destinations (like 品川・東京), use the `&
         "english": "Shinagawa&\nTokyo"
     },
     "東京・上野": {
-        "english": "Tokyo&\nUeno"
+        "english": "Tōkyō&Ueno"
     }
 }
 ```
 
-**Format:** `"StationA&\nStationB"` - The `&` indicates a line break point. No space before `&`.
+**Format:** `"StationA&StationB"` (single-line) or `"StationA&\nStationB"` (multi-line). No space around `&` in either case.
 
 **Note:** Compound destinations typically don't need `furigana` field as they are used for English display only (not for furigana cycling on the upper LCD).
 

@@ -310,11 +310,19 @@ class PASimulator:
 
     def run(self) -> None:
         """Main game loop."""
-        # Draw initial state — boot lands in STOPPING@curr_stop=0 by default
-        # (see AppState.__init__). Prefix reads "ただいま <start station>".
+        # Boot lands in STOPPING@curr_stop=0 by default (see AppState.__init__);
+        # prefix reads "ただいま <start station>".
+        #
+        # CONTRACT: boot draw MUST pass real wall-clock to lower.draw(), not default 0.0.
+        # Default 0.0 initializes the view-cycler's _slot_start to 0.0; the first
+        # main-loop tick (current_time=wall_time) then sees a huge delta and
+        # immediately advances the slot — boot view never persists through its
+        # natural duration. Surfaced 2026-05-07 via `preview --lower-view full`
+        # opening in the 8-station view.
+        boot_t = time.time()
         self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=self.state.at_station, cnt_pa_at_station=self.state.cnt_pa_at_station)
         self.upper.draw()
-        self.lower.draw()
+        self.lower.draw(boot_t)
         self._render_panel()
         pygame.display.flip()
 
