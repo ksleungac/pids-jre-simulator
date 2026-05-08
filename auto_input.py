@@ -67,6 +67,7 @@ class Layer3State:
     MOVING_AFTER_ARR = "MOVING_AFTER_ARR"
     UNKNOWN = "UNKNOWN"
 
+
 # ─────────────────────────── drive recorder (blackbox) ────────────────────────
 # Per-drive JSONL log written by AutoDriver. Each file is one drive session.
 # Three record types (`_type` field discriminates):
@@ -101,14 +102,16 @@ def _build_stops_meta(sim) -> list[dict]:
     """
     out = []
     for s in sim.stops:
-        out.append({
-            "name": s.get("name", ""),
-            "english": s.get("english", ""),
-            "furigana": s.get("furigana", ""),
-            "stops_here": s.get("time") is not None,
-            "scheduled_time": s.get("time"),
-            "sta_code": s.get("sta_code"),
-        })
+        out.append(
+            {
+                "name": s.get("name", ""),
+                "english": s.get("english", ""),
+                "furigana": s.get("furigana", ""),
+                "stops_here": s.get("time") is not None,
+                "scheduled_time": s.get("time"),
+                "sta_code": s.get("sta_code"),
+            }
+        )
     return out
 
 
@@ -155,12 +158,18 @@ def _write_sample(f: TextIO, sample: dict) -> None:
 def _write_event(f: TextIO, kind: str, curr_stop: int, ts: float) -> None:
     """Write a transition event line. `kind` ∈ {arrival, departure, passing_start, passing_end}."""
     try:
-        f.write(json.dumps({
-            "_type": "event",
-            "ts": ts,
-            "kind": kind,
-            "curr_stop": curr_stop,
-        }, ensure_ascii=False) + "\n")
+        f.write(
+            json.dumps(
+                {
+                    "_type": "event",
+                    "ts": ts,
+                    "kind": kind,
+                    "curr_stop": curr_stop,
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
         f.flush()
     except Exception as e:
         print(f"[AutoDriver] Drive-log event write failed: {e}")
@@ -179,6 +188,7 @@ def _badge_transition_kind(prev: Optional[str], curr: Optional[str]) -> Optional
     if prev == "PASSING" and curr == "MOVING":
         return "passing_end"
     return None
+
 
 # ─────────────────────────── debug panel rendering ────────────────────────────
 # Panel logic is fully self-contained in this module — no imports from displays/,
@@ -274,6 +284,7 @@ def _render_report_async(log_path: Path) -> None:
     """
     try:
         from plot_drive import render_html_report, load_jsonl
+
         out_path = project_root() / f"{log_path.stem}.html"
         meta, events, samples = load_jsonl(log_path)
         render_html_report(meta, events, samples, 5, out_path)
@@ -369,7 +380,9 @@ def draw_debug_panel(surface: pygame.Surface, status: dict, sim_state, stops: li
         from_name = stops[seg_start].get("name", "?")
         to_name = stops[sim_state.curr_stop].get("name", "?")
         passing = "  (passing through — arrival skipped)" if badge == "PASSING" else ""
-        _blit_text(surface, font, f"app: between {from_name} -> {to_name}  (curr_stop={sim_state.curr_stop}){passing}{inferred_suffix}", (8, y3), _TEXT_WHITE)
+        _blit_text(
+            surface, font, f"app: between {from_name} -> {to_name}  (curr_stop={sim_state.curr_stop}){passing}{inferred_suffix}", (8, y3), _TEXT_WHITE
+        )
     else:
         _blit_text(surface, font, f"app: curr_stop={sim_state.curr_stop}{inferred_suffix}", (8, y3), _TEXT_GRAY)
 
@@ -606,22 +619,25 @@ class AutoDriver:
                         if kind is not None:
                             _write_event(log_file, kind, self.sim.state.curr_stop, sample_ts)
 
-                        _write_sample(log_file, {
-                            "_type": "sample",
-                            "ts": sample_ts,
-                            "speed": s_val,
-                            "speed_score": s_score,
-                            "distance": d_val,
-                            "distance_score": d_score,
-                            "badge": badge,
-                            "badge_diff": b_diff,
-                            "curr_stop": self.sim.state.curr_stop,
-                            "cnt_pa": self.sim.state.cnt_pa,
-                            "departure_observed": self._detector.departure_observed,
-                            "arrival_observed": self._detector.arrival_observed,
-                            "inferred_state": self._detector.inferred_state(),
-                            "segment_start_stop": self._segment_start_stop,
-                        })
+                        _write_sample(
+                            log_file,
+                            {
+                                "_type": "sample",
+                                "ts": sample_ts,
+                                "speed": s_val,
+                                "speed_score": s_score,
+                                "distance": d_val,
+                                "distance_score": d_score,
+                                "badge": badge,
+                                "badge_diff": b_diff,
+                                "curr_stop": self.sim.state.curr_stop,
+                                "cnt_pa": self.sim.state.cnt_pa,
+                                "departure_observed": self._detector.departure_observed,
+                                "arrival_observed": self._detector.arrival_observed,
+                                "inferred_state": self._detector.inferred_state(),
+                                "segment_start_stop": self._segment_start_stop,
+                            },
+                        )
 
                     if badge is not None:
                         prev_log_badge = badge
@@ -630,7 +646,10 @@ class AutoDriver:
                     d_str = f"{d_val:>5}m" if d_val is not None else "  ---"
                     s_str = f"{s_val:>3}km/h" if s_val is not None else " --"
                     b_str = badge or "?"
-                    print(f"[AD {ts}]  badge={b_str:<7}({b_diff:5.1f})  spd={s_str}  dst={d_str}  " f"sim:stop={self.sim.state.curr_stop} cnt_pa={self.sim.state.cnt_pa}")
+                    print(
+                        f"[AD {ts}]  badge={b_str:<7}({b_diff:5.1f})  spd={s_str}  dst={d_str}  "
+                        f"sim:stop={self.sim.state.curr_stop} cnt_pa={self.sim.state.cnt_pa}"
+                    )
 
                     for ev in self._detector.update(d_val, s_val, badge):
                         self._handle_event(ev)

@@ -24,19 +24,19 @@ from pathlib import Path
 
 from detect_sta_cut import detect
 
-PAD = 0.2          # target leading + trailing silence pad
-MID_GAP = 1.0      # target silence between music end and voice start
+PAD = 0.2  # target leading + trailing silence pad
+MID_GAP = 1.0  # target silence between music end and voice start
 MIN_CONFIDENCE = 0.7  # skip mid-trim if change-point is ambiguous
-MIN_GAP = 0.5         # skip mid-trim if gap is already short
-MAX_GAP = 5.0         # skip mid-trim if gap is implausibly large (something weird)
+MIN_GAP = 0.5  # skip mid-trim if gap is already short
+MAX_GAP = 5.0  # skip mid-trim if gap is implausibly large (something weird)
 
 
 def detect_silences(path: Path, threshold_db: int = -40) -> tuple[float, list[float], list[float]]:
     """Return (duration, silence_starts, silence_ends)."""
     out = subprocess.run(
-        ["ffmpeg", "-hide_banner", "-nostats", "-i", str(path),
-         "-af", f"silencedetect=noise={threshold_db}dB:d=0.1", "-f", "null", "-"],
-        capture_output=True, text=True,
+        ["ffmpeg", "-hide_banner", "-nostats", "-i", str(path), "-af", f"silencedetect=noise={threshold_db}dB:d=0.1", "-f", "null", "-"],
+        capture_output=True,
+        text=True,
     ).stderr
     m = re.search(r"Duration: (\d+):(\d+):([\d.]+)", out)
     duration = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
@@ -75,9 +75,7 @@ def trim_middle_gap(path: Path, music_end: float, voice_start: float) -> float:
         f"[a1][a2]concat=n=2:v=0:a=1[out]"
     )
     subprocess.run(
-        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(path),
-         "-filter_complex", filter_str, "-map", "[out]",
-         "-q:a", "2", str(tmp)],
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(path), "-filter_complex", filter_str, "-map", "[out]", "-q:a", "2", str(tmp)],
         check=True,
     )
     shutil.move(str(tmp), str(path))
@@ -125,11 +123,7 @@ def main() -> int:
         result = detect(f)
         gap = result.voice_start - result.music_end
         mid_trim = 0.0
-        if (
-            result.confidence >= MIN_CONFIDENCE
-            and MIN_GAP < gap < MAX_GAP
-            and gap > MID_GAP + 0.1
-        ):
+        if result.confidence >= MIN_CONFIDENCE and MIN_GAP < gap < MAX_GAP and gap > MID_GAP + 0.1:
             mid_trim = trim_middle_gap(f, result.music_end, result.voice_start)
             actions.append(f"mid-gap {gap:.2f}s -> {MID_GAP:.1f}s  (sta_cut shift -{mid_trim:.2f}s)")
 
@@ -151,6 +145,7 @@ def main() -> int:
     # was compact, but both forms are valid JSON).
     if args.route and lead_trims:
         import json
+
         route = json.loads(args.route.read_text(encoding="utf-8"))
         for stop in route["stops"]:
             for sta_name in stop.get("sta", []):
@@ -162,9 +157,7 @@ def main() -> int:
                     stop["sta_cut"] = new
                     print(f"  route.json: {sta_name} sta_cut {old} -> {new}")
                     break  # one shift per stop even if multi-variant sta
-        args.route.write_text(
-            json.dumps(route, ensure_ascii=False, indent=4) + "\n", encoding="utf-8"
-        )
+        args.route.write_text(json.dumps(route, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
 
     return 0
 

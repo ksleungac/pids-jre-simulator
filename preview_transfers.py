@@ -60,8 +60,7 @@ def main():
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Print structured layout trace: per-entry widths, grouping candidates, "
-        "blueprint state, per-row rule taken, chosen xs, and gaps.",
+        help="Print structured layout trace: per-entry widths, grouping candidates, " "blueprint state, per-row rule taken, chosen xs, and gaps.",
     )
     args = parser.parse_args()
 

@@ -296,9 +296,7 @@ def read_speed(cell: np.ndarray, templates: Templates) -> tuple[int | None, str,
     return _read_value(cell, templates, max_gap=SPEED_MAX_GAP, stop_at_decimal=True)
 
 
-def _read_value(
-    cell: np.ndarray, templates: Templates, max_gap: int, stop_at_decimal: bool = False
-) -> tuple[int | None, str, float]:
+def _read_value(cell: np.ndarray, templates: Templates, max_gap: int, stop_at_decimal: bool = False) -> tuple[int | None, str, float]:
     bboxes = segment_chars(cell, max_gap=max_gap, stop_at_decimal=stop_at_decimal)
     chars: list[str] = []
     min_score = 1.0

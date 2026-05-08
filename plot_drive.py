@@ -159,10 +159,7 @@ def compute_metrics(events: list[dict], samples: list[dict], start_ts: float, st
     speeds: list[int] = [int(s["speed"]) for s in samples if s.get("speed") is not None]
     top_speed = max(speeds) if speeds else 0
 
-    moving_speeds = [
-        int(s["speed"]) for s in samples
-        if s.get("speed") is not None and s.get("badge") in ("MOVING", "PASSING") and s["speed"] > 0
-    ]
+    moving_speeds = [int(s["speed"]) for s in samples if s.get("speed") is not None and s.get("badge") in ("MOVING", "PASSING") and s["speed"] > 0]
     avg_speed = round(sum(moving_speeds) / len(moving_speeds)) if moving_speeds else 0
 
     # Dwell stats from STOPPED runs (each run = one platform dwell)
@@ -186,10 +183,7 @@ def compute_section_metrics(samples: list[dict], rs: float, re_: float, stopped_
     in_window = [s for s in samples if rs <= s["ts"] <= re_]
     speeds: list[int] = [int(s["speed"]) for s in in_window if s.get("speed") is not None]
     top = max(speeds) if speeds else 0
-    moving_speeds = [
-        int(s["speed"]) for s in in_window
-        if s.get("speed") is not None and s.get("badge") in ("MOVING", "PASSING") and s["speed"] > 0
-    ]
+    moving_speeds = [int(s["speed"]) for s in in_window if s.get("speed") is not None and s.get("badge") in ("MOVING", "PASSING") and s["speed"] > 0]
     avg = round(sum(moving_speeds) / len(moving_speeds)) if moving_speeds else 0
 
     # Total dwell within this section's window (clip to window bounds)
@@ -308,7 +302,9 @@ def build_section_figure(
         fig.add_vrect(
             x0=datetime.fromtimestamp(max(st_ts, rs)),
             x1=datetime.fromtimestamp(min(end_ts, re_)),
-            fillcolor=_STOPPED_FILL, line_width=0, layer="below",
+            fillcolor=_STOPPED_FILL,
+            line_width=0,
+            layer="below",
         )
     for st_ts, end_ts, _ in passing_runs:
         if end_ts < rs or st_ts > re_:
@@ -316,21 +312,26 @@ def build_section_figure(
         fig.add_vrect(
             x0=datetime.fromtimestamp(max(st_ts, rs)),
             x1=datetime.fromtimestamp(min(end_ts, re_)),
-            fillcolor=_PASSING_FILL, line_width=0, layer="below",
+            fillcolor=_PASSING_FILL,
+            line_width=0,
+            layer="below",
         )
 
     # Speed trace ───────────────────────────────────────────────────
     if row_samples:
-        fig.add_trace(go.Scatter(
-            x=[datetime.fromtimestamp(s["ts"]) for s in row_samples],
-            y=[int(s["speed"]) if s.get("speed") is not None else 0 for s in row_samples],
-            mode="lines",
-            line=dict(color=_ACCENT, width=2.0, shape="spline", smoothing=0.4),
-            fill="tozeroy", fillcolor=_ACCENT_FILL,
-            hovertemplate="%{customdata}<extra></extra>",
-            customdata=[_hover_text(s, meta, start_ts) for s in row_samples],
-            showlegend=False,
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=[datetime.fromtimestamp(s["ts"]) for s in row_samples],
+                y=[int(s["speed"]) if s.get("speed") is not None else 0 for s in row_samples],
+                mode="lines",
+                line=dict(color=_ACCENT, width=2.0, shape="spline", smoothing=0.4),
+                fill="tozeroy",
+                fillcolor=_ACCENT_FILL,
+                hovertemplate="%{customdata}<extra></extra>",
+                customdata=[_hover_text(s, meta, start_ts) for s in row_samples],
+                showlegend=False,
+            )
+        )
 
     # Station signposts (solid vertical line + badge label) ─────────
     # `entry_arrival` (when present) is the previous row's last arrival sitting
@@ -357,16 +358,27 @@ def build_section_figure(
         x = datetime.fromtimestamp(arr["ts"])
         fig.add_shape(
             type="line",
-            x0=x, x1=x, y0=0, y1=label_y - 4,
+            x0=x,
+            x1=x,
+            y0=0,
+            y1=label_y - 4,
             line=dict(color=post_line, width=1.8),
             layer="above",
         )
         fig.add_annotation(
-            x=x, y=label_y, text=f"  {name}  ",
-            showarrow=False, yanchor="bottom", xanchor="center",
-            font=dict(size=13, color="white", family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif"),
-            bgcolor=post_bg, bordercolor=post_bg,
-            borderwidth=0, borderpad=4,
+            x=x,
+            y=label_y,
+            text=f"  {name}  ",
+            showarrow=False,
+            yanchor="bottom",
+            xanchor="center",
+            font=dict(
+                size=13, color="white", family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif"
+            ),
+            bgcolor=post_bg,
+            bordercolor=post_bg,
+            borderwidth=0,
+            borderpad=4,
         )
 
     # Passing-station markers ───────────────────────────────────────
@@ -377,17 +389,28 @@ def build_section_figure(
         x = datetime.fromtimestamp(st_ts)
         fig.add_shape(
             type="line",
-            x0=x, x1=x, y0=0, y1=ymax * 0.7,
+            x0=x,
+            x1=x,
+            y0=0,
+            y1=ymax * 0.7,
             line=dict(color=_PASSING_LINE, width=1.5, dash="dash"),
             layer="above",
         )
         if passing_name:
             fig.add_annotation(
-                x=x, y=ymax * 0.72, text=f" {passing_name} ",
-                showarrow=False, yanchor="bottom", xanchor="center",
-                font=dict(size=11, color="white", family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif"),
-                bgcolor=_PASSING_ACCENT, bordercolor=_PASSING_ACCENT,
-                borderwidth=0, borderpad=3,
+                x=x,
+                y=ymax * 0.72,
+                text=f" {passing_name} ",
+                showarrow=False,
+                yanchor="bottom",
+                xanchor="center",
+                font=dict(
+                    size=11, color="white", family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif"
+                ),
+                bgcolor=_PASSING_ACCENT,
+                bordercolor=_PASSING_ACCENT,
+                borderwidth=0,
+                borderpad=3,
             )
 
     # Layout ────────────────────────────────────────────────────────
@@ -408,15 +431,19 @@ def build_section_figure(
     fig.update_xaxes(
         range=[datetime.fromtimestamp(rs), datetime.fromtimestamp(x_end)],
         tickformat="%H:%M",
-        showgrid=True, gridcolor="rgba(200,200,200,0.35)",
-        showline=True, linecolor="rgba(150,150,150,0.5)",
+        showgrid=True,
+        gridcolor="rgba(200,200,200,0.35)",
+        showline=True,
+        linecolor="rgba(150,150,150,0.5)",
         tickfont=dict(size=11, color="#6b7280"),
     )
     fig.update_yaxes(
         range=[0, ymax],
         rangemode="nonnegative",
-        showgrid=True, gridcolor="rgba(200,200,200,0.35)",
-        showline=True, linecolor="rgba(150,150,150,0.5)",
+        showgrid=True,
+        gridcolor="rgba(200,200,200,0.35)",
+        showline=True,
+        linecolor="rgba(150,150,150,0.5)",
         title=dict(text="km/h", font=dict(size=11, color="#6b7280")),
         tickfont=dict(size=11, color="#6b7280"),
     )
@@ -735,8 +762,17 @@ def render_html_report(meta: dict, events: list[dict], samples: list[dict], stop
     section_cards: list[str] = []
     for i, (rs, re_, row_arrivals, entry_arrival) in enumerate(rows):
         fig = build_section_figure(
-            meta, start_ts, rs, re_, row_arrivals, entry_arrival,
-            samples, stopped_runs, passing_runs, ymax, x_axis_duration_s,
+            meta,
+            start_ts,
+            rs,
+            re_,
+            row_arrivals,
+            entry_arrival,
+            samples,
+            stopped_runs,
+            passing_runs,
+            ymax,
+            x_axis_duration_s,
             drive_first_arrival_ts=drive_first_arrival_ts,
             drive_last_arrival_ts=drive_last_arrival_ts,
         )

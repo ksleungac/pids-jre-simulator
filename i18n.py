@@ -26,6 +26,7 @@ DEFAULT_LANG = "en"
 # dev. Survives across the user's two PCs as separate state — never committed.
 # ---------------------------------------------------------------------------
 
+
 def settings_path() -> Path:
     return project_root() / "settings.json"
 
@@ -54,6 +55,7 @@ def save_settings(data: dict) -> None:
 # zh_CN / zh_SG / zh_Hans → Simplified.
 # Anything else → English.
 # ---------------------------------------------------------------------------
+
 
 def detect_default_lang() -> str:
     try:
@@ -129,11 +131,13 @@ def t(key: str, **fmt) -> str:
 # ---------------------------------------------------------------------------
 
 # {lang: (regular_filename, bold_filename)} — both files must exist in fonts/.
+# fmt: off
 _LANG_CHROME_FONT: dict[str, tuple[str, str]] = {
     "en":    ("HelveticaNeue-Roman.otf",   "HelveticaNeue-Bold.otf"),
     "zh_HK": ("ShinGoPr6N-Medium.otf",     "ShinGoPr6N-Heavy.otf"),
     "zh_CN": ("NotoSansCJKsc-Regular.otf", "NotoSansCJKsc-Bold.otf"),
 }
+# fmt: on
 
 _font_cache: dict = {}
 

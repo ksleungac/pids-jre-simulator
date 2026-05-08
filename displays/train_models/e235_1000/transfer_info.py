@@ -22,7 +22,6 @@ from displays.transfer_info import (
 )
 from app_paths import project_root
 
-
 # Canvas dimensions for the transfer-info body (lower-LCD region).
 W = S_WIDTH
 H = S_HEIGHT - UPPER_HEIGHT
@@ -54,10 +53,7 @@ def load_icon(slug: str, target_h: int, cache: dict) -> pygame.Surface:
     path = project_root() / "data" / "line_icons" / f"{slug}.png"
     if not path.exists():
         # Fail loud per critical_lessons.md § "Runtime-required materials must be committed".
-        raise FileNotFoundError(
-            f"line_icon asset missing: {path} (slug={slug!r}). "
-            f"Drop a PNG at that path or fix the badge slug in lines.json."
-        )
+        raise FileNotFoundError(f"line_icon asset missing: {path} (slug={slug!r}). " f"Drop a PNG at that path or fix the badge slug in lines.json.")
     img = pygame.image.load(str(path)).convert_alpha()
     sw, sh = img.get_size()
     target_w = int(round(sw * (target_h / sh)))
@@ -135,6 +131,7 @@ def render_transfer(
     standalone preview, so ``preview_transfers.py`` can call it directly
     against a freshly-allocated surface.
     """
+
     # CONTRACT: Pipeline = scaling → row-grouping → blueprint → Rules 1-4 + track-back.
     # See DISPLAY_E235.md § "Transfer Info" for definitions + worked examples.
     # Tuning lives in the params block below — adjust named constants, not the IRL math.
@@ -142,6 +139,7 @@ def render_transfer(
         if debug:
             print(*args, **kwargs)
 
+    # fmt: off
     # --- Tuneable params (adjust freely) ---
     margin_x_factor = 1.6          # Side margin = N × badge_h (user spec: 1.6 badge widths)
     inter_element_margin_ratio = 0.7  # Greedy walk comfort TARGET: predecessor inter-spacing = ratio × margin_x. < 1.0 → "cramped-centered" look.
@@ -194,6 +192,7 @@ def render_transfer(
     # but bottom gap is `bottom_extra` px taller than top gap (user spec: 5-10 px).
     bottom_extra = 7
     # ----------------------------------------
+    # fmt: on
 
     font_ja = _font("ShinGoPr6N-Medium.otf", name_size_ja)
     font_en = _font("NeueFrutigerWorld-Bold.otf", name_size_en)
@@ -230,9 +229,7 @@ def render_transfer(
         part_surfs = [render_fn(p) for p in parts]
         dot_surf = render_fn("·")
         n_dots = len(parts) - 1
-        total_w = sum(s.get_width() for s in part_surfs) + n_dots * (
-            dot_surf.get_width() + 2 * dot_side_pad
-        )
+        total_w = sum(s.get_width() for s in part_surfs) + n_dots * (dot_surf.get_width() + 2 * dot_side_pad)
         max_h = max(s.get_height() for s in part_surfs + [dot_surf])
         out = pygame.Surface((total_w, max_h), pygame.SRCALPHA)
         x = 0
@@ -424,7 +421,7 @@ def render_transfer(
 
         f = first_failed
         head_right = rule1_xs[f - 1] + widths[f - 1]
-        middle_widths = widths[f:n - 1]
+        middle_widths = widths[f : n - 1]
         tail_w = widths[n - 1]
         predecessor_clean_seen = False
         tail_anchor = None
@@ -498,14 +495,13 @@ def render_transfer(
         if rows_override is not None:
             if sum(rows_override) != N_total:
                 trace.append(
-                    f"⚠ rows_override {rows_override} sums to {sum(rows_override)} "
-                    f"but N_total={N_total}; ignored, falling back to algorithm"
+                    f"⚠ rows_override {rows_override} sums to {sum(rows_override)} " f"but N_total={N_total}; ignored, falling back to algorithm"
                 )
             else:
                 cursor_idx = 0
                 for r_idx, n in enumerate(rows_override):
-                    row_entries = list(entries_seq[cursor_idx:cursor_idx + n])
-                    row_widths = list(widths_seq[cursor_idx:cursor_idx + n])
+                    row_entries = list(entries_seq[cursor_idx : cursor_idx + n])
+                    row_widths = list(widths_seq[cursor_idx : cursor_idx + n])
                     if r_idx == 0:
                         row_xs = compute_row0_provisional(row_widths)
                     else:
@@ -657,10 +653,7 @@ def render_transfer(
 
     rows_widths_pre = [[width_of(e) for e in row] for row in rows]
     row_sums_pre = [sum(rw) for rw in rows_widths_pre]
-    row_h_required = [
-        (W - row_sums_pre[i]) / (len(rows[i]) + 1)
-        for i in range(len(rows))
-    ]
+    row_h_required = [(W - row_sums_pre[i]) / (len(rows[i]) + 1) for i in range(len(rows))]
     h_narrowest = min(row_h_required) if row_h_required else float("inf")
     effective_margin_x = max(margin_x, int(round(h_narrowest)))
     blueprint_widened = effective_margin_x > margin_x
@@ -720,8 +713,8 @@ def render_transfer(
         right_edge_canvas = W - effective_margin_x
         rule_taken: str = "?"
 
-        is_seed_row = (r_idx == 0)
-        is_anchor_row = (r_idx == anchor_row_idx and column_aware_xs is not None)
+        is_seed_row = r_idx == 0
+        is_anchor_row = r_idx == anchor_row_idx and column_aware_xs is not None
         upper_anchors: list = []
         if not is_seed_row:
             upper_anchors = row_anchors_list[r_idx - 1]
@@ -805,7 +798,7 @@ def render_transfer(
             else:
                 f = first_failed
                 head_right = rule1_xs[f - 1] + widths[f - 1]
-                middle_widths = widths[f:n - 1]
+                middle_widths = widths[f : n - 1]
                 tail_w = widths[n - 1]
                 tail_anchor = None
                 tail_anchor_idx = -1

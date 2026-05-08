@@ -322,7 +322,7 @@ class SetupScreen:
         gap = 18  # gap between pill and steppers
         pill_w, pill_h = 170, 32
         step_btn = 26  # +/- button size (square)
-        value_w = 56   # width reserved for "900m" / "5s" text
+        value_w = 56  # width reserved for "900m" / "5s" text
         # ────────────────────────────────────────────────────────────────────────
 
         cy = band_y + band_h // 2  # vertical center of band
@@ -419,8 +419,7 @@ class SetupScreen:
         pygame.draw.rect(self.screen, self.control_bg, rect, border_radius=btn_h // 2)
         self.screen.blit(
             label_img,
-            (rect.centerx - label_img.get_width() // 2,
-             rect.centery - label_img.get_height() // 2),
+            (rect.centerx - label_img.get_width() // 2, rect.centery - label_img.get_height() // 2),
         )
         self._tutorial_btn_rect = rect
 
@@ -514,10 +513,7 @@ class SetupScreen:
                     if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                         # ? Tutorial button takes priority — sits above the
                         # OCR auto-PA band, so check it first.
-                        if (
-                            self._tutorial_btn_rect is not None
-                            and self._tutorial_btn_rect.collidepoint(event.pos)
-                        ):
+                        if self._tutorial_btn_rect is not None and self._tutorial_btn_rect.collidepoint(event.pos):
                             return {"action": "run_tutorial"}
                         self._handle_band_click(event.pos)
                         continue

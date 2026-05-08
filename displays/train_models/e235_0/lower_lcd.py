@@ -44,7 +44,6 @@ from displays.train_models.e235_1000.lower_lcd import (
     LowerDisplay as E235_1000_LowerDisplay,
 )
 
-
 # =============================================================================
 # Canonical Yamanote JY-code ordering for racetrack screen layout.
 #
@@ -119,6 +118,7 @@ class CircularFullRouteDisplay:
         self.y_top = UPPER_HEIGHT  # absolute y where lower LCD area starts
         self.lower_h = S_HEIGHT - self.y_top
 
+        # fmt: off
         # Vertical layout — track row centerlines (relative to y_top).
         # _build_positions derives row centerline y from cy ± curve_v_radius
         # (matching _draw_track) so a 1-pixel asymmetry from odd sums doesn't
@@ -143,6 +143,7 @@ class CircularFullRouteDisplay:
         self.curve_v_radius       = (self.track_bottom_y - self.track_top_y) // 2
         self.vert_seg_h_outer     = 20     # outer-rect vertical straight at apex
         self.vert_seg_h_inner     = 15     # inner-rect vertical straight at apex (smaller = more curvy inner)
+        # fmt: on
 
         # =====================================================================
         # Fonts (shared across multiple draw methods)
@@ -268,12 +269,14 @@ class CircularFullRouteDisplay:
         So inner border_radius is automatically right when both rects are
         offset by stroke_w on every side.
         """
+        # fmt: off
         # --- Track draw params (adjust freely) ---
         v_outer = self.curve_v_radius + self.track_stroke_w // 2
         v_inner = max(1, self.curve_v_radius - self.track_stroke_w // 2)
         border_outer = max(1, v_outer - self.vert_seg_h_outer // 2)
         border_inner = max(1, v_inner - self.vert_seg_h_inner // 2)
         # -----------------------------------------
+        # fmt: on
 
         cy = self.y_top + (self.track_top_y + self.track_bottom_y) // 2
 
@@ -307,6 +310,7 @@ class CircularFullRouteDisplay:
         notch). Direction-aware: ``face_left=True`` mirrors the chevron to
         point LEFT for top-row stops (inner-loop = R→L on top row).
         """
+        # fmt: off
         # --- Arrow params (mirrors e235_1000.draw_ptr chevron) ---
         w_body       = 18
         h_body       = STOPS_BAR_HEIGHT + 4   # = 34
@@ -317,6 +321,7 @@ class CircularFullRouteDisplay:
         tip_offset   = 4                      # tip lies tip_offset px past station center on apex side
         halo_x_extra = 2                      # halo sits 2px more "behind" than body (matches e235_1000's `-2`)
         # ---------------------------------------------------------
+        # fmt: on
         cx, cy = pos
         body_y = int(cy - h_body / 2)
         halo_y = int(cy - h_halo / 2)
@@ -346,6 +351,7 @@ class CircularFullRouteDisplay:
         Chevron sits centered on the vertical apex segment, drawn in WHITE_BG
         on top of the green band.
         """
+        # fmt: off
         # --- Arrow params (adjust freely) ---
         # arrow_w spans the full color-bar width so the chevron reaches the
         # inner edges of the band. Smaller arrow_h = flatter, less pointy
@@ -354,6 +360,7 @@ class CircularFullRouteDisplay:
         arrow_h = 6    # chevron vertical extent (top-to-tip depth) — flatter is less pointy
         stroke  = 4
         # -------------------------------------
+        # fmt: on
 
         cy = self.y_top + (self.track_top_y + self.track_bottom_y) // 2
         left_band_cx = self.track_left_pad + self.track_stroke_w // 2
@@ -367,13 +374,13 @@ class CircularFullRouteDisplay:
         half_w = w // 2
         half_h = h // 2
         if point_down:
-            left   = (cx - half_w, cy - half_h)
-            tip    = (cx,          cy + half_h)
-            right  = (cx + half_w, cy - half_h)
+            left = (cx - half_w, cy - half_h)
+            tip = (cx, cy + half_h)
+            right = (cx + half_w, cy - half_h)
         else:
-            left   = (cx - half_w, cy + half_h)
-            tip    = (cx,          cy - half_h)
-            right  = (cx + half_w, cy + half_h)
+            left = (cx - half_w, cy + half_h)
+            tip = (cx, cy - half_h)
+            right = (cx + half_w, cy + half_h)
         pygame.draw.line(self.screen, WHITE_BG, left, tip, stroke)
         pygame.draw.line(self.screen, WHITE_BG, tip, right, stroke)
 
@@ -382,9 +389,11 @@ class CircularFullRouteDisplay:
 
         Copied from e235_1000.JapaneseDisplay.draw_marks's small_dot path.
         """
+        # fmt: off
         # --- Dot params (adjust freely) ---
         radius = 5  # matches e235_1000 small_dot_radius
         # ----------------------------------
+        # fmt: on
         cx, cy = int(pos[0]), int(pos[1])
         pygame.gfxdraw.filled_circle(self.screen, cx, cy, radius, PASSED_COLOR)
         pygame.gfxdraw.aacircle(self.screen, cx, cy, radius, PASSED_COLOR)
@@ -396,12 +405,14 @@ class CircularFullRouteDisplay:
         outline + black countdown text — distinct from e235_1000's gray active-ring
         style (which sits on a green active-range bar). Uses gfxdraw for AA edges.
         """
+        # fmt: off
         # --- Numbered circle params (adjust freely) ---
         outer_radius        = 12   # outer route-color ring radius
         inner_inset         = 1    # inset from outer (= visible ring thickness)
         suffix_x_gap        = 0    # gap between circle right edge and (分) suffix
         suffix_bottom_pad   = 2    # gap between (分) bottom and color bar bottom edge
         # ----------------------------------------------
+        # fmt: on
         cx, cy = int(pos[0]), int(pos[1])
         pygame.gfxdraw.filled_circle(self.screen, cx, cy, outer_radius, self.color)
         pygame.gfxdraw.aacircle(self.screen, cx, cy, outer_radius, self.color)
@@ -435,6 +446,7 @@ class CircularFullRouteDisplay:
         at extremes), period 2s; derived from pygame.time.get_ticks() for
         frame-rate independence.
         """
+        # fmt: off
         # --- Pentagon static params (adjust freely) ---
         overhang             = 2                          # vertical overhang past row centerline (max state)
         rect_half_w_back     = STOPS_WIDTH / 2            # = 21 (flat back side from center)
@@ -445,11 +457,12 @@ class CircularFullRouteDisplay:
         # --- Pentagon animation params (adjust freely) ---
         breath_period_s      = 1.2                        # full big→small→big cycle (0.6s single travel)
         # --------------------------------------------------
+        # fmt: on
         cx, cy = pos
 
-        half_h_max = STOPS_BAR_HEIGHT / 2 + overhang      # = 17 (red at max, fully extended)
-        half_h_min = self.track_stroke_w / 2              # = 14 (red at min, height = color bar)
-        scale_min = half_h_min / half_h_max               # ≈ 0.824
+        half_h_max = STOPS_BAR_HEIGHT / 2 + overhang  # = 17 (red at max, fully extended)
+        half_h_min = self.track_stroke_w / 2  # = 14 (red at min, height = color bar)
+        scale_min = half_h_min / half_h_max  # ≈ 0.824
 
         # Triangle wave: 1 at cycle=0 (max), 0 at half cycle (min), back to 1.
         # Constant |velocity| — instant reversal at extremes, NO rest/lingering
@@ -462,32 +475,29 @@ class CircularFullRouteDisplay:
         # Direction-aware geometry — pentagon at max size; red gets uniformly scaled.
         if face_left:
             rect_right_x = cx + rect_half_w_back
-            rect_left_x  = cx - rect_half_w_apex
-            apex_x       = rect_left_x - triangle_d
+            rect_left_x = cx - rect_half_w_apex
+            apex_x = rect_left_x - triangle_d
             max_points = [
                 (rect_right_x, cy - half_h_max),
                 (rect_right_x, cy + half_h_max),
-                (rect_left_x,  cy + half_h_max),
-                (apex_x,       cy),
-                (rect_left_x,  cy - half_h_max),
+                (rect_left_x, cy + half_h_max),
+                (apex_x, cy),
+                (rect_left_x, cy - half_h_max),
             ]
         else:
-            rect_left_x  = cx - rect_half_w_back
+            rect_left_x = cx - rect_half_w_back
             rect_right_x = cx + rect_half_w_apex
-            apex_x       = rect_right_x + triangle_d
+            apex_x = rect_right_x + triangle_d
             max_points = [
-                (rect_left_x,  cy - half_h_max),
-                (rect_left_x,  cy + half_h_max),
+                (rect_left_x, cy - half_h_max),
+                (rect_left_x, cy + half_h_max),
                 (rect_right_x, cy + half_h_max),
-                (apex_x,       cy),
+                (apex_x, cy),
                 (rect_right_x, cy - half_h_max),
             ]
 
         # Uniformly scale max_points toward (cx, cy) for the breathing red body.
-        red_points = [
-            (cx + (px - cx) * scale, cy + (py - cy) * scale)
-            for (px, py) in max_points
-        ]
+        red_points = [(cx + (px - cx) * scale, cy + (py - cy) * scale) for (px, py) in max_points]
 
         # Halo: drop-shadow x-shifted copies + filled fixed-size halo. The
         # fixed-size halo fill is what becomes visible (gray) around the red
@@ -520,6 +530,7 @@ class CircularFullRouteDisplay:
         if not name:
             return
 
+        # fmt: off
         # --- Name layout params (adjust freely) ---
         # `clearance` = gap from station-position centerline to nearest name char.
         # = track_stroke_w/2 + 8 → 8px margin between the green color bar's
@@ -527,6 +538,7 @@ class CircularFullRouteDisplay:
         clearance = self.track_stroke_w // 2 + 8
         line_gap = 1   # extra px between vertically-stacked chars
         # ------------------------------------------
+        # fmt: on
 
         font = self.font_station_bold if is_major else self.font_station
         line_pitch = font.get_height() + line_gap
@@ -626,7 +638,7 @@ class CircularFullRouteDisplay:
             pos = self.positions.get(jy)
             if pos is None:
                 continue
-            with_suffix = (i == len(ahead) - 1)
+            with_suffix = i == len(ahead) - 1
             self._draw_numbered_circle(pos, minutes, with_minute_suffix=with_suffix)
 
         # 5. Train indicator at current stop — pentagon (STOPPING) or chevron
@@ -658,11 +670,13 @@ class CircularFullRouteDisplay:
         # 7. Disclaimer — left-bottom-anchored to lower-LCD area.
         # Yamanote IRL omits the "一部区間では時間を表示しません。" tail of the standard disclaimer
         # (Yamanote always shows times — no "some sections don't display times" caveat).
+        # fmt: off
         # --- Disclaimer params (adjust freely) ---
         disclaimer_text = "のりかえ、待合せ時間は含まれません。電車により多少時間が異なります。"
         left_x      = 8   # left margin from screen edge
         bottom_pad  = 4   # gap between disclaimer baseline and bottom of lower LCD
         # -----------------------------------------
+        # fmt: on
         img = self.font_disclaimer.render(disclaimer_text, True, DARK_BG)
         blit_y = self.y_top + self.lower_h - bottom_pad - img.get_height()
         self.screen.blit(img, (left_x, blit_y))

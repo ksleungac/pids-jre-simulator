@@ -36,13 +36,13 @@ from pathlib import Path
 import pygame
 
 WINDOW_W, WINDOW_H = 1040, 540
-LIST_W = 280             # left-column station list width
+LIST_W = 280  # left-column station list width
 LIST_TOP = 60
 ROW_H = 26
-HEAD_DURATION = 3.0      # seconds played from start of file
-TAIL_LEAD = 3.0          # seconds before sta_cut where tail playback starts
-INTER_GAP_MS = 400       # silence between head and tail segments
-FADE_MS = 120            # fade-out when stopping head segment
+HEAD_DURATION = 3.0  # seconds played from start of file
+TAIL_LEAD = 3.0  # seconds before sta_cut where tail playback starts
+INTER_GAP_MS = 400  # silence between head and tail segments
+FADE_MS = 120  # fade-out when stopping head segment
 
 BG = (24, 24, 28)
 PANEL = (38, 38, 44)
@@ -57,10 +57,10 @@ FAIL_COLOR = (210, 70, 70)
 REPLAY_COLOR = (90, 120, 200)
 
 # Seek-bar region tints (head played, music lead-in to cut, voice after cut, untouched)
-HEAD_TINT = (60, 130, 90)       # green-ish — head segment that gets played
+HEAD_TINT = (60, 130, 90)  # green-ish — head segment that gets played
 CUT_LEAD_TINT = (180, 130, 60)  # amber — TAIL_LEAD seconds before sta_cut (also played)
-VOICE_TINT = (170, 70, 70)      # red — voice region from sta_cut to EOF (also played)
-UNTOUCHED_TINT = (60, 60, 70)   # dim gray — region between head end and tail start (skipped)
+VOICE_TINT = (170, 70, 70)  # red — voice region from sta_cut to EOF (also played)
+UNTOUCHED_TINT = (60, 60, 70)  # dim gray — region between head end and tail start (skipped)
 CUT_MARKER = (255, 255, 255)
 CURSOR = (255, 240, 100)
 
@@ -73,8 +73,7 @@ def find_font(size: int) -> pygame.font.Font:
     return pygame.font.SysFont(None, size)
 
 
-def draw_button(screen: pygame.Surface, rect: pygame.Rect, label: str,
-                color: tuple[int, int, int], font: pygame.font.Font, hover: bool) -> None:
+def draw_button(screen: pygame.Surface, rect: pygame.Rect, label: str, color: tuple[int, int, int], font: pygame.font.Font, hover: bool) -> None:
     fill = tuple(min(255, c + 30) for c in color) if hover else color
     pygame.draw.rect(screen, fill, rect, border_radius=8)
     pygame.draw.rect(screen, (255, 255, 255), rect, width=2, border_radius=8)
@@ -82,9 +81,16 @@ def draw_button(screen: pygame.Surface, rect: pygame.Rect, label: str,
     screen.blit(txt, txt.get_rect(center=rect.center))
 
 
-def draw_seek_bar(screen: pygame.Surface, rect: pygame.Rect, duration: float,
-                  sta_cut: float, position: float | None, font: pygame.font.Font,
-                  trim_start: float = 0.0, trim_end: float | None = None) -> None:
+def draw_seek_bar(
+    screen: pygame.Surface,
+    rect: pygame.Rect,
+    duration: float,
+    sta_cut: float,
+    position: float | None,
+    font: pygame.font.Font,
+    trim_start: float = 0.0,
+    trim_end: float | None = None,
+) -> None:
     """Static colored regions for head/skipped/cut-lead/voice + sta_cut marker + live cursor.
 
     Whole bar is the file [0, duration]. Played regions get tints; the skipped
@@ -160,7 +166,8 @@ def _find_ffmpeg() -> str:
     if found:
         return found
     candidates = [
-        Path.home() / "AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.1-full_build/bin/ffmpeg.exe",
+        Path.home()
+        / "AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.1-full_build/bin/ffmpeg.exe",
         Path("C:/ProgramData/chocolatey/bin/ffmpeg.exe"),
         Path("C:/ffmpeg/bin/ffmpeg.exe"),
         Path("C:/Program Files/ffmpeg/bin/ffmpeg.exe"),
@@ -178,6 +185,7 @@ def _find_ffmpeg() -> str:
 def _make_beep(duration_s: float = 0.08, freq: float = 880.0, volume: float = 0.4) -> pygame.mixer.Sound:
     """Short sine-wave beep used to mark sta_cut moment during tail playback."""
     import numpy as np
+
     sr = 22050
     t = np.linspace(0, duration_s, int(sr * duration_s), endpoint=False)
     # Soft envelope to avoid click on attack/release
@@ -194,19 +202,18 @@ class Player:
 
     def __init__(self) -> None:
         self.state = "IDLE"
-        self.head_stop_at = 0     # ms tick at which to fade out head
-        self.gap_until = 0        # ms tick at which to start tail
+        self.head_stop_at = 0  # ms tick at which to fade out head
+        self.gap_until = 0  # ms tick at which to start tail
         self.tail_path: Path | None = None
         self.tail_start: float = 0.0
         self.head_start_offset: float = 0.0  # head playback starts at this file-time offset
-        self.tail_end: float | None = None   # absolute file time to stop tail (early stop for trim preview)
+        self.tail_end: float | None = None  # absolute file time to stop tail (early stop for trim preview)
         self.segment_started_ms = 0  # tick when current HEAD or TAIL segment began playing
-        self.cut_time: float = 0.0   # absolute file-time position where sta_cut sits
+        self.cut_time: float = 0.0  # absolute file-time position where sta_cut sits
         self.beep_played: bool = False
         self.beep = _make_beep()
 
-    def begin(self, path: Path, sta_cut: float,
-              head_start: float = 0.0, tail_end: float | None = None) -> None:
+    def begin(self, path: Path, sta_cut: float, head_start: float = 0.0, tail_end: float | None = None) -> None:
         """Start playback. head_start/tail_end let the caller preview pending trim
         without touching the file: head plays from `head_start` (skipping the
         soon-to-be-trimmed prefix), tail stops at `tail_end` (skipping the
@@ -277,7 +284,10 @@ class Player:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("work_dir", type=Path, help="audio/<line>/<diagram>")
-    ap.add_argument("--only", help="comma-separated sta basenames to test (e.g. 'kumagaya' or 'kumagaya,konosu'). Existing JSON verdicts for un-tested stations are preserved.")
+    ap.add_argument(
+        "--only",
+        help="comma-separated sta basenames to test (e.g. 'kumagaya' or 'kumagaya,konosu'). Existing JSON verdicts for un-tested stations are preserved.",
+    )
     args = ap.parse_args()
     only: set[str] | None = set(s.strip() for s in args.only.split(",")) if args.only else None
 
@@ -329,8 +339,8 @@ def main() -> int:
     # Notes are editable in-app (click ✎ pen icon). Notes survive across runs.
     # PASS auto-marks the current note as resolved (display dimmed + strike-through).
     prior_verdicts: dict[str, str] = {}
-    notes: dict[str, str] = {}                    # sta -> note text (live, editable)
-    notes_resolved: dict[str, bool] = {}          # sta -> resolved flag
+    notes: dict[str, str] = {}  # sta -> note text (live, editable)
+    notes_resolved: dict[str, bool] = {}  # sta -> resolved flag
     if out_path.exists():
         try:
             prior = json.loads(out_path.read_text(encoding="utf-8"))
@@ -386,8 +396,8 @@ def main() -> int:
     edit_mode = False
     edit_buffer = ""
     # Pending trim state (per-station, applied via T key)
-    trim_start: float = 0.0      # seconds to trim from start (file head)
-    trim_end_offset: float = 0.0 # seconds to trim from end (file tail)
+    trim_start: float = 0.0  # seconds to trim from start (file head)
+    trim_end_offset: float = 0.0  # seconds to trim from end (file tail)
 
     def current_verdict_for(sta: str) -> str:
         if sta in verdicts:
@@ -397,7 +407,7 @@ def main() -> int:
     def jump_to(new_idx: int) -> None:
         nonlocal idx, edit_mode, trim_start, trim_end_offset
         edit_mode = False  # cancel any in-progress edit on navigation
-        trim_start = 0.0   # discard pending trim — moving on to new station
+        trim_start = 0.0  # discard pending trim — moving on to new station
         trim_end_offset = 0.0
         idx = max(0, min(len(items) - 1, new_idx))
         begin_with_trim()
@@ -466,12 +476,7 @@ def main() -> int:
         pygame.mixer.music.unload()
         tmp = src.with_suffix(".tmp.mp3")
         # Use ffmpeg -ss + -t for lossless cut from both ends
-        cmd = [_find_ffmpeg(), "-y", "-loglevel", "error",
-               "-ss", f"{keep_start:.3f}",
-               "-i", str(src),
-               "-t", f"{new_dur:.3f}",
-               "-c", "copy",
-               str(tmp)]
+        cmd = [_find_ffmpeg(), "-y", "-loglevel", "error", "-ss", f"{keep_start:.3f}", "-i", str(src), "-t", f"{new_dur:.3f}", "-c", "copy", str(tmp)]
         try:
             subprocess.run(cmd, check=True)
             shutil.move(str(tmp), str(src))
@@ -540,7 +545,7 @@ def main() -> int:
                     elif ev.key == pygame.K_e:
                         start_edit()
                     # Trim controls: [/] adjust start, ,/. adjust end, T apply, Z reset
-                    elif ev.key == pygame.K_LEFTBRACKET:   # [
+                    elif ev.key == pygame.K_LEFTBRACKET:  # [
                         trim_start = max(0.0, trim_start - step)
                     elif ev.key == pygame.K_RIGHTBRACKET:  # ]
                         trim_start = min(items[idx]["sta_cut"] - 0.05, trim_start + step)
@@ -636,9 +641,7 @@ def main() -> int:
                 screen.blit(txt, (note_rect.x + 4, note_rect.y + 2))
                 # Strike-through for resolved
                 if resolved:
-                    pygame.draw.line(screen, DIM,
-                                     (note_rect.x + 4, note_rect.y + 13),
-                                     (note_rect.x + 4 + txt.get_width(), note_rect.y + 13), 1)
+                    pygame.draw.line(screen, DIM, (note_rect.x + 4, note_rect.y + 13), (note_rect.x + 4 + txt.get_width(), note_rect.y + 13), 1)
             else:
                 placeholder = font_body.render("✎  (click to add note)", True, (90, 90, 100))
                 screen.blit(placeholder, (note_rect.x + 4, note_rect.y + 2))
@@ -662,8 +665,7 @@ def main() -> int:
         trim_end_pos = max(trim_start + 0.1, cur_dur - trim_end_offset)
         # Display sta_cut adjusted by trim_start so the marker shows post-trim placement preview.
         # Internally the marker still represents the cut moment in the (current) file timeline.
-        draw_seek_bar(screen, seek_rect, cur_dur, item["sta_cut"], player.position(), font_small,
-                      trim_start=trim_start, trim_end=trim_end_pos)
+        draw_seek_bar(screen, seek_rect, cur_dur, item["sta_cut"], player.position(), font_small, trim_start=trim_start, trim_end=trim_end_pos)
 
         # Trim status line: only show if any pending trim
         if trim_start > 0 or trim_end_offset > 0:

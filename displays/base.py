@@ -6,6 +6,7 @@ from enum import IntEnum
 
 class DisplayMode(IntEnum):
     """Display modes for Upper LCD cycling."""
+
     KANJI = 0
     FURIGANA = 1
     ENGLISH = 2

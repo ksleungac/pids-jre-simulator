@@ -55,7 +55,6 @@ from displays.train_models.e235_1000 import (
     WHITE_BG,
 )
 
-
 # =============================================================================
 # Region rect manifest — single source of truth for each region's bounds.
 #
@@ -70,17 +69,17 @@ from displays.train_models.e235_1000 import (
 # =============================================================================
 
 TRAIN_TYPE_RECT = pygame.Rect(15, 8, 150, 31)
-DEST_RECT       = pygame.Rect(0, 50, 180, UPPER_HEIGHT - 50)
-PREFIX_RECT     = pygame.Rect(222, 5, 300, 30)
-STATION_RECT    = pygame.Rect(302, 35, 384, 82)
+DEST_RECT = pygame.Rect(0, 50, 180, UPPER_HEIGHT - 50)
+PREFIX_RECT = pygame.Rect(222, 5, 300, 30)
+STATION_RECT = pygame.Rect(302, 35, 384, 82)
 # Clock blits at y=0 (surface ascender absorbs the y=0..5 strip); the rect
 # spans y=0..35 so clip never amputates the visible glyph caps.
-CLOCK_RECT      = pygame.Rect(S_WIDTH - 170, 0, 80, 35)
+CLOCK_RECT = pygame.Rect(S_WIDTH - 170, 0, 80, 35)
 # Badge spans both the framed 68×68 square AND the optional code_3 top band
 # (12 px upward extension when present). Sized to the maximum (with-band)
 # extent so clip never amputates the band when code_3 is set.
-BADGE_RECT      = pygame.Rect(222, UPPER_HEIGHT - 68 - 12, 68, 68 + 12)
-PA_HINT_RECT    = pygame.Rect(S_WIDTH - 20, UPPER_HEIGHT - 20, 20, 20)
+BADGE_RECT = pygame.Rect(222, UPPER_HEIGHT - 68 - 12, 68, 68 + 12)
+PA_HINT_RECT = pygame.Rect(S_WIDTH - 20, UPPER_HEIGHT - 20, 20, 20)
 
 
 # =============================================================================
@@ -98,12 +97,12 @@ PA_HINT_RECT    = pygame.Rect(S_WIDTH - 20, UPPER_HEIGHT - 20, 20, 20)
 DEBUG_GRID: bool = False  # flipped by preview_display.py --debug-grid
 
 _DEBUG_COLORS = {
-    "upper_bg":   (80, 80, 80),    # neutral gray — baseline "no region claimed this pixel"
-    "dest":       (180, 40, 40),   # bright red
-    "prefix":     (40, 80, 200),   # bright blue
-    "clock":      (200, 170, 30),  # bright yellow
-    "station":    (140, 40, 170),  # bright magenta/purple
-    "pa_hint":    (220, 110, 0),   # bright orange
+    "upper_bg": (80, 80, 80),  # neutral gray — baseline "no region claimed this pixel"
+    "dest": (180, 40, 40),  # bright red
+    "prefix": (40, 80, 200),  # bright blue
+    "clock": (200, 170, 30),  # bright yellow
+    "station": (140, 40, 170),  # bright magenta/purple
+    "pa_hint": (220, 110, 0),  # bright orange
     # Note: train_type is intentionally absent — its WHITE_BG box is already
     # visually distinct from every other region's tint, so keep it WHITE_BG in
     # debug mode too. The _bg("train_type", default=WHITE_BG) call resolves
@@ -173,7 +172,9 @@ class JapaneseDisplay:
             pygame.draw.rect(self.screen, _bg("dest"), DEST_RECT)
 
             dest_box_x, dest_box_y, dest_box_w = 15, 50, 150
-            draw_text_given_width(dest_box_x, dest_box_y, dest_box_w, self.font_dest, dest_text, WHITE_BG, self.screen, collapse=False, script="japanese")
+            draw_text_given_width(
+                dest_box_x, dest_box_y, dest_box_w, self.font_dest, dest_text, WHITE_BG, self.screen, collapse=False, script="japanese"
+            )
 
             suffix = "方面" if route_name == "山手線" else "ゆき"
             t_w, t_h = self.font_suffix.size(suffix)
@@ -296,9 +297,9 @@ class EnglishDisplay:
                 # renderer's tighter stacking). Inter-line gap matters here because
                 # line 1 may contain descenders ("p" of "Airport", "g" of "Shinagawa")
                 # that would collide with line 2's caps under ascent-pitch.
-                two_line_x       = 5                  # align with "for" left edge
-                two_line_top_pad = 5                  # gap between "for" visible bottom and line 1 top
-                two_line_max_w   = 175                # extends to right edge of dest region (~180)
+                two_line_x = 5  # align with "for" left edge
+                two_line_top_pad = 5  # gap between "for" visible bottom and line 1 top
+                two_line_max_w = 175  # extends to right edge of dest region (~180)
                 visible_for_bottom = for_y + self.font_suffix.get_ascent()
                 top_y = visible_for_bottom + two_line_top_pad
                 line_pitch = self.font_dest.get_height()  # full-height pitch — natural inter-line gap
@@ -317,9 +318,7 @@ class EnglishDisplay:
                 dest_h = self.font_dest.get_height()
                 zone_top = for_y + for_h
                 single_y = zone_top + (UPPER_HEIGHT - zone_top - dest_h) // 2 - 5
-                draw_text_given_width(
-                    text_x, single_y, text_max_w, self.font_dest, dest_text, WHITE_BG, self.screen, collapse=True, script="latin"
-                )
+                draw_text_given_width(text_x, single_y, text_max_w, self.font_dest, dest_text, WHITE_BG, self.screen, collapse=True, script="latin")
 
     def draw_prefix(self, prefix_text: str) -> None:
         """Draw English prefix (already translated by UpperDisplay manager)."""
@@ -342,12 +341,14 @@ class EnglishDisplay:
             return
 
         with clip(self.screen, STATION_RECT):
+            # fmt: off
             # --- Station layout params ---
             name_x             = int(S_WIDTH * 0.40) + 10
             max_width          = int(S_WIDTH * 0.54 - 10)
             # 2-line (used when station_text contains "\n"):
             line_pitch_offset  = 0    # px adjustment to ascent-based pitch (-ve = even tighter, +ve = looser)
             # -----------------------------
+            # fmt: on
 
             # Single bg fill for the whole station territory. Clip enforces the
             # confinement guarantee — any glyph pixel that would land above
@@ -559,6 +560,7 @@ class UpperDisplay:
         station_name = self.stops[self.curr_stop].get("name", "")
         code_3 = self.stations.get(station_name, {}).get("code_3", "")
 
+        # fmt: off
         # --- Badge params (adjust freely) ---
         badge_x = 222  # left edge
         badge_w = 68  # total width
@@ -578,6 +580,7 @@ class UpperDisplay:
         code_3_y_offset = 4  # nudge code_3 text vertically within band (positive = lower, closer to green ring)
         # Font size lives in __init__ as self.font_sta_code_3letter — increase pt if the text should be bigger.
         # -------------------------------------
+        # fmt: on
 
         badge_y = UPPER_HEIGHT - badge_h
 
@@ -694,11 +697,7 @@ class UpperDisplay:
                 # auto/just-played. Floor passes to the user only when the
                 # current PA finishes, so flashing earlier is misleading nag.
                 audio_busy = self.audio is not None and self.audio.is_pa_playing()
-                show_yellow = (
-                    len(pa_list) > 1
-                    and self.cnt_pa < len(pa_list) - 1
-                    and not audio_busy
-                )
+                show_yellow = len(pa_list) > 1 and self.cnt_pa < len(pa_list) - 1 and not audio_busy
             if show_yellow:
                 on = (pygame.time.get_ticks() // 500) % 2 == 0
                 color = (247, 225, 158) if on else _bg("pa_hint")

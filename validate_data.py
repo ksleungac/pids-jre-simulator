@@ -8,6 +8,7 @@ badge icons exist on disk, etc.).
 Usage: PYTHONUTF8=1 python validate_data.py [--quiet]
 Exits 0 if clean, 1 if issues found.
 """
+
 import os
 
 # Suppress pygame's greeting on import — we transitively pull pygame via
@@ -54,8 +55,7 @@ def _check_badge_icons(slug: str, badges: list, suffix: str, issues: list) -> No
         if not icon:
             continue
         if not (LINE_ICONS_DIR / f"{icon}.png").exists():
-            issues.append(("data/lines.json",
-                           f"'{slug}{suffix}': badge icon '{icon}.png' missing in data/line_icons/"))
+            issues.append(("data/lines.json", f"'{slug}{suffix}': badge icon '{icon}.png' missing in data/line_icons/"))
 
 
 def check_lines_json(lines_data: dict, issues: list) -> None:
@@ -64,8 +64,7 @@ def check_lines_json(lines_data: dict, issues: list) -> None:
     for slug, entry in lines_data.items():
         cat = entry.get("category")
         if cat is not None and cat not in VALID_LINE_CATEGORIES:
-            issues.append(("data/lines.json",
-                           f"'{slug}': category={cat!r} — not in {sorted(VALID_LINE_CATEGORIES)}"))
+            issues.append(("data/lines.json", f"'{slug}': category={cat!r} — not in {sorted(VALID_LINE_CATEGORIES)}"))
 
         _check_badge_icons(slug, entry.get("badges", []), "", issues)
         for vname, vdata in entry.get("variants", {}).items():
@@ -81,6 +80,7 @@ def _resolve_slug_ref(ref: str, lines_data: dict) -> tuple[bool, str]:
     identically), AND running the validator exercises production code on
     every authored data point — bugs in resolve_entry surface here."""
     from displays.transfer_info import resolve_entry
+
     try:
         resolve_entry(ref, lines_data)
         return True, ""
@@ -100,39 +100,38 @@ def check_stations_transfers(stations_data: dict, lines_data: dict, issues: list
 
 def check_transfers_by_view(stations_data: dict, lines_data: dict, issues: list) -> None:
     """Per-view ops on a station's transfers:
-      - drop entries must match a base slug already in transfers[]
-      - edit keys must match a base slug in transfers[]; edit values must resolve in lines.json
-      - rows array must sum to len(transfers) - len(drop)  (edit doesn't change count)
+    - drop entries must match a base slug already in transfers[]
+    - edit keys must match a base slug in transfers[]; edit values must resolve in lines.json
+    - rows array must sum to len(transfers) - len(drop)  (edit doesn't change count)
     """
     from displays.transfer_info import SCALE_SUFFIX_RE
+
     for sname, sdata in stations_data.items():
         transfers = sdata.get("transfers", [])
-        base_slugs_in_transfers = {
-            SCALE_SUFFIX_RE.sub("", entry).split(".")[0]
-            for entry in transfers
-        }
+        base_slugs_in_transfers = {SCALE_SUFFIX_RE.sub("", entry).split(".")[0] for entry in transfers}
         for view_key, ops in sdata.get("transfers_by_view", {}).items():
             # drop validity
             for d in ops.get("drop", []):
                 if d not in base_slugs_in_transfers:
-                    issues.append(("data/stations.json",
-                                   f"'{sname}' view '{view_key}': drop '{d}' — not a base slug in transfers[]"))
+                    issues.append(("data/stations.json", f"'{sname}' view '{view_key}': drop '{d}' — not a base slug in transfers[]"))
             # edit validity
             for ek, ev in ops.get("edit", {}).items():
                 if ek not in base_slugs_in_transfers:
-                    issues.append(("data/stations.json",
-                                   f"'{sname}' view '{view_key}': edit key '{ek}' — not a base slug in transfers[]"))
+                    issues.append(("data/stations.json", f"'{sname}' view '{view_key}': edit key '{ek}' — not a base slug in transfers[]"))
                 ok, err = _resolve_slug_ref(ev, lines_data)
                 if not ok:
-                    issues.append(("data/stations.json",
-                                   f"'{sname}' view '{view_key}': edit value {err}"))
+                    issues.append(("data/stations.json", f"'{sname}' view '{view_key}': edit value {err}"))
             # rows sum (edit doesn't change count, so post-ops count = len(transfers) - len(drop))
             rows = ops.get("rows")
             if rows is not None:
                 expected = len(transfers) - len(ops.get("drop", []))
                 if sum(rows) != expected:
-                    issues.append(("data/stations.json",
-                                   f"'{sname}' view '{view_key}': rows={rows} sum={sum(rows)} — expected {expected} (len(transfers) - len(drop))"))
+                    issues.append(
+                        (
+                            "data/stations.json",
+                            f"'{sname}' view '{view_key}': rows={rows} sum={sum(rows)} — expected {expected} (len(transfers) - len(drop))",
+                        )
+                    )
 
 
 def check_compound_dest_format(translations: dict, issues: list) -> None:
@@ -145,12 +144,10 @@ def check_compound_dest_format(translations: dict, issues: list) -> None:
         if not en:
             continue
         if "&" in en and not COMPOUND_DEST_RE.match(en):
-            issues.append(("data/translations.json",
-                           f'compound "{ja_key}": english "{en!r}" not in "A&\\nB" form'))
+            issues.append(("data/translations.json", f'compound "{ja_key}": english "{en!r}" not in "A&\\nB" form'))
 
 
-def check_route(route_path: Path, translations: dict, train_types: dict,
-                issues: list) -> None:
+def check_route(route_path: Path, translations: dict, train_types: dict, issues: list) -> None:
     rel = route_path.parent.relative_to(AUDIO_ROOT).as_posix()
     try:
         data = load(route_path)
@@ -261,12 +258,11 @@ def check_route_transfer_view(route_path: Path, stations_data: dict, issues: lis
     if not transfer_view:
         return
     stops = data.get("stops", [])
-    consumed = any(
-        transfer_view in stations_data.get(stop.get("name", ""), {}).get("transfers_by_view", {})
-        for stop in stops
-    )
+    consumed = any(transfer_view in stations_data.get(stop.get("name", ""), {}).get("transfers_by_view", {}) for stop in stops)
     if not consumed:
-        issues.append((rel, f"transfer_view '{transfer_view}': no stop on this route has a stations.json transfers_by_view entry for it (config is dead)"))
+        issues.append(
+            (rel, f"transfer_view '{transfer_view}': no stop on this route has a stations.json transfers_by_view entry for it (config is dead)")
+        )
 
 
 def check_route_loads(route_path: Path, station_db: dict, issues: list) -> None:
@@ -282,6 +278,7 @@ def check_route_loads(route_path: Path, station_db: dict, issues: list) -> None:
     runtime is the closure."
     """
     from route_loader import load_route_from_dir
+
     rel = route_path.parent.relative_to(AUDIO_ROOT).as_posix()
     try:
         load_route_from_dir(route_path.parent, station_db)

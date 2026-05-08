@@ -26,18 +26,16 @@ class LanguagePicker:
     # across scripts. Font face is chosen by ``i18n.font_for_lang(code, ...)``
     # at render time.
     LANGS = [
-        ("en",    "English",   28),
-        ("zh_HK", "繁體中文",  24),
-        ("zh_CN", "简体中文",  24),
+        ("en", "English", 28),
+        ("zh_HK", "繁體中文", 24),
+        ("zh_CN", "简体中文", 24),
     ]
 
     def __init__(self, screen: pygame.Surface):
         self.screen = screen
 
         default = i18n.detect_default_lang()
-        self.selected_idx = next(
-            (i for i, row in enumerate(self.LANGS) if row[0] == default), 0
-        )
+        self.selected_idx = next((i for i, row in enumerate(self.LANGS) if row[0] == default), 0)
         i18n.set_language(self.LANGS[self.selected_idx][0])
 
         # Palette mirrors SetupScreen for visual consistency across chrome.

@@ -18,7 +18,6 @@ from typing import List, Optional
 
 from app_paths import project_root as _project_root
 
-
 SCALE_SUFFIX_RE = re.compile(r"\.scale\(([0-9]*\.?[0-9]+)\)$")
 
 
@@ -45,15 +44,11 @@ def resolve_entry(slug_ref: str, lines: dict) -> dict:
         if "." in variant_name:
             raise ValueError(f"Dot-notation is one level only; got '{slug_ref}'")
         if base_slug not in lines:
-            raise KeyError(
-                f"Base slug '{base_slug}' not in lines.json (referenced as '{slug_ref}')"
-            )
+            raise KeyError(f"Base slug '{base_slug}' not in lines.json (referenced as '{slug_ref}')")
         base = lines[base_slug]
         variants = base.get("variants", {})
         if variant_name not in variants:
-            raise KeyError(
-                f"Variant '{variant_name}' not under '{base_slug}' (referenced as '{slug_ref}')"
-            )
+            raise KeyError(f"Variant '{variant_name}' not under '{base_slug}' (referenced as '{slug_ref}')")
         merged = {k: v for k, v in base.items() if k != "variants"}
         merged.update(variants[variant_name])
     else:
@@ -80,14 +75,7 @@ def apply_transfer_filter(
     the preview CLI. Pure function — no class state.
     """
     if line_code:
-        transfers = [
-            ref
-            for ref in transfers
-            if not any(
-                b.get("code") == line_code
-                for b in resolve_entry(ref, lines).get("badges", [])
-            )
-        ]
+        transfers = [ref for ref in transfers if not any(b.get("code") == line_code for b in resolve_entry(ref, lines).get("badges", []))]
 
     if transfer_view:
         view_ops = station_data.get("transfers_by_view", {}).get(transfer_view, {})
@@ -116,9 +104,7 @@ class TransferInfoDisplay:
 
         root = _project_root()
         self.lines = json.loads((root / "data" / "lines.json").read_text(encoding="utf-8"))
-        self.stations = json.loads(
-            (root / "data" / "stations.json").read_text(encoding="utf-8")
-        )
+        self.stations = json.loads((root / "data" / "stations.json").read_text(encoding="utf-8"))
 
         # Route-level filter knobs read once. Both optional — absent means
         # "no filtering" (renders raw transfers list). Out-of-spec routes

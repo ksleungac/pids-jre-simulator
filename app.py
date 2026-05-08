@@ -111,8 +111,10 @@ class _SilentAudio:
     def stop(self) -> None: ...
     def is_playing(self) -> bool:
         return False
+
     def is_pa_playing(self) -> bool:
         return False
+
     def is_sta_playing(self) -> bool:
         return False
 
@@ -257,6 +259,7 @@ class PASimulator:
         Returns empty dict if not found.
         """
         from app_paths import project_root
+
         translations_path = project_root() / "data" / "translations.json"
 
         if os.path.exists(translations_path):
@@ -320,7 +323,9 @@ class PASimulator:
         # natural duration. Surfaced 2026-05-07 via `preview --lower-view full`
         # opening in the 8-station view.
         boot_t = time.time()
-        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=self.state.at_station, cnt_pa_at_station=self.state.cnt_pa_at_station)
+        self.upper.set_state(
+            self.state.curr_stop, self.state.cnt_pa, at_station=self.state.at_station, cnt_pa_at_station=self.state.cnt_pa_at_station
+        )
         self.upper.draw()
         self.lower.draw(boot_t)
         self._render_panel()
@@ -424,9 +429,7 @@ class PASimulator:
         panel_h = self.debug_surface.get_height() if (self.auto_input and self.debug_surface is not None) else 0
         lcd_y = my - panel_h
         clickable = lcd_y >= 0 and self._click_target(mx, lcd_y) is not None
-        pygame.mouse.set_cursor(
-            pygame.SYSTEM_CURSOR_HAND if clickable else pygame.SYSTEM_CURSOR_ARROW
-        )
+        pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND if clickable else pygame.SYSTEM_CURSOR_ARROW)
 
     def _handle_input(self) -> None:
         """Dispatch input handling based on mode.
@@ -749,7 +752,9 @@ class PASimulator:
         """
         self.audio.pause()
         self.state.__dict__.update(snap.__dict__)
-        self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=self.state.at_station, cnt_pa_at_station=self.state.cnt_pa_at_station)
+        self.upper.set_state(
+            self.state.curr_stop, self.state.cnt_pa, at_station=self.state.at_station, cnt_pa_at_station=self.state.cnt_pa_at_station
+        )
 
     def cleanup(self) -> None:
         """Clean up resources."""

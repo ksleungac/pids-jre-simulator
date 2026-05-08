@@ -18,8 +18,20 @@ LINES = json.loads((ROOT / "data" / "lines.json").read_text(encoding="utf-8"))
 
 # JR East codes whose stations are in our dataset
 JR_EAST_CODES = {
-    "JY", "JK", "JT", "JO", "JU", "JC", "JB",
-    "JA", "JS", "JN", "JE", "JJ", "JH", "JM",
+    "JY",
+    "JK",
+    "JT",
+    "JO",
+    "JU",
+    "JC",
+    "JB",
+    "JA",
+    "JS",
+    "JN",
+    "JE",
+    "JJ",
+    "JH",
+    "JM",
 }
 
 # Line-code → default direction view (used when station has no transfers_by_view entry).
@@ -31,6 +43,7 @@ DEFAULT_VIEWS = {
     "JO": "JO_east",
     # No direction views for: JT, JU, JC, JB, JS, JN, JE, JJ, JH, JM
 }
+
 
 def jr_east_codes_for_station(name: str) -> set[str]:
     """Codes appearing in any transfer badge of this station (i.e., lines passing through)."""
@@ -46,14 +59,20 @@ def jr_east_codes_for_station(name: str) -> set[str]:
                 codes.add(c)
     return codes
 
+
 def run_render(station: str, filter_line: str, view: str) -> tuple[int, list[int], int, str] | None:
     """Returns (N, widths, total_w, chosen_shape) or None if station has no transfers etc."""
     cmd = [
-        "uv", "run", "preview_transfers.py",
-        "--station", station,
-        "--filter-line", filter_line,
+        "uv",
+        "run",
+        "preview_transfers.py",
+        "--station",
+        station,
+        "--filter-line",
+        filter_line,
         "--debug",
-        "--out", "_visual_iter/_enum_tmp.png",
+        "--out",
+        "_visual_iter/_enum_tmp.png",
     ]
     if view:
         cmd += ["--view", view]
@@ -69,6 +88,7 @@ def run_render(station: str, filter_line: str, view: str) -> tuple[int, list[int
     chosen = m_chosen.group(1) if m_chosen else "?"
     return (n, widths, total_w, chosen)
 
+
 def views_to_try(station: str, code: str) -> list[str]:
     """For (station, line), return list of views to try.
     Includes all transfers_by_view keys for this line + the default if no view-specific
@@ -82,8 +102,10 @@ def views_to_try(station: str, code: str) -> list[str]:
     default = DEFAULT_VIEWS.get(code, "")
     return [default]
 
+
 def main():
     import sys
+
     try:
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
     except Exception:
@@ -114,6 +136,7 @@ def main():
     for r in sorted(rows, key=lambda r: r[6]):  # sort by h ascending (most cramped first)
         s, c, v, n, w, sigma, h, chosen = r
         print(f"{s:<10} {c:<5} {v:<10} {str(w):<25} {sigma:>5} {h:>7.1f}  {chosen}")
+
 
 if __name__ == "__main__":
     main()

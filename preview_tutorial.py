@@ -53,6 +53,7 @@ def render(step: int = 1, lang: str = "en", out: str = "screenshot_tutorial.png"
     else:
         # Boot a real sim and render one frame inside the LCD sub-surface.
         from app import PASimulator
+
         tut.lcd_surface = screen.subsurface((LCD_X, LCD_Y, LCD_W, LCD_H))
         sim = PASimulator(
             work_dir=tut.tutorial_route_dir(),

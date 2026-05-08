@@ -12,7 +12,6 @@ from typing import List, Tuple
 
 import pygame
 
-
 BADGE_TEXT = (15, 15, 15)  # dark — text sits on white interior
 WHITE_BG = (230, 230, 230)
 
@@ -359,7 +358,7 @@ def draw_station_code_badge(
     *,
     code_3: str = "",
     font_code_3: pygame.font.Font = None,
-    text_color = BADGE_TEXT,
+    text_color=BADGE_TEXT,
     ring_black: int = 7,
     ring_color: int = 7,
     outer_radius: int = 8,

@@ -54,7 +54,6 @@ from displays.utils import (
     draw_continuity_triangle,
 )
 
-
 # =============================================================================
 # Japanese Display (KANJI / FURIGANA modes — kanji station labels)
 # =============================================================================
@@ -242,6 +241,7 @@ class JapaneseDisplay:
         l_y = y + self.h_line * line_num + self.top_pad * (line_num - 1)
 
         if use_pentagon:
+            # fmt: off
             # --- Pentagon params (adjust freely) ---
             overhang = 2
             head_extra = 10           # left bar-extension at row-head positions
@@ -253,6 +253,7 @@ class JapaneseDisplay:
             dot_radius = 5            # interior light dot
             halo_offset = 3           # gray halo offset (drop-shadow style)
             # ----------------------------------------
+            # fmt: on
 
             cell_left = x + ptr
             cell_right = cell_left + self.stops_w
@@ -484,10 +485,7 @@ class JapaneseDisplay:
                     # White separator caps the bar's right edge when there's no
                     # continuity tail. Suppress when this cell flows into the
                     # continuity chevrons — bar should be visually continuous.
-                    is_continuity_tail = (
-                        (local_i == self.per_line - 1 and self.continuity[0])
-                        or (gi == last_gi and self.continuity[2])
-                    )
+                    is_continuity_tail = (local_i == self.per_line - 1 and self.continuity[0]) or (gi == last_gi and self.continuity[2])
 
                     pygame.draw.rect(
                         self.screen,
@@ -548,6 +546,7 @@ class JapaneseDisplay:
 
         dest_idx = self._find_dest_index(f_stops, effective_dest)
 
+        # fmt: off
         # --- Continuity-tail params (adjust freely) ---
         # Last-in-row cells get a +row_tail_extra width bump (applies to row 1's
         # last cell AND row 2's last visible cell, independent of continuity).
@@ -563,9 +562,10 @@ class JapaneseDisplay:
         cont_chev_stroke = 4     # chevron body thickness — tip-portion = w−stroke = 8 = tri_w,
                                  # so triangle and chevron tips have the same slope (uniform pointiness).
         cont_chev_gap = -4       # negative = chevron BBs OVERLAP. Combined with tip-portion = tri_w,
-                                 # this makes ALL three gaps (triangle→chev1, chev1→chev2, body+center)
-                                 # render as a uniform 4-px white margin.
+        # this makes ALL three gaps (triangle→chev1, chev1→chev2, body+center)
+        # render as a uniform 4-px white margin.
         # -----------------------------------------------
+        # fmt: on
 
         minute_w, _ = self.font_minute.size("分")
         last_gi = f_stops[-1][0] if f_stops else -1
@@ -789,6 +789,7 @@ class JapaneseEightStationDisplay:
         self.color = route_data.get("color", [255, 255, 255])
         self.contrast_color = route_data.get("contrast_color", [224, 54, 37])
 
+        # fmt: off
         # --- Layout params (adjust freely) ---
         # Top of the lower-LCD region (just below upper LCD)
         self.top_y = UPPER_HEIGHT
@@ -813,6 +814,7 @@ class JapaneseEightStationDisplay:
         self.badge_w = 22
         self.badge_h = 22
         # ------------------------------------
+        # fmt: on
 
         self.font_stops = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", self.label_font_size)
         self.font_time = pygame.font.Font("fonts/HelveticaNeue-Bold.otf", FONT_TIME_SIZE + 7)
@@ -1056,6 +1058,7 @@ class JapaneseEightStationDisplay:
         ptr_color = self.contrast_color
 
         if not use_pentagon:
+            # fmt: off
             # --- Pointer params (adjust freely) ---
             # See `arrow_points` docstring for what `stroke` actually controls
             # (chevron BODY thickness — NOT line stroke).
@@ -1075,6 +1078,7 @@ class JapaneseEightStationDisplay:
             outer_x_offset = -outer_w_delta // 2  # center outer around inner
             offset_factor = 0.4  # 0.5 = body centered on cell boundary; lower = more into cursor cell
             # ---------------------------------------
+            # fmt: on
             offset = int(inner_w * offset_factor)
             inner_y_off = -inner_h_overshoot // 2
             inner_h = self.bar_height + inner_h_overshoot
@@ -1093,6 +1097,7 @@ class JapaneseEightStationDisplay:
             # STOPPING pentagon — drawn at curr_stop's cell. Generalized from
             # the original boot-state pentagon at curr_stop=0 (when the
             # chevron has no left neighbor to anchor against).
+            # fmt: off
             # --- Pentagon params (adjust freely) ---
             overhang = 1            # protrudes above/below bar (matches chevron's inner_h_overshoot // 2)
             shift_x = -3            # nudge left (matches full-route convention)
@@ -1101,6 +1106,7 @@ class JapaneseEightStationDisplay:
             dot_radius = 6          # interior light dot (matches passed-style dot at curr_stop=0)
             halo_offset = 3         # gray drop-shadow offset
             # ---------------------------------------
+            # fmt: on
 
             cell_left = x + ptr_x
             cell_right = cell_left + self.stops_w
@@ -1249,11 +1255,13 @@ class JapaneseEightStationDisplay:
         if last_gi >= len(self.stops) - 1:
             return
 
+        # fmt: off
         # --- Continuation marker params (adjust freely) ---
         triangle_w = 8
         triangle_pad_x = 4  # gap after the 分 marker
         triangle_pad_y = 6  # vertical inset within bar height
         # ---------------------------------------------------
+        # fmt: on
 
         bar_right = self.x + self.cells * self.stops_w
         minute_w, _ = self.font_minute.size("分")
@@ -1286,6 +1294,7 @@ class JapaneseEightStationDisplay:
         if not sta_code:
             return
 
+        # fmt: off
         # --- Mini-badge params (adjust freely) ---
         badge_w = self.badge_w
         badge_h = self.badge_h
@@ -1302,6 +1311,7 @@ class JapaneseEightStationDisplay:
         text_y_offset = 0  # vertically centered in the interior
         prefix_x_offset = 0  # center prefix (upper biases right by 1, not desirable here)
         # ------------------------------------------
+        # fmt: on
 
         badge_x = cell_x + (self.stops_w - badge_w) // 2
         draw_station_code_badge(
@@ -1625,11 +1635,7 @@ class LowerDisplay:
         if self._current_slot == self._SLOT_TRANSFER:
             return self.transfer_display
         if mode in (DisplayMode.KANJI, DisplayMode.FURIGANA):
-            return (
-                self.japanese_eight_display
-                if self._current_slot == self._SLOT_EIGHT
-                else self.japanese_display
-            )
+            return self.japanese_eight_display if self._current_slot == self._SLOT_EIGHT else self.japanese_display
         return self.japanese_display
 
     def draw(self, current_time: float = 0.0) -> None:

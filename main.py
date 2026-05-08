@@ -47,6 +47,7 @@ def main():
 
     # Repo root (dev) / alongside-exe (frozen) — single canonical helper.
     from app_paths import project_root
+
     BASE_DIR = str(project_root())
 
     # Create screen for setup (also reused by the first-run language picker)
@@ -103,7 +104,7 @@ def main():
         action = config.get("action")
         if action == "run_tutorial":
             _run_tutorial(SETUP_SIZE)
-            continue                              # re-show setup
+            continue  # re-show setup
         if action == "select":
             break
         # Unknown action: defensive bail.

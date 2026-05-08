@@ -24,6 +24,7 @@ from app import AppState, PASimulator
 from app_paths import project_root
 from displays.train_models.e235_1000 import S_HEIGHT, S_WIDTH
 
+# fmt: off
 # ── tuneable params (window / layout) ───────────────────────────────────────
 WINDOW_W, WINDOW_H = 1100, 500
 PROGRESS_H = 64                                   # top progress strip (stepper + labels)
@@ -45,6 +46,7 @@ BTN_BORDER = (118, 126, 142)
 PROGRESS_BG = (44, 49, 60)
 LINE_DIM = (76, 84, 100)                          # incomplete progress-line segments
 DOT_FUTURE = (70, 76, 92)                         # fill for not-yet-reached phase dots
+# fmt: on
 
 
 # ── fonts ───────────────────────────────────────────────────────────────────
@@ -57,6 +59,7 @@ DOT_FUTURE = (70, 76, 92)                         # fill for not-yet-reached pha
 #     Simplified-specific glyphs).
 # Mixed strings render via ``_render_mixed`` which switches font per-codepoint
 # and baseline-aligns the runs.
+
 
 def _font_helv(size: int, *, bold: bool = False, medium: bool = False) -> pygame.font.Font:
     """Cached HelveticaNeue from the bundled OTFs. ``medium`` picks the Medium
@@ -111,6 +114,7 @@ def _is_cjk(ch: str) -> bool:
     Latin font: CJK ideographs, kana, and CJK punctuation/symbols. Latin
     Extended (macrons etc.) returns False — those go to HelveticaNeue."""
     cp = ord(ch)
+    # fmt: off
     return (
         0x3000 <= cp <= 0x303F        # CJK symbols + punctuation
         or 0x3040 <= cp <= 0x309F     # Hiragana
@@ -118,14 +122,16 @@ def _is_cjk(ch: str) -> bool:
         or 0x4E00 <= cp <= 0x9FFF     # CJK Unified Ideographs
         or 0xFF00 <= cp <= 0xFFEF     # Halfwidth/Fullwidth Forms
     )
+    # fmt: on
 
 
 RUN_LATIN = "latin"
 RUN_CJK = "cjk"
-RUN_KEYCAP = "keycap"   # `[[X]]` — sunken slate <kbd> chip; physical keyboard key
-RUN_BUTTON = "button"   # `[[btn:X]]` — green chip matching the panel's primary button
+RUN_KEYCAP = "keycap"  # `[[X]]` — sunken slate <kbd> chip; physical keyboard key
+RUN_BUTTON = "button"  # `[[btn:X]]` — green chip matching the panel's primary button
 
-import re                                                              # noqa: E402
+import re  # noqa: E402
+
 # Capture optional `btn:` prefix to discriminate buttons from keys; group 1 is
 # the prefix (None for keys), group 2 is the inline label.
 _KEYCAP_RE = re.compile(r"\[\[(?:(btn):)?([^\]]+)\]\]")
@@ -166,17 +172,17 @@ def _wrap_atoms(text: str):
     n = len(text)
     while pos < n:
         ch = text[pos]
-        if ch == ' ':
-            yield ' ', True
+        if ch == " ":
+            yield " ", True
             pos += 1
             continue
-        if text[pos:pos+2] == '[[':
-            end = text.find(']]', pos + 2)
-            if end == -1:                      # unclosed markup — treat rest as one atom
+        if text[pos : pos + 2] == "[[":
+            end = text.find("]]", pos + 2)
+            if end == -1:  # unclosed markup — treat rest as one atom
                 yield text[pos:], False
                 pos = n
             else:
-                yield text[pos:end+2], False
+                yield text[pos : end + 2], False
                 pos = end + 2
             continue
         if _is_cjk(ch):
@@ -187,7 +193,7 @@ def _wrap_atoms(text: str):
         start = pos
         while pos < n:
             c = text[pos]
-            if c == ' ' or _is_cjk(c) or text[pos:pos+2] == '[[':
+            if c == " " or _is_cjk(c) or text[pos : pos + 2] == "[[":
                 break
             pos += 1
         yield text[start:pos], False
@@ -201,7 +207,7 @@ def _split_runs(text: str):
     """
     pos = 0
     for m in _KEYCAP_RE.finditer(text):
-        before = text[pos:m.start()]
+        before = text[pos : m.start()]
         if before:
             yield from _split_script(before)
         kind = RUN_BUTTON if m.group(1) == "btn" else RUN_KEYCAP
@@ -212,8 +218,7 @@ def _split_runs(text: str):
         yield from _split_script(tail)
 
 
-def _render_keycap(label: str, latin_font: pygame.font.Font,
-                   cjk_font: pygame.font.Font, *, kind: str = RUN_KEYCAP) -> tuple[pygame.Surface, int]:
+def _render_keycap(label: str, latin_font: pygame.font.Font, cjk_font: pygame.font.Font, *, kind: str = RUN_KEYCAP) -> tuple[pygame.Surface, int]:
     """Render a small inline chip. Two visual flavors discriminated by
     ``kind``: physical keys (``RUN_KEYCAP``) get a sunken slate <kbd>
     appearance; on-screen buttons (``RUN_BUTTON``) get an accent-green fill
@@ -230,9 +235,9 @@ def _render_keycap(label: str, latin_font: pygame.font.Font,
         cap_border = ACCENT_BRIGHT
         cap_text = TEXT_COLOR
     else:
-        cap_bg = (38, 44, 56)                # darker than panel — sunken chip
-        cap_border = (148, 158, 178)         # cool gray, low-contrast
-        cap_text = (240, 244, 252)           # soft white
+        cap_bg = (38, 44, 56)  # darker than panel — sunken chip
+        cap_border = (148, 158, 178)  # cool gray, low-contrast
+        cap_text = (240, 244, 252)  # soft white
     border_w = 1
     radius = 5
     # ─────────────────────────────────────────────────────────
@@ -262,8 +267,7 @@ def _render_keycap(label: str, latin_font: pygame.font.Font,
     return surf, effective_ascent
 
 
-def _render_label_script(text: str, latin_font: pygame.font.Font,
-                         cjk_font: pygame.font.Font, color) -> tuple[pygame.Surface, int]:
+def _render_label_script(text: str, latin_font: pygame.font.Font, cjk_font: pygame.font.Font, color) -> tuple[pygame.Surface, int]:
     """Mixed Latin/CJK render used by keycap inner labels. Splits at script
     boundaries only — keycap markup inside a label isn't expected, so we
     skip the ``_split_runs`` keycap path and call ``_split_script`` directly
@@ -294,7 +298,7 @@ def _render_mixed(text: str, latin_font: pygame.font.Font, cjk_font: pygame.font
     """
     if not text:
         return latin_font.render("", True, color)
-    rendered: list[tuple[pygame.Surface, int]] = []   # (surface, ascent_for_alignment)
+    rendered: list[tuple[pygame.Surface, int]] = []  # (surface, ascent_for_alignment)
     for kind, seg in _split_runs(text):
         if kind in (RUN_KEYCAP, RUN_BUTTON):
             cap, cap_ascent = _render_keycap(seg, latin_font, cjk_font, kind=kind)
@@ -336,6 +340,7 @@ def _measure_mixed(text: str, latin_font: pygame.font.Font, cjk_font: pygame.fon
             total += latin_font.size(seg)[0]
     return total
 
+
 # Phase progress-bar i18n keys. Labels are looked up via i18n.t() each frame
 # (cheap — the bundled-font surfaces are cached separately). Plain text values,
 # no emoji prefix; the bundled CJK faces don't ship emoji glyphs and the color
@@ -362,6 +367,7 @@ ACT_CLICK = "click"
 # Each takes (tut: Tutorial) and returns True if [Next] should enable for the
 # step. Tutorial state holds `_action_in_step: bool` (reset on step entry, set
 # True when the user performs the step's allowed action via the dispatcher).
+
 
 def _pred_passive(tut: "Tutorial") -> bool:
     """Always-true: step is observation-only; [Next] enabled from entry."""
@@ -409,6 +415,7 @@ def _pred_step8_clicked(tut: "Tutorial") -> bool:
 # fires pa[0]; ``_next_pa`` plays pa[1]). The ``audio.pause()`` at the top of
 # ``_skip_step`` clears ``_next_pa``'s audio guard so chained skips with audio
 # in flight don't silently no-op.
+
 
 def _skip_noop(tut: "Tutorial") -> None:
     """No state mutation needed."""
@@ -467,6 +474,7 @@ def _skip_step7(tut: "Tutorial") -> None:
 # is in flight). When a mid-play stage's audio ends without user action, the
 # flow auto-skips it (treating natural-finish as implicit pass-through).
 
+
 @dataclass(frozen=True)
 class ActionFlow:
     """Per-step multi-stage action prompt model. ``stages`` is the ordered
@@ -474,6 +482,7 @@ class ActionFlow:
     number of action presses performed so far; ``audio_playing`` is the live
     audio state. ``mid_play_stages`` is the set of stage indices that should
     render DURING prior audio rather than after."""
+
     stages: tuple[str, ...]
     pressed_count: int
     audio_playing: bool
@@ -524,6 +533,7 @@ class ActionFlow:
 # user got here (skip-step chains can leave audio in flight, which suppresses
 # the natural state advance via the audio guard in _next_pa).
 
+
 def _entry_noop(tut: "Tutorial") -> None:
     pass
 
@@ -544,9 +554,9 @@ def _entry_step8(tut: "Tutorial") -> None:
 
 @dataclass(frozen=True)
 class Step:
-    n: int                                          # 1..8 (1-indexed for human-readable)
-    phase_idx: Optional[int]                        # progress bar index, or None
-    allowed: frozenset                              # subset of {ACT_PGDN, ACT_PGUP, ACT_CLICK}
+    n: int  # 1..8 (1-indexed for human-readable)
+    phase_idx: Optional[int]  # progress bar index, or None
+    allowed: frozenset  # subset of {ACT_PGDN, ACT_PGUP, ACT_CLICK}
     predicate: Callable[["Tutorial"], bool]
     next_handler: Callable[["Tutorial"], None] = _skip_noop  # fires on [Next] before advancing
     # Runs when this step is skipped past (forward jump on the progress bar).
@@ -574,38 +584,36 @@ class Step:
 
 
 STEPS: tuple[Step, ...] = (
-    Step(1, 0,    frozenset(),                _pred_passive),
+    Step(1, 0, frozenset(), _pred_passive),
     # Step 2: pa_at_station has 2 entries, allow multiple PgDn so user can
     # hear both. [Next] handler exhausts pa_at_station so step 4's PgDn
     # correctly calls _advance_to_next_stop instead of replaying entry [1].
-    Step(2, 1,    frozenset({ACT_PGDN}),      _pred_action_flow_complete,
-         next_handler=_skip_step2,
-         skip_handler=_skip_step2,
-         lock_after_first_action=False),
+    Step(2, 1, frozenset({ACT_PGDN}), _pred_action_flow_complete, next_handler=_skip_step2, skip_handler=_skip_step2, lock_after_first_action=False),
     # Step 3: STA can be restarted (each PgUp re-cuts from sta_cut position).
-    Step(3, 2,    frozenset({ACT_PGUP}),      _pred_action_flow_complete,
-         lock_after_first_action=False),
-    Step(4, 3,    frozenset({ACT_PGDN}),      _pred_action_flow_complete,
-         skip_handler=_skip_step4),
+    Step(3, 2, frozenset({ACT_PGUP}), _pred_action_flow_complete, lock_after_first_action=False),
+    Step(4, 3, frozenset({ACT_PGDN}), _pred_action_flow_complete, skip_handler=_skip_step4),
     # Step 5 (Approaching): arrival announcement. Tokaido 1865E has no passing
     # stations between 国府津 and 鴨宮, so a separate "driving" dwell phase to
     # showcase station-skipping + countdown was dropped — countdown still
     # ticks visibly on the LCD between step 4 and this step.
-    Step(5, 4,    frozenset({ACT_PGDN}),      _pred_action_flow_complete,
-         skip_handler=_skip_step6),
-    Step(6, 5,    frozenset({ACT_PGDN}),      _pred_step7_approached,
-         skip_handler=_skip_step7),
+    Step(5, 4, frozenset({ACT_PGDN}), _pred_action_flow_complete, skip_handler=_skip_step6),
+    Step(6, 5, frozenset({ACT_PGDN}), _pred_step7_approached, skip_handler=_skip_step7),
     # Step 7: click-to-jump demo. PgDn / PgUp are also unlocked so the user
     # can freely explore the cycle from anywhere they jump to. callout_rect
     # frames the actually-clickable region (the two station-name rows +
     # their color bars) — excludes the bottom disclaimer line which isn't
     # interactive. Pulses while no click has fired, hides after first
     # click. entry_handler forces STOPPING @ 鴨宮 as the canonical state.
-    Step(7, 6,    frozenset({ACT_CLICK, ACT_PGDN, ACT_PGUP}), _pred_step8_clicked,
-         lock_after_first_action=False,
-         entry_handler=_entry_step8,
-         callout_rect=(5, 130, S_WIDTH - 10, 275)),
-    Step(8, 7,    frozenset(),                _pred_passive),
+    Step(
+        7,
+        6,
+        frozenset({ACT_CLICK, ACT_PGDN, ACT_PGUP}),
+        _pred_step8_clicked,
+        lock_after_first_action=False,
+        entry_handler=_entry_step8,
+        callout_rect=(5, 130, S_WIDTH - 10, 275),
+    ),
+    Step(8, 7, frozenset(), _pred_passive),
 )
 
 
@@ -653,10 +661,10 @@ class Tutorial:
         self.clock = pygame.time.Clock()
 
         # Step state.
-        self.current_step = 1                     # 1..8 (1-indexed for human-readable)
+        self.current_step = 1  # 1..8 (1-indexed for human-readable)
         self.step_entered_at = time.time()
-        self.state_stack: list[AppState] = []     # per-step snapshots for [Back]
-        self._action_in_step: bool = False        # set by dispatcher when user fires the step's action
+        self.state_stack: list[AppState] = []  # per-step snapshots for [Back]
+        self._action_in_step: bool = False  # set by dispatcher when user fires the step's action
         # Step 3 (departure melody) walks the user through 3 PgUps: 1st full
         # play, 2nd start, 3rd cut. Action prompt switches per press count.
         self._step3_pgup_count: int = 0
@@ -678,7 +686,7 @@ class Tutorial:
         self._phase_rects: list[pygame.Rect] = []
 
         self.running = True
-        self.completed = False                    # True iff user reached [Done]
+        self.completed = False  # True iff user reached [Done]
 
     # ────────────────────────────── lifecycle ────────────────────────────────
 
@@ -869,7 +877,7 @@ class Tutorial:
         """
         for i, rect in enumerate(self._phase_rects):
             if rect.collidepoint(pos):
-                self._jump_to_step(i + 1)               # phase 0 → step 1
+                self._jump_to_step(i + 1)  # phase 0 → step 1
                 return True
         return False
 
@@ -942,18 +950,14 @@ class Tutorial:
         callout_rect = pygame.Rect(LCD_X + x, LCD_Y + y, w, h)
         self._draw_pulsing_outline(callout_rect, ACCENT_BRIGHT, outline_w=4)
 
-    def _draw_pulsing_outline(self, rect: pygame.Rect, bright: tuple, *,
-                              outline_w: int = 3, period_s: float = 1.2,
-                              radius: int = 4) -> None:
+    def _draw_pulsing_outline(self, rect: pygame.Rect, bright: tuple, *, outline_w: int = 3, period_s: float = 1.2, radius: int = 4) -> None:
         """Draw a rectangle outline whose color sine-pulses from BG_COLOR
         (effectively invisible) to ``bright`` over ``period_s`` seconds. The
         wide BG → bright range gives a clear "appears and disappears" feel
         rather than a faint shimmer."""
         phase = (time.time() % period_s) / period_s
-        t = (math.sin(phase * 2 * math.pi - math.pi / 2) + 1) / 2   # 0..1
-        border_color = tuple(
-            int(BG_COLOR[i] + (bright[i] - BG_COLOR[i]) * t) for i in range(3)
-        )
+        t = (math.sin(phase * 2 * math.pi - math.pi / 2) + 1) / 2  # 0..1
+        border_color = tuple(int(BG_COLOR[i] + (bright[i] - BG_COLOR[i]) * t) for i in range(3))
         pygame.draw.rect(self.screen, border_color, rect, width=outline_w, border_radius=radius)
 
     def _teardown_sim(self) -> None:
@@ -985,13 +989,13 @@ class Tutorial:
         bar_y = 0
         bar_h = PROGRESS_H
         side_pad = 26
-        circle_r = 11                                  # main dot radius
-        ring_r = 16                                    # outer ring on current step
+        circle_r = 11  # main dot radius
+        ring_r = 16  # outer ring on current step
         line_thickness = 3
         circle_y = bar_y + 18
-        label_top = circle_y + circle_r + 9            # gap below circle
+        label_top = circle_y + circle_r + 9  # gap below circle
         label_size = 11
-        num_size = 11                                  # number rendered inside circle
+        num_size = 11  # number rendered inside circle
         # ─────────────────────────────────────────────────────────
 
         pygame.draw.rect(self.screen, PROGRESS_BG, pygame.Rect(0, bar_y, WINDOW_W, bar_h))
@@ -1006,12 +1010,9 @@ class Tutorial:
 
         # Connecting line: dim base across full width, accent overlay across
         # completed segments (segment 0..k connects circle 0..circle k).
-        pygame.draw.line(self.screen, LINE_DIM,
-                         (centers_x[0], circle_y), (centers_x[-1], circle_y), line_thickness)
+        pygame.draw.line(self.screen, LINE_DIM, (centers_x[0], circle_y), (centers_x[-1], circle_y), line_thickness)
         if active_phase > 0:
-            pygame.draw.line(self.screen, ACCENT_COLOR,
-                             (centers_x[0], circle_y),
-                             (centers_x[active_phase], circle_y), line_thickness)
+            pygame.draw.line(self.screen, ACCENT_COLOR, (centers_x[0], circle_y), (centers_x[active_phase], circle_y), line_thickness)
 
         # Circles + labels + click rects. Phase labels go through the mixed
         # renderer so zh-HK / zh-CN translations (停站中, 出發前, ...) render
@@ -1022,8 +1023,8 @@ class Tutorial:
         self._phase_rects = []
 
         for i, (cx, key) in enumerate(zip(centers_x, PHASE_KEYS)):
-            is_current = (i == active_phase)
-            is_done = (i < active_phase)
+            is_current = i == active_phase
+            is_done = i < active_phase
 
             if is_current:
                 pygame.draw.circle(self.screen, ACCENT_BRIGHT, (cx, circle_y), ring_r)
@@ -1042,9 +1043,7 @@ class Tutorial:
 
             pygame.draw.circle(self.screen, fill, (cx, circle_y), circle_r)
             num_img = num_font.render(str(i + 1), True, num_color)
-            self.screen.blit(num_img,
-                             (cx - num_img.get_width() // 2,
-                              circle_y - num_img.get_height() // 2))
+            self.screen.blit(num_img, (cx - num_img.get_width() // 2, circle_y - num_img.get_height() // 2))
 
             label_img = _render_mixed(i18n.t(key), label_font, label_cjk, label_color)
             label_x = cx - label_img.get_width() // 2
@@ -1055,9 +1054,7 @@ class Tutorial:
             # overlap). Edge phases get clipped to bar bounds.
             col_left = max(0, cx - spacing // 2)
             col_right = min(WINDOW_W, cx + spacing // 2)
-            self._phase_rects.append(
-                pygame.Rect(col_left, bar_y, col_right - col_left, bar_h)
-            )
+            self._phase_rects.append(pygame.Rect(col_left, bar_y, col_right - col_left, bar_h))
 
     def _draw_panel(self) -> None:
         """Render the side panel: step header, body, buttons."""
@@ -1066,8 +1063,8 @@ class Tutorial:
         header_size = 22
         subtitle_size = 11
         body_size = 15
-        subtitle_gap = 2                          # gap between header + subtitle
-        body_gap = 14                             # vertical gap between subtitle + body
+        subtitle_gap = 2  # gap between header + subtitle
+        body_gap = 14  # vertical gap between subtitle + body
         body_line_gap = 4
         btn_h = 38
         btn_gap = 8
@@ -1105,7 +1102,7 @@ class Tutorial:
         bottom_y = PANEL_Y + PANEL_H - panel_pad
         if self.current_step == len(STEPS):
             primary_row_y = bottom_y - primary_btn_h
-            skip_tutorial_y = 0                   # unused; not drawn
+            skip_tutorial_y = 0  # unused; not drawn
         else:
             skip_tutorial_y = bottom_y - btn_h
             primary_row_y = skip_tutorial_y - btn_gap - primary_btn_h
@@ -1124,8 +1121,11 @@ class Tutorial:
         action_h = 0
         if action_text:
             action_h = self._measure_wrapped_text(
-                action_text, action_latin, action_cjk,
-                max_w=action_max_w, line_gap=body_line_gap,
+                action_text,
+                action_latin,
+                action_cjk,
+                max_w=action_max_w,
+                line_gap=body_line_gap,
             )
         action_top = primary_row_y - action_gap_above_btns - action_h
 
@@ -1136,7 +1136,10 @@ class Tutorial:
         history_gap_above_active = 8
         history_gap_between = 4
         history_block_h = self._action_history_total_h(
-            history_keys, action_latin, action_cjk, action_max_w,
+            history_keys,
+            action_latin,
+            action_cjk,
+            action_max_w,
             body_line_gap,
             gap_above_active=history_gap_above_active,
             gap_between=history_gap_between,
@@ -1150,7 +1153,10 @@ class Tutorial:
         body = self._step_body_text()
         body_top = subtitle_y + subtitle_img.get_height() + body_gap
         self._draw_wrapped_text(
-            body, body_latin, body_cjk, TEXT_COLOR,
+            body,
+            body_latin,
+            body_cjk,
+            TEXT_COLOR,
             x=PANEL_X + panel_pad,
             y=body_top,
             max_w=PANEL_W - 2 * panel_pad,
@@ -1168,9 +1174,9 @@ class Tutorial:
             if pos is not None and dur and dur > 0:
                 # ── tuneable params ──────────────────────────────────────
                 seek_h = 6
-                seek_gap_below = 8                # space between seek bar block and action stripe
+                seek_gap_below = 8  # space between seek bar block and action stripe
                 label_size = 11
-                label_gap = 4                     # space between bar and labels
+                label_gap = 4  # space between bar and labels
                 # ─────────────────────────────────────────────────────────
                 time_font = _font_helv(label_size, medium=True)
                 label_h = time_font.get_height()
@@ -1183,30 +1189,33 @@ class Tutorial:
                 fill_w = int(seek_rect.w * progress)
                 if fill_w > 0:
                     pygame.draw.rect(
-                        self.screen, ACCENT_COLOR,
+                        self.screen,
+                        ACCENT_COLOR,
                         pygame.Rect(seek_rect.x, seek_rect.y, fill_w, seek_rect.h),
                         border_radius=3,
                     )
                 elapsed_img = time_font.render(_fmt_time(pos), True, DIM_COLOR)
                 total_img = time_font.render(_fmt_time(dur), True, DIM_COLOR)
                 self.screen.blit(elapsed_img, (seek_rect.x, seek_rect.bottom + label_gap))
-                self.screen.blit(total_img,
-                                 (seek_rect.right - total_img.get_width(),
-                                  seek_rect.bottom + label_gap))
+                self.screen.blit(total_img, (seek_rect.right - total_img.get_width(), seek_rect.bottom + label_gap))
 
         # Action prompt render — accent text + left stripe. Stripe height uses
         # action_h (visible-glyph height) rather than the wrapped-draw return
         # so the stripe's vertical center matches the text's visual midline.
         if action_text:
             self._draw_wrapped_text(
-                action_text, action_latin, action_cjk, ACCENT_BRIGHT,
+                action_text,
+                action_latin,
+                action_cjk,
+                ACCENT_BRIGHT,
                 x=action_x,
                 y=action_top,
                 max_w=action_max_w,
                 line_gap=body_line_gap,
             )
             pygame.draw.rect(
-                self.screen, ACCENT_BRIGHT,
+                self.screen,
+                ACCENT_BRIGHT,
                 pygame.Rect(PANEL_X + panel_pad, action_top, stripe_w, action_h),
                 border_radius=2,
             )
@@ -1235,11 +1244,9 @@ class Tutorial:
         next_rect = pygame.Rect(back_rect.right + btn_gap, primary_row_y, half_w, primary_btn_h)
         self._btn_rects["back"] = back_rect
         self._btn_rects["next"] = next_rect
-        self._draw_button(back_rect, i18n.t("tutorial.btn.back"), btn_latin, btn_cjk,
-                          enabled=self.current_step > 1, primary=False)
+        self._draw_button(back_rect, i18n.t("tutorial.btn.back"), btn_latin, btn_cjk, enabled=self.current_step > 1, primary=False)
         next_label = i18n.t("tutorial.btn.done") if self.current_step == len(STEPS) else i18n.t("tutorial.btn.next")
-        self._draw_button(next_rect, next_label, btn_latin, btn_cjk,
-                          enabled=self.predicate_satisfied, primary=True)
+        self._draw_button(next_rect, next_label, btn_latin, btn_cjk, enabled=self.predicate_satisfied, primary=True)
 
         # Skip-tutorial — only on non-wrap-up steps (would be a self-loop on
         # the recap). Skip-step's mechanic is replicated by clicking the next
@@ -1248,12 +1255,11 @@ class Tutorial:
         if self.current_step != len(STEPS):
             skip_tut_rect = pygame.Rect(PANEL_X + panel_pad, skip_tutorial_y, btn_w, btn_h)
             self._btn_rects["skip_tutorial"] = skip_tut_rect
-            self._draw_button(skip_tut_rect, i18n.t("tutorial.btn.skip_tutorial"), btn_latin, btn_cjk,
-                              enabled=True, primary=False)
+            self._draw_button(skip_tut_rect, i18n.t("tutorial.btn.skip_tutorial"), btn_latin, btn_cjk, enabled=True, primary=False)
 
-    def _draw_button(self, rect: pygame.Rect, label: str,
-                     latin_font: pygame.font.Font, cjk_font: pygame.font.Font,
-                     *, enabled: bool, primary: bool) -> None:
+    def _draw_button(
+        self, rect: pygame.Rect, label: str, latin_font: pygame.font.Font, cjk_font: pygame.font.Font, *, enabled: bool, primary: bool
+    ) -> None:
         if not enabled:
             bg = BTN_BG_DIM
             fg = DIM_COLOR
@@ -1268,13 +1274,10 @@ class Tutorial:
         img = _render_mixed(label, latin_font, cjk_font, fg)
         self.screen.blit(
             img,
-            (rect.centerx - img.get_width() // 2,
-             rect.centery - img.get_height() // 2),
+            (rect.centerx - img.get_width() // 2, rect.centery - img.get_height() // 2),
         )
 
-    def _measure_wrapped_text(self, text: str,
-                              latin_font: pygame.font.Font, cjk_font: pygame.font.Font,
-                              *, max_w: int, line_gap: int) -> int:
+    def _measure_wrapped_text(self, text: str, latin_font: pygame.font.Font, cjk_font: pygame.font.Font, *, max_w: int, line_gap: int) -> int:
         """Visible height of ``text`` after wrap to ``max_w``. Returns
         ``N*line_h + (N-1)*line_gap`` — drops the trailing inter-line gap
         that ``_draw_wrapped_text``'s return value carries (which is the
@@ -1295,9 +1298,9 @@ class Tutorial:
             cy -= line_gap
         return cy
 
-    def _draw_wrapped_text(self, text: str,
-                           latin_font: pygame.font.Font, cjk_font: pygame.font.Font,
-                           color, *, x: int, y: int, max_w: int, line_gap: int) -> int:
+    def _draw_wrapped_text(
+        self, text: str, latin_font: pygame.font.Font, cjk_font: pygame.font.Font, color, *, x: int, y: int, max_w: int, line_gap: int
+    ) -> int:
         """Wrap ``text`` into ``max_w`` with mixed-script rendering. CJK
         runs break at character boundaries (no whitespace required); Latin
         runs stay whole; ``[[...]]`` markup blocks are atomic. Explicit
@@ -1315,8 +1318,7 @@ class Tutorial:
         return cy
 
     @staticmethod
-    def _wrap_lines(paragraph: str, latin_font: pygame.font.Font,
-                    cjk_font: pygame.font.Font, max_w: int):
+    def _wrap_lines(paragraph: str, latin_font: pygame.font.Font, cjk_font: pygame.font.Font, max_w: int):
         """Yield successive line strings from a paragraph, breaking at atom
         boundaries (CJK char, Latin word, or chip markup) so a line never
         exceeds ``max_w``. Trailing whitespace at line breaks is dropped."""
@@ -1325,7 +1327,7 @@ class Tutorial:
         for atom, is_space in _wrap_atoms(paragraph):
             if is_space:
                 if not had_atom:
-                    continue                   # leading space — drop
+                    continue  # leading space — drop
                 trial = line + atom
                 if _measure_mixed(trial, latin_font, cjk_font) <= max_w:
                     line = trial
@@ -1400,11 +1402,7 @@ class Tutorial:
             # cnt_pa_at_station is the INDEX of the last-fired entry, with -1
             # as the pre-first sentinel. pressed_count = cnt + 1.
             pressed = self.sim.state.cnt_pa_at_station + 1
-            stages = (
-                ("tutorial.step.2.action",)
-                + ("tutorial.step.2.action_after_first",) * (total - 1)
-                + ("tutorial.action.next_to_continue",)
-            )
+            stages = ("tutorial.step.2.action",) + ("tutorial.step.2.action_after_first",) * (total - 1) + ("tutorial.action.next_to_continue",)
             return ActionFlow(stages, pressed, audio_playing)
         if self.current_step == 3:
             stages = (
@@ -1417,8 +1415,7 @@ class Tutorial:
             # 2nd melody is in flight — flag as mid-play so it shows DURING
             # the prior audio, and is auto-skipped if audio ends without user
             # action (natural-finish path).
-            return ActionFlow(stages, self._step3_pgup_count, audio_playing,
-                              mid_play_stages=frozenset({2}))
+            return ActionFlow(stages, self._step3_pgup_count, audio_playing, mid_play_stages=frozenset({2}))
         if self.current_step in (4, 5):
             stages = (
                 f"tutorial.step.{self.current_step}.action",
@@ -1457,26 +1454,30 @@ class Tutorial:
         flow = self._step_action_flow()
         return flow.history_keys() if flow else []
 
-    def _action_history_total_h(self, keys: list[str],
-                                 latin: pygame.font.Font, cjk: pygame.font.Font,
-                                 max_w: int, line_gap: int,
-                                 gap_above_active: int, gap_between: int) -> int:
+    def _action_history_total_h(
+        self, keys: list[str], latin: pygame.font.Font, cjk: pygame.font.Font, max_w: int, line_gap: int, gap_above_active: int, gap_between: int
+    ) -> int:
         """Total vertical span of the history block (including the gap between
         the block's bottom edge and the active prompt's top). Returns 0 when
         ``keys`` is empty so callers can treat 'no history' uniformly."""
         if not keys:
             return 0
-        items_h = sum(
-            self._measure_wrapped_text(i18n.t(k), latin, cjk,
-                                       max_w=max_w, line_gap=line_gap)
-            for k in keys
-        )
+        items_h = sum(self._measure_wrapped_text(i18n.t(k), latin, cjk, max_w=max_w, line_gap=line_gap) for k in keys)
         return gap_above_active + items_h + max(0, len(keys) - 1) * gap_between
 
-    def _draw_action_history(self, keys: list[str], *, anchor_top: int, x: int,
-                              max_w: int, latin: pygame.font.Font,
-                              cjk: pygame.font.Font, line_gap: int,
-                              gap_above_active: int, gap_between: int) -> None:
+    def _draw_action_history(
+        self,
+        keys: list[str],
+        *,
+        anchor_top: int,
+        x: int,
+        max_w: int,
+        latin: pygame.font.Font,
+        cjk: pygame.font.Font,
+        line_gap: int,
+        gap_above_active: int,
+        gap_between: int,
+    ) -> None:
         """Render past action prompts struck-through + dimmed, stacking
         upward from ``anchor_top`` (the active prompt's top y). Each key is
         wrapped to ``max_w`` like the active prompt. Strikethrough is a 1-px
@@ -1487,7 +1488,11 @@ class Tutorial:
         for key in reversed(keys):
             text = i18n.t(key)
             h = self._measure_wrapped_text(
-                text, latin, cjk, max_w=max_w, line_gap=line_gap,
+                text,
+                latin,
+                cjk,
+                max_w=max_w,
+                line_gap=line_gap,
             )
             cy = cy_bottom - h
             for paragraph in text.split("\n"):
@@ -1499,8 +1504,11 @@ class Tutorial:
                     self.screen.blit(surf, (x, cy))
                     mid_y = cy + line_h // 2
                     pygame.draw.line(
-                        self.screen, DIM_COLOR,
-                        (x, mid_y), (x + surf.get_width(), mid_y), 1,
+                        self.screen,
+                        DIM_COLOR,
+                        (x, mid_y),
+                        (x + surf.get_width(), mid_y),
+                        1,
                     )
                     cy += line_h + line_gap
             cy_bottom = (cy_bottom - h) - gap_between

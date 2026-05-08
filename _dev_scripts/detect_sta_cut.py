@@ -32,9 +32,9 @@ SMOOTH_FRAMES = 5  # majority-vote window (~0.5 s)
 
 
 class DetectionResult(NamedTuple):
-    music_end: float       # seconds — change-point boundary, last music frame
-    voice_start: float     # seconds — first non-silence frame after music_end (= sta_cut)
-    confidence: float      # [0, 1] — partition sharpness
+    music_end: float  # seconds — change-point boundary, last music frame
+    voice_start: float  # seconds — first non-silence frame after music_end (= sta_cut)
+    confidence: float  # [0, 1] — partition sharpness
 
 
 def detect(path: Path) -> DetectionResult:
@@ -90,7 +90,7 @@ def detect(path: Path) -> DetectionResult:
     # music_end and voice_start.
     rms = librosa.feature.rms(y=y, hop_length=hop)[0]
     rms_db = 20 * np.log10(rms + 1e-10)
-    MIN_GAP_FRAMES = 5         # 500 ms minimum to qualify as a real music→voice gap
+    MIN_GAP_FRAMES = 5  # 500 ms minimum to qualify as a real music→voice gap
     SEARCH_WINDOW_FRAMES = 12  # 1.2 s after cut_frame — beyond this is mid-voice
     music_end_frame = cut_frame
     voice_start_frame = cut_frame
@@ -132,11 +132,7 @@ def main() -> int:
     ap.add_argument("--truth", type=Path, help="route.json for ground-truth comparison")
     args = ap.parse_args()
 
-    files = (
-        sorted(args.target.glob("*.mp3"))
-        if args.target.is_dir()
-        else [args.target]
-    )
+    files = sorted(args.target.glob("*.mp3")) if args.target.is_dir() else [args.target]
 
     truth: dict[str, float] = {}
     if args.truth:
