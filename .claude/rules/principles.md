@@ -85,6 +85,7 @@ Before claiming "X is a bug" or "X works like Y", read the call sites and trace 
 - (2026-05-03) Claimed pygame does partial redraw; the file showed full redraw at 15 FPS.
 - (2026-05-07) Dismissed `i18n.font_named()` as "by design" from the local docstring; canonical CONTRACT block was in the same grep output, unread.
 - (2026-05-08) Claimed vibe-check + review-dirty needed an explicit primitive-ban grep checklist; the reviewer's preloaded conventions.md + rule-citation pass already covered it.
+- (2026-05-08 PM) Defended green ring on Yamanote time circle citing original code + DISPLAY_E235.md line 252 across multiple user pushbacks; user: *"there is NO green ring."* Both code and doc were stale relative to user's IRL mental model.
 
 **How to apply:**
 - When user pushes back, re-read the source — don't re-justify from memory.
@@ -101,6 +102,16 @@ For code whose behavior depends on deployment frame or external runtime (PyInsta
 - Trigger heuristic — code references `sys._MEIPASS` / `sys.frozen` / `Path(__file__)` for behavior-dependent paths, branches on frozen-vs-dev, uses threading or I/O timing, or relies on library API behavior that may differ across versions/platforms.
 - Verify against the library's own source / the build script's actual copy logic / the deployed artifact. Not Stack Overflow.
 - When defending behavior as "intentional" / "the standard pattern" / "leave it alone" — that phrase is load-bearing. Confirm primary source before saying it.
+
+### Converge on the model, not the next correction
+When the user pushes back N times and each fix is a different concrete state (color A → B → C → A again), stop point-fixing and ask what determines the value structurally. Cycling answers means the underlying model isn't loaded.
+
+**Why:** Each correction looks local; iterating point-fixes substitutes for grasping intent. Examples:
+- (2026-05-08 PM) Yamanote time-circle color cycled across 6 distinct states under user pushback; never converged because never asked "what determines the color, structurally." User invoked /third-man.
+
+**How to apply:**
+- 2+ corrections on the same primitive with non-monotonic state → stop adjusting, ask the model question.
+- Frame as "is X a function of position / role / state?" — not "should X be value Y?".
 
 ### Causal depth on diagnoses
 When a problem reveals a pattern of mistake (not just a bug), push past surface framings ("X things got conflated", "three contributing factors") to the underlying frame mismatch.
