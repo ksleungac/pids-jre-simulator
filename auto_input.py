@@ -34,13 +34,15 @@ import dxcam
 import numpy as np
 import pygame
 
-from hud_layout import BADGE_BBOX, DISTANCE_VALUE_BBOX, HUD_BBOX, SPEED_VALUE_BBOX
+from hud_layout import BADGE_BBOX, DISTANCE_VALUE_BBOX, HUD_BBOX, SPEED_LIMIT_VALUE_BBOX, SPEED_VALUE_BBOX
 from ocr import (
     build_templates,
     classify_badge_state,
     load_badge_anchors,
     read_distance,
     read_speed,
+    read_speed_limit,
+    read_stopping_offset,
 )
 
 if TYPE_CHECKING:
@@ -347,19 +349,34 @@ def draw_debug_panel(surface: pygame.Surface, status: dict, sim_state, stops: li
     if badge_diff is not None:
         _blit_text(surface, font, f"(d={badge_diff:.1f})", (x, 6), _TEXT_GRAY)
 
-    # Line 2: speed + distance + cnt_pa + Layer 2 observed-flags
+    # Line 2: speed + distance/offset + cnt_pa + Layer 2 observed-flags
     s_val = status.get("speed")
     s_score = status.get("speed_score")
     d_val = status.get("distance")
     d_score = status.get("distance_score")
+    offset_val = status.get("stopping_offset_cm")
+    offset_score = status.get("stopping_offset_score")
+    sl_val = status.get("speed_limit")
+    sl_score = status.get("speed_limit_score")
     y2 = 28
     x = 8
     x = _blit_text(surface, font, "spd:", (x, y2), _TEXT_GRAY) + gap
     spd_str = f"{s_val:>3} km/h" if s_val is not None else " -- km/h"
     x = _blit_text(surface, font, spd_str, (x, y2), _conf_color(s_score if s_val is not None else None)) + gap + 6
-    x = _blit_text(surface, font, "dst:", (x, y2), _TEXT_GRAY) + gap
-    dst_str = f"{d_val:>5}m" if d_val is not None else "  ---m"
-    x = _blit_text(surface, font, dst_str, (x, y2), _conf_color(d_score if d_val is not None else None)) + gap + 6
+    # Cell-content priority: cm reading wins (only shows briefly after arrival, then
+    # the cell swaps back to m-distance to next station even while parked at platform).
+    # Fall through to m otherwise.
+    if offset_val is not None:
+        x = _blit_text(surface, font, "off:", (x, y2), _TEXT_GRAY) + gap
+        x = _blit_text(surface, font, f"{offset_val:+d}cm", (x, y2), _conf_color(offset_score)) + gap + 6
+    else:
+        x = _blit_text(surface, font, "dst:", (x, y2), _TEXT_GRAY) + gap
+        dst_str = f"{d_val:>5}m" if d_val is not None else "  ---m"
+        x = _blit_text(surface, font, dst_str, (x, y2), _conf_color(d_score if d_val is not None else None)) + gap + 6
+    # Speed limit (line-dependent, often empty — only show when present).
+    if sl_val is not None:
+        x = _blit_text(surface, font, "lim:", (x, y2), _TEXT_GRAY) + gap
+        x = _blit_text(surface, font, f"{sl_val} km/h", (x, y2), _conf_color(sl_score)) + gap + 6
     x = _blit_text(surface, font, f"cnt_pa={sim_state.cnt_pa}", (x, y2), _TEXT_GRAY) + gap + 6
     dep_obs = bool(status.get("departure_observed"))
     arr_obs = bool(status.get("arrival_observed"))
@@ -452,6 +469,22 @@ class _Detector:
 
     def update(self, distance: Optional[int], speed: Optional[int], badge: Optional[str]) -> list[str]:
         events: list[str] = []
+        # Cross-attribute reject (black-screen guard). The game sometimes blacks the
+        # screen briefly to fast-forward simulated time, but ONLY while parked at a
+        # platform — never mid-transit. During that window the badge cell goes uniform-
+        # dark and the classifier picks whichever anchor pixel-diffs lowest (typically
+        # PASSING — blue is closer to black than green); the dist cell drops out
+        # consistently while speed sometimes survives showing the parked-at-platform 0.
+        # Structural rule: a real STOPPED→{MOVING,PASSING} transition always shows
+        # speed climbing from 0 (the game can't fake movement without rendering it),
+        # so when prev_badge==STOPPED, require speed>0 to accept the transition.
+        # Without this the spurious PASSING fires a phantom STOPPED→PASSING and resets
+        # observed-flags as if a new segment began. See AUTO_INPUT.md § "Cross-attribute reject".
+        if self.prev_badge == "STOPPED" and badge in ("MOVING", "PASSING") and (speed is None or speed == 0):
+            print(
+                f"          [AD] >>> CROSS-REJECT raw_badge={badge} (prev=STOPPED, speed={speed} — train hasn't moved; likely black-screen at platform)"
+            )
+            badge = None
         # Segment boundaries: STOPPED ↔ (MOVING | PASSING). Both MOVING and
         # PASSING signal "the train is moving" — the OCR can mis-classify
         # a normal MOVING segment as PASSING for many consecutive frames
@@ -589,10 +622,19 @@ class AutoDriver:
 
                     d_cell = _crop_cell(frame, HUD_BBOX, DISTANCE_VALUE_BBOX)
                     s_cell = _crop_cell(frame, HUD_BBOX, SPEED_VALUE_BBOX)
+                    sl_cell = _crop_cell(frame, HUD_BBOX, SPEED_LIMIT_VALUE_BBOX)
                     b_cell = _crop_cell(frame, HUD_BBOX, BADGE_BBOX)
-                    d_val, _, d_score = read_distance(d_cell, templates)
-                    s_val, _, s_score = read_speed(s_cell, templates)
                     badge, b_diff = classify_badge_state(b_cell, badge_anchors)
+                    s_val, _, s_score = read_speed(s_cell, templates)
+                    # The DISTANCE cell is shared and self-identifies via color: dark text
+                    # `Nm` (distance to next stop, both transit and ~5s+ after arriving at
+                    # platform) vs green text `+/-Ncm` (stopping offset, briefly after
+                    # arrival). Run both readers unconditionally — their masks are
+                    # mutually exclusive, only one returns non-None per frame.
+                    d_val, _, d_score = read_distance(d_cell, templates)
+                    offset_val, _, offset_score = read_stopping_offset(d_cell, templates)
+                    # Speed limit (最高速度): line-dependent, often empty. None is normal.
+                    sl_val, _, sl_score = read_speed_limit(sl_cell, templates)
                     sample_ts = time.time()
 
                     # Publish status to the simulator's debug panel (atomic dict swap).
@@ -604,6 +646,10 @@ class AutoDriver:
                         "speed_score": s_score,
                         "distance": d_val,
                         "distance_score": d_score,
+                        "stopping_offset_cm": offset_val,
+                        "stopping_offset_score": offset_score,
+                        "speed_limit": sl_val,
+                        "speed_limit_score": sl_score,
                         "segment_start_stop": self._segment_start_stop,
                         "departure_observed": self._detector.departure_observed,
                         "arrival_observed": self._detector.arrival_observed,
@@ -628,6 +674,10 @@ class AutoDriver:
                                 "speed_score": s_score,
                                 "distance": d_val,
                                 "distance_score": d_score,
+                                "stopping_offset_cm": offset_val,
+                                "stopping_offset_score": offset_score,
+                                "speed_limit": sl_val,
+                                "speed_limit_score": sl_score,
                                 "badge": badge,
                                 "badge_diff": b_diff,
                                 "curr_stop": self.sim.state.curr_stop,
@@ -643,11 +693,19 @@ class AutoDriver:
                         prev_log_badge = badge
 
                     ts = time.strftime("%H:%M:%S")
-                    d_str = f"{d_val:>5}m" if d_val is not None else "  ---"
                     s_str = f"{s_val:>3}km/h" if s_val is not None else " --"
                     b_str = badge or "?"
+                    # Cell-content priority: cm reading wins (only shows briefly after
+                    # arrival); fall through to m if cm is empty.
+                    if offset_val is not None:
+                        dist_field = f"off={offset_val:+d}cm"
+                    elif d_val is not None:
+                        dist_field = f"dst={d_val:>5}m"
+                    else:
+                        dist_field = "dst=  ---"
+                    sl_field = f"  lim={sl_val}km/h" if sl_val is not None else ""
                     print(
-                        f"[AD {ts}]  badge={b_str:<7}({b_diff:5.1f})  spd={s_str}  dst={d_str}  "
+                        f"[AD {ts}]  badge={b_str:<7}({b_diff:5.1f})  spd={s_str}  {dist_field}{sl_field}  "
                         f"sim:stop={self.sim.state.curr_stop} cnt_pa={self.sim.state.cnt_pa}"
                     )
 

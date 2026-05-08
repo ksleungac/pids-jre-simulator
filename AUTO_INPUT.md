@@ -233,9 +233,10 @@ screen-relative.
 | Constant | Value | Notes |
 |---|---|---|
 | `HUD_BBOX` | `(2200, 20, 350, 480)` | Top-right corner of game window |
-| `DISTANCE_VALUE_BBOX` | `(120, 314, 230, 55)` | Right side of "Distance" / "残距離" row |
+| `DISTANCE_VALUE_BBOX` | `(120, 314, 230, 55)` | Right side of "Distance" / "残距離" row (shared with stopping-offset) |
 | `SPEED_VALUE_BBOX` | `(120, 165, 230, 55)` | Right side of "Speed" / "速度" row |
-| `BADGE_BBOX` | `(15, 117, 125, 45)` | Green pentagon in next-station row |
+| `SPEED_LIMIT_VALUE_BBOX` | `(120, 215, 230, 55)` | Right side of "Speed Limit" / "最高速度" row — red digits, line-dependent |
+| `BADGE_BBOX` | `(29, 122, 111, 40)` | Green/blue pentagon — left + top scenery bleed trimmed |
 
 Position invariant across language modes (EN/JA), game states (running/stopped/at-platform), and scenes — verified against 7 reference screenshots.
 
@@ -318,6 +319,83 @@ territory).
 | `DISTANCE_MAX_GAP` | 20 | Inter-digit gap < 20; m-stroke gap > 20 |
 | `SPEED_MAX_GAP` | 25 | Wider for narrow `1`-to-`1` kerning (~18 px) |
 
+## Stopping offset (cm) — shared distance cell
+
+The `DISTANCE_VALUE_BBOX` cell is content-shared and self-identifies via color:
+
+- **Dark text `Nm`** — distance to the next stopping station. Shown during
+  transit, AND at the platform after the cm display dismisses (~5s post-arrival).
+- **Green text `±Ncm`** — stopping offset from the platform's stop mark. Shown
+  briefly after `MOVING→STOPPED` (~5s window). Sign shown only for negative
+  (train stopped past the mark); `0` and positives omit the sign character.
+
+Both readers run unconditionally each capture cycle. Their masks are mutually
+exclusive (`gray < 70` for m-distance, `(G - max(R,B)) > 30` for cm-offset), so
+at most one returns non-None per frame. JSONL records both fields each sample;
+display priority gives cm precedence (transient signal of interest) and falls
+through to m otherwise.
+
+Two pipeline differences in `read_stopping_offset` vs `read_distance`:
+- **Color mask** as above.
+- **Sign detection**: a small bbox (h ≤ 12, w ≤ 18) in the vertical center of
+  the text band, left of the first digit, is treated as a leading minus. No `+`
+  glyph template — positive case has no sign character at all.
+
+The `cm` suffix is the same green color but smaller than digits, excluded by the
+existing `DIGIT_MIN_H=22` shape filter. Digit templates are reused unchanged —
+binarization is colour-agnostic, the shape matches the dark-text version.
+
+**Overrun semantics.** The game prevents the user from physically stopping in
+the red-text zone — overrun → game resets the train to `0cm`, briefly shows it,
+then black-screens to fast-forward past to the next station. Red text is
+unreachable in normal play. The "no cm reading" state at STOPPED is the normal
+post-display-dismissal state, **not** an out-of-bound signal — interpreting
+overrun requires examining the surrounding badge transitions and the brief `0cm`
+read, not a single null cm sample.
+
+## Speed limit (最高速度) — red digits
+
+Cell at `SPEED_LIMIT_VALUE_BBOX`, between speed and distance rows. Red digits +
+dark `km/h` suffix. **Line-dependent** — many lines don't post a cab speed limit;
+empty cell is the normal "no posted limit" state, not OCR fault. `read_speed_limit`
+returns `None` for those frames; speed limits are always in 5/10 km/h increments
+when present (5, 10, …, 75, 95, 110, 120).
+
+The reader uses `(R - max(G,B)) > RED_TEXT_DELTA` as the color mask — the dark
+`km/h` suffix is excluded automatically. Three complications the reader handles:
+
+- **Tight kerning glues digit pairs** — at 80, 90, 110 the column-density
+  threshold never drops below `COLUMN_TEXT_MIN` between digit pairs (typically
+  ?-`0`), so segmentation sees one over-wide run instead of two digits.
+  `segment_red_digits` supports two split strategies:
+  - **`argmin` (default)**: find the deepest column-density valley and split
+    there, recursively until each sub-bbox fits `DIGIT_MAX_W`. Precise for
+    cases with a clear inter-digit dip.
+  - **`equal_width` (fallback)**: divide each over-wide run into N equal parts
+    where N = round(width / 18). Ignores column density entirely. Robust to
+    cases where `0`-shaped digits' natural hollows look deeper than the actual
+    digit boundary (limit_100's `0+0` merged blob).
+  `read_speed_limit` runs `argmin` first; if grammar validation rejects the
+  result, it retries with `equal_width`. First-valid-wins so equal-width's
+  occasional confidently-wrong reads can't override argmin's correct ones.
+- **Stroke-weight mismatch** — the red font is bolder than the dark-text font
+  the original digit templates were extracted from, so dark templates alone
+  consistently mismatch certain digit pairs (8 / 6 misread as 4). Two-tier
+  matching: (a) red-text digit templates extracted from limit screenshots into
+  `ocr_templates/digits_red/` (one PNG per digit, full 0–9 coverage as of
+  2026-05-09); (b) dark templates dilated by `SPEED_LIMIT_TEMPLATE_DILATION`
+  (3 px) as fallback for any digit without a red template. Best-of-both score
+  wins per glyph. Re-extract via `_dev_scripts/extract_ocr_assets.py` after
+  adding new `_ocr_calibration/limit_*.png` reference screenshots.
+- **Domain validation** — observed range in JR EAST Train Sim Real is 25–130 km/h
+  in 5/10 km/h increments. The reader validates the final integer against
+  `VALID_SPEED_LIMITS = {25, 30, 35, …, 130}` and returns `None` on out-of-grammar
+  reads. Catches the fallout of split contamination (e.g. 110 occasionally read
+  as 114 because the `0`'s left curve bleeds into the `1`'s split bbox),
+  single-digit corruptions (90 sometimes read as 1), and any future misclassification
+  mode that produces a non-grammar value. Better to return `None` and miss a frame
+  than write a wrong value to the JSONL.
+
 ## Badge classification (state cell)
 
 Game shows a pentagon badge in the next-station row, with text inside:
@@ -349,9 +427,13 @@ Per frame: crop badge cell, compute mean-abs-diff against each anchor, pick the
 state with the lowest-diff anchor. Language-agnostic — whichever anchor matches
 best determines the state, regardless of which language the user plays in.
 
-Diff < 15 = high confidence. Transient diff spikes (e.g. > 70) at exact transition
-moments are normal — the badge is mid-animation and matches neither anchor cleanly
-for one frame. The state machine handles this via flag-resets only on transitions.
+Diff < 15 = high confidence; real reads sit there. Diff > `BADGE_DIFF_REJECT`
+(50) is rejected at the classifier — `classify_badge_state` returns `(None, diff)`
+so the detector treats it as OCR FAIL. Black-screen / dark-cell garbage frames
+diff 60-110; mid-animation transient spikes at exact transitions hit >70. 50
+cleanly separates real from garbage with margin on both sides. The detector's
+`None` tolerance preserves `prev_badge` across rejected frames, so a one-cycle
+delay on transition detection is the only cost.
 
 ## State machine — `PaEventDetector`
 
@@ -426,8 +508,25 @@ PageDown events including the synthetic ones we send. Within `SELF_PRESS_GUARD_S
 (500ms) of an auto-send, key callbacks ignore the press as our own. Prevents
 self-detection that would mark the segment as "user already pressed".
 
-`None` values for distance/speed/badge are tolerated — OCR FAIL frames don't
-reset state, so transient unreadable frames don't break the segment continuity.
+`None` values for distance/speed/badge are tolerated individually — OCR FAIL
+frames don't reset state, so transient unreadable frames don't break segment
+continuity.
+
+**Cross-attribute reject (black-screen guard).** When `prev_badge == "STOPPED"`
+and the new badge would transition to `MOVING` or `PASSING`, the transition is
+rejected (badge forced to `None`) unless `speed > 0`. The game black-screens
+briefly to fast-forward simulated time, but only while parked at a platform —
+never mid-transit. During that window the badge cell goes uniform-dark and the
+classifier picks whichever anchor pixel-diffs lowest (typically PASSING — blue
+is closer to black than green); the distance cell drops out consistently while
+the speed cell sometimes survives showing the parked-at-platform `0`. The
+structural rule exploits that asymmetry: a real platform departure always shows
+speed climbing from 0 (the game can't fake movement without rendering it), so
+`speed == 0` or `speed is None` at a STOPPED→moving transition is the
+black-screen signature. Without this the spurious PASSING fires a phantom
+`STOPPED→PASSING` and resets the observed-flags as if a new segment began.
+First concrete instance of the cross-attribute hardening philosophy
+([TODO.md § Auto-input/OCR](TODO.md)).
 
 ## Debug panel (in-process integration only)
 
@@ -562,7 +661,7 @@ auto/manual key activity.
 | `_dev_scripts/capture_game.py` | Standalone observation/debug script (separate process, synthetic keystrokes, optional `--route` flag for PA-count check) |
 | `_dev_scripts/test_dxcam.py` | Diagnostic — full-desktop dxcam capture + brightness check |
 | `ocr_templates/digits/*.png` | **Runtime input** — 10 pre-extracted digit glyphs (~20×30 binary PNGs, ~1 KB each). Loaded by `ocr.build_templates()`. Committed. |
-| `ocr_templates/badges/*.png` | **Runtime input** — 6 pre-extracted badge cell crops (125×45 RGB PNGs, ~5 KB each). Loaded by `ocr.load_badge_anchors()`. Committed. |
+| `ocr_templates/badges/*.png` | **Runtime input** — 6 pre-extracted badge cell crops (111×40 RGB PNGs, ~5 KB each — dims match `BADGE_BBOX`). Loaded by `ocr.load_badge_anchors()`. Committed. |
 | `_ocr_calibration/*.png` | **Local-only** source screenshots (full 2560×1440 desktop captures, ~33 MB total). Gitignored. Only needed when re-extracting `ocr_templates/` after a game HUD layout change. |
 | `_dev_scripts/extract_ocr_assets.py` | One-shot extractor: reads `_ocr_calibration/` source screenshots → writes `ocr_templates/`. Run after re-capturing sources, then commit the diff. |
 | `_recordings/drive_<line>_<diagram>_<TS>.jsonl` | **Blackbox / drive recorder log** — one file per AutoDriver lifetime. Line 0 is `_type: "meta"` (route/diagram/dest/stops); subsequent lines are `_type: "sample"` (one OCR cycle each). Written inside `auto_input.py`'s capture loop with per-line `flush()` for crash safety. Local-only / gitignored. Schema is locked — downstream plot generator depends on the layout. |

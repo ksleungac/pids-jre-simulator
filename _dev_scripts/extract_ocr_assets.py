@@ -33,6 +33,8 @@ from ocr import (  # noqa: E402
     extract_glyph,
     load_value_cell,
     segment_chars,
+    segment_red_digits,
+    speed_limit_cell_from_surface,
 )
 
 # Known distance values per source screenshot — labels used to assign each
@@ -46,6 +48,25 @@ KNOWN_VALUES: dict[str, str] = {
     "stopping_en": "3834m",
     "stopping_ja": "3834m",
     "5 and 6": "3756m",
+}
+
+# Speed-limit screenshots: red-text digit cell. Filename → posted limit value as
+# a digit string. The reader's `segment_red_digits` returns the bboxes; we save
+# first-seen of each digit to ocr_templates/digits_red/<N>.png. Dark-text templates
+# alone don't reliably match the bolder red font (8→4 / 6→4 confusion); dedicated
+# red templates close the gap.
+KNOWN_LIMIT_VALUES: dict[str, str] = {
+    "speed_limit_75": "75",
+    "limit_30": "30",
+    "limit_35": "35",
+    "limit_45": "45",
+    "limit_55": "55",
+    "limit 65": "65",
+    "limit_80": "80",
+    "limit_85": "85",
+    "limit_90": "90",
+    "limit_110": "110",
+    "limit_120": "120",
 }
 
 SOURCES_DIR = Path(__file__).parent.parent / "_ocr_calibration"
@@ -99,6 +120,39 @@ def extract_digits(sources_dir: Path, digits_dir: Path) -> dict[str, str]:
     return digit_source
 
 
+def extract_red_digits(sources_dir: Path, red_digits_dir: Path) -> None:
+    """Walk KNOWN_LIMIT_VALUES, segment each limit screenshot's red-text cell,
+    label each glyph by position, save first-seen as a tight binary PNG at
+    ocr_templates/digits_red/<N>.png."""
+    glyphs: dict[str, np.ndarray] = {}
+    digit_source: dict[str, str] = {}
+    for stem, expected in KNOWN_LIMIT_VALUES.items():
+        path = sources_dir / f"{stem}.png"
+        if not path.exists():
+            print(f"[skip] {stem}.png — not in {sources_dir.name}/")
+            continue
+        cell = speed_limit_cell_from_surface(pygame.image.load(str(path)))
+        red_mask, bboxes = segment_red_digits(cell)
+        if len(bboxes) != len(expected):
+            print(f"[warn] {stem}: segmented {len(bboxes)} digits, expected {len(expected)} ({expected}) — skipping")
+            continue
+        for bbox, ch in zip(bboxes, expected):
+            if ch not in glyphs:
+                x0, y0, x1, y1 = bbox
+                glyphs[ch] = red_mask[y0:y1, x0:x1].astype(np.uint8)
+                digit_source[ch] = stem
+
+    red_digits_dir.mkdir(parents=True, exist_ok=True)
+    for ch, glyph in glyphs.items():
+        out = red_digits_dir / f"{ch}.png"
+        save_binary_glyph(glyph, out)
+        print(f"[red digit {ch}] {glyph.shape[1]}×{glyph.shape[0]} from {digit_source[ch]} -> {out.relative_to(OUT_DIR.parent)}")
+
+    missing = sorted(set("0123456789") - glyphs.keys())
+    if missing:
+        print(f"\n[INFO] no red template yet for: {missing} — read_speed_limit falls back to dilated dark templates for those.")
+
+
 def extract_badges(sources_dir: Path, badges_dir: Path) -> None:
     """Crop BADGE_BBOX from each anchor source; save as PNG."""
     badges_dir.mkdir(parents=True, exist_ok=True)
@@ -124,8 +178,10 @@ def main() -> int:
         return 1
 
     print(f"Extracting from {SOURCES_DIR.name}/ -> {OUT_DIR.name}/\n")
-    print("--- digit glyphs ---")
+    print("--- digit glyphs (dark) ---")
     extract_digits(SOURCES_DIR, OUT_DIR / "digits")
+    print("\n--- digit glyphs (red, speed-limit) ---")
+    extract_red_digits(SOURCES_DIR, OUT_DIR / "digits_red")
     print("\n--- badge anchors ---")
     extract_badges(SOURCES_DIR, OUT_DIR / "badges")
     print(f"\nDone. Commit the diff under {OUT_DIR.name}/.")

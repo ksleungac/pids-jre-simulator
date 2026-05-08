@@ -47,7 +47,10 @@ from ocr import (  # noqa: E402
     load_badge_anchors,
     read_distance,
     read_speed,
+    read_speed_limit,
+    read_stopping_offset,
     speed_cell_from_surface,
+    speed_limit_cell_from_surface,
     value_cell_from_surface,
 )
 
@@ -60,7 +63,6 @@ EXPECTED_RES = (2560, 1440)
 DEFAULT_INTERVAL_S = 5
 DEFAULT_LEAD_M = 900
 OUTPUT_DIR = Path(__file__).parent.parent / "_experiments" / "live_captures"
-REFS_DIR = Path(__file__).parent.parent / "game_references"
 
 SPEED_DEPARTURE_KMH = 30
 SELF_PRESS_GUARD_S = 0.5  # ignore key callbacks within this window after we send
@@ -133,6 +135,15 @@ class PaEventDetector:
 
     def update(self, distance: int | None, speed: int | None, badge: str | None) -> list[str]:
         events: list[str] = []
+        # Cross-attribute reject (black-screen guard). Game black-screens for fast-
+        # forward only while parked at a platform, never mid-transit. Real
+        # STOPPED→{MOVING,PASSING} departures always show speed climbing from 0;
+        # black-screen at platform leaves speed=0 (parked) or None (OCR FAIL).
+        # When prev_badge==STOPPED, require speed>0 to accept the transition.
+        # Mirrors auto_input.py:_Detector. See AUTO_INPUT.md § "Cross-attribute reject".
+        if self.prev_badge == "STOPPED" and badge in ("MOVING", "PASSING") and (speed is None or speed == 0):
+            events.append(f"CROSS-REJECT raw_badge={badge} (prev=STOPPED, speed={speed} — train hasn't moved; likely black-screen at platform)")
+            badge = None
         # Segment boundaries: STOPPED ↔ (MOVING | PASSING). The OCR badge classifier
         # can stick on PASSING for an entire normal MOVING segment (live drive
         # 2026-04-27 on Keiyo 千葉みなと→稲毛海岸: ~80s of mis-classified PASSING).
@@ -254,15 +265,15 @@ def main() -> int:
     pygame.init()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    print(f"Building templates from {REFS_DIR}")
-    templates = build_templates(REFS_DIR)
+    print("Building templates from ocr_templates/")
+    templates = build_templates()
     missing = set("0123456789") - templates.glyphs.keys()
     if missing:
         print(f"WARNING: missing digit templates: {sorted(missing)}")
     else:
         print(f"Templates loaded: {sorted(templates.glyphs.keys())}")
 
-    badge_anchors = load_badge_anchors(REFS_DIR)
+    badge_anchors = load_badge_anchors()
     print(f"Badge anchors: { {k: len(v) for k, v in badge_anchors.items()} }")
 
     print("Initializing dxcam...")
@@ -306,16 +317,27 @@ def main() -> int:
 
             d_cell = value_cell_from_surface(surf)
             s_cell = speed_cell_from_surface(surf)
+            sl_cell = speed_limit_cell_from_surface(surf)
             b_cell = badge_cell_from_surface(surf)
-            d_val, _, d_score = read_distance(d_cell, templates)
-            s_val, _, s_score = read_speed(s_cell, templates)
             badge, b_diff = classify_badge_state(b_cell, badge_anchors)
+            s_val, _, s_score = read_speed(s_cell, templates)
+            # Cell self-identifies via color — run both readers, only one will succeed.
+            d_val, _, d_score = read_distance(d_cell, templates)
+            offset_val, _, offset_score = read_stopping_offset(d_cell, templates)
+            sl_val, _, sl_score = read_speed_limit(sl_cell, templates)
 
             ts = time.strftime("%H:%M:%S")
-            d_str = f"{d_val:>5}m" if d_val is not None else "  ---"
             s_str = f"{s_val:>3}km/h" if s_val is not None else " --"
             b_str = f"{badge:<7}" if badge else "    ?  "
-            print(f"[{ts}]  badge={b_str} (d={b_diff:5.1f})   spd={s_str} (s={s_score:.2f})   dst={d_str} (s={d_score:.2f})")
+            # cm wins (transient post-arrival display); fall through to m.
+            if offset_val is not None:
+                dist_field = f"off={offset_val:+d}cm (s={offset_score:.2f})"
+            elif d_val is not None:
+                dist_field = f"dst={d_val:>5}m (s={d_score:.2f})"
+            else:
+                dist_field = "dst=  ---"
+            sl_field = f"   lim={sl_val}km/h (s={sl_score:.2f})" if sl_val is not None else ""
+            print(f"[{ts}]  badge={b_str} (d={b_diff:5.1f})   spd={s_str} (s={s_score:.2f})   {dist_field}{sl_field}")
 
             for ev in detector.update(d_val, s_val, badge):
                 handle_event(ev, detector, keys, fire, route_data)
