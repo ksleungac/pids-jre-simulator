@@ -32,7 +32,8 @@ In scope:
 
 Out of scope:
 - `CLAUDE.md` (preloaded; mental-model framing is intentionally generous, slim-rule applies to implementation only — see [principles.md § "Preloaded mental model vs progressive implementation detail"](../../rules/principles.md))
-- `.claude/rules/*` (handled by `/distill-memory`'s logs→rules direction; rules→code direction is a different audit not yet built)
+- `.claude/rules/principles.md` (handled by `/distill-rules`, sibling skill)
+- `.claude/rules/conventions.md`, `critical_lessons.md`, `redlines.md` (no dedicated audit; may fold into `/distill-rules` if bloat surfaces)
 - `.claude/skills/*/SKILL.md` (updated proactively per `feedback_proactive_skill_updates`)
 - `memory/*.md` (logs are append-only by design)
 - `TODO.md` (sweep handled by `/session-recap`)
