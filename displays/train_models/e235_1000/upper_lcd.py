@@ -7,7 +7,7 @@ E235-1000 series Upper LCD.
 import pygame
 import time
 
-from app_paths import load_json_relative
+from app_paths import load_json_relative, project_root
 from displays.base import DisplayMode, ModeCycler
 from displays.utils import clip, draw_text_given_width, draw_station_code_badge
 
@@ -49,7 +49,6 @@ from displays.utils import clip, draw_text_given_width, draw_station_code_badge
 
 from displays.train_models.e235_1000 import (
     S_WIDTH,
-    S_HEIGHT,
     UPPER_HEIGHT,
     DARK_BG,
     WHITE_BG,
@@ -145,14 +144,14 @@ class JapaneseDisplay:
         # locale Windows with `TypeError: expected str, bytes or os.PathLike object,
         # not int`. All fonts in this project ship in fonts/ and load via Font(path).
         # E235-1000 specific fonts (shared across methods) - load from fonts/ folder
-        self.font_type_bold = pygame.font.Font("fonts/ShinGoPr6N-Heavy.otf", 26)
+        self.font_type_bold = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Heavy.otf"), 26)
         self.font_type_bold.set_bold(True)
         self.font_type_bold.set_italic(True)
-        self.font_dest = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 35)
-        self.font_prefix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 25)
-        self.font_station = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 78)
-        self.font_clock = pygame.font.Font("fonts/HelveticaNeue-Roman.otf", 27)
-        self.font_suffix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 18)
+        self.font_dest = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 35)
+        self.font_prefix = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 25)
+        self.font_station = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 78)
+        self.font_clock = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Roman.otf"), 27)
+        self.font_suffix = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 18)
 
     def draw_train_type(self, train_type: str, type_color: tuple) -> None:
         """Draw train type box."""
@@ -255,18 +254,18 @@ class EnglishDisplay:
         self.stops = stops
 
         # E235-1000 specific English fonts (shared across methods) - load from fonts/ folder
-        self.font_type_bold = pygame.font.Font("fonts/ShinGoPr6N-Heavy.otf", 26)
+        self.font_type_bold = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Heavy.otf"), 26)
         self.font_type_bold.set_bold(True)
         self.font_type_bold.set_italic(True)
-        self.font_dest = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 24)
-        self.font_main_prefix = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 27)
-        self.font_station = pygame.font.Font("fonts/HelveticaNeue-Bold.otf", 75)
+        self.font_dest = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Medium.otf"), 24)
+        self.font_main_prefix = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Medium.otf"), 27)
+        self.font_station = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 75)
         # Used when station_text contains "\n" — see draw_station's 2-line branch.
         # Smaller pt so two lines fit in the ~82px station area without colliding
         # with the prefix band. Tune in concert with line_gap below.
-        self.font_station_2line = pygame.font.Font("fonts/HelveticaNeue-Bold.otf", 42)
-        self.font_clock = pygame.font.Font("fonts/HelveticaNeue-Roman.otf", 27)
-        self.font_suffix = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 20)
+        self.font_station_2line = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 42)
+        self.font_clock = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Roman.otf"), 27)
+        self.font_suffix = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Medium.otf"), 20)
 
     def draw_train_type(self, train_type: str, type_color: tuple) -> None:
         """Draw train type box."""
@@ -391,7 +390,6 @@ class EnglishDisplay:
                 return
 
             _, name_h = self.font_station.size(station_text)
-            # Bottom-aligned, nudged down ~2px to match reference vertical placement
             name_y = UPPER_HEIGHT - name_h
 
             draw_text_given_width(name_x, name_y, max_width, self.font_station, station_text, WHITE_BG, self.screen, collapse=True, script="latin")
@@ -451,9 +449,9 @@ class UpperDisplay:
         self.mode_cycler = ModeCycler(self.mode_displays, default_mode=DisplayMode.KANJI)
 
         # Station code badge fonts — sizes tunable here; layout auto-adjusts in _draw_station_code_badge
-        self.font_sta_code_prefix = pygame.font.Font("fonts/NeueFrutigerWorld-Bold.otf", 18)
-        self.font_sta_code_num = pygame.font.Font("fonts/NeueFrutigerWorld-Bold.otf", 22)
-        self.font_sta_code_3letter = pygame.font.Font("fonts/NeueFrutigerWorld-Bold.otf", 20)
+        self.font_sta_code_prefix = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 18)
+        self.font_sta_code_num = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 22)
+        self.font_sta_code_3letter = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 20)
 
         # Load translations (station names, destinations)
         self.translations = load_json_relative("data/translations.json")

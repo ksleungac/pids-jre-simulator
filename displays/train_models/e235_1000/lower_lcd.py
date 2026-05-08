@@ -22,6 +22,7 @@ from typing import Dict, List, Optional, Tuple
 import pygame
 import pygame.gfxdraw
 
+from app_paths import project_root
 from constants import (
     PASSED_COLOR,
     CURRENT_COLOR,
@@ -88,10 +89,10 @@ class JapaneseDisplay:
         # `continuity[2]` via _get_stops_list_disp's side effect.
         self._last_window: Optional[List[Tuple[int, Dict]]] = None
 
-        self.font_stops = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", FONT_STOPS_SIZE)
-        self.font_time = pygame.font.Font("fonts/HelveticaNeue-Bold.otf", FONT_TIME_SIZE)
-        self.font_minute = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", FONT_STOPS_MINUTE_SIZE)
-        self.font_disclaimer = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 10)
+        self.font_stops = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), FONT_STOPS_SIZE)
+        self.font_time = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), FONT_TIME_SIZE)
+        self.font_minute = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), FONT_STOPS_MINUTE_SIZE)
+        self.font_disclaimer = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 10)
 
     def _calculate_layout(self) -> None:
         """Calculate station display layout based on route length.
@@ -816,13 +817,13 @@ class JapaneseEightStationDisplay:
         # ------------------------------------
         # fmt: on
 
-        self.font_stops = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", self.label_font_size)
-        self.font_time = pygame.font.Font("fonts/HelveticaNeue-Bold.otf", FONT_TIME_SIZE + 7)
-        self.font_minute = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", FONT_STOPS_MINUTE_SIZE + 3)
+        self.font_stops = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), self.label_font_size)
+        self.font_time = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), FONT_TIME_SIZE + 7)
+        self.font_minute = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), FONT_STOPS_MINUTE_SIZE + 3)
         # Badge fonts.
-        self.font_badge_prefix = pygame.font.Font("fonts/NeueFrutigerWorld-Bold.otf", 8)
-        self.font_badge_num = pygame.font.Font("fonts/NeueFrutigerWorld-Bold.otf", 11)
-        self.font_disclaimer = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 10)
+        self.font_badge_prefix = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 8)
+        self.font_badge_num = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 11)
+        self.font_disclaimer = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 10)
 
         # Derived band geometry (top_y of each row)
         _, t_h = self.font_stops.size("東")
