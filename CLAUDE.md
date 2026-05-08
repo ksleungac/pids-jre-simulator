@@ -23,6 +23,8 @@ Before doing anything else, every session:
 uv run main.py
 ```
 
+After a fresh clone: `uv sync` then `uv run pre-commit install` to wire up the format + lint hooks. See [conventions.md § Tooling](.claude/rules/conventions.md).
+
 ## Mental Model
 
 What this project is modeling. Keep this in head — it shapes every design decision. (Implementation details live in domain docs and are read on demand.)

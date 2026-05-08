@@ -1,0 +1,33 @@
+# Pre-commit hooks. Run `pre-commit install` once after clone to wire up
+# .git/hooks/pre-commit. See conventions.md § Tooling.
+#
+# Hooks:
+#   - black              — formatter, version pinned to match pyproject.toml
+#   - ban-production-primitives — regex-grep for conventions.md § Tooling bans
+#                                 (SysFont, _MEIPASS, Path(__file__).parent, sys.frozen)
+
+repos:
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: 26.1.0
+    hooks:
+      - id: black
+        # line-length read from pyproject.toml [tool.black]
+        # old_version.py is preserved as pre-refactor reference (conventions.md
+        # § Tooling) — don't reformat. Other files including _* dev scripts
+        # follow normal Black style.
+        exclude: '^old_version\.py$'
+
+  - repo: local
+    hooks:
+      - id: ban-production-primitives
+        name: Ban forbidden production primitives (conventions.md § Tooling)
+        entry: python _dev_scripts/lint_primitives.py
+        language: python
+        types: [python]
+        # Whole-folder + whole-file exclusions: not production code, rules don't apply.
+        # Anything `_`-prefixed (folder or root file) follows conventions.md § Naming
+        # "_* prefix = preserved-but-not-shipped". `old_version.py` is the named
+        # carve-out per conventions.md § Tooling.
+        # Per-ban exemptions for files that ARE production (app_paths.py,
+        # compare_fonts.py, compare_grid.py) live in lint_primitives.py BANS.
+        exclude: '^(_|old_version\.py$)'

@@ -138,7 +138,8 @@ This table applies *always*, not only at recap time. Whenever you write or edit 
 | What | Where | NOT in |
 |------|-------|--------|
 | Project overview, file structure, module table, key features, controls, **mental model (project framing, train family, IRL line scope, in-spec/best-effort policy, IRL display conventions, Hepburn)** | `CLAUDE.md` | rules files, domain docs |
-| Cross-cutting code contracts (font-loading rule, PyInstaller path resolution, countdown formula, preview-mode swap inventory) | inline `# CONTRACT:` block at the code site | rules files, domain docs (cross-reference instead) |
+| Region-scoped code contracts — fires only when editing this region (mode-cycler timing rules, countdown formula, preview-mode swap inventory, clear-bg confinements, skip-animation state contracts) | inline `# CONTRACT:` block at the code site | rules files, domain docs (cross-reference instead) |
+| Primitive-scoped rules — precondition is a language/library primitive that can be invoked anywhere (never `pygame.font.SysFont`, never `Path(__file__).parent` for bundled assets, never `try/except ImportError` for required deps, path resolution via `app_paths.project_root`) | `conventions.md` (auto-loaded — gates ALL authoring surfaces) AND inline `# CONTRACT:` at known call sites as enforcement reminder | rules files alone (inline pointer at known sites still earns its place) |
 | Mock route stop layout, test-station roles, schema gotchas | `audio/_mock/main/README.md` | rules files, domain docs |
 | Values that shape judgment (discussion-first, pragmatic-over-perfect, filename-as-store, backup-before-destructive, doc-placement strategy, behavioral patterns from `/third-man` reviews) | `.claude/rules/principles.md` | CLAUDE.md, MEMORY.md |
 | Project-local style, naming, tooling (sta terminology, .otf only, Black, tuneable-params, Contract Pointers convention) | `.claude/rules/conventions.md` | CLAUDE.md, MEMORY.md |
@@ -151,6 +152,14 @@ This table applies *always*, not only at recap time. Whenever you write or edit 
 | Daily session logs (narrative continuity only) | `memory/YYYY-MM-DD.md` | rules / preferences / learnings (those went to canonical homes) |
 | Long-term memory index (one-line pointers only) | `memory/MEMORY.md` | — |
 | Open work items, follow-ups, deferred design Qs (one-line each + source pointer) | `TODO.md` | daily logs (logs capture history; TODO captures forward state) |
+
+### Region-scoped vs primitive-scoped — classification test
+
+If the rule statement names a **language/library primitive** (a function, syntax form, or library API call), it's primitive-scoped — the precondition fires anywhere that primitive can be invoked, including code authored in new files outside any existing call site. Auto-loaded layer (`conventions.md`) is required; inline `# CONTRACT:` at known call sites is the enforcement reminder.
+
+If the rule's precondition is "editing this code region" (a specific class, draw method, state-machine site, manifest), it's region-scoped — inline-only is sufficient because anyone editing the region opens the file.
+
+**Why the split matters** (2026-05-07 SysFont incident): the rule "never `pygame.font.SysFont` in production code" lived only as an inline `# CONTRACT:` in `displays/train_models/*/upper_lcd.py`. The 2026-05-02 i18n chrome refactor authored a new module (`i18n.py`) outside `displays/`; the CONTRACT was invisible from that workspace; SysFont got re-introduced; release exe crashed on Chinese-locale Windows. The rule's precondition was "calling `pygame.font.SysFont` anywhere," not "editing the upper LCD" — primitive-scoped, but classified as region-scoped at the 2026-04-28 rules-split distillation.
 
 ### Preloaded vs progressive
 

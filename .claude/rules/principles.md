@@ -84,6 +84,7 @@ Before claiming "X is a bug" or "X works like Y", read the call sites and trace 
 - (2026-05-02) Misread `upper_lcd.py`'s region-map "Debug" column as the live default; live default was `DARK_BG` (invisible).
 - (2026-05-03) Claimed pygame does partial redraw; the file showed full redraw at 15 FPS.
 - (2026-05-07) Dismissed `i18n.font_named()` as "by design" from the local docstring; canonical CONTRACT block was in the same grep output, unread.
+- (2026-05-08) Claimed vibe-check + review-dirty needed an explicit primitive-ban grep checklist; the reviewer's preloaded conventions.md + rule-citation pass already covered it.
 
 **How to apply:**
 - When user pushes back, re-read the source — don't re-justify from memory.
