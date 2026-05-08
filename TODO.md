@@ -73,6 +73,7 @@ The chrome i18n foundation shipped 2026-04-29 evening: `i18n.py`, language picke
 
 - [ ] **Decide 1b debug-frame dump behaviour.** `_dev_scripts/capture_game.py:320` saves a HUD crop every sample interval to `_experiments/live_captures/`. Gitignored, but disk spam if 1b runs long. Options: leave (debugging tool), gate behind `--save-frames` flag (default off), or remove. (Discussed 2026-04-27, deferred.)
 - [ ] **Re-grab `passing_en.png` at native 2560×1440.** Current capture is 2559×1439 — pygame blit handles it, classifier diff=0.00, but a clean re-capture is tidier.
+- [ ] **Other PC: wire pre-commit hook.** First session on the second PC after pulling commit `836014d`: `uv sync && uv run pre-commit install`. One-time per clone — `.pre-commit-config.yaml` + Black + primitive-ban lint then run automatically on every commit. (This PC done 2026-05-08.)
 
 ---
 
