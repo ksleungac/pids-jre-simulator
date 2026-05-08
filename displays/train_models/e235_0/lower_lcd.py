@@ -26,6 +26,7 @@ from typing import Dict, List, Optional, Tuple
 import pygame
 import pygame.gfxdraw
 
+from app_paths import project_root
 from constants import (
     CURRENT_COLOR,
     PASSED_COLOR,
@@ -69,7 +70,7 @@ JY_TOP_LR_SCREEN: List[int] = [16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 
 # IRL Yamanote PIDS bolds a specific subset of major interchange stations —
 # NOT derived from code_3 (大崎/JY24 has code_3=OSK but is NOT bolded). User-
 # approved hardcoded set; extend by adding entries below.
-MAJOR_STATION_NAMES_BOLD: set[str] = {"上野", "東京", "品川", "新宿", "渋谷"}
+MAJOR_STATION_NAMES_BOLD: set[str] = {"上野", "東京", "品川", "新宿", "渋谷", "池袋"}
 
 
 def _parse_jy_code(sta_code: str) -> Optional[int]:
@@ -106,9 +107,6 @@ class CircularFullRouteDisplay:
         self.stops = stops
         self.color = route_data.get("color", [116, 193, 30])
         self.contrast_color = route_data.get("contrast_color", [224, 54, 37])
-
-        # Cached window for hit_test parity (deferred — pentagon is static for now).
-        self._last_curr_stop: int = -1
 
         # =====================================================================
         # Cross-method layout params — referenced by both _build_positions and
@@ -157,11 +155,11 @@ class CircularFullRouteDisplay:
         # Major station names use Heavy weight; the rest use Medium. The
         # bold set is hardcoded at module scope (MAJOR_STATION_NAMES_BOLD) —
         # not derived from code_3 since IRL Yamanote PIDS bolds a narrower set.
-        self.font_station = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 19)
-        self.font_station_bold = pygame.font.Font("fonts/ShinGoPr6N-Heavy.otf", 19)
-        self.font_circle = pygame.font.Font("fonts/HelveticaNeue-Bold.otf", 15)
-        self.font_minute = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 10)
-        self.font_disclaimer = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 9)
+        self.font_station = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 19)
+        self.font_station_bold = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Heavy.otf"), 19)
+        self.font_circle = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 15)
+        self.font_minute = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 10)
+        self.font_disclaimer = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 9)
 
         # =====================================================================
         # Build per-sta_code position table (screen coordinates)
@@ -206,19 +204,31 @@ class CircularFullRouteDisplay:
         top_row_y = cy - self.curve_v_radius
         bot_row_y = cy + self.curve_v_radius
 
+        # Both rows share a canonical item spacing derived from the row with
+        # MORE stations (so the longer row spans the full straight section).
+        # The shorter row reuses that spacing; its leftover slack splits
+        # evenly on both ends — matches IRL Yamanote behavior when JY26
+        # 高輪ゲートウェイ is absent (bottom row 14 < top row 15).
+        # ``self.slot_w`` is also consumed by chevron-animation cross-row
+        # synthesis (phantom-prev placement past the curve).
+        n_canonical = max(len(top_present), len(bottom_present), 1)
+        self.slot_w = straight_w / n_canonical
+
         # Bottom row positions
         if bottom_present:
-            n = len(bottom_present)
+            used_w = len(bottom_present) * self.slot_w
+            row_left = straight_left + (straight_w - used_w) / 2
             for i, jy in enumerate(bottom_present):
-                x = straight_left + int(straight_w * (i + 0.5) / n) if n > 1 else (straight_left + straight_right) // 2
-                self.positions[jy] = (x, bot_row_y)
+                x = row_left + self.slot_w * (i + 0.5)
+                self.positions[jy] = (int(x), bot_row_y)
 
         # Top row positions
         if top_present:
-            n = len(top_present)
+            used_w = len(top_present) * self.slot_w
+            row_left = straight_left + (straight_w - used_w) / 2
             for i, jy in enumerate(top_present):
-                x = straight_left + int(straight_w * (i + 0.5) / n) if n > 1 else (straight_left + straight_right) // 2
-                self.positions[jy] = (x, top_row_y)
+                x = row_left + self.slot_w * (i + 0.5)
+                self.positions[jy] = (int(x), top_row_y)
 
     # -------------------------------------------------------------------------
     # State helpers — "next 15 ahead" with sta_code dedup
@@ -395,25 +405,33 @@ class CircularFullRouteDisplay:
         surf.fill((255, 255, 255, a), special_flags=pygame.BLEND_RGBA_MULT)
         self.screen.blit(surf, (min_x, min_y))
 
-    def _compute_chevron_animation_state(self, curr_stop: int) -> List[Tuple[float, float, bool, float]]:
+    def _compute_chevron_animation_state(self, curr_stop: int) -> Optional[List[Tuple[float, float, bool, float]]]:
         """Compute the chevron animation frames for the current frame.
 
-        Returns up to 2 ``(tip_x, tip_y, face_left, alpha)`` tuples for the
-        chevs visible right now. Returns empty list when no valid previous
-        station (curr_stop has no prior, or last+curr are on different
-        rows — both deferred cases; caller falls back to static placement).
+        Returns:
+          - ``list`` of ``(tip_x, tip_y, face_left, alpha)`` tuples (0..2
+            entries) when the animation is in scope. Empty list = legitimate
+            "rest gap" frame where no chev is visible — caller draws nothing.
+          - ``None`` when the animation is out-of-scope (no valid previous
+            station, cross-row transition) — caller falls back to a static
+            chev at curr_stop's near-circle position.
 
-        Animation: two chevs phase-offset by ``phase_offset_s``, each cycling
-        ``cycle_period_s``. Per chev: fade-in at A → linear sweep A→B → fade-out
-        at B → dead. The fade-out at B of one chev coincides with the fade-in
-        at A of the other (continuous arrow march).
+        The None-vs-empty distinction matters: an empty frame during the
+        rest gap must NOT trigger the static fallback (would flash a
+        full-alpha chev at B mid-rest).
+
+        Animation: two chevs phase-offset by ``phase_offset_s = sweep +
+        fade_out + rest_s``, each cycling ``cycle_period_s = 2 *
+        phase_offset_s``. Per chev: fade-in at A → eased sweep A→B →
+        fade-out at B → idle. ``rest_s`` directly controls the empty gap
+        between any two chevs being visible.
         """
         if not (0 <= curr_stop < len(self.stops)):
-            return []
+            return None
 
         curr_jy = _parse_jy_code(self.stops[curr_stop].get("sta_code", ""))
         if curr_jy is None or curr_jy not in self.positions:
-            return []
+            return None
 
         # Walk backward in stops[] with sta_code dedup to find the previous
         # station's jy. Mirrors _ahead_indices but in the reverse direction.
@@ -429,34 +447,47 @@ class CircularFullRouteDisplay:
             break
 
         if last_jy is None or last_jy not in self.positions:
-            return []
+            return None
 
-        # Cross-row transitions deferred — last and curr must be on the same row.
+        # Cross-row transitions: chev does NOT animate across the curve. When
+        # curr is the first station past a curve (e.g. JY02 right after the
+        # right curve, or JY17 right after the left curve), synthesize a
+        # phantom prev one slot_w away on the SAME row in the direction
+        # opposite travel (top row travels R→L → phantom to the RIGHT of
+        # curr; bottom row travels L→R → phantom to the LEFT of curr). The
+        # animation then sweeps from phantom toward curr like any normal
+        # same-row segment.
         curr_on_top = curr_jy in JY_TOP_LR_SCREEN
         last_on_top = last_jy in JY_TOP_LR_SCREEN
-        if curr_on_top != last_on_top:
-            return []
-
         curr_pos = self.positions[curr_jy]
-        last_pos = self.positions[last_jy]
+        if curr_on_top != last_on_top:
+            phantom_dx = self.slot_w if curr_on_top else -self.slot_w
+            last_pos = (curr_pos[0] + phantom_dx, curr_pos[1])
+        else:
+            last_pos = self.positions[last_jy]
 
         # fmt: off
         # --- Animation params (adjust freely) ---
-        # Per-chev timeline: sweep+fade-in (0..sweep_duration_s) → fade-out at B
-        # (next fade_out_s) → rest (next rest_s) → repeat. Total cycle =
-        # sweep + fade-out + rest. Two chevs phase-offset by sweep_duration so
-        # chev2's start (fade-in + move at A) coincides with chev1's fade-out start at B.
+        # Per-chev timeline within cycle_period_s:
+        #   0 → sweep_duration_s:               sweep + fade-in (A → B)
+        #   sweep → sweep+fade_out_s:           fade-out at B
+        #   sweep+fade_out → cycle_period_s:    idle (invisible)
+        # Two chevs phase-offset by sweep+fade_out+rest, so chev2 only spawns at
+        # A AFTER chev1's full lifecycle (sweep + fade-out) completes AND a
+        # rest_s gap of "no visible chev" elapses. cycle = 2 * phase_offset =
+        # 2 * (sweep + fade_out + rest). rest_s directly controls the empty gap.
         sweep_duration_s  = 1.0
-        fade_out_s        = 0.4   # chev lingers at B as next one starts at A
-        rest_s            = 0.4   # dead phase before chev restarts at A
+        fade_out_s        = 0.4
+        rest_s            = 0.3   # empty gap (NO chev visible) between one chev's fade-out end and the other's spawn at A
         endpoint_gap_A    = 3     # px gap between chev tip and last station's circle near edge (= start position)
         endpoint_gap_B    = 1     # px gap between chev tip and curr_stop's circle near edge (= end position)
         ease_in_power     = 2     # sweep position eased via sweep_t**ease_in_power (>1 = accelerating: slow at A, fast at B)
         fade_in_full_at   = 0.5   # alpha hits 1.0 when eased position reaches this fraction (0.5 = midpoint)
+        fade_out_power    = 2     # fade-out alpha = 1 - fade_t**fade_out_power (>1 = accelerating: slow drop early, fast drop late)
         # ----------------------------------------
         # fmt: on
-        cycle_period_s = sweep_duration_s + fade_out_s + rest_s
-        phase_offset_s = sweep_duration_s
+        phase_offset_s = sweep_duration_s + fade_out_s + rest_s
+        cycle_period_s = 2 * phase_offset_s
 
         dx = 1 if curr_pos[0] > last_pos[0] else -1
         tip_x_A = last_pos[0] + dx * (self.circle_outer_radius + endpoint_gap_A)
@@ -474,7 +505,8 @@ class CircularFullRouteDisplay:
                 tip_x = tip_x_A + (tip_x_B - tip_x_A) * eased
                 alpha = min(1.0, eased / fade_in_full_at)
             elif t_chev < sweep_duration_s + fade_out_s:
-                alpha = 1.0 - (t_chev - sweep_duration_s) / fade_out_s
+                fade_t = (t_chev - sweep_duration_s) / fade_out_s
+                alpha = 1.0 - fade_t**fade_out_power
                 tip_x = tip_x_B
             else:
                 continue  # rest phase — chev not visible this frame
@@ -811,16 +843,17 @@ class CircularFullRouteDisplay:
                         self._draw_pentagon(pos, face_left=on_top)
                     else:
                         # APPROACHING — animated cascade between last and curr.
-                        # Cross-row + no-previous edge cases fall back to a
-                        # static chev at curr_stop's near-circle position.
+                        # None = out-of-scope (cross-row, no-previous) → static
+                        # fallback. Empty list = in-scope but rest-gap frame →
+                        # draw nothing (don't flash a static chev mid-rest).
                         chevs = self._compute_chevron_animation_state(state.curr_stop)
-                        if chevs:
-                            for tip_x, tip_y, face_left, alpha in chevs:
-                                self._draw_approaching_arrow(tip_x, tip_y, face_left, alpha)
-                        else:
+                        if chevs is None:
                             dx_curr = -1 if on_top else 1
                             tip_x_static = pos[0] - dx_curr * (self.circle_outer_radius + 1)
                             self._draw_approaching_arrow(tip_x_static, pos[1], face_left=on_top)
+                        else:
+                            for tip_x, tip_y, face_left, alpha in chevs:
+                                self._draw_approaching_arrow(tip_x, tip_y, face_left, alpha)
 
         # 6. Station names (vertical text)
         for s in self.stops:
@@ -849,8 +882,14 @@ class CircularFullRouteDisplay:
         blit_y = self.y_top + self.lower_h - bottom_pad - img.get_height()
         self.screen.blit(img, (left_x, blit_y))
 
+    # NOTE: deliberately NOT implemented yet — interface stub returning None.
+    # Wire up when click-jump for the circular full-route lands. Reserved for:
+    # hit-testing each station's pentagon/numbered-circle/dot at its
+    # `self.positions[jy]` screen coord (use `self.circle_outer_radius` as the
+    # pick radius for circle/dot; pentagon hit-box is its bounding rect).
+    # Sibling reference: e235_1000.JapaneseDisplay.hit_test (linear bar).
     def hit_test(self, state, mx: int, my: int) -> Optional[int]:
-        """Click hit-test. Deferred — return None for now (pentagon is static)."""
+        """Click hit-test. Deferred — return None for now."""
         return None
 
 

@@ -10,7 +10,7 @@ the train-type box is now plain DARK_BG; no other elements reflow.
 import pygame
 import time
 
-from app_paths import load_json_relative
+from app_paths import load_json_relative, project_root
 from displays.base import DisplayMode, ModeCycler
 from displays.utils import clip, draw_text_given_width, draw_station_code_badge
 
@@ -51,7 +51,6 @@ from displays.utils import clip, draw_text_given_width, draw_station_code_badge
 
 from displays.train_models.e235_0 import (
     S_WIDTH,
-    S_HEIGHT,
     UPPER_HEIGHT,
     DARK_BG,
     WHITE_BG,
@@ -137,11 +136,11 @@ class JapaneseDisplay:
         # SysFont scans the Windows font registry, which fails on Chinese/Japanese
         # locale Windows with `TypeError: expected str, bytes or os.PathLike object,
         # not int`. All fonts in this project ship in fonts/ and load via Font(path).
-        self.font_dest = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 35)
-        self.font_prefix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 25)
-        self.font_station = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 78)
-        self.font_clock = pygame.font.Font("fonts/HelveticaNeue-Roman.otf", 27)
-        self.font_suffix = pygame.font.Font("fonts/ShinGoPr6N-Medium.otf", 18)
+        self.font_dest = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 35)
+        self.font_prefix = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 25)
+        self.font_station = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 78)
+        self.font_clock = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Roman.otf"), 27)
+        self.font_suffix = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 18)
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
         """Draw destination with suffix (ゆき/方面)."""
@@ -149,7 +148,7 @@ class JapaneseDisplay:
             # Per-region bg fill (DARK_BG / debug-grid tint).
             pygame.draw.rect(self.screen, _bg("dest"), DEST_RECT)
 
-            dest_box_x, dest_box_y, dest_box_w = 15, 50, 150
+            dest_box_x, dest_box_y, dest_box_w = 7, 50, 166
             draw_text_given_width(
                 dest_box_x, dest_box_y, dest_box_w, self.font_dest, dest_text, WHITE_BG, self.screen, collapse=False, script="japanese"
             )
@@ -232,20 +231,19 @@ class EnglishDisplay:
         self.route_data = route_data
         self.stops = stops
 
-        self.font_dest = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 24)
-        self.font_main_prefix = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 27)
-        self.font_station = pygame.font.Font("fonts/HelveticaNeue-Bold.otf", 75)
+        self.font_dest = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Medium.otf"), 24)
+        self.font_main_prefix = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Medium.otf"), 27)
+        self.font_station = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 75)
         # Used when station_text contains "\n" — see draw_station's 2-line branch.
         # Smaller pt so two lines fit in the ~82px station area without colliding
         # with the prefix band. Tune in concert with line_gap below.
-        self.font_station_2line = pygame.font.Font("fonts/HelveticaNeue-Bold.otf", 42)
-        self.font_clock = pygame.font.Font("fonts/HelveticaNeue-Roman.otf", 27)
-        self.font_suffix = pygame.font.Font("fonts/HelveticaNeue-Medium.otf", 20)
+        self.font_station_2line = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 42)
+        self.font_clock = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Roman.otf"), 27)
+        self.font_suffix = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Medium.otf"), 20)
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
         """Draw destination with 'for' label above."""
         with clip(self.screen, DEST_RECT):
-            dest_box_x, dest_box_w = 15, 150
             for_y = 50
 
             # Per-region bg fill (DARK_BG / debug-grid tint).
@@ -279,13 +277,21 @@ class EnglishDisplay:
                         img = pygame.transform.smoothscale(img, (two_line_max_w, img.get_height()))
                     self.screen.blit(img, (two_line_x, y_pos))
             else:
-                # Single line: vertically center between "for" bottom and UPPER_HEIGHT
-                text_x = dest_box_x + 10
-                text_max_w = dest_box_w - 10
+                # Single line: LEFT-aligned at x=5 (mirrors the 2-line branch
+                # so single- and 2-line renders share a left edge). Vertically
+                # centered between "for" bottom and UPPER_HEIGHT. Smoothscale
+                # fallback if natural width exceeds the dest region — same
+                # defensive shrink the 2-line branch uses.
+                single_x = 5  # align with "for" left edge AND 2-line render
+                single_max_w = 175  # matches two_line_max_w
                 dest_h = self.font_dest.get_height()
                 zone_top = for_y + for_h
                 single_y = zone_top + (UPPER_HEIGHT - zone_top - dest_h) // 2 - 5
-                draw_text_given_width(text_x, single_y, text_max_w, self.font_dest, dest_text, WHITE_BG, self.screen, collapse=True, script="latin")
+                img = self.font_dest.render(dest_text, True, WHITE_BG)
+                w = img.get_width()
+                if w > single_max_w:
+                    img = pygame.transform.smoothscale(img, (single_max_w, img.get_height()))
+                self.screen.blit(img, (single_x, single_y))
 
     def draw_prefix(self, prefix_text: str) -> None:
         """Draw English prefix (already translated by UpperDisplay manager)."""
@@ -358,7 +364,6 @@ class EnglishDisplay:
                 return
 
             _, name_h = self.font_station.size(station_text)
-            # Bottom-aligned, nudged down ~2px to match reference vertical placement
             name_y = UPPER_HEIGHT - name_h
 
             draw_text_given_width(name_x, name_y, max_width, self.font_station, station_text, WHITE_BG, self.screen, collapse=True, script="latin")
@@ -416,9 +421,9 @@ class UpperDisplay:
         self.mode_cycler = ModeCycler(self.mode_displays, default_mode=DisplayMode.KANJI)
 
         # Station code badge fonts — sizes tunable here; layout auto-adjusts in _draw_station_code_badge
-        self.font_sta_code_prefix = pygame.font.Font("fonts/NeueFrutigerWorld-Bold.otf", 18)
-        self.font_sta_code_num = pygame.font.Font("fonts/NeueFrutigerWorld-Bold.otf", 22)
-        self.font_sta_code_3letter = pygame.font.Font("fonts/NeueFrutigerWorld-Bold.otf", 20)
+        self.font_sta_code_prefix = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 18)
+        self.font_sta_code_num = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 22)
+        self.font_sta_code_3letter = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 20)
 
         # Load translations (station names, destinations)
         self.translations = load_json_relative("data/translations.json")
