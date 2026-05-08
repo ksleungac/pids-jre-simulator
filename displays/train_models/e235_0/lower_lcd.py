@@ -27,6 +27,7 @@ import pygame
 import pygame.gfxdraw
 
 from constants import (
+    CURRENT_COLOR,
     PASSED_COLOR,
     STOPS_BAR_HEIGHT,
     STOPS_WIDTH,
@@ -143,6 +144,11 @@ class CircularFullRouteDisplay:
         self.curve_v_radius       = (self.track_bottom_y - self.track_top_y) // 2
         self.vert_seg_h_outer     = 20     # outer-rect vertical straight at apex
         self.vert_seg_h_inner     = 15     # inner-rect vertical straight at apex (smaller = more curvy inner)
+
+        # Numbered-circle outer radius — shared between _draw_numbered_circle
+        # (its own size) and _draw_approaching_arrow (chevron tip anchors at
+        # circle's left edge + tip_into_circle).
+        self.circle_outer_radius  = 12
         # fmt: on
 
         # =====================================================================
@@ -218,9 +224,14 @@ class CircularFullRouteDisplay:
     # State helpers — "next 15 ahead" with sta_code dedup
     # -------------------------------------------------------------------------
 
-    def _ahead_indices(self, curr_stop: int) -> List[Tuple[int, int]]:
+    def _ahead_indices(self, curr_stop: int, include_curr: bool = False) -> List[Tuple[int, int]]:
         """Return up to NUMBERED_AHEAD_COUNT (stop_index, jy_code) tuples for
         the next stations ahead of ``curr_stop`` in inner-loop direction.
+
+        ``include_curr=True`` prepends ``curr_stop`` itself as the first entry —
+        used when APPROACHING (train hasn't arrived yet, so curr_stop is part
+        of the upcoming countdown set). Total output stays capped at
+        NUMBERED_AHEAD_COUNT either way.
 
         Walks ``stops[]`` forward with modulo wrap, skipping any sta_code
         already seen. The wrap handles the data shape where Yamanote's
@@ -232,11 +243,13 @@ class CircularFullRouteDisplay:
             return []
 
         seen: set[int] = set()
+        ahead: List[Tuple[int, int]] = []
         curr_jy = _parse_jy_code(self.stops[curr_stop].get("sta_code", ""))
         if curr_jy is not None:
+            if include_curr:
+                ahead.append((curr_stop, curr_jy))
             seen.add(curr_jy)
 
-        ahead: List[Tuple[int, int]] = []
         n = len(self.stops)
         # 2n cap is a guard against infinite loops if data is malformed.
         for offset in range(1, 2 * n + 1):
@@ -302,45 +315,171 @@ class CircularFullRouteDisplay:
     # Per-station markers
     # -------------------------------------------------------------------------
 
-    def _draw_approaching_arrow(self, pos: Tuple[int, int], face_left: bool = False) -> None:
-        """Chevron arrow at the train's target stop while APPROACHING.
+    def _draw_approaching_arrow(self, tip_x: float, tip_y: float, face_left: bool, alpha: float = 1.0) -> None:
+        """Chevron arrow at a given tip apex (tip_x, tip_y) with optional fade alpha.
 
-        Geometry copied from e235_1000.JapaneseDisplay.draw_ptr's chevron path:
-        gray halo (wider, thinner notch) under a red body (taller, pointier
-        notch). Direction-aware: ``face_left=True`` mirrors the chevron to
-        point LEFT for top-row stops (inner-loop = R→L on top row).
+        Geometry copied verbatim from e235_1000.JapaneseDisplay.draw_ptr's
+        full-route chevron path (NOT the 8-station uniform-halo recipe).
+        Absolute deltas: halo wider by 5, shorter by 4, thicker stroke by 6,
+        offset 2px back of body. Body sized for racetrack readability.
+
+        ``face_left=True`` produces a left-pointing chevron with apex at
+        (tip_x, tip_y); ``face_left=False`` produces a right-pointing one.
+        ``alpha < 1.0`` renders via a SRCALPHA Surface so the chevron can fade
+        in/out at animation endpoints — gfxdraw / draw_aapolygon themselves
+        only take solid colors.
         """
         # fmt: off
-        # --- Arrow params (mirrors e235_1000.draw_ptr chevron) ---
-        w_body       = 18
-        h_body       = STOPS_BAR_HEIGHT + 4   # = 34
-        stroke_body  = 10
-        w_halo       = 23
-        h_halo       = STOPS_BAR_HEIGHT       # = 30
-        stroke_halo  = 16
-        tip_offset   = 4                      # tip lies tip_offset px past station center on apex side
-        halo_x_extra = 2                      # halo sits 2px more "behind" than body (matches e235_1000's `-2`)
-        # ---------------------------------------------------------
+        # --- Arrow params (adjust freely) ---
+        # tip-portion = w_body - stroke_body sets the tip angle (pointiness).
+        w_body            = 17                     # racetrack-tuned (narrower than sibling's 18)
+        h_body            = STOPS_BAR_HEIGHT + 2   # = 32 (overhangs 2px past green band each side)
+        stroke_body       = 11                     # tip-portion = 6
+        # Halo absolute deltas (from e235_1000 full-route chevron, NOT 8-station).
+        halo_w_extra      = 5                      # halo wider than body
+        halo_h_under      = 4                      # halo shorter than body
+        halo_stroke_extra = 6                      # halo stroke thicker than body
+        halo_back_extra   = 2                      # halo extends past body's back by this much
+        # ------------------------------------
         # fmt: on
-        cx, cy = pos
-        body_y = int(cy - h_body / 2)
-        halo_y = int(cy - h_halo / 2)
+        w_halo = w_body + halo_w_extra
+        h_halo = h_body - halo_h_under
+        stroke_halo = stroke_body + halo_stroke_extra
+        halo_apex_extra = halo_w_extra - halo_back_extra  # = 3 (halo extends past body apex)
 
-        # Build right-pointing chevron points; mirror around cx for left-pointing.
-        body_x = int(cx - (w_body - tip_offset))
-        halo_x = int(cx - (w_halo - tip_offset) - halo_x_extra)
-        body_pts_r = arrow_points(body_x, body_y, w_body, h_body, stroke_body)
-        halo_pts_r = arrow_points(halo_x, halo_y, w_halo, h_halo, stroke_halo)
+        # Build right-pointing geometry first; mirror per-bbox if face_left.
+        # body apex = (body_x + w_body, body_y + h_body/2). Set body_x so apex.x = tip_x.
+        body_x = tip_x - w_body
+        body_y = tip_y - h_body / 2
+        # halo apex extends `halo_apex_extra` past body apex; halo bbox right = body_x + w_body + halo_apex_extra.
+        halo_x = body_x + w_body + halo_apex_extra - w_halo  # = body_x - halo_back_extra
+        halo_y = tip_y - h_halo / 2
+
+        body_pts = arrow_points(int(body_x), int(body_y), w_body, h_body, stroke_body)
+        halo_pts = arrow_points(int(halo_x), int(halo_y), w_halo, h_halo, stroke_halo)
 
         if face_left:
-            body_pts = [(2 * cx - px, py) for (px, py) in body_pts_r]
-            halo_pts = [(2 * cx - px, py) for (px, py) in halo_pts_r]
-        else:
-            body_pts = body_pts_r
-            halo_pts = halo_pts_r
+            # Mirror each polygon around its own bbox horizontal center so the
+            # apex flips from right edge to left edge. Apex of mirrored body
+            # lands at body_x → set body_x = tip_x for left-pointing.
+            body_x = tip_x
+            halo_x = body_x - halo_apex_extra
+            body_pts = arrow_points(int(body_x), int(body_y), w_body, h_body, stroke_body)
+            halo_pts = arrow_points(int(halo_x), int(halo_y), w_halo, h_halo, stroke_halo)
+            body_center_x = body_x + w_body / 2
+            halo_center_x = halo_x + w_halo / 2
+            body_pts = [(2 * body_center_x - px, py) for (px, py) in body_pts]
+            halo_pts = [(2 * halo_center_x - px, py) for (px, py) in halo_pts]
 
-        draw_aapolygon(self.screen, PASSED_COLOR, halo_pts, 5)
-        draw_aapolygon(self.screen, self.contrast_color, body_pts)
+        if alpha >= 1.0:
+            draw_aapolygon(self.screen, PASSED_COLOR, halo_pts, 5)
+            draw_aapolygon(self.screen, self.contrast_color, body_pts)
+            return
+
+        # Faded path — render to SRCALPHA surface, scale alpha via BLEND_RGBA_MULT, blit.
+        all_pts = halo_pts + body_pts
+        min_x = int(min(p[0] for p in all_pts)) - 2
+        min_y = int(min(p[1] for p in all_pts)) - 2
+        max_x = int(max(p[0] for p in all_pts)) + 2
+        max_y = int(max(p[1] for p in all_pts)) + 2
+        surf_w = max_x - min_x + 1
+        surf_h = max_y - min_y + 1
+        if surf_w <= 0 or surf_h <= 0:
+            return
+        surf = pygame.Surface((surf_w, surf_h), pygame.SRCALPHA)
+        local_halo = [(px - min_x, py - min_y) for (px, py) in halo_pts]
+        local_body = [(px - min_x, py - min_y) for (px, py) in body_pts]
+        draw_aapolygon(surf, PASSED_COLOR, local_halo, 5)
+        draw_aapolygon(surf, self.contrast_color, local_body)
+        a = max(0, min(255, int(alpha * 255)))
+        surf.fill((255, 255, 255, a), special_flags=pygame.BLEND_RGBA_MULT)
+        self.screen.blit(surf, (min_x, min_y))
+
+    def _compute_chevron_animation_state(self, curr_stop: int) -> List[Tuple[float, float, bool, float]]:
+        """Compute the chevron animation frames for the current frame.
+
+        Returns up to 2 ``(tip_x, tip_y, face_left, alpha)`` tuples for the
+        chevs visible right now. Returns empty list when no valid previous
+        station (curr_stop has no prior, or last+curr are on different
+        rows — both deferred cases; caller falls back to static placement).
+
+        Animation: two chevs phase-offset by ``phase_offset_s``, each cycling
+        ``cycle_period_s``. Per chev: fade-in at A → linear sweep A→B → fade-out
+        at B → dead. The fade-out at B of one chev coincides with the fade-in
+        at A of the other (continuous arrow march).
+        """
+        if not (0 <= curr_stop < len(self.stops)):
+            return []
+
+        curr_jy = _parse_jy_code(self.stops[curr_stop].get("sta_code", ""))
+        if curr_jy is None or curr_jy not in self.positions:
+            return []
+
+        # Walk backward in stops[] with sta_code dedup to find the previous
+        # station's jy. Mirrors _ahead_indices but in the reverse direction.
+        last_jy = None
+        seen = {curr_jy}
+        n = len(self.stops)
+        for offset in range(1, 2 * n + 1):
+            idx = (curr_stop - offset) % n
+            jy = _parse_jy_code(self.stops[idx].get("sta_code", ""))
+            if jy is None or jy in seen:
+                continue
+            last_jy = jy
+            break
+
+        if last_jy is None or last_jy not in self.positions:
+            return []
+
+        # Cross-row transitions deferred — last and curr must be on the same row.
+        curr_on_top = curr_jy in JY_TOP_LR_SCREEN
+        last_on_top = last_jy in JY_TOP_LR_SCREEN
+        if curr_on_top != last_on_top:
+            return []
+
+        curr_pos = self.positions[curr_jy]
+        last_pos = self.positions[last_jy]
+
+        # fmt: off
+        # --- Animation params (adjust freely) ---
+        # Per-chev timeline: sweep+fade-in (0..sweep_duration_s) → fade-out at B
+        # (next fade_out_s) → rest (next rest_s) → repeat. Total cycle =
+        # sweep + fade-out + rest. Two chevs phase-offset by sweep_duration so
+        # chev2's start (fade-in + move at A) coincides with chev1's fade-out start at B.
+        sweep_duration_s  = 1.0
+        fade_out_s        = 0.4   # chev lingers at B as next one starts at A
+        rest_s            = 0.4   # dead phase before chev restarts at A
+        endpoint_gap_A    = 3     # px gap between chev tip and last station's circle near edge (= start position)
+        endpoint_gap_B    = 1     # px gap between chev tip and curr_stop's circle near edge (= end position)
+        ease_in_power     = 2     # sweep position eased via sweep_t**ease_in_power (>1 = accelerating: slow at A, fast at B)
+        fade_in_full_at   = 0.5   # alpha hits 1.0 when eased position reaches this fraction (0.5 = midpoint)
+        # ----------------------------------------
+        # fmt: on
+        cycle_period_s = sweep_duration_s + fade_out_s + rest_s
+        phase_offset_s = sweep_duration_s
+
+        dx = 1 if curr_pos[0] > last_pos[0] else -1
+        tip_x_A = last_pos[0] + dx * (self.circle_outer_radius + endpoint_gap_A)
+        tip_x_B = curr_pos[0] - dx * (self.circle_outer_radius + endpoint_gap_B)
+        tip_y = curr_pos[1]
+        face_left = dx < 0
+
+        t_now = pygame.time.get_ticks() / 1000.0
+        chevs: List[Tuple[float, float, bool, float]] = []
+        for chev_t_offset in (0.0, phase_offset_s):
+            t_chev = (t_now - chev_t_offset) % cycle_period_s
+            if t_chev < sweep_duration_s:
+                sweep_t = t_chev / sweep_duration_s
+                eased = sweep_t**ease_in_power
+                tip_x = tip_x_A + (tip_x_B - tip_x_A) * eased
+                alpha = min(1.0, eased / fade_in_full_at)
+            elif t_chev < sweep_duration_s + fade_out_s:
+                alpha = 1.0 - (t_chev - sweep_duration_s) / fade_out_s
+                tip_x = tip_x_B
+            else:
+                continue  # rest phase — chev not visible this frame
+            chevs.append((tip_x, tip_y, face_left, alpha))
+        return chevs
 
     def _draw_direction_arrows(self) -> None:
         """Draw inner-loop direction chevrons on each cap's apex.
@@ -398,27 +537,41 @@ class CircularFullRouteDisplay:
         pygame.gfxdraw.filled_circle(self.screen, cx, cy, radius, PASSED_COLOR)
         pygame.gfxdraw.aacircle(self.screen, cx, cy, radius, PASSED_COLOR)
 
-    def _draw_numbered_circle(self, pos: Tuple[int, int], minutes: int, with_minute_suffix: bool = False) -> None:
-        """White-interior + route-color outline circle with countdown minutes.
+    def _draw_numbered_circle(self, pos: Tuple[int, int], minutes: int, with_minute_suffix: bool = False, is_current: bool = False) -> None:
+        """Numbered countdown circle — verbatim primitive from
+        e235_1000.draw_marks's active-range marker, sized larger via
+        ``self.circle_outer_radius``.
 
-        IRL Yamanote countdown circles use a white interior with thin route-color
-        outline + black countdown text — distinct from e235_1000's gray active-ring
-        style (which sits on a green active-range bar). Uses gfxdraw for AA edges.
+        Two layers + digit:
+          - Outer PASSED_COLOR full disk (every upcoming station). The visible
+            ring effect comes from the green track band peeking around the
+            disk — NOT from drawing a route-color ring explicitly.
+          - Inner CURRENT_COLOR overlay only when ``is_current=True`` —
+            mirrors e235_1000's ``if gi == curr_stop:`` gate.
+          - Black countdown digit on top + optional ``(分)`` suffix at the
+            farthest-ahead position (e235_0 specific — e235_1000 renders the
+            digit as a separate text label above the bar).
         """
         # fmt: off
         # --- Numbered circle params (adjust freely) ---
-        outer_radius        = 12   # outer route-color ring radius
-        inner_inset         = 1    # inset from outer (= visible ring thickness)
+        # `outer_radius` lives on self (self.circle_outer_radius) — shared with
+        # _draw_approaching_arrow's tip placement.
+        inner_disk_inset    = 2    # inner CURRENT_COLOR overlay inset (curr_stop only; matches e235_1000)
         suffix_x_gap        = 0    # gap between circle right edge and (分) suffix
         suffix_bottom_pad   = 2    # gap between (分) bottom and color bar bottom edge
         # ----------------------------------------------
         # fmt: on
+        outer_radius = self.circle_outer_radius
+
         cx, cy = int(pos[0]), int(pos[1])
-        pygame.gfxdraw.filled_circle(self.screen, cx, cy, outer_radius, self.color)
-        pygame.gfxdraw.aacircle(self.screen, cx, cy, outer_radius, self.color)
-        inner_r = outer_radius - inner_inset
-        pygame.gfxdraw.filled_circle(self.screen, cx, cy, inner_r, WHITE_BG)
-        pygame.gfxdraw.aacircle(self.screen, cx, cy, inner_r, WHITE_BG)
+        # Outer disk — every upcoming station. Green band shows around it.
+        pygame.gfxdraw.filled_circle(self.screen, cx, cy, outer_radius, PASSED_COLOR)
+        pygame.gfxdraw.aacircle(self.screen, cx, cy, outer_radius, PASSED_COLOR)
+        # Inner CURRENT_COLOR overlay — curr_stop only
+        if is_current:
+            inner_disk_r = outer_radius - inner_disk_inset
+            pygame.gfxdraw.filled_circle(self.screen, cx, cy, inner_disk_r, CURRENT_COLOR)
+            pygame.gfxdraw.aacircle(self.screen, cx, cy, inner_disk_r, CURRENT_COLOR)
 
         img = self.font_circle.render(str(minutes), True, DARK_BG)
         self.screen.blit(img, img.get_rect(center=(cx, cy)))
@@ -631,15 +784,20 @@ class CircularFullRouteDisplay:
         for jy, pos in self.positions.items():
             self._draw_dot(pos)
 
-        # 4. Numbered countdown circles for next 15 ahead
-        ahead = self._ahead_indices(state.curr_stop)
+        # 4. Numbered countdown circles for next 15 ahead.
+        # Include curr_stop when APPROACHING (train hasn't arrived yet, so its
+        # time-to-arrival belongs in the countdown set; chevron in step 5
+        # paints over the circle).
+        include_curr = not state.at_station
+        ahead = self._ahead_indices(state.curr_stop, include_curr=include_curr)
         minutes_list = self._compute_minutes_for_ahead(ahead, state, current_time)
         for i, ((stop_idx, jy), minutes) in enumerate(zip(ahead, minutes_list)):
             pos = self.positions.get(jy)
             if pos is None:
                 continue
             with_suffix = i == len(ahead) - 1
-            self._draw_numbered_circle(pos, minutes, with_minute_suffix=with_suffix)
+            is_current = stop_idx == state.curr_stop
+            self._draw_numbered_circle(pos, minutes, with_minute_suffix=with_suffix, is_current=is_current)
 
         # 5. Train indicator at current stop — pentagon (STOPPING) or chevron
         # (APPROACHING). face_left when on top row (inner-loop = R→L).
@@ -652,7 +810,17 @@ class CircularFullRouteDisplay:
                     if state.at_station:
                         self._draw_pentagon(pos, face_left=on_top)
                     else:
-                        self._draw_approaching_arrow(pos, face_left=on_top)
+                        # APPROACHING — animated cascade between last and curr.
+                        # Cross-row + no-previous edge cases fall back to a
+                        # static chev at curr_stop's near-circle position.
+                        chevs = self._compute_chevron_animation_state(state.curr_stop)
+                        if chevs:
+                            for tip_x, tip_y, face_left, alpha in chevs:
+                                self._draw_approaching_arrow(tip_x, tip_y, face_left, alpha)
+                        else:
+                            dx_curr = -1 if on_top else 1
+                            tip_x_static = pos[0] - dx_curr * (self.circle_outer_radius + 1)
+                            self._draw_approaching_arrow(tip_x_static, pos[1], face_left=on_top)
 
         # 6. Station names (vertical text)
         for s in self.stops:
