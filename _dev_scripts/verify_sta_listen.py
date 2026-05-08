@@ -374,6 +374,8 @@ def main() -> int:
 
     player = Player()
     idx = 0
+    list_scroll = 0  # row offset for sidebar scroll (in row units)
+    visible_rows = max(1, (WINDOW_H - LIST_TOP) // ROW_H)
     verdicts: dict[str, str] = {}  # sta -> "PASS"/"FAIL" — this session's verdicts
     player.begin(items[idx]["path"], items[idx]["sta_cut"])
 
@@ -405,11 +407,16 @@ def main() -> int:
         return prior_verdicts.get(sta, "")
 
     def jump_to(new_idx: int) -> None:
-        nonlocal idx, edit_mode, trim_start, trim_end_offset
+        nonlocal idx, edit_mode, trim_start, trim_end_offset, list_scroll
         edit_mode = False  # cancel any in-progress edit on navigation
         trim_start = 0.0  # discard pending trim — moving on to new station
         trim_end_offset = 0.0
         idx = max(0, min(len(items) - 1, new_idx))
+        # auto-scroll sidebar to keep idx in view
+        if idx < list_scroll:
+            list_scroll = idx
+        elif idx >= list_scroll + visible_rows:
+            list_scroll = idx - visible_rows + 1
         begin_with_trim()
 
     def record(verdict: str) -> None:
@@ -505,7 +512,7 @@ def main() -> int:
         x, y = pos
         if x >= LIST_W or y < LIST_TOP:
             return None
-        i = (y - LIST_TOP) // ROW_H
+        i = (y - LIST_TOP) // ROW_H + list_scroll
         return int(i) if 0 <= i < len(items) else None
 
     running = True
@@ -560,6 +567,9 @@ def main() -> int:
                         trim_end_offset = 0.0
             elif ev.type == pygame.TEXTINPUT and edit_mode:
                 edit_buffer += ev.text
+            elif ev.type == pygame.MOUSEWHEEL:
+                max_scroll = max(0, len(items) - visible_rows)
+                list_scroll = max(0, min(max_scroll, list_scroll - ev.y * 3))
             elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
                 if edit_mode:
                     # Click outside note rect cancels edit
@@ -588,8 +598,9 @@ def main() -> int:
         pygame.draw.rect(screen, LIST_BG, (0, 0, LIST_W, WINDOW_H))
         list_header = font_h2.render(f"{len(items)} stations", True, DIM)
         screen.blit(list_header, (16, 24))
-        for i, it in enumerate(items):
-            row_y = LIST_TOP + i * ROW_H
+        for i in range(list_scroll, min(len(items), list_scroll + visible_rows)):
+            it = items[i]
+            row_y = LIST_TOP + (i - list_scroll) * ROW_H
             row_rect = pygame.Rect(0, row_y, LIST_W, ROW_H)
             if i == idx:
                 pygame.draw.rect(screen, ROW_ACTIVE, row_rect)
@@ -605,6 +616,11 @@ def main() -> int:
             screen.blit(label, (32, row_y + 4))
             cut_label = font_small.render(f"{it['sta_cut']:.1f}s", True, DIM)
             screen.blit(cut_label, (LIST_W - 12 - cut_label.get_width(), row_y + 7))
+        # scroll indicator: small arrows when content above/below viewport
+        if list_scroll > 0:
+            screen.blit(font_small.render("▲", True, DIM), (LIST_W - 16, LIST_TOP - 14))
+        if list_scroll + visible_rows < len(items):
+            screen.blit(font_small.render("▼", True, DIM), (LIST_W - 16, WINDOW_H - 16))
 
         # right: detail panel
         panel_rect = pygame.Rect(LIST_W + 20, 20, WINDOW_W - LIST_W - 40, WINDOW_H - 130)

@@ -481,6 +481,60 @@ Where `keep_until = music_end + 0.5` and `skip_until = voice_start - 0.5` (uses 
 
 If the file is locked when `mv` runs ("Device or resource busy"), the verifier or another player is holding it — close it and retry.
 
+#### Hostile-recording pattern (yamanote-style) — combine fixes in ONE splice
+
+When the source recording has multiple problems in the cut zone — sta_cut placed mid-music, residual KAK transient post-cut, no clean silence gap, voice attacks at digital ceiling — fix them all in a single ffmpeg operation. Don't iterate "fix KAK → user verifies → adjust sta_cut → user verifies → add silence pad → user verifies." That triples user verification time.
+
+The combined operation:
+
+1. **Cut music body before its natural sharp end** — addresses pre-cut KAK perception (the music's hard staff-cut moment can sound clicky in the verifier preview). Use `atrim=0:<music_cut>` ending slightly before the music's natural end (e.g. 100–200 ms inside the music body).
+2. **Insert artificial silence** to meet the `~0.3 s pre-voice` convention. Yamanote-style files don't have a natural silence gap wide enough; generate one with `anullsrc=channel_layout=stereo:sample_rate=22050,atrim=duration=0.30`.
+3. **Skip KAK + first voice burst** — splice through to the inter-syllable quiet zone (or directly to voice content if no quiet zone exists). Use `atrim=<voice_resume>` for the second segment.
+4. **Crossfade both junctions** to avoid audible click at sample-level discontinuities. Use `acrossfade=d=0.03:c1=tri:c2=tri` between music and silence (30 ms is good for music-side fade-out), and `acrossfade=d=0.02` between silence and voice (20 ms is enough since silence side is already at zero).
+5. **Set sta_cut at the start of artificial silence** — gives the convention's 0.3 s pad before voice attack arrives.
+
+Template:
+
+```bash
+ffmpeg -y -loglevel error -i audio/<line>/<diagram>/sta/<sta>.mp3 \
+    -filter_complex "
+        [0:a]atrim=0:<music_cut>,asetpts=PTS-STARTPTS[music];
+        anullsrc=channel_layout=stereo:sample_rate=22050,atrim=duration=<silence_dur>[silence];
+        [0:a]atrim=<voice_resume>,asetpts=PTS-STARTPTS[voice];
+        [music][silence]acrossfade=d=0.03:c1=tri:c2=tri[ms];
+        [ms][voice]acrossfade=d=0.02:c1=tri:c2=tri[out]
+    " \
+    -map "[out]" -q:a 2 <sta>.tmp.mp3
+mv <sta>.tmp.mp3 audio/<line>/<diagram>/sta/<sta>.mp3
+```
+
+Then update `sta_cut` to `<music_cut>` (= start of inserted silence).
+
+**Verify with the −8 dB voice-attack threshold** (not the convention's voice_start which assumes a sharp onset — yamanote voices ramp in and cross −8 dB earlier than the peak). Aim for the gap from sta_cut to first window > −8 dB to be 280–340 ms. If short, increase `silence_dur` by ~100 ms and redo.
+
+**Anti-pattern:** doing this in 2-3 ffmpeg passes (first KAK splice, then sta_cut adjustment, then silence pad). Each pass requires user verification. Combine all three into the single template above.
+
+#### Route-level gap alignment — audit ALL stops, not just FAILs
+
+Before declaring a route done, audit the pre-voice gap (sta_cut → first sample > −8 dB) across **every** stop, including the originally-PASSed ones. The FAIL-driven workflow only fixes the obvious ones; the PASSed files often have widely varying gaps (anything from 50 ms to 900 ms) just because their natural silence floors happen to be different lengths. That variance is audible — a PageUp on station X feels snappier than station Y on the same line.
+
+Target: all stops within ~250–400 ms of `sta_cut → voice attack`. Two cheap fixes converge them:
+
+- **LONG (gap > 400 ms)**: route.json edit only. Set `new_sta_cut = round(voice_attack_time − 0.30, 1)`. No audio change. Files with deep silence floors before voice (`sta_cut` placed where music decay just ended) tend to land here — moving `sta_cut` later gets the simulator to start playback closer to voice.
+- **SHORT (gap < 250 ms)**: insert artificial silence AT `sta_cut` position (no splice junction needed if the file is otherwise clean — typical for originally-PASSed files). Use:
+
+```
+[0:a]atrim=0:<sta_cut>,asetpts=PTS-STARTPTS[pre];
+anullsrc=channel_layout=stereo:sample_rate=22050,atrim=duration=<silence_dur>[silence];
+[0:a]atrim=<sta_cut>,asetpts=PTS-STARTPTS[post];
+[pre][silence]concat=n=2:v=0:a=1[ps];
+[ps][post]concat=n=2:v=0:a=1[out]
+```
+
+`silence_dur` ≈ `0.30 − current_gap`. No sta_cut change needed (the inserted silence pushes voice content later within the file).
+
+Run the audit script after each fix batch. The skill is "done" when 0 stops fall outside 250–400 ms.
+
 ### Step 13 — Cleanup
 
 After by-ear gate passes (`PASS` for all stations or user explicitly accepts FAILs):
