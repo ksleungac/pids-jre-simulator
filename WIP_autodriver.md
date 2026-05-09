@@ -41,11 +41,11 @@ Align ONLY when game is in-transit AND `App.at_station=True` (advance App by one
 
 | Layer 3 inferred state | App.at_station | Action |
 |---|---|---|
-| `STOPPING_FRESH` / `STOPPING_AFTER_ARR` | * | no-op |
-| `APPROACHING_AFTER_DEP` (absorbs `_BEFORE_DEP` at entry) | True | advance App: land at APPROACHING_EARLY of curr_stop+1 (silent — no audio) |
-| `APPROACHING_AFTER_DEP` | False | no-op |
-| `MOVING_AFTER_ARR` | True | advance App: land at APPROACHING_FINAL of curr_stop+1 (silent — no audio) |
-| `MOVING_AFTER_ARR` | False | no-op |
+| `IDLE` / `STOPPED` | * | no-op |
+| `CRUISING` (absorbs `DEPARTING` at entry) | True | advance App: land at APPROACHING_EARLY of curr_stop+1 (silent — no audio) |
+| `CRUISING` | False | no-op |
+| `ARRIVING` | True | advance App: land at APPROACHING_FINAL of curr_stop+1 (silent — no audio) |
+| `ARRIVING` | False | no-op |
 
 ### `jump_to_stop` is single-purpose
 
@@ -61,8 +61,8 @@ AutoDriver tracks last-known `curr_stop`. If it differs from current and the cha
 
 ### Resolved Qs (from previous design sessions)
 
-- **State 2 (APPROACHING_BEFORE_DEP) dep-PA loss at entry**: lumped into State 3 (APPROACHING_AFTER_DEP). Accepted: dep PA is structurally unrecoverable mid-segment.
-- **State 3 vs 4 disambiguation**: distinguish via distance — `distance ≤ lead → State 4 (MOVING_AFTER_ARR)`.
+- **`DEPARTING` dep-PA loss at entry**: lumped into `CRUISING`. Accepted: dep PA is structurally unrecoverable mid-segment.
+- **`CRUISING` vs `ARRIVING` disambiguation**: distinguish via distance — `distance ≤ lead → ARRIVING`.
 - **Probe consensus**: sliding window — probe 3 must agree with probe 2; stale probes discarded.
 - **PASSING vs MOVING anchor**: same anchor. PASSING-specific gating happens in normal event flow afterward, not at anchor time.
 
@@ -117,7 +117,7 @@ Manual smoke-test hint for live-validating 1a:
    - Debug panel renders correctly (4 lines: header, speed/distance/cnt_pa/observed flags, app/game state)
    - Speed/distance values track HUD readings
    - `dep✓` / `arr✓` flags light up at expected times
-   - `inferred_state` value matches expectations (`STOPPING_FRESH` / `APPROACHING_*` / `MOVING_AFTER_ARR`)
+   - `inferred_state` value matches expectations (`IDLE` / `DEPARTING` / `CRUISING` / `ARRIVING` / `STOPPED`)
    - `app:` line shows correct App-state description
    - Manual PageDown overrides cleanly (auto skips its own fire)
 3. If anything misbehaves, paste the terminal log + a panel screenshot. The 1b path (`_dev_scripts/capture_game.py`) is the comparison baseline — known working.

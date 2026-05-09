@@ -212,3 +212,65 @@ When reviewing diffs that touch deployment-frame primitives:
 - **`principles.md`**: two new entries — *"Search before authoring common utility code"* (authoring-time discipline) and *"Verify deployment-frame and external-runtime semantics from primary source"* (review-time discipline).
 - **`/vibe-check`**: smell #11 (utility-helper duplication) + smell #12 (deployment-frame primitive outside canonical home) added.
 - **`/review-dirty`**: Lens 1 extended with deployment-frame verification check; Lens 2 categories #11 + #12 added with cross-codebase grep pre-flight requirement.
+
+---
+
+## ⚠️ CRITICAL: Single-shot signal flags must be consumed AFTER successful action, not before
+
+**Date:** 2026-05-09
+
+### The Incident
+AutoDriver fires the at-station press by setting `sim.pending_next_pa = True` from a background thread. The simulator's main loop reads:
+
+```python
+if keyboard.is_pressed("page down") or self.pending_next_pa:
+    self.pending_next_pa = False  # ← reset BEFORE the action
+    self._next_pa()                # ← may no-op (PA-blocks-PA)
+```
+
+`_next_pa()` short-circuits when audio is mid-play (`if self.audio.is_pa_playing(): return`). When AutoDriver fires at-station while the まもなく PA is still playing audio, the flag is reset, `_next_pa` no-ops, and the signal is **lost forever**. By the time audio finishes, no pending flag remains and the detector's `at_station_observed` is already True so it won't re-emit. User overran Yokohama on Tokaido, train physically stopped, LCD stuck on まもなく 横浜 because the at-station press never converted.
+
+Manual press doesn't surface the bug because the held key keeps firing every frame — the press auto-retries until audio clears. Auto-fire is one-shot; one drop is forever.
+
+### The Rule
+> **A single-shot signal flag from one source to another (`pending_X = True` → consumer reads → consumer acts) must be consumed only when the action's preconditions are met. Don't reset the flag before checking the consumer's gates — if the action no-ops, the signal is silently dropped.**
+
+The shape: producer sets a one-shot flag; consumer reads it; consumer's action has internal preconditions that may not yet be met. If you reset the flag before checking those preconditions, you've lost the signal. If you reset after a no-op return, same outcome.
+
+### Applies To
+- `sim.pending_next_pa` (this incident — fixed in `app.py:_handle_input_real`)
+- Any future flag of the same shape (e.g. `pending_next_sta`, `pending_jump`, `pending_resync`).
+- More broadly: any background-thread → main-thread signal where the action might decline (mutex held, audio busy, mid-animation, etc.).
+
+### The Pattern (Use This Every Time)
+
+When introducing a one-shot signal flag from a source that won't retry:
+
+1. **Check action preconditions BEFORE consuming the flag.** If preconditions aren't met, leave the flag set; retry next frame.
+2. **Reset the flag only on the path where the action actually runs.** Action successfully invoked → reset. Action declined (no-op return, exception) → leave set.
+3. **For held-key (multi-shot) inputs**, the standard "reset and call" pattern is fine — the input keeps re-asserting. The pathology only fires for single-shot flags.
+
+**Concrete shape for a similar flag in this codebase:**
+
+```python
+# Wrong:
+if pending_X or held_input:
+    pending_X = False                  # consumed before action
+    do_action()                        # may no-op, signal lost
+
+# Right (the fix landed in app.py):
+if (pending_X or held_input) and action_preconditions_met():
+    pending_X = False
+    do_action()
+# else: pending_X stays True; held_input self-retries; either way the
+# signal is preserved until the next frame where preconditions are met
+```
+
+### Why This Matters
+- **Silent drop is the worst-case mode.** No console log, no error — the auto-fire just doesn't happen. User sees the LCD stuck on the wrong state with no way to know why.
+- **Held-key inputs masked the pathology** for months (manual press worked because of the natural retry). The bug only surfaced when an auto-fire flag interacted with a long-PA gating condition.
+- **The fix is one line** at the consumer site (gate the consumption on action preconditions). The ROOT-CAUSE understanding is what protects future flags from the same shape.
+
+### Concrete fix applied (this incident)
+- **`app.py:_handle_input_real`**: gate the consumption on `not self.audio.is_pa_playing()`. The held-key path retries naturally; the one-shot pending flag now stays set until audio clears, then runs.
+- **JSONL log expanded** (`auto_input.py`): `at_station`, `cnt_pa_at_station`, `at_station_observed` added to per-sample records so the same incident is debuggable from the recording alone next time. Without these fields the original investigation couldn't distinguish "detector didn't fire" from "fire dropped" from "transition silently regressed."

@@ -73,50 +73,64 @@ already dispatched. Lives across samples; all flags reset on
 What the auto-driver thinks the IRL game train is doing — expressed as one of
 five canonical named states + a sentinel:
 
-| Canonical name | Game-side meaning |
-|---|---|
-| `STOPPING_FRESH` | At platform, no in-segment arrival was observed (boot, post-click, or arrival trigger missed by OCR). State 1. |
-| `APPROACHING_BEFORE_DEP` | In-transit, dep-trigger not yet observed in this segment. State 2. |
-| `APPROACHING_AFTER_DEP` | In-transit, dep-trigger observed, arr-trigger not yet observed. State 3. |
-| `MOVING_AFTER_ARR` | In-transit, arr-trigger observed, decelerating to platform. State 4. |
-| `STOPPING_AFTER_ARR` | At platform, arr-trigger observed in this segment. State 5. |
-| `UNKNOWN` | OCR FAIL or insufficient context. Sentinel. |
+| Canonical name | Panel label | Game-side meaning |
+|---|---|---|
+| `IDLE` | Idle | At platform, no in-segment arrival was observed (boot, post-click, or arrival trigger missed by OCR). |
+| `DEPARTING` | Departing | In-transit, rolling out, speed not yet >30 km/h (dep-trigger not observed). |
+| `CRUISING` | Cruising | In-transit at full speed, dep-trigger observed, arr-trigger not yet observed. |
+| `ARRIVING` | Arriving | In-transit, dist crossed below the arrival lead (~900m), decelerating to platform. |
+| `STOPPED` | Stopped | At platform, arr-trigger observed in this segment. |
+| `UNKNOWN` | — | OCR FAIL or insufficient context. Sentinel. |
 
-**Naming-collision note.** Layer 1 also uses `STOPPING` / `APPROACHING_EARLY` /
-`APPROACHING_FINAL` semantically. Layer 3 names always carry a suffix (`_FRESH`,
-`_BEFORE_DEP`, ...) to keep them distinguishable in code and design discussion.
-Never use bare `STOPPING` / `APPROACHING_*` for Layer 3.
+**2026-05-09 rename.** Old wire names embedded the detector's trigger-fire
+shape (`STOPPING_FRESH`, `APPROACHING_BEFORE_DEP`, `APPROACHING_AFTER_DEP`,
+`MOVING_AFTER_ARR`, `STOPPING_AFTER_ARR`) which leaked internal logic into the
+state name. New names describe what the train is *doing* in plain transit
+verbs and line up 1:1 with the user-facing panel labels.
+
+**Cross-layer token sharing.** Layer 1's vocabulary (`STOPPING` /
+`APPROACHING_EARLY` / `APPROACHING_FINAL`) is now disjoint from Layer 3 — the
+old suffix discipline isn't needed there. **Layer 2 ↔ Layer 3 share one token
+by design:** `STOPPED` is both a Layer 2 badge value (raw OCR input) and a
+Layer 3 inferred-state value (output). `MOVING` and `PASSING` appear only in
+Layer 2; `IDLE` / `DEPARTING` / `CRUISING` / `ARRIVING` / `UNKNOWN` appear
+only in Layer 3. The collision on `STOPPED` is intentional — the badge is one
+input to the inference, and at the platform with `arrival_observed=True` they
+collapse to the same semantic. **In code and discussion, always disambiguate
+by field name** (`status['badge']` vs `status['inferred_state']`) rather than
+by raw string match. The panel disambiguates visually too: badges render in
+UPPERCASE, Layer 3 states in Title Case ("Stopped").
 
 These are **inference outputs**, not direct OCR reads. Inputs:
 
 - **Raw OCR observations**: `badge_read ∈ {STOPPED, MOVING, PASSING}`,
   `speed_read`, `distance_read` — single-sample reads of the game HUD.
 - **Layer 2 cache** (per-segment): `departure_observed`, `arrival_observed`,
-  `at_station_observed`. Necessary because OCR alone doesn't distinguish e.g.
-  `APPROACHING_BEFORE_DEP` from `APPROACHING_AFTER_DEP` — both show
-  `badge∈{MOVING,PASSING}`; the cache disambiguates. The flags semantically
-  record "we observed the trigger condition this segment," not "we dispatched
-  a fire" — the dispatcher's mismatch-skip is a separate concern.
+  `at_station_observed`. Necessary because OCR alone doesn't distinguish
+  `DEPARTING` from `CRUISING` — both show `badge∈{MOVING,PASSING}`; the cache
+  disambiguates. The flags semantically record "we observed the trigger
+  condition this segment," not "we dispatched a fire" — the dispatcher's
+  mismatch-skip is a separate concern.
 
 **Streaming inference truth table** (per-sample, with cache):
 
 | `badge` | `arrival_observed` | `departure_observed` | → state |
 |---|---|---|---|
-| `STOPPED` | False | * | `STOPPING_FRESH` |
-| `STOPPED` | True | * | `STOPPING_AFTER_ARR` |
-| `MOVING` or `PASSING` | True | * | `MOVING_AFTER_ARR` |
-| `MOVING` or `PASSING` | False | True | `APPROACHING_AFTER_DEP` |
-| `MOVING` or `PASSING` | False | False | `APPROACHING_BEFORE_DEP` |
+| `STOPPED` | False | * | `IDLE` |
+| `STOPPED` | True | * | `STOPPED` |
+| `MOVING` or `PASSING` | True | * | `ARRIVING` |
+| `MOVING` or `PASSING` | False | True | `CRUISING` |
+| `MOVING` or `PASSING` | False | False | `DEPARTING` |
 | `None` | * | * | `UNKNOWN` |
 
 (`at_station_observed` doesn't appear — it gates dispatch of FIRE_AT_STATION, not
 the inferred state.)
 
 **Entry-point inference** (no Layer 2 cache; toggle-ON, click reanchor):
-substitute `distance ≤ lead` for `arrival_observed`. `STOPPING_FRESH` ≡
-`STOPPING_AFTER_ARR` (collapsed at entry — functionally identical anchoring).
-`APPROACHING_BEFORE_DEP` lumped into `APPROACHING_AFTER_DEP` (the brief
-acceleration window is functionally equivalent at entry).
+substitute `distance ≤ lead` for `arrival_observed`. `IDLE` ≡ `STOPPED`
+(collapsed at entry — functionally identical anchoring). `DEPARTING` lumped
+into `CRUISING` (the brief acceleration window is functionally equivalent at
+entry).
 
 The inference function is pluggable; future cross-attribute hardening enriches
 it without changing the named-state vocabulary.
@@ -124,7 +138,7 @@ it without changing the named-state vocabulary.
 **Vocabulary discipline.** In design conversations and code comments:
 
 1. **Use the Layer 1 / 2 / 3 named states verbatim** — say *"AutoDriver thinks
-   the game is in `STOPPING_FRESH`"*, not *"badge is STOPPED"* or any invented
+   the game is in `IDLE`"*, not *"badge is STOPPED"* or any invented
    parallel vocabulary. The badge is one input to the inference; the inferred
    state is what the design reasons about. The vocabulary separation lets us
    harden inference without re-litigating design conclusions.
@@ -425,6 +439,7 @@ Game shows a pentagon badge in the next-station row, with text inside:
 - Pentagon shape is **identical** across all three states — only text content + fill colour differ.
 - MOVING and STOPPED both use the same green pentagon; pixel-diff against text-content anchors is what discriminates them.
 - PASSING's blue fill gives the classifier a wide separation margin: cross-state mean diff to MOVING/STOPPED is ~43, vs within-state ~6–10.
+- **STOPPED is canonical, never transient.** The game only shows the STOPPED badge when the train is actually stopped within the platform's stopping range OR when the game has reset the train to a platform. It NEVER flickers STOPPED briefly during deceleration or overrun. Detector logic relies on this: a single STOPPED frame is sufficient to flip `at_station_observed=True`, no debouncing or N-frame consensus needed. Also rules out a recurrence-shape hypothesis ("brief STOPPED reading during overrun resets atstn_obs from a prior segment") — that scenario can't happen by game design.
 
 ### Classifier
 
@@ -456,9 +471,9 @@ Lives in `_dev_scripts/capture_game.py` (1b) + `auto_input.py` `_Detector` (1a, 
 
 ### State vocabulary
 
-The state machine works in the Layer 3 named-state vocabulary — see "State machine layering" above for the canonical names + inference truth table. The 5 states (`STOPPING_FRESH`, `APPROACHING_BEFORE_DEP`, `APPROACHING_AFTER_DEP`, `MOVING_AFTER_ARR`, `STOPPING_AFTER_ARR`) + `UNKNOWN` sentinel describe the autodriver's inferred view of where the IRL game train is in its segment cycle. They map onto the per-sample event emissions below.
+The state machine works in the Layer 3 named-state vocabulary — see "State machine layering" above for the canonical names + inference truth table. The 5 states (`IDLE`, `DEPARTING`, `CRUISING`, `ARRIVING`, `STOPPED`) + `UNKNOWN` sentinel describe the autodriver's inferred view of where the IRL game train is in its segment cycle. They map onto the per-sample event emissions below.
 
-**When designing flows that interact with the state machine** (entry-point, resync, click-to-jump): say *"AutoDriver thinks the game is in `STOPPING_FRESH`"*, not *"badge is STOPPED."* The badge is one input to the inference; the inferred state is what the design reasons about. The separation matters for hardening — and avoids design conclusions accidentally over-trusting a single OCR attribute.
+**When designing flows that interact with the state machine** (entry-point, resync, click-to-jump): say *"AutoDriver thinks the game is in `IDLE`"*, not *"badge is STOPPED."* The badge is one input to the inference; the inferred state is what the design reasons about. The separation matters for hardening — and avoids design conclusions accidentally over-trusting a single OCR attribute.
 
 ### Events
 
@@ -599,20 +614,30 @@ models with different LCD widths are added, panel follows automatically.
 
 ```python
 {
-    "badge": "MOVING" | "STOPPED" | None,
-    "badge_diff": float | None,
-    "speed": int | None,           # km/h, integer (decimal stripped)
-    "speed_score": float,           # OCR confidence 0..1
-    "distance": int | None,         # meters
+    "badge": "MOVING" | "STOPPED" | "PASSING" | None,
+    "badge_diff": float | None,            # template-match diff (lower = better)
+    "speed": int | None,                   # km/h, integer (decimal stripped)
+    "speed_score": float,                  # OCR confidence 0..1
+    "distance": int | None,                # meters to next stop
     "distance_score": float,
-    "segment_start_stop": int,      # sim.state.curr_stop snapshot at last STOPPED→MOVING
+    "stopping_offset_cm": int | None,      # cm offset at platform (briefly populated post-arrival)
+    "stopping_offset_score": float,
+    "speed_limit": int | None,             # km/h speed limit (line-dependent, often empty)
+    "speed_limit_score": float,
+    "segment_start_stop": int,             # sim.state.curr_stop snapshot at last STOPPED→MOVING
     "departure_observed": bool,
     "arrival_observed": bool,
-    "at_station_observed": bool,       # set when the silent STOPPING-entry press has fired
-    "inferred_state": str,             # canonical Layer 3 state name (see § "Layer 3" truth table)
-    "ts": float,                    # time.time() of capture
+    "at_station_observed": bool,
+    "inferred_state": str,                 # canonical Layer 3 state name (see § "Layer 3" truth table)
+    "ts": float,                           # time.time() of capture
+    "paused": bool,                        # True when the user has clicked Pause (capture loop idle)
+    "last_fire": dict | None,              # {"ts": float, "type": "departure"|"arrival"|"at-station"} — most recent successful auto-fire; panel renders a transient chip when ts is recent
 }
 ```
+
+**Paused-frame variant.** During paused cycles the loop preserves the prior
+status dict and overlays only `"paused": True` (no fresh OCR fields). Readers
+should treat any field that's stale-looking against `paused=True` accordingly.
 
 CPython dict assignment is atomic. No lock needed for single writer (BG thread)
 + single reader (main thread).
@@ -679,7 +704,7 @@ auto/manual key activity.
 | `ocr_templates/badges/*.png` | **Runtime input** — 6 pre-extracted badge cell crops (111×40 RGB PNGs, ~5 KB each — dims match `BADGE_BBOX`). Loaded by `ocr.load_badge_anchors()`. Committed. |
 | `_ocr_calibration/*.png` | **Local-only** source screenshots (full 2560×1440 desktop captures, ~33 MB total). Gitignored. Only needed when re-extracting `ocr_templates/` after a game HUD layout change. |
 | `_dev_scripts/extract_ocr_assets.py` | One-shot extractor: reads `_ocr_calibration/` source screenshots → writes `ocr_templates/`. Run after re-capturing sources, then commit the diff. |
-| `_recordings/drive_<line>_<diagram>_<TS>.jsonl` | **Blackbox / drive recorder log** — one file per AutoDriver lifetime. Line 0 is `_type: "meta"` (route/diagram/dest/stops); subsequent lines are `_type: "sample"` (one OCR cycle each). Written inside `auto_input.py`'s capture loop with per-line `flush()` for crash safety. Local-only / gitignored. Schema is locked — downstream plot generator depends on the layout. |
+| `_recordings/drive_<line>_<diagram>_<TS>.jsonl` | **Blackbox / drive recorder log** — one file per AutoDriver lifetime. Line 0 is `_type: "meta"` (route/diagram/dest/stops); subsequent lines mix `_type: "event"` (badge transitions: arrival / departure / passing_start / passing_end) and `_type: "sample"` (one OCR cycle, ~5s, all OCR fields + sim state including `at_station` / `cnt_pa_at_station` / `at_station_observed` / `inferred_state` / `segment_start_stop`). Written inside `auto_input.py`'s capture loop with per-line `flush()` for crash safety. Local-only / gitignored. Field additions are backward-compatible (plot_drive ignores unknowns); field removals or renames require coordinated update with `plot_drive.py`. |
 | `_experiments/live_captures/` | Saved HUD crops from prior live testing (gitignored — `_experiments/` itself is now an artifact-only folder; OCR + layout modules promoted to root) |
 | `fonts/ShinGoPr6N-Medium.otf` | Latin + CJK font used by debug panel for station names |
 

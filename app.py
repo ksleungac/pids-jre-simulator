@@ -227,6 +227,10 @@ class PASimulator:
         # log to render an HTML drive report from.
         self.drive_log_path: Optional[Path] = None
 
+        # Reference to the AutoDriver instance, stashed by main.py so the debug-
+        # panel click handler can toggle pause/resume. None when auto_input=False.
+        self.auto_driver: Optional[Any] = None
+
     def _load_route_data(self) -> None:
         """Load route.json configuration via the route_loader module.
 
@@ -455,7 +459,13 @@ class PASimulator:
         through the same code path. See AUTO_INPUT.md.
         """
         try:
-            if keyboard.is_pressed("page down") or self.pending_next_pa:
+            # Gate consumption on audio: `_next_pa` no-ops while a PA is mid-play
+            # (PA-blocks-PA, line 599). Without this gate, an auto-fire's
+            # single-shot `pending_next_pa` would be reset before _next_pa got a
+            # chance to act — silently dropping the at-station press if the long
+            # まもなく PA was still playing. Held-key manual press self-retries
+            # via the next frame; pending_next_pa needs the same retry behavior.
+            if (keyboard.is_pressed("page down") or self.pending_next_pa) and not self.audio.is_pa_playing():
                 self.pending_next_pa = False
                 self._next_pa()
                 pygame.time.wait(KEY_REPEAT_DELAY)

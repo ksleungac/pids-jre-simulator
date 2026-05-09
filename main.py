@@ -124,6 +124,7 @@ def main():
             from auto_input import AutoDriver
 
             driver = AutoDriver(sim, lead_m=config.get("lead_m", 900), interval_s=config.get("interval_s", 5))
+            sim.auto_driver = driver  # exposes pause toggle to debug-panel click handler
             driver.start()
         sim.run()
     except Exception as e:

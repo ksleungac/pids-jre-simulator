@@ -57,17 +57,32 @@ DEFAULT_LEAD_M = 900
 class Layer3State:
     """Canonical names for AutoDriver's inferred view of the IRL game state.
 
-    See AUTO_INPUT.md § "Layer 3 — AutoDriver's inferred game state" for the
-    full inference truth table. Values are bare strings so they round-trip
-    cleanly through the status dict and JSONL drive log.
+    Renamed 2026-05-09 from trigger-fire-shape names (STOPPING_FRESH,
+    APPROACHING_BEFORE_DEP, etc.) to verb-form transit vocabulary. The new
+    names describe what the train is *doing*, not which detector flag has
+    flipped. See AUTO_INPUT.md § "Layer 3 — AutoDriver's inferred game state"
+    for the full inference truth table.
     """
 
-    STOPPING_FRESH = "STOPPING_FRESH"
-    STOPPING_AFTER_ARR = "STOPPING_AFTER_ARR"
-    APPROACHING_BEFORE_DEP = "APPROACHING_BEFORE_DEP"
-    APPROACHING_AFTER_DEP = "APPROACHING_AFTER_DEP"
-    MOVING_AFTER_ARR = "MOVING_AFTER_ARR"
+    IDLE = "IDLE"  # parked at start, no movement yet
+    STOPPED = "STOPPED"  # parked at platform after arrival
+    DEPARTING = "DEPARTING"  # rolling out, speed not yet >30 km/h
+    CRUISING = "CRUISING"  # at full speed between stops
+    ARRIVING = "ARRIVING"  # dist <900m, decelerating into platform
     UNKNOWN = "UNKNOWN"
+
+
+# Plain-English panel labels — wire and panel names line up 1:1 after the
+# 2026-05-09 rename, so this map is essentially title-case identity. Kept as
+# a discrete map so future divergence (i18n, customization) has a hook.
+_LAYER3_HUMAN = {
+    Layer3State.IDLE: "Idle",
+    Layer3State.STOPPED: "Stopped",
+    Layer3State.DEPARTING: "Departing",
+    Layer3State.CRUISING: "Cruising",
+    Layer3State.ARRIVING: "Arriving",
+    Layer3State.UNKNOWN: "—",
+}
 
 
 # ─────────────────────────── drive recorder (blackbox) ────────────────────────
@@ -278,22 +293,84 @@ def _blit_text(surf: pygame.Surface, font: pygame.font.Font, text: str, pos: tup
 # ── Click-through-state for the in-panel buttons. Recomputed each draw call,
 # read by `handle_panel_click()` when the simulator forwards a MOUSEBUTTONDOWN.
 _report_button_rect: Optional[pygame.Rect] = None
+_pause_button_rect: Optional[pygame.Rect] = None
+
+# Top-left button strip. Horizontal pill shape — icon left, label right, width
+# auto-fits the label so longer labels don't overflow. Pills are short enough
+# (32px) that only line 1 of the panel content sits beside them; lines 2-3
+# reclaim full panel width below.
+_BTN_X0 = 8
+_BTN_Y0 = 4
+_BTN_HEIGHT = 32
+_BTN_GAP = 6
+
+# Smaller font dedicated to button labels.
+_button_font: Optional[pygame.font.Font] = None
 
 
-def _draw_report_button(surface: pygame.Surface, font: pygame.font.Font) -> None:
-    """Top-right pill-style button. Click triggers HTML drive-report rendering."""
+def _get_button_font() -> pygame.font.Font:
+    global _button_font
+    if _button_font is None:
+        _button_font = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 12)
+    return _button_font
+
+
+def _draw_pill_button(
+    surface: pygame.Surface,
+    x: int,
+    y: int,
+    color: tuple[int, int, int],
+    icon_kind: str,
+    label: str,
+    paused: bool = False,
+) -> pygame.Rect:
+    """Horizontal pill: rounded ends, icon on the left, label on the right.
+    Width sized to fit the label. `icon_kind` ∈ {"pause", "report"}; for "pause",
+    `paused=True` swaps to a play triangle."""
+    label_font = _get_button_font()
+    label_surf = label_font.render(label, True, _TEXT_WHITE)
+    icon_w = 16
+    pad_x = 12
+    icon_label_gap = 8
+    btn_w = pad_x + icon_w + icon_label_gap + label_surf.get_width() + pad_x
+    rect = pygame.Rect(x, y, btn_w, _BTN_HEIGHT)
+    pygame.draw.rect(surface, color, rect, border_radius=_BTN_HEIGHT // 2)
+
+    icon_cx = x + pad_x + icon_w // 2
+    cy = y + _BTN_HEIGHT // 2
+    if icon_kind == "pause":
+        if paused:
+            tri = [(icon_cx - 5, cy - 8), (icon_cx - 5, cy + 8), (icon_cx + 7, cy)]
+            pygame.draw.polygon(surface, _TEXT_WHITE, tri)
+        else:
+            bar_w, bar_h = 4, 14
+            pygame.draw.rect(surface, _TEXT_WHITE, (icon_cx - 5, cy - bar_h // 2, bar_w, bar_h))
+            pygame.draw.rect(surface, _TEXT_WHITE, (icon_cx + 1, cy - bar_h // 2, bar_w, bar_h))
+    elif icon_kind == "report":
+        pygame.draw.line(surface, _TEXT_WHITE, (icon_cx, cy - 7), (icon_cx, cy + 2), 3)
+        head = [(icon_cx - 5, cy - 1), (icon_cx + 5, cy - 1), (icon_cx, cy + 7)]
+        pygame.draw.polygon(surface, _TEXT_WHITE, head)
+
+    label_x = x + pad_x + icon_w + icon_label_gap
+    label_y = cy - label_surf.get_height() // 2
+    surface.blit(label_surf, (label_x, label_y))
+    return rect
+
+
+def _draw_pause_button(surface: pygame.Surface, paused: bool) -> pygame.Rect:
+    """Top-left pill with icon + label. Orange when paused, slate when running."""
+    global _pause_button_rect
+    color = (180, 100, 50) if paused else (80, 100, 120)
+    label = "Resume" if paused else "Pause"
+    _pause_button_rect = _draw_pill_button(surface, _BTN_X0, _BTN_Y0, color, "pause", label, paused=paused)
+    return _pause_button_rect
+
+
+def _draw_report_button(surface: pygame.Surface, x: int) -> pygame.Rect:
+    """Pill button drawn to the right of Pause. Renders the drive's speed-curve HTML report."""
     global _report_button_rect
-    label = "Report ↓"
-    text = font.render(label, True, _TEXT_WHITE)
-    pad_x, pad_y = 12, 4
-    btn_w = text.get_width() + 2 * pad_x
-    btn_h = text.get_height() + 2 * pad_y
-    btn_x = surface.get_width() - btn_w - 8
-    btn_y = 4
-    btn_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
-    pygame.draw.rect(surface, (52, 116, 145), btn_rect, border_radius=btn_h // 2)
-    surface.blit(text, (btn_x + pad_x, btn_y + pad_y))
-    _report_button_rect = btn_rect
+    _report_button_rect = _draw_pill_button(surface, x, _BTN_Y0, (52, 116, 145), "report", "Save Speed Curve")
+    return _report_button_rect
 
 
 def _render_report_async(log_path: Path) -> None:
@@ -319,17 +396,22 @@ def handle_panel_click(sim, pos: tuple[int, int]) -> bool:
     """Dispatch a MOUSEBUTTONDOWN that landed inside the debug panel.
 
     Returns True if a button absorbed the click (caller can stop propagating).
-    Today we only have one button (the Report download); easy to extend.
     """
-    if _report_button_rect is None or not _report_button_rect.collidepoint(pos):
-        return False
-    log_path = getattr(sim, "drive_log_path", None)
-    if log_path is None:
-        print("[Drive recorder] No drive log open yet — wait for the AutoDriver to capture some samples.")
+    if _pause_button_rect is not None and _pause_button_rect.collidepoint(pos):
+        driver = getattr(sim, "auto_driver", None)
+        if driver is not None:
+            driver.paused = not driver.paused
+            print(f"[AutoDriver] {'paused' if driver.paused else 'resumed'} via panel button")
         return True
-    print(f"[Drive recorder] Generating report from {log_path.name} ...")
-    threading.Thread(target=_render_report_async, args=(log_path,), daemon=True).start()
-    return True
+    if _report_button_rect is not None and _report_button_rect.collidepoint(pos):
+        log_path = getattr(sim, "drive_log_path", None)
+        if log_path is None:
+            print("[Drive recorder] No drive log open yet — wait for the AutoDriver to capture some samples.")
+            return True
+        print(f"[Drive recorder] Generating report from {log_path.name} ...")
+        threading.Thread(target=_render_report_async, args=(log_path,), daemon=True).start()
+        return True
+    return False
 
 
 def draw_debug_panel(surface: pygame.Surface, status: dict, sim_state, stops: list) -> None:
@@ -347,29 +429,51 @@ def draw_debug_panel(surface: pygame.Surface, status: dict, sim_state, stops: li
     """
     font = _get_panel_font()
     surface.fill(_PANEL_BG)
+    paused = bool(status.get("paused", False))
 
-    # Always-on Report button (top-right). Drawn even before first capture
-    # so the user can find it; clicking before any samples just logs a hint.
-    _draw_report_button(surface, font)
+    # Always-on top-left button strip — Pause first, Report second. Pills size
+    # to fit their labels, so we render Pause first and place Report immediately
+    # to its right.
+    pause_rect = _draw_pause_button(surface, paused)
+    report_rect = _draw_report_button(surface, pause_rect.right + _BTN_GAP)
+    line1_x = report_rect.right + 14
 
-    if not status:
-        _blit_text(surface, font, "[AUTO-INPUT]  waiting for first capture...", (8, 6), _TEXT_GRAY)
+    # 3-row layout. Line 1 sits beside the buttons (matching their vertical
+    # center); lines 2-3 reclaim full panel width below the 32px button strip.
+    y1, y2, y3 = 12, 40, 60
+
+    if not status or all(k == "paused" for k in status):
+        _blit_text(surface, font, "Game Sync  ·  waiting for first capture...", (line1_x, y1), _TEXT_GRAY)
         return
 
     gap = 10  # px gap between chunks on the same line
 
-    # Line 1: header + badge state + diff
+    # Line 1: header + raw badge state + match-diff. Header tints orange when
+    # paused so the frozen-OCR state is unmistakable at a glance.
+    header_color = _COLOR_ORANGE if paused else _TEXT_WHITE
+    header_label = "Game Sync — PAUSED" if paused else "Game Sync"
     badge = status.get("badge")
     badge_diff = status.get("badge_diff")
     badge_str = badge if badge else "?"
-    x = 8
-    x = _blit_text(surface, font, "[AUTO-INPUT]", (x, 6), _TEXT_WHITE) + gap + 4
-    x = _blit_text(surface, font, "badge:", (x, 6), _TEXT_GRAY) + gap
-    x = _blit_text(surface, font, badge_str, (x, 6), _badge_color(badge_diff)) + gap
+    x = line1_x
+    x = _blit_text(surface, font, header_label, (x, y1), header_color) + gap + 4
+    x = _blit_text(surface, font, badge_str, (x, y1), _badge_color(badge_diff)) + gap
     if badge_diff is not None:
-        _blit_text(surface, font, f"(d={badge_diff:.1f})", (x, 6), _TEXT_GRAY)
+        x = _blit_text(surface, font, f"(d={badge_diff:.1f})", (x, y1), _TEXT_GRAY) + gap
 
-    # Line 2: speed + distance/offset + cnt_pa + Layer 2 observed-flags
+    # Auto-fire chip — visible for 3s after a successful fire so the user can
+    # confirm the auto-driver is acting. Skipped fires don't surface here (they
+    # only print to console); only successful pending_next_pa sets land here.
+    last_fire = status.get("last_fire")
+    if last_fire is not None and isinstance(last_fire, dict):
+        fire_age = time.time() - last_fire.get("ts", 0)
+        if fire_age < 3.0:
+            chip_label = f"  ●  Auto-fired: {last_fire.get('type', '?')}"
+            _blit_text(surface, font, chip_label, (x, y1), _COLOR_GREEN)
+
+    # Line 2: OCR readings — speed, limit, distance, stopping position (split
+    # into independent fields so the user can see both the in-transit distance
+    # and the platform-arrival offset, even when only one is currently populated).
     s_val = status.get("speed")
     s_score = status.get("speed_score")
     d_val = status.get("distance")
@@ -378,50 +482,54 @@ def draw_debug_panel(surface: pygame.Surface, status: dict, sim_state, stops: li
     offset_score = status.get("stopping_offset_score")
     sl_val = status.get("speed_limit")
     sl_score = status.get("speed_limit_score")
-    y2 = 28
+    # Line 2 sits below the button strip — full panel width available.
     x = 8
-    x = _blit_text(surface, font, "spd:", (x, y2), _TEXT_GRAY) + gap
+    x = _blit_text(surface, font, "speed:", (x, y2), _TEXT_GRAY) + 6
     spd_str = f"{s_val:>3} km/h" if s_val is not None else " -- km/h"
-    x = _blit_text(surface, font, spd_str, (x, y2), _conf_color(s_score if s_val is not None else None)) + gap + 6
-    # Cell-content priority: cm reading wins (only shows briefly after arrival, then
-    # the cell swaps back to m-distance to next station even while parked at platform).
-    # Fall through to m otherwise.
-    if offset_val is not None:
-        x = _blit_text(surface, font, "off:", (x, y2), _TEXT_GRAY) + gap
-        x = _blit_text(surface, font, f"{offset_val:+d}cm", (x, y2), _conf_color(offset_score)) + gap + 6
-    else:
-        x = _blit_text(surface, font, "dst:", (x, y2), _TEXT_GRAY) + gap
-        dst_str = f"{d_val:>5}m" if d_val is not None else "  ---m"
-        x = _blit_text(surface, font, dst_str, (x, y2), _conf_color(d_score if d_val is not None else None)) + gap + 6
-    # Speed limit (line-dependent, often empty — only show when present).
+    x = _blit_text(surface, font, spd_str, (x, y2), _conf_color(s_score if s_val is not None else None)) + gap
     if sl_val is not None:
-        x = _blit_text(surface, font, "lim:", (x, y2), _TEXT_GRAY) + gap
-        x = _blit_text(surface, font, f"{sl_val} km/h", (x, y2), _conf_color(sl_score)) + gap + 6
-    x = _blit_text(surface, font, f"cnt_pa={sim_state.cnt_pa}", (x, y2), _TEXT_GRAY) + gap + 6
-    dep_obs = bool(status.get("departure_observed"))
-    arr_obs = bool(status.get("arrival_observed"))
-    atstn_obs = bool(status.get("at_station_observed"))
-    x = _blit_text(surface, font, "dep✓" if dep_obs else "dep·", (x, y2), _TEXT_WHITE if dep_obs else _TEXT_GRAY) + gap
-    x = _blit_text(surface, font, "arr✓" if arr_obs else "arr·", (x, y2), _TEXT_WHITE if arr_obs else _TEXT_GRAY) + gap
-    _blit_text(surface, font, "atstn✓" if atstn_obs else "atstn·", (x, y2), _TEXT_WHITE if atstn_obs else _TEXT_GRAY)
+        x = _blit_text(surface, font, "limit:", (x, y2), _TEXT_GRAY) + 6
+        x = _blit_text(surface, font, f"{sl_val} km/h", (x, y2), _conf_color(sl_score)) + gap
+    x = _blit_text(surface, font, "distance:", (x, y2), _TEXT_GRAY) + 6
+    if d_val is not None:
+        x = _blit_text(surface, font, f"{d_val:>5}m", (x, y2), _conf_color(d_score)) + gap
+    else:
+        x = _blit_text(surface, font, "  -- m", (x, y2), _TEXT_GRAY) + gap
+    # Stopping position only renders when a reading is present (the cell
+    # briefly populates after arrival). Brightness-pulse flash when shown so it
+    # pops against the steady-state fields; nothing rendered otherwise.
+    if offset_val is not None:
+        x = _blit_text(surface, font, "stopping position:", (x, y2), _TEXT_GRAY) + 6
+        flash_on = (pygame.time.get_ticks() // 350) % 2 == 0
+        r, g, b = _conf_color(offset_score)
+        offset_color: tuple[int, int, int] = (r, g, b) if flash_on else (int(r * 0.4), int(g * 0.4), int(b * 0.4))
+        _blit_text(surface, font, f"{offset_val:+d} cm", (x, y2), offset_color)
 
-    # Line 3: App-layer position description + Layer 3 inferred game state.
+    # Line 3: train state phrase + announcements played. State word leads (plain
+    # English from _LAYER3_HUMAN); station name or segment is the detail.
+    # Detector observation flags are intentionally NOT shown — the state word
+    # already implies them (e.g. "Approaching" means departure was observed),
+    # and they're available in the JSONL log for debugging.
     inferred = status.get("inferred_state", Layer3State.UNKNOWN)
-    inferred_suffix = f"  ·  game: {inferred}"
+    state_word = _LAYER3_HUMAN.get(inferred, "—")
     seg_start = status.get("segment_start_stop")
-    y3 = 50
     if badge == "STOPPED" and 0 <= sim_state.curr_stop < len(stops):
-        cur = stops[sim_state.curr_stop].get("name", "?")
-        _blit_text(surface, font, f"app: stopped at {cur}{inferred_suffix}", (8, y3), _TEXT_WHITE)
+        location = stops[sim_state.curr_stop].get("name", "?")
+        line3 = f"{location}  ·  {state_word}"
     elif seg_start is not None and 0 <= seg_start < len(stops) and 0 <= sim_state.curr_stop < len(stops):
         from_name = stops[seg_start].get("name", "?")
         to_name = stops[sim_state.curr_stop].get("name", "?")
-        passing = "  (passing through — arrival skipped)" if badge == "PASSING" else ""
-        _blit_text(
-            surface, font, f"app: between {from_name} -> {to_name}  (curr_stop={sim_state.curr_stop}){passing}{inferred_suffix}", (8, y3), _TEXT_WHITE
-        )
+        passing = "  (passing through)" if badge == "PASSING" else ""
+        line3 = f"{from_name} → {to_name}  ·  {state_word}{passing}"
     else:
-        _blit_text(surface, font, f"app: curr_stop={sim_state.curr_stop}{inferred_suffix}", (8, y3), _TEXT_GRAY)
+        line3 = state_word
+    # Played count: cnt_pa is 0-indexed and post-play (cnt_pa=0 means pa[0] has
+    # been played). Displayed value is `cnt_pa+1` of total available PAs at this
+    # stop. Start station (no pa) shows "—".
+    pa_total = len(stops[sim_state.curr_stop].get("pa", [])) if 0 <= sim_state.curr_stop < len(stops) else 0
+    played_str = f"{sim_state.cnt_pa + 1}/{pa_total}" if pa_total > 0 else "—"
+    line3 += f"  ·  Played: {played_str}"
+    _blit_text(surface, font, line3, (8, y3), _TEXT_WHITE)
 
 
 # ─────────────────────────── auto-input driver ────────────────────────────
@@ -481,13 +589,13 @@ class _Detector:
         if badge is None:
             return Layer3State.UNKNOWN
         if badge == "STOPPED":
-            return Layer3State.STOPPING_AFTER_ARR if self.arrival_observed else Layer3State.STOPPING_FRESH
+            return Layer3State.STOPPED if self.arrival_observed else Layer3State.IDLE
         # MOVING or PASSING
         if self.arrival_observed:
-            return Layer3State.MOVING_AFTER_ARR
+            return Layer3State.ARRIVING
         if self.departure_observed:
-            return Layer3State.APPROACHING_AFTER_DEP
-        return Layer3State.APPROACHING_BEFORE_DEP
+            return Layer3State.CRUISING
+        return Layer3State.DEPARTING
 
     def update(self, distance: Optional[int], speed: Optional[int], badge: Optional[str]) -> list[str]:
         events: list[str] = []
@@ -567,12 +675,22 @@ class AutoDriver:
     sim: "PASimulator"
     lead_m: int = DEFAULT_LEAD_M
     interval_s: int = SAMPLE_INTERVAL_S
+    # Toggled by the debug-panel "Pause" button. While True, the capture loop
+    # skips frame.grab() / OCR / detector.update() and only updates the panel
+    # status flag — last OCR readings stay frozen on screen so the user can
+    # inspect them without the live stream overwriting.
+    paused: bool = False
 
     # Internal state — set by _run on thread start
     _detector: _Detector = field(init=False)
     _stop_event: threading.Event = field(default_factory=threading.Event, init=False)
     _thread: Optional[threading.Thread] = field(default=None, init=False)
     _segment_start_stop: int = field(default=-1, init=False)
+    # Most recent successful auto-fire — surfaced on the debug panel as a
+    # transient chip so the user can verify the auto-driver is acting. Updated
+    # by _fire_departure / _fire_arrival / _fire_at_station on success only;
+    # skipped fires don't count.
+    _last_fire: Optional[dict] = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         self._detector = _Detector(arrival_lead_m=self.lead_m)
@@ -631,6 +749,12 @@ class AutoDriver:
         try:
             while not self._stop_event.is_set():
                 try:
+                    if self.paused:
+                        # Mark status so panel renders the indicator. Preserve last OCR
+                        # values — only the paused flag flips so the panel doesn't blank.
+                        self.sim.auto_input_status = {**self.sim.auto_input_status, "paused": True}
+                        self._stop_event.wait(self.interval_s)
+                        continue
                     frame = None
                     for _ in range(5):
                         frame = camera.grab()
@@ -680,6 +804,8 @@ class AutoDriver:
                         "at_station_observed": self._detector.at_station_observed,
                         "inferred_state": self._detector.inferred_state(),
                         "ts": sample_ts,
+                        "paused": False,
+                        "last_fire": self._last_fire,
                     }
 
                     if log_file is not None:
@@ -706,8 +832,11 @@ class AutoDriver:
                                 "badge_diff": b_diff,
                                 "curr_stop": self.sim.state.curr_stop,
                                 "cnt_pa": self.sim.state.cnt_pa,
+                                "cnt_pa_at_station": self.sim.state.cnt_pa_at_station,
+                                "at_station": self.sim.state.at_station,
                                 "departure_observed": self._detector.departure_observed,
                                 "arrival_observed": self._detector.arrival_observed,
+                                "at_station_observed": self._detector.at_station_observed,
                                 "inferred_state": self._detector.inferred_state(),
                                 "segment_start_stop": self._segment_start_stop,
                             },
@@ -784,18 +913,43 @@ class AutoDriver:
                 self.sim.state.cnt_pa_at_station = len(pa_at_st) - 1
                 print(f"          [AD] >>> Silent drain: dropped {dropped} unplayed pa_at_station entr{'y' if dropped == 1 else 'ies'}")
         self.sim.pending_next_pa = True
+        self._last_fire = {"ts": time.time(), "type": "departure"}
         print("          [AD] >>> FIRED departure (set pending_next_pa)")
+
+    def _expected_next_stop(self) -> int:
+        """First stopping-station index after segment_start_stop, or -1 if none.
+
+        "Stopping station" detected via `stop.get("time") is not None` — the
+        canonical DATA_FORMAT.md discriminator (passing stations have NO `time`
+        field). This matches `_build_stops_meta`'s `stops_here` test in this
+        same module. **Note:** the simulator's `_advance_to_next_stop` uses a
+        different test (`bool(pa) or bool(pa_at_station)`) that filters by
+        audio content rather than schedule presence — they agree for normal
+        routes but diverge on stopping stations with empty audio (e.g. start
+        station). Use `time` here because we want "where the train physically
+        stops," not "where audio plays."
+
+        Routes with passing-through stops between two stopping stops mean
+        curr_stop legitimately jumps past +1 (e.g. chuo Nakano(18) → Shinjuku(21)
+        skips 東中野(19) + 大久保(20)). The expected post-departure curr_stop
+        is the next stopping-station index, not segment_start_stop + 1.
+        """
+        for k in range(self._segment_start_stop + 1, len(self.sim.stops)):
+            if self.sim.stops[k].get("time") is not None:
+                return k
+        return -1
 
     def _fire_arrival(self) -> None:
         curr = self.sim.state.curr_stop
-        # After departure fired, curr_stop should be segment_start_stop + 1.
+        expected = self._expected_next_stop()
+        # After departure fired, curr_stop should be `expected`.
         # If it's still segment_start_stop, departure didn't fire — would be premature.
-        # If it's beyond, user already fired arrival or skipped to next stop.
+        # If it differs from expected, user manually advanced to the wrong stop.
         if curr <= self._segment_start_stop:
             print(f"          [AD] >>> SKIPPED arrival fire (departure not yet fired; sim at stop {curr})")
             return
-        if curr > self._segment_start_stop + 1:
-            print(f"          [AD] >>> SKIPPED arrival fire (sim advanced past expected; at stop {curr})")
+        if curr != expected:
+            print(f"          [AD] >>> SKIPPED arrival fire (sim at stop {curr}, expected {expected})")
             return
 
         target = self.sim.stops[curr] if curr < len(self.sim.stops) else None
@@ -814,6 +968,7 @@ class AutoDriver:
             return
 
         self.sim.pending_next_pa = True
+        self._last_fire = {"ts": time.time(), "type": "arrival"}
         print("          [AD] >>> FIRED arrival (set pending_next_pa)")
 
     def _fire_at_station(self) -> None:
@@ -825,13 +980,14 @@ class AutoDriver:
             print("          [AD] >>> SKIPPED at-station fire (sim already STOPPING)")
             return
         curr = self.sim.state.curr_stop
-        # Mirrors _fire_arrival's anchor — curr should be segment_start_stop+1
-        # by now (arrival fire moved sim there, or it was already there).
+        expected = self._expected_next_stop()
+        # Mirrors _fire_arrival's anchor — curr should be `expected` by now
+        # (arrival fire moved sim there, or it was already there).
         if curr <= self._segment_start_stop:
             print(f"          [AD] >>> SKIPPED at-station fire (sim still at segment_start={self._segment_start_stop}; arrival not advanced)")
             return
-        if curr > self._segment_start_stop + 1:
-            print(f"          [AD] >>> SKIPPED at-station fire (sim past expected stop; at {curr})")
+        if curr != expected:
+            print(f"          [AD] >>> SKIPPED at-station fire (sim at stop {curr}, expected {expected})")
             return
         target = self.sim.stops[curr] if curr < len(self.sim.stops) else None
         if target is None:
@@ -844,4 +1000,5 @@ class AutoDriver:
             print(f"          [AD] >>> SKIPPED at-station fire (cnt_pa={self.sim.state.cnt_pa}, expected={len(pa) - 1}; arrival likely missed)")
             return
         self.sim.pending_next_pa = True
+        self._last_fire = {"ts": time.time(), "type": "at-station"}
         print("          [AD] >>> FIRED at-station (set pending_next_pa)")

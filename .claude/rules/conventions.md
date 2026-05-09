@@ -63,7 +63,7 @@ Some domain docs (`AUTO_INPUT.md`, `DISPLAY.md`) define canonical names + notati
 - **AutoDriver state vocabulary.** Use the Layer 1/2/3 names defined in [AUTO_INPUT.md](../../AUTO_INPUT.md):
   - **Layer 1 (app sub-states):** `STOPPING` / `APPROACHING_EARLY` / `APPROACHING_FINAL`
   - **Layer 2 (OCR badge reads):** `STOPPED` / `MOVING` / `PASSING` / `UNKNOWN`
-  - **Layer 3 (inferred game state):** `STOPPING_FRESH` / `STOPPING_AFTER_ARR` / `APPROACHING_BEFORE_DEP` / `APPROACHING_AFTER_DEP` / `MOVING_AFTER_ARR` / `UNKNOWN`
+  - **Layer 3 (inferred game state):** `IDLE` / `STOPPED` / `DEPARTING` / `CRUISING` / `ARRIVING` / `UNKNOWN` (renamed 2026-05-09 from `STOPPING_FRESH` / `STOPPING_AFTER_ARR` / `APPROACHING_BEFORE_DEP` / `APPROACHING_AFTER_DEP` / `MOVING_AFTER_ARR`)
 
   **Notation:** prefer arrow flow (`prev → curr`) over tables when describing transitions. Tables only when ≥3 dimensions matter at once.
 
