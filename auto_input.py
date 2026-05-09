@@ -91,6 +91,26 @@ from app_paths import project_root
 
 RECORDINGS_DIR = project_root() / "_recordings"
 
+# Speed-limit OCR misread debug dump. When a grammar-valid speed_limit read scores
+# below this threshold, the source cell is saved as a PNG under the dump dir for
+# offline calibration. Local-only (parent _ocr_calibration/ is gitignored).
+SUSPICIOUS_SPEED_LIMIT_SCORE = 0.75
+MISREAD_DUMP_DIR = project_root() / "_ocr_calibration" / "_misread_dumps"
+
+
+def _dump_misread_speed_limit_cell(cell: np.ndarray, sl_val: int, sl_score: float, ts: float) -> None:
+    """Save a low-confidence speed-limit cell crop as PNG for offline calibration.
+    Filename encodes ts (millisecond int, matches JSONL ts*1000), score, and the
+    misread value. Failures are logged but do not raise — debug-only."""
+    try:
+        MISREAD_DUMP_DIR.mkdir(parents=True, exist_ok=True)
+        h, w, _ = cell.shape
+        surf = pygame.image.frombuffer(cell.tobytes(), (w, h), "RGB")
+        path = MISREAD_DUMP_DIR / f"sl_{int(ts * 1000)}_score{int(sl_score * 100)}_read{sl_val}.png"
+        pygame.image.save(surf, str(path))
+    except Exception as e:
+        print(f"[AutoDriver] misread cell dump failed: {e}")
+
 
 def _build_stops_meta(sim) -> list[dict]:
     """Per-stop dicts for the meta line. Self-contained — plot tool doesn't need
@@ -411,7 +431,9 @@ def _crop_cell(frame_bgra: np.ndarray, hud_bbox: tuple[int, int, int, int], cell
     """Crop a HUD cell from a BGRA frame as RGB numpy array. Pure-numpy, thread-safe.
 
     Used instead of pygame.image.frombuffer + Surface.blit so we don't touch pygame
-    state from the background thread (the simulator owns the display thread).
+    DISPLAY state from the background thread (the simulator owns the display thread).
+    Display-independent pygame.image calls (frombuffer + image.save with no display
+    init dependency) are safe from this thread and are used by the misread dump hook.
     """
     hx, hy, _, _ = hud_bbox
     vx, vy, vw, vh = cell_bbox
@@ -636,6 +658,8 @@ class AutoDriver:
                     # Speed limit (最高速度): line-dependent, often empty. None is normal.
                     sl_val, _, sl_score = read_speed_limit(sl_cell, templates)
                     sample_ts = time.time()
+                    if sl_val is not None and sl_score < SUSPICIOUS_SPEED_LIMIT_SCORE:
+                        _dump_misread_speed_limit_cell(sl_cell, sl_val, sl_score, sample_ts)
 
                     # Publish status to the simulator's debug panel (atomic dict swap).
                     # Single-writer (this thread), single-reader (main thread) — no lock needed.

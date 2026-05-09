@@ -56,15 +56,16 @@ KNOWN_VALUES: dict[str, str] = {
 # alone don't reliably match the bolder red font (8→4 / 6→4 confusion); dedicated
 # red templates close the gap.
 KNOWN_LIMIT_VALUES: dict[str, str] = {
-    "speed_limit_75": "75",
     "limit_30": "30",
     "limit_35": "35",
     "limit_45": "45",
     "limit_55": "55",
-    "limit 65": "65",
+    "limit_65": "65",
+    "limit_75": "75",
     "limit_80": "80",
     "limit_85": "85",
     "limit_90": "90",
+    "limit_100": "100",
     "limit_110": "110",
     "limit_120": "120",
 }

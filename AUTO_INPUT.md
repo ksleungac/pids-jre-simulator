@@ -375,9 +375,14 @@ The reader uses `(R - max(G,B)) > RED_TEXT_DELTA` as the color mask — the dark
     where N = round(width / 18). Ignores column density entirely. Robust to
     cases where `0`-shaped digits' natural hollows look deeper than the actual
     digit boundary (limit_100's `0+0` merged blob).
-  `read_speed_limit` runs `argmin` first; if grammar validation rejects the
-  result, it retries with `equal_width`. First-valid-wins so equal-width's
-  occasional confidently-wrong reads can't override argmin's correct ones.
+  `read_speed_limit` runs `argmin` first; if grammar-valid AND
+  `min_score >= ARGMIN_TRUST_SCORE` (0.85, in `ocr.py`), return immediately.
+  Otherwise — argmin grammar-invalid OR low-confidence valid — also run
+  `equal_width` and prefer its grammar-valid result. Threshold gates against
+  argmin's `0+0` misread mode where the split lands inside a digit hollow and
+  produces a confident-but-wrong grammar-valid read; equal_width's symmetric
+  split repairs it (calibrated against 31-frame `100` corpus — low band
+  0.65-0.66, high band 0.92+).
 - **Stroke-weight mismatch** — the red font is bolder than the dark-text font
   the original digit templates were extracted from, so dark templates alone
   consistently mismatch certain digit pairs (8 / 6 misread as 4). Two-tier
@@ -395,6 +400,16 @@ The reader uses `(R - max(G,B)) > RED_TEXT_DELTA` as the color mask — the dark
   single-digit corruptions (90 sometimes read as 1), and any future misclassification
   mode that produces a non-grammar value. Better to return `None` and miss a frame
   than write a wrong value to the JSONL.
+
+**Debugging misreads.** Live-frame OCR misreads don't round-trip cleanly through
+the pipeline: the dxcam BGRA frame and a `pygame.image.save`'d PNG of the same
+instant can produce different `segment_red_digits` bboxes via sub-pixel
+column-density variance. A live `100`→`110` misread may replay to `100`→`160` on
+the saved PNG (grammar-fail → equal_width fallback → correct), masking the
+original mode. To collect a usable corpus, AutoDriver dumps `sl_cell` to
+`_ocr_calibration/_misread_dumps/sl_<ts_ms>_score<NN>_read<NNN>.png` whenever a
+grammar-valid `speed_limit` read scores below `SUSPICIOUS_SPEED_LIMIT_SCORE`
+(0.75, in `auto_input.py`); `ts_ms = int(ts * 1000)` matches the JSONL row.
 
 ## Badge classification (state cell)
 

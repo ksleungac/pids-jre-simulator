@@ -440,6 +440,11 @@ VALID_SPEED_LIMITS: frozenset[int] = frozenset(range(25, 131, 5))
 
 _TYPICAL_RED_DIGIT_WIDTH = 18  # avg width of a red-text digit; used by the equal-width split strategy fallback
 
+# Score threshold below which a grammar-valid argmin read is distrusted and equal_width
+# is also tried. Calibrated on 31-frame chuo `100` corpus: low-confidence band is
+# 0.65-0.66 (always wrong-or-uncertain), high-confidence band is 0.92+ (always correct).
+ARGMIN_TRUST_SCORE = 0.85
+
 
 def segment_red_digits(cell: np.ndarray, split_strategy: str = "argmin") -> tuple[np.ndarray, list[tuple[int, int, int, int]]]:
     """Color-mask + segment + glued-digit split + shape filter for the red speed-limit cell.
@@ -597,11 +602,16 @@ def read_speed_limit(cell: np.ndarray, templates: Templates) -> tuple[int | None
     per glyph — red templates dominate for covered digits, dilated dark covers any
     gaps.
 
-    Two-try splitter: the segmenter is run with strategy="argmin" first; if grammar
-    validation rejects the result (out-of-set value, invalid increment), the segmenter
-    is re-run with strategy="equal_width" and the pipeline retries. Equal-width
-    splitting is the fallback for cases where argmin valleys land inside `0`-shaped
-    digits' hollows (e.g. limit_100's `0+0` merged blob).
+    Score-gated two-try splitter: argmin runs first. If grammar-valid AND
+    min_score >= ARGMIN_TRUST_SCORE, return immediately. Otherwise also try
+    equal_width and prefer its grammar-valid result. Closes the limit_100 misread
+    mode where argmin's `0+0` split lands asymmetrically inside a digit's hollow,
+    producing low-confidence wrong reads (live capture saw `110` @ 0.65; saved-PNG
+    replay sees `160` @ 0.66 — both repaired by equal_width's symmetric split
+    returning `100` @ 0.92). Cases without a merged blob (e.g. real limit_110 has
+    three separate bboxes) clear the threshold via argmin alone, or — if rendering
+    variance dips score below threshold — produce identical bboxes between
+    strategies, so the fallback agrees rather than breaking a clean read.
 
     Boundary refinement: for any consecutive pair of bboxes that touch (came from a
     glued-digit split in `segment_red_digits`), the split column is locally re-searched
@@ -620,23 +630,26 @@ def read_speed_limit(cell: np.ndarray, templates: Templates) -> tuple[int | None
     red_t = _get_red_digit_templates()
     dilated_t = _get_dilated_dark_templates(templates)
 
-    # First-valid-wins semantics: argmin is the precise default — try it first; if its
-    # read is grammar-valid, return immediately. Equal-width is a fallback for cases
-    # where argmin's column-density valleys land inside `0`-shaped digits' hollows.
-    # Equal-width on a cleanly-segmenting case (e.g. limit_110) produces a confidently-
-    # scored but WRONG value (the equal-N split divides three digits into two), so we
-    # never let it override an argmin-valid read by score.
-    fallback_raw, fallback_score = "", 1.0
-    for strategy in ("argmin", "equal_width"):
-        attempt = _try_read_speed_limit(cell, strategy, red_t, dilated_t)
-        if attempt is None:
-            continue
-        value, raw, min_score = attempt
-        if value is not None:
-            return value, raw, min_score
-        if strategy == "argmin":
-            fallback_raw, fallback_score = raw, min_score
-    return None, fallback_raw, fallback_score
+    argmin_attempt = _try_read_speed_limit(cell, "argmin", red_t, dilated_t)
+    if argmin_attempt is not None:
+        a_val, a_raw, a_score = argmin_attempt
+        if a_val is not None and a_score >= ARGMIN_TRUST_SCORE:
+            return a_val, a_raw, a_score
+
+    eqw_attempt = _try_read_speed_limit(cell, "equal_width", red_t, dilated_t)
+    if eqw_attempt is not None:
+        e_val, e_raw, e_score = eqw_attempt
+        if e_val is not None:
+            return e_val, e_raw, e_score
+
+    # Neither path produced a confident grammar-valid read. Prefer argmin's grammar-
+    # valid (low-score) result over its raw fallback; fall through to equal_width's
+    # raw read if argmin couldn't segment at all.
+    if argmin_attempt is not None:
+        return argmin_attempt
+    if eqw_attempt is not None:
+        return eqw_attempt
+    return None, "", 1.0
 
 
 def _try_read_speed_limit(
