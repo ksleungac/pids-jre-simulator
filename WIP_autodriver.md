@@ -74,8 +74,12 @@ AutoDriver tracks last-known `curr_stop`. If it differs from current and the cha
 - **2026-04-26 evening (Phase 2)**: speed OCR (decimal-place stripping, gap tuning); badge classifier (4-anchor pixel-diff); event state machine with per-segment observed-flags; validated against multi-station live drive (2 segments, all transitions detected correctly).
 - **2026-04-26 late evening (Phase 3)**: speed OCR robustness — decimal-point detection (replaces gap heuristic for boundary), gap relaxation for narrow-digit kerning; validated on 17 live frames spanning 0–120+ km/h.
 - **2026-04-27 (Phase 4)**: PASSING badge added (rapid-service "Pass" / "通過" blue pentagon); classifier expanded from 4 to 6 anchors. Arrival logic switched from downward-crossing to level test gated on `badge==MOVING` so post-PASSING under-threshold cases fire correctly. OCR + layout modules promoted from `_experiments/` to project root. Auto-input toggle + Lead/Interval steppers moved from CLI flags to setup screen. Offline OCR validation 6/6 PASS; detector scenarios cover normal segment, mid-segment PASSING, post-PASSING already-under-threshold, double-fire prevention, STOPPED gate.
-- **2026-04-27 evening**: live-validated 1b (separate-process, `_dev_scripts/capture_game.py`) on Keihin-Tōhoku 727B Omiya→Kanda full route — flawless. 1a (in-process) feature-complete + compiles cleanly but **not yet live-validated**.
-- **2026-04-29**: Layer 2 cache rename `*_fired` → `*_observed`; `_Detector.inferred_state()` accessor extracted; `inferred_state` surfaced in status dict + JSONL drive log + debug panel. Layer 3 vocabulary (canonical names + truth table) now mirrored between code and AUTO_INPUT.md.
+- **2026-04-27 evening (1b live)**: 1b (separate-process, `_dev_scripts/capture_game.py`) on Keihin-Tōhoku 727B Omiya→Kanda full route — flawless.
+- **2026-04-27 evening (1a live)**: 1a (in-process) live-validated on Keiyo 780Y_1510Y 蘇我→東京 (765 samples). Surfaced detector bug — `STOPPED→PASSING` didn't reset flags; PA fires suppressed on Keiyo's 千葉みなと→稲毛海岸 PASSING-through-freight-terminal leg. Fixed in commit `8ac2b67` (symmetric reset on `STOPPED→(MOVING|PASSING)`).
+- **2026-04-28**: STOPPING badge-state hook landed — display + state-machine (`b9fe153`); autodriver `_fire_at_station` via `pending_next_pa` reuse (`8ef2eba`). Drive-recorder JSONL streaming logger (`5039d24`); Report button + plot generator HTML (`5e86d25`).
+- **2026-04-29**: Layer 2 cache rename `*_fired` → `*_observed`; `_Detector.inferred_state()` accessor extracted; `inferred_state` surfaced in status dict + JSONL drive log + debug panel.
+- **2026-05-08**: cross-attribute hardening (`7fa9242`) — black-screen guard (`prev_badge=STOPPED + speed=0|None` forces `badge=None`), cm stopping-offset reader, speed-limit reader (red-digit OCR). Silent `pa_at_station` drain at FIRE_DEPARTURE (`b95e7b1`).
+- **2026-05-09**: Layer 3 vocabulary renamed (`STOPPING_FRESH / STOPPING_AFTER_ARR / APPROACHING_BEFORE_DEP / APPROACHING_AFTER_DEP / MOVING_AFTER_ARR` → `IDLE / STOPPED / DEPARTING / CRUISING / ARRIVING`) per commit `0190983`; debug-panel redesign same commit. Single-shot signal-flag consumption fix in `app.py` — gate `pending_next_pa` reset on `not is_pa_playing()` so at-station auto-fire isn't dropped when arrival PA still playing (see [critical_lessons.md § "Single-shot signal flags"](.claude/rules/critical_lessons.md)).
 
 ## Calibration insights (rationale / guardrails)
 
@@ -88,36 +92,24 @@ AutoDriver tracks last-known `curr_stop`. If it differs from current and the cha
 
 ## Future enhancements
 
-Priority-ordered for next session pickup:
+Full backlog lives in [TODO.md § Auto-input / OCR](TODO.md). Two items gate the entry-point flow above:
 
-- [ ] **Layer 1 silent-advance design**. Required before entry-point flow can land. NOT a `jump_to_stop` variant. Discussion-first.
+- [ ] **Layer 1 silent-advance design.** Required before entry-point flow can land. NOT a `jump_to_stop` variant. Discussion-first.
 - [ ] **Implement entry-point flow** (toggle-ON + click-jump variants) on the cleaned abstraction.
-- [ ] **Live-validate 1a (in-process integration)**. 1b is the only path live-tested end-to-end (Keihin 727B Omiya→Kanda). 1a should behave identically but needs a real drive to confirm.
-- [ ] **Dynamic arrival threshold**: per-stop 1200m vs 900m based on whether the stop's last PA is "significantly longer" than the route's average PA duration (transfer guides are characteristically longer). User's exact words: *"if it's significantly longer than the average length of other PA, then it's a long arriving PA, if no please go and have the most fun"*. In-process driver has direct access to `sim.stops` + can probe audio durations via `mutagen` or `soundfile` — no extra `--route` flag needed. Currently uses the static Lead value chosen on the setup screen.
-- [ ] **Multi-PA queue auto-advance**: simulator's `_next_pa()` plays one PA per invocation. For multi-PA stops (transfer hubs with 3+ PAs), only the first arrival PA fires automatically; user manually fires the rest with PageDown. Auto-advance would either fire multiple `pending_next_pa` flags spaced by PA audio durations, or have the simulator auto-chain when configured.
-- [ ] **Multi-resolution support**: bboxes + digit templates are pixel-fixed at 2560×1440. Future: proportional layout + template scaling.
-- [ ] **Separate-window debug panel**: today the panel shares the LCD's pygame window via sub-surfaces (no overlap, but same window). User has flagged preference for further decoupling — possible via `pygame._sdl2.video.Window` for a fully separate OS window. Not a blocker; deferred.
-- [ ] **STA auto-fire**: not modeled. STA is IRL-manual (station master, not driver), per user spec. Plumbing for synthetic PageUp + user-press monitoring exists in 1b if needed later.
 
 ## For next-session Claude (zero-context pickup)
 
 Context to load:
 
-- [AUTO_INPUT.md](AUTO_INPUT.md) — current-state facts (state-machine layering, code architecture, OCR pipeline, debug panel, files).
-- This doc — pending design, history, future work.
-- `memory/2026-04-29.md` — most recent session.
-- `memory/2026-04-27.md` — original autodriver phase-4 milestone.
+- [AUTO_INPUT.md](AUTO_INPUT.md) — current-state facts.
+- This doc — entry-point flow design + history + calibration.
+- `memory/2026-05-09.md` + `memory/2026-05-09-overnight.md` — Layer 3 rename + panel redesign + signal-flag fix.
+- `memory/2026-05-08.md` — black-screen-at-platform crisis + cross-attribute hardening.
 
-**Highest-value next step:** Layer 1 silent-advance design discussion. Refactor was completed 2026-04-29 — `_Detector.inferred_state()` is live, flags renamed, code now mirrors the Layer 3 truth table. Implementing the entry-point flow is unblocked once silent-advance has a chosen mechanism.
+**Highest-value next step:** Layer 1 silent-advance design discussion. Entry-point flow is unblocked once silent-advance has a chosen mechanism.
 
-Manual smoke-test hint for live-validating 1a:
+Manual smoke-test hint for live drives:
 
-1. Boot `uv run main.py`, toggle OCR Auto-PA on the setup screen, select Keihin 727B (validated route on 1b). Game must be running fullscreen at 2560×1440 with HUD visible at top-right.
-2. Drive 2 stations. Confirm:
-   - Debug panel renders correctly (4 lines: header, speed/distance/cnt_pa/observed flags, app/game state)
-   - Speed/distance values track HUD readings
-   - `dep✓` / `arr✓` flags light up at expected times
-   - `inferred_state` value matches expectations (`IDLE` / `DEPARTING` / `CRUISING` / `ARRIVING` / `STOPPED`)
-   - `app:` line shows correct App-state description
-   - Manual PageDown overrides cleanly (auto skips its own fire)
-3. If anything misbehaves, paste the terminal log + a panel screenshot. The 1b path (`_dev_scripts/capture_game.py`) is the comparison baseline — known working.
+1. Boot `uv run main.py`, toggle OCR Auto-PA on the setup screen, select a calibrated route. Game running fullscreen at 2560×1440 with HUD visible top-right.
+2. Drive 2 stations. Confirm via debug panel: `inferred_state` cycles `IDLE` → `DEPARTING` → `CRUISING` → `ARRIVING` → `STOPPED`; observed-flags light in order (`dep✓`, `arr✓`, `at✓`); auto-fires land at expected events; manual PageDown overrides cleanly (auto skips its own fire on `curr_stop` mismatch).
+3. If anything misbehaves, dump the JSONL log (`_recordings/drive_<line>_<diagram>_<TS>.jsonl`) + a panel screenshot. The 1b path (`_dev_scripts/capture_game.py`) is the offline-replay baseline.
