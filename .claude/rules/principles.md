@@ -340,6 +340,16 @@ After applying a code change, exercise the change's full blast radius before say
 - Identify the change's blast radius before saying done. "Every route's load path" → exercise every route. "Every PA stop" → walk the stop list.
 - Distinguish structural from behavioral checks. Grep + code-read prove the path exists; they don't prove behavioral properties (stickiness, ordering). Behavioral correctness needs runtime simulation — preview, headless render, end-to-end exercise.
 
+### Blind A/B verify presentation convention changes
+Before adopting a new presentation convention (writing style, doc voice, naming rule, layout shift), validate via blind A/B: spawn parallel fresh-context agents with identical comprehension questions — one reads the original text, one reads the new. Adopt only when answers match.
+
+**Why:** Self-judging "this still reads fine" is unreliable for compressed / reformatted prose — the rewriter knows the original meaning and back-fills mentally. Independent agents reading only the new version expose comprehension drift that the rewriter can't see. Examples:
+- (2026-05-11) Tested caveman-full voice on 3 doc sections via parallel fresh-context sub-agents (one sees original, one sees compressed); 18/18 comprehension questions matched → safe to adopt. Without the test the call would have been hunch-grade.
+
+**How to apply:**
+- Spawn 2 parallel fresh-context agents with identical question sets; A reads original, B reads new. Compare.
+- Use for voice / structure / naming changes affecting user-facing prose. Not for code refactors (smoke tests work better) or trivial layout tweaks where eye-scan suffices.
+
 ---
 
 ## Environment
@@ -382,3 +392,13 @@ When editing any audited doc — domain docs (`DISPLAY.md`, `DATA_FORMAT.md`, `A
 **Why:** Stale duplicates read as authoritative until someone notices they contradict each other; bloat dilutes attention and makes "I read the doc" a weaker signal.
 
 **How to apply:** Each audited doc carries an `EDIT-CONTRACT` block at its top — refuse-list, "name what you merge into OR replace" requirement, size gate. Re-read before any non-trivial addition. Skills that write to these docs (`/session-recap`, etc.) re-quote the EDIT-CONTRACT before writing. Periodic sweep via `/distill-docs` (domain docs) or `/distill-rules` (rules corpus) catches what the gate misses (cross-doc drift, cumulative staleness, self-blindness).
+
+### Big-bang rewrite when convention shifts
+When a presentation convention (voice, style, naming, layout) changes and affects multiple files, do a one-off rewrite of all in-scope files in a single push plus a write-time gate (EDIT-CONTRACT / inline `# CONTRACT:` / skill rule). Don't propose lazy / incremental adoption where new content uses the new convention while old content stays unchanged.
+
+**Why:** Lazy adoption leaves the codebase in a mixed-voice / mixed-style state indefinitely; the boundary blurs, future readers can't tell which convention is canonical, and the rule loses bite. Examples:
+- (2026-05-11) Proposed lazy caveman adoption for domain docs ("future entries land in caveman voice; existing stays"); user: *"I prefer one-off rewrite then + EDIT CONTRACT, one time pain forever fun."* Big-bang push (3 docs) + write-time Voice gate landed instead.
+
+**How to apply:**
+- For voice / style / naming / layout changes affecting >1 file, propose one-off rewrite + write-time gate. Not "future content uses X" deferred adoption.
+- Exception: if the rewrite is too large for one session, propose a phased plan with explicit deadline / completion milestone — not open-ended drift.

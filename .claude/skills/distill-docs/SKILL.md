@@ -64,7 +64,7 @@ For each doc, hunt for these specific shapes (matching the EDIT-CONTRACT refuse 
 1. **History notes / change logs.** Sections titled by date, "Key Changes from legacy …", "Pre-X behavior", migration walkthroughs. `git log` is canonical; doc-side history is duplication.
 2. **Code-snippet illustrations.** Multi-line Python/JSON blocks showing how a class/method *looks* rather than what its contract *is*. Schema reference (a JSON example showing required/optional fields) is in scope for the doc; "here's what `JapaneseDisplay.__init__` looks like" is not — link `file:line` instead.
 3. **Speculative future sections.** "Future: …", "When X is implemented, …", design for hypothetical features that haven't shipped. Distinct from genuine schema fields marked deferred — those stay.
-4. **Design-rationale prose.** Multi-paragraph framings of *why* a layered model exists, the discussion that produced a vocabulary, etc. The decision rule lives in the doc; the discussion narrative lives in `memory/`.
+4. **Design-rationale prose.** Multi-paragraph framings of *why* a layered model exists, the discussion that produced a vocabulary, etc. The decision rule lives in the doc; the discussion narrative lives in `memory/`. **Exception:** rationale-shaped passages explicitly preserved by `EDIT-CONTRACT § Voice` (e.g. "Convention rationale" framings, "Mental model:" framings, incident-warning paragraphs like "burned us before") stay — the doc has reserved them for normal voice on purpose.
 5. **Cross-doc duplication.** A fact also stated in `CLAUDE.md` mental model / a skill / an inline `# CONTRACT:`. Cross-reference, don't restate.
 6. **Cumulative staleness.** Sections written for an earlier feature state that's been superseded but not pruned. Hardest shape to detect — needs cross-check against current code.
 7. **Design-principle / lessons inflation.** Bullet lists where each entry was added at a different time, never pruned. Scan for entries that duplicate `CLAUDE.md` framing / `conventions.md` / `principles.md`.
@@ -166,6 +166,7 @@ Recognize these patterns and don't flag them:
 - **Recently-added content** (within the last ~2 weeks of git log on the file) — too soon to know if it's bloat. Let one cycle pass.
 - **Small redundancies that aid skimmability** — a 1-line restatement at the top of a section that re-introduces a concept defined elsewhere is acceptable; the cost is low and locality helps the reader.
 - **Cross-references** — explicit `see CLAUDE.md § X` links are *good*, even if they technically restate the topic name.
+- **Voice mismatch within a doc** — rationale-shaped passages staying in normal grammar within an otherwise-caveman-voice doc is per the Voice rule in `EDIT-CONTRACT § Voice`, NOT bloat. Specifically: "Convention rationale" / "Mental model:" / "burned us before" / "why this matters" framings explicitly carved out by the Voice rule. Don't flag voice differences alone.
 
 ## Rules
 

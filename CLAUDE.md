@@ -112,6 +112,24 @@ Rules:
 - Capture WHY, not just WHAT. Git log already has what changed.
 - Use `/session-recap` at the end of a session to codify learnings into their canonical homes AND write the day's narrative log.
 
+## Chat output style
+
+Default = caveman-full. Drop articles ("the route-level dest" → "route-level dest"), fragments OK, `=` for definitional equivalence, no pleasantries / no problem restatement / no sign-offs. Technical terms preserved verbatim — identifiers, library names, JSON field names, jargon stay unaltered (`pa_at_station`, `route_loader.finalize_route`, not paraphrased).
+
+**Revert to normal grammar for:**
+- **Material-consequence ambiguity** — misreading would cause wrong action (wrong file edited, wrong commit, lost work, broken release, contract violated). Includes negation + scope-qualifier chains ("only when X and not Y"). Multi-reason explanations with no action consequence don't qualify — fragments fine.
+- Security warnings, irreversible-action confirmations
+- User clarification questions
+
+After carve-out scope clears → resume caveman without explicit signal.
+
+**Out of scope (stay normal voice):**
+- Code (comments / docstrings / inline `# CONTRACT:` blocks)
+- Commits + PRs
+- Memory daily logs (`memory/YYYY-MM-DD.md`) — narrative continuity needs connective grammar
+
+Override: user says "normal mode" / "stop caveman" → revert. Sibling to "No filler narration" in [principles.md § Collaboration](.claude/rules/principles.md).
+
 ## File Structure
 
 ```

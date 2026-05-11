@@ -10,7 +10,7 @@ triggers:
 
 ## Purpose
 
-Keep each commit to one logical change. Mixing **related** data + program changes is fine and expected (a feature that needs a new JSON file, a refactor that needs to update its fixtures). Mixing **unrelated** data fixes into a program commit is not — it pollutes the history, makes cherry-picks harder, and makes the release-notes classifier (see `/build` + `release.ps1`) unable to tell whether a commit is Program, Data, or genuinely both.
+Keep each commit to one logical change. Mixing **related** data + program changes is fine and expected (a feature that needs a new JSON file, a refactor that needs to update its fixtures). Mixing **unrelated** data fixes into a program commit is not — it pollutes the history, makes cherry-picks harder, and makes `git log -- data/` / `git log -- audio/` give noisy answers for downstream tools (`/release` drafts release notes by walking commit history since the last tag — see `.claude/skills/release/SKILL.md`).
 
 This skill runs right before the actual commit. It's a lightweight gate, not a replacement for the built-in commit flow — the built-in flow still owns staging, message drafting, and the actual `git commit` call.
 
@@ -187,7 +187,7 @@ If the user chose a multi-commit split, loop: commit the first group, verify, th
 
 ## Why this matters
 
-Release notes are generated from commit history (`release.ps1` classifies each commit as Program or Data by looking at touched paths). When unrelated data fixes are bundled into a program commit, the classifier sees "mixed" and has to ask the user to split it at *release* time — the exact moment when context is stale and the commit author may not remember which files were the "main" change vs. the ride-along.
+Release notes are drafted from commit history — `/release` walks commits since the last tag, filters by ships-in-zip, and proposes user-facing bullets in `release_notes.md` for the user to edit. When unrelated data fixes are bundled into a program commit, the headline subject says one thing while the body of changes says another — making the bullet drafter (and any human reading the commit later) misclassify the commit's substance at a glance.
 
 Catching this at commit time means the history already reads cleanly: each commit is one thing, each line of the release notes has an obvious home, and `git log -- data/` / `git log -- audio/` give honest answers to "what data changed since v0.5.1?"
 

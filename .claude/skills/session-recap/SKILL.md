@@ -10,13 +10,13 @@ triggers:
 
 ## Purpose
 
-Capture **what was learned this session** and **codify it synchronously** into its canonical home. The daily log captures narrative continuity (what happened + why) for next-session pickup; **rules / learnings / preferences live in their canonical home, written this session, not deferred.**
+Capture **what was learned this session** and **codify synchronously** into canonical home. Daily log captures narrative continuity (what happened + why) for next-session pickup; **rules / learnings / preferences live in canonical home, written this session, not deferred.**
 
-There is **no log-only / promote-candidate intermediate state**. Every learning, correction, or preference either lands in its canonical home this recap (with dedup-by-re-read) or is omitted entirely. Defer-and-distill is gone — `/distill-memory` becomes a safety-net audit, not a primary route.
+**No log-only / promote-candidate intermediate state.** Every learning, correction, or preference either lands in canonical home this recap (with dedup-by-re-read) or omitted entirely. Defer-and-distill is gone — `/distill-memory` becomes safety-net audit, not primary route.
 
-The two operations:
-- **Codify** — write the rule/fact to its canonical home (`principles.md` / `conventions.md` / `CLAUDE.md` / domain doc / inline `# CONTRACT:` / skill).
-- **Narrate** — write the session story to `memory/YYYY-MM-DD.md` for next-session continuity. Informational only, not for the user's review at recap time.
+Two operations:
+- **Codify** — write rule/fact to canonical home (`principles.md` / `conventions.md` / `CLAUDE.md` / domain doc / inline `# CONTRACT:` / skill).
+- **Narrate** — write session story to `memory/YYYY-MM-DD.md` for next-session continuity. Informational only, not for user's review at recap time.
 
 ## Process
 
@@ -25,40 +25,40 @@ The two operations:
 Before discussing learnings, claude self-assesses: *did this session involve friction?*
 
 **Friction signals** (impression-based — claude judges from session memory; user hints accepted):
-- Multiple back-and-forth rounds on a single point of program logic.
+- Multiple back-and-forth rounds on single point of program logic.
 - User foul language or visible frustration.
 - User explicitly says "you've been bad today" / "you're being argumentative" / similar.
-- Claude was challenged and re-justified its position instead of re-reading source (defensive posture).
+- Claude challenged and re-justified position instead of re-reading source (defensive posture).
 
 **If no friction → skip silently. Proceed to Step 1.** User will voice out if claude misses.
 
 **If friction → run the loop:**
 
-1. **Self-observation.** Claude writes a structured behavioral self-observation: patterns claude noticed about its own outputs this session, with project-specific evidence cited inline. Format is claude's call — ad-hoc file at repo root, inline section, etc. Whatever feeds cleanly into third-man.
+1. **Self-observation.** Claude writes structured behavioral self-observation: patterns claude noticed about its own outputs this session, with project-specific evidence cited inline. Format = claude's call — ad-hoc file at repo root, inline section, etc. Whatever feeds cleanly into third-man.
 
-2. **Third-man review.** Hand the self-observation to `/third-man`. Third-man's role: **fair researcher / doctor** — not always claude's fault; sometimes the "friction" is miscommunication or unclear user wording. Third-man's job:
+2. **Third-man review.** Hand self-observation to `/third-man`. Third-man's role: **fair researcher / doctor** — not always claude's fault; sometimes "friction" = miscommunication or unclear user wording. Third-man's job:
    - Validate patterns are real (not over-pattern-matched from one instance).
    - Disambiguate against existing `principles.md § Collaboration` entries (avoid duplicates).
    - Identify which patterns are claude-side vs miscommunication-side.
    - Propose wording for codifications.
 
-3. **Open questions back to user.** If third-man surfaces a question requiring user preference input, claude pauses and asks. Otherwise the third-man → claude consolidation continues without further user touchpoints until Step 2.
+3. **Open questions back to user.** If third-man surfaces a question requiring user preference input, claude pauses and asks. Otherwise third-man → claude consolidation continues without further user touchpoints until Step 2.
 
-4. **Consolidate.** Claude proposes codifications to `principles.md § Collaboration` (or narrower home if applicable, e.g. auto-memory for tool-specific feedback). Each proposal subject to the dedup rule (Step 3 rule 2).
+4. **Consolidate.** Claude proposes codifications to `principles.md § Collaboration` (or narrower home if applicable, e.g. auto-memory for tool-specific feedback). Each proposal subject to dedup rule (Step 3 rule 2).
 
-5. **Cleanup.** Self-observation file (if any) is ephemeral — deleted after consolidation lands. The codified rule is the source of truth.
+5. **Cleanup.** Self-observation file (if any) = ephemeral — deleted after consolidation lands. Codified rule = source of truth.
 
-**Routing into Step 1's report:** Step-0 codifications enter the **"New Understandings"** section with `→ propose:` annotations alongside other learnings — they are claude-side learnings about claude's own behavior, NOT user corrections. Do not file them under "Corrections / preferences" (which is reserved for user-articulated rules / preferences captured verbatim).
+**Routing into Step 1's report:** Step-0 codifications enter **"New Understandings"** section with `→ propose:` annotations alongside other learnings — they = claude-side learnings about claude's own behavior, NOT user corrections. Don't file under "Corrections / preferences" (reserved for user-articulated rules / preferences captured verbatim).
 
-**Scope:** this step targets **behavioral patterns claude noticed about its own outputs** — patterns the user observed but did not articulate as a rule. Project-specific factual corrections (got X wrong about the codebase) continue through Step 1's "Corrections / preferences" flow.
+**Scope:** this step targets **behavioral patterns claude noticed about its own outputs** — patterns user observed but didn't articulate as rule. Project-specific factual corrections (got X wrong about codebase) continue through Step 1's "Corrections / preferences" flow.
 
 ### Step 1 — Discuss learnings
 
-Skip code-change inventory (git covers it). Present the report below.
+Skip code-change inventory (git covers it). Present report below.
 
-**Brevity is mandatory — the report is for the user's eye-scan, not a write-up.** Each bullet should fit on one line: the learning + destination annotation, nothing more. No parenthetical "(deliberate listening pause)" / "(why: X breaks if Y)" tails — the WHY belongs in the file the codification lands in, not the recap. If a bullet won't fit on one line, the WHY is leaking; trim it. Aim: ~5 words of content + the destination tag.
+**Brevity mandatory — report = for user's eye-scan, not write-up.** Each bullet should fit one line: learning + destination annotation, nothing more. No parenthetical "(deliberate listening pause)" / "(why: X breaks if Y)" tails — WHY belongs in file the codification lands in, not the recap. If bullet won't fit one line, WHY is leaking; trim it. Aim: ~5 words of content + destination tag.
 
-Same brevity rule for "Corrections / preferences": list items being codified verbatim; for omits, **collapse to a count** ("3 other passing remarks omitted") rather than enumerating each one. Enumerating omits is the same self-narration anti-pattern the New Understandings hard-rule warns against.
+Same brevity rule for "Corrections / preferences": list items being codified verbatim; for omits, **collapse to count** ("3 other passing remarks omitted") rather than enumerating each one. Enumerating omits = same self-narration anti-pattern the New Understandings hard-rule warns against.
 
 Present this:
 
@@ -114,18 +114,20 @@ Wait for user to correct, add nuance, or override classifications. Don't update 
 
 ### Step 3 — Update files
 
-After approval, update only the files the user confirmed. Each piece of information has ONE home.
+After approval, update only files user confirmed. Each piece of information has ONE home.
 
 **Mandatory dedup-by-re-read before writing to any target file:**
 
-1. **Re-read the target file in full** — not from cached impression. The cached-impression failure mode is documented (e.g. claude operating from memory of what `principles.md` *probably* says vs. what it actually says).
+1. **Re-read target file in full** — not from cached impression. Cached-impression failure mode is documented (e.g. claude operating from memory of what `principles.md` *probably* says vs. what it actually says).
 2. **Search for overlapping entries** by topic / similar wording.
-3. **If overlap exists**: merge into the existing entry (extend `Why:` / `How to apply:` lines, add new evidence) — don't create a second entry.
-4. **If no overlap**: write a new entry.
+3. **If overlap exists**: merge into existing entry (extend `Why:` / `How to apply:` lines, add new evidence) — don't create second entry.
+4. **If no overlap**: write new entry.
 
-The cost of one extra file read is trivial; the cost of duplicate-rule drift is high.
+Cost of one extra file read = trivial; cost of duplicate-rule drift = high.
 
-**For domain doc edits** (`DISPLAY.md` / `DATA_FORMAT.md` / `AUTO_INPUT.md`): re-read the `EDIT-CONTRACT` block at the top of the file first. Confirm the addition isn't on the refuse list. Name the section you're merging into OR replacing. For additions > ~10 lines, present the diff to the user before writing.
+**For domain doc edits** (`DISPLAY.md` / `DATA_FORMAT.md` / `AUTO_INPUT.md`): re-read `EDIT-CONTRACT` block at top of file first. Confirm addition isn't on refuse list. Name section you're merging into OR replacing. For additions > ~10 lines, present diff to user before writing.
+
+**Voice on domain doc writes.** When writing reference-shaped content to domain doc, switch to caveman-full voice per that doc's `EDIT-CONTRACT § Voice` — even if recap chat is currently in normal-grammar carve-out. Rationale-shaped additions (incident traces, "Convention rationale" framings) stay normal voice per same Voice rule.
 
 **Daily log writes silently** — not shown to user. Pure narrative + decisions + why-context. The `## Codifications this session` subsection (see Daily log format below) gives next-session-claude a pointer to what this session changed.
 
@@ -155,15 +157,15 @@ This table applies *always*, not only at recap time. Whenever you write or edit 
 
 ### Region-scoped vs primitive-scoped — classification test
 
-If the rule statement names a **language/library primitive** (a function, syntax form, or library API call), it's primitive-scoped — the precondition fires anywhere that primitive can be invoked, including code authored in new files outside any existing call site. Auto-loaded layer (`conventions.md`) is required; inline `# CONTRACT:` at known call sites is the enforcement reminder.
+If rule statement names a **language/library primitive** (function, syntax form, library API call), it's primitive-scoped — precondition fires anywhere that primitive can be invoked, including code authored in new files outside any existing call site. Auto-loaded layer (`conventions.md`) required; inline `# CONTRACT:` at known call sites = enforcement reminder.
 
-If the rule's precondition is "editing this code region" (a specific class, draw method, state-machine site, manifest), it's region-scoped — inline-only is sufficient because anyone editing the region opens the file.
+If rule's precondition is "editing this code region" (specific class, draw method, state-machine site, manifest), it's region-scoped — inline-only is sufficient because anyone editing the region opens the file.
 
 **Why the split matters** (2026-05-07 SysFont incident): the rule "never `pygame.font.SysFont` in production code" lived only as an inline `# CONTRACT:` in `displays/train_models/*/upper_lcd.py`. The 2026-05-02 i18n chrome refactor authored a new module (`i18n.py`) outside `displays/`; the CONTRACT was invisible from that workspace; SysFont got re-introduced; release exe crashed on Chinese-locale Windows. The rule's precondition was "calling `pygame.font.SysFont` anywhere," not "editing the upper LCD" — primitive-scoped, but classified as region-scoped at the 2026-04-28 rules-split distillation.
 
 ### Preloaded vs progressive
 
-Preloaded files (`CLAUDE.md`, `.claude/rules/*`) hold what humans keep in their head. Progressive files (`DISPLAY.md`, `DATA_FORMAT.md`, etc.) hold implementation detail read on demand. Ask: *would someone working on this project have it in their head, or look it up when they hit the relevant submodule?* The slim-CLAUDE rule applies to *implementation*, not framing — mental model can grow CLAUDE.md modestly.
+Preloaded files (`CLAUDE.md`, `.claude/rules/*`) hold what humans keep in their head. Progressive files (`DISPLAY.md`, `DATA_FORMAT.md`, etc.) hold implementation detail read on demand. Ask: *would someone working on this project have it in their head, or look it up when they hit relevant submodule?* Slim-CLAUDE rule applies to *implementation*, not framing — mental model can grow CLAUDE.md modestly.
 
 ---
 
@@ -177,30 +179,30 @@ Preloaded files (`CLAUDE.md`, `.claude/rules/*`) hold what humans keep in their 
    - **Both-shaped** (correction has BOTH canonical content AND a behavioral binding about how to use it) → save in BOTH homes. Canonical content → domain doc (read on demand); behavioral binding → `principles.md` / `conventions.md` (preloaded every session). A rule that lives only in a domain doc fires only when claude opens the doc. Concrete (2026-04-30 incident): "for autodriver discussions use Layer 1/2/3 names + arrow flow + don't redesign" → AUTO_INPUT.md gets the canonical names + arrows AND conventions.md gets the binding rule.
    - **Passing remark with no rule shape** → OMIT. No log-only bucket. The daily log narrates the session, not the preferences ledger.
 
-   **When in doubt, classify rule-shaped, not omit.** A correction is rule-shaped if violating it would cause the same mistake in any future session on this project — even without explicit "always" wording. Cost asymmetry: over-promotion = bloat (auditable via `/distill-memory`); under-promotion = recurrence (paid by user, who has named it costly: "same thing happens 2 times are frustrating enough already"). The user's Step 2 review is the safety net for false-positive promotions.
+   **When in doubt, classify rule-shaped, not omit.** Correction = rule-shaped if violating it would cause same mistake in any future session on this project — even without explicit "always" wording. Cost asymmetry: over-promotion = bloat (auditable via `/distill-memory`); under-promotion = recurrence (paid by user, who has named it costly: "same thing happens 2 times are frustrating enough already"). User's Step 2 review = safety net for false-positive promotions.
 
-2. **Mandatory dedup-by-re-read before any write.** Before writing to ANY target file: re-read it in full, search for overlapping entries by topic/wording, merge in place if overlap exists, write new entry only if no overlap. Cached-impression dedup is forbidden — that failure mode is documented (claude operating from memory of what a file says vs. what it actually says). One extra file read is trivial; duplicate-rule drift is high cost.
+2. **Mandatory dedup-by-re-read before any write.** Before writing to ANY target file: re-read in full, search for overlapping entries by topic/wording, merge in place if overlap exists, write new entry only if no overlap. Cached-impression dedup forbidden — that failure mode documented (claude operating from memory of what file says vs. what it actually says). One extra file read = trivial; duplicate-rule drift = high cost.
 
-3. **Tighten before appending.** Each domain doc carries an `EDIT-CONTRACT` block at its top — re-read before any non-trivial addition. See [principles.md § "Tighten before appending"](../../rules/principles.md).
+3. **Tighten before appending.** Each domain doc carries `EDIT-CONTRACT` block at top — re-read before any non-trivial addition. See [principles.md § "Tighten before appending"](../../rules/principles.md).
 
 4. **Cross-reference, don't copy.** E.g., `DATA_FORMAT.md` says "see CLAUDE.md § Mental Model" rather than re-explaining.
 
 5. **CLAUDE.md stays slim on implementation, generous on framing.** Mental-model content belongs there *because* it's preloaded. Implementation details go to domain docs.
 
-6. **MEMORY.md is an index, not an abstract.** Format: `- [YYYY-MM-DD time-block](file.md) — headline finding`. ~150 char cap per line. Multi-session days get one entry per session-block ("2026-04-30 AM" / "2026-04-30 PM"), not a bundled paragraph. Headlines, not summaries.
+6. **MEMORY.md = index, not abstract.** Format: `- [YYYY-MM-DD time-block](file.md) — headline finding`. ~150 char cap per line. Multi-session days get one entry per session-block ("2026-04-30 AM" / "2026-04-30 PM"), not bundled paragraph. Headlines, not summaries.
 
 7. **Be specific.** "Fixed display bug" → "Destination always displays as kanji (no furigana cycling) to match IRL behavior."
 
-8. **Cross-layer alignment when codifying a pattern.** When this session's learnings include a pattern that benefits from being caught at multiple stages of the workflow, **codify it at all three layers**: authoring time (`principles.md` / `conventions.md` — fires on claude every session), post-hoc audit (`/vibe-check` smell — fires when the user audits the codebase), per-diff review (`/review-dirty` Lens — fires on every PR-like review). The three layers have different focus and different timing; missing any one means the pattern can still slip through. **How to apply:** when proposing a new principle, ask "does the same pattern have a smell shape (post-hoc detectable) and a per-diff shape (review-time detectable)?" — if yes, write all three with reciprocal cross-citation. The 2026-05-05 pathology codification did this for both halves (authoring locality → principle "Search before authoring" + vibe-check #11 + review-dirty Lens 2 #11; deployment-frame mythology → principle "Verify deployment-frame ..." + vibe-check #12 + review-dirty Lens 1). Single-layer codifications are weaker; the codification work is mostly the principle, the smell + lens additions are cheap riders that close the recurrence path.
+8. **Cross-layer alignment when codifying a pattern.** When this session's learnings include a pattern that benefits from being caught at multiple stages of workflow, **codify at all three layers**: authoring time (`principles.md` / `conventions.md` — fires on claude every session), post-hoc audit (`/vibe-check` smell — fires when user audits codebase), per-diff review (`/review-dirty` Lens — fires on every PR-like review). Three layers have different focus and different timing; missing any one means pattern can still slip through. **How to apply:** when proposing new principle, ask "does same pattern have smell shape (post-hoc detectable) and per-diff shape (review-time detectable)?" — if yes, write all three with reciprocal cross-citation. The 2026-05-05 pathology codification did this for both halves (authoring locality → principle "Search before authoring" + vibe-check #11 + review-dirty Lens 2 #11; deployment-frame mythology → principle "Verify deployment-frame ..." + vibe-check #12 + review-dirty Lens 1). Single-layer codifications weaker; codification work is mostly the principle, smell + lens additions = cheap riders that close the recurrence path.
 
 ---
 
 ## Daily log format (`memory/YYYY-MM-DD.md`)
 
-The daily log is **narrative continuity for next-session pickup** — what happened, decisions, why-context, dead ends. Pure prose, no structured preferences section.
+Daily log = **narrative continuity for next-session pickup** — what happened, decisions, why-context, dead ends. Pure prose, no structured preferences section.
 
-Under the informational-only model:
-- Daily logs do NOT capture rules, preferences, or learnings as candidates for later promotion. Those went to their canonical home in Step 3 of this same recap.
+Under informational-only model:
+- Daily logs do NOT capture rules, preferences, or learnings as candidates for later promotion. Those went to canonical home in Step 3 of this same recap.
 - Daily logs DO capture: session story, decisions made, debugging narrative, why-context that doesn't fit elsewhere, pointers to where rules landed.
 
 ```markdown
@@ -217,28 +219,28 @@ Under the informational-only model:
 - (or: "no codifications this session")
 ```
 
-The `## Codifications this session` subsection is short — one line per file touched, pointing to where the rule/fact lives now. It's a forward-pointer for next-session-claude, not a duplicate of the rule.
+`## Codifications this session` subsection = short — one line per file touched, pointing to where rule/fact lives now. Forward-pointer for next-session-claude, not duplicate of the rule.
 
 ---
 
 ## Daily log EDIT-CONTRACT
 
-Daily logs are decision-records, not narrative dumps or preferences-ledgers. Before writing a session-block to `memory/YYYY-MM-DD.md`, check the addition isn't on the refuse list.
+Daily logs = decision-records, not narrative dumps or preferences-ledgers. Before writing session-block to `memory/YYYY-MM-DD.md`, check addition isn't on refuse list.
 
 **Refuse:**
 - Blow-by-blow review-cycle reports ("Cycle 1 caught X, Y, Z. Cycle 2 caught Q. Cycle 3 clean."). Git log + commit messages already cover what changed.
 - "What got done" narrative — bullet list of code changes. Git diff covers it. Keep WHY decisions, not WHAT was edited.
-- Full-text rehashes of design discussions. Keep the 2-3-line decision + WHY. Trim the meandering.
+- Full-text rehashes of design discussions. Keep 2-3-line decision + WHY. Trim meandering.
 - Documentation enumerations ("Updated A, B, C, D, E files"). `git status` covers it. Mention only non-obvious doc moves.
-- **Rules / preferences / learnings as standalone entries.** Under the new model, these went to their canonical home in Step 3. Daily log mentions them only in the `## Codifications this session` pointer subsection.
+- **Rules / preferences / learnings as standalone entries.** Under new model, these went to canonical home in Step 3. Daily log mentions them only in `## Codifications this session` pointer subsection.
 
 **Keep:**
-- WHY a decision was made (context that doesn't survive in code).
+- WHY decision was made (context that doesn't survive in code).
 - Non-obvious context that has no other home (mental-model shifts, surprising IRL conventions discovered, unresolved threads).
-- Trace of incidents — what surprised us, what we fixed, what could recur. The pathology, not the play-by-play.
-- Pointers to codifications landed this session (in the `## Codifications` subsection).
+- Trace of incidents — what surprised us, what we fixed, what could recur. Pathology, not play-by-play.
+- Pointers to codifications landed this session (in `## Codifications` subsection).
 
-**Size target:** <50 lines per session-block. >100 lines is typically the failure mode — narrating git history that's already in git.
+**Size target:** <50 lines per session-block. >100 lines = typically the failure mode — narrating git history that's already in git.
 
 ---
 

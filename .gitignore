@@ -60,3 +60,6 @@ _sta_verify_*.json
 # User settings (language, future per-PC preferences). Lives next to the exe in
 # frozen builds / project root in dev. Local-only — separate per machine.
 /settings.json
+
+# Caveman hook turn counter (UserPromptSubmit modulo state)
+.claude/.caveman_turn_count
