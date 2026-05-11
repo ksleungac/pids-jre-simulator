@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "f=.claude/.caveman_turn_count; n=$(cat \"$f\" 2>/dev/null || echo 0); n=$((n+1)); echo \"$n\" > \"$f\"; if [ $((n%5)) -eq 0 ]; then printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"Caveman-full chat style active per CLAUDE.md § Chat output style.\"}}'; fi"
+            "command": "printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"Drop articles/filler/pleasantries/hedging. Fragments OK. Plain over complex. Cut self-justifying connective tissue.\\nMaterial-consequence/security/clarification: write normal. Casual/chatty/pushback register ≠ carve-out.\"}}'"
           }
         ]
       }

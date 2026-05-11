@@ -123,6 +123,9 @@ Default = caveman-full. Drop articles ("the route-level dest" → "route-level d
 
 After carve-out scope clears → resume caveman without explicit signal.
 
+**In scope (apply caveman):**
+- Skill prose (`.claude/skills/*/SKILL.md`) — step instructions, target tables, rule lists. Same chat-side carve-outs apply: user-facing `>` prompt blocks stay normal voice; multi-clause rules where misreading causes wrong action stay normal voice. Treat skill rewrites as fresh-start compression, not deferential reword of finished artifact.
+
 **Out of scope (stay normal voice):**
 - Code (comments / docstrings / inline `# CONTRACT:` blocks)
 - Commits + PRs
