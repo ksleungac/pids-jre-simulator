@@ -1,8 +1,6 @@
 # Auto-Input — OCR-driven PA firing from JR EAST Train Sim HUD
 
-Companion module that automates PA-firing in the simulator by reading the JR EAST
-Train Simulator game's HUD via screen capture. Removes the need to press PageDown
-manually during normal driving.
+Companion module that automates PA-firing in the simulator by reading JR EAST Train Simulator game's HUD via screen capture. Removes need to press PageDown manually during normal driving.
 
 > **EDIT-CONTRACT** — what this doc holds, what it refuses.
 >
@@ -15,6 +13,8 @@ manually during normal driving.
 > - Design-discussion rationale (multi-paragraph framings of *why* a model exists) — the rule lives here; the rationale lives in `memory/YYYY-MM-DD.md`
 > - Facts already in [CLAUDE.md](CLAUDE.md) mental model / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
 >
+> **Voice:** new reference-shaped entries (schema, OCR pipeline rules, event tables, layer specs, contracts) — caveman-full voice (drop articles, fragments OK, `=` for definitional equivalence). Rationale-shaped passages ("Mental model" framings, "Why not X" framings, narrative examples) — stay normal voice. See [CLAUDE.md § Chat output style](CLAUDE.md).
+>
 > **Before adding:** name the section your edit merges into OR the content it replaces. If neither — you're appending, which is the failure mode this contract fights.
 >
 > **Additions > ~10 lines:** present the diff to the user first. Heavy additions get gated, not auto-applied.
@@ -23,94 +23,48 @@ manually during normal driving.
 
 ## Mental model
 
-The auto-driver is an **input layer** — it observes game state via OCR on the game
-window, detects state transitions, and emits PA-fire events. The simulator's existing
-state machine (`AppState`, `_next_pa`, `state.curr_stop`) is the source of truth for
-*what* PA to play; the auto-driver only decides *when* to advance the queue.
+The auto-driver is an **input layer** — it observes game state via OCR on the game window, detects state transitions, and emits PA-fire events. The simulator's existing state machine (`AppState`, `_next_pa`, `state.curr_stop`) is the source of truth for *what* PA to play; the auto-driver only decides *when* to advance the queue.
 
-This split keeps fidelity work (LCD rendering, route data, audio cuts) decoupled from
-input automation. The auto-driver can be disabled and the simulator behaves exactly
-as today, with manual PageDown control.
+This split keeps fidelity work (LCD rendering, route data, audio cuts) decoupled from input automation. The auto-driver can be disabled and the simulator behaves exactly as today, with manual PageDown control.
 
-**Two integrations.** Both live in this repo and share the OCR + state-machine
-implementation:
+**Two integrations.** Both live in this repo and share OCR + state-machine implementation:
 
-- **In-process** (`auto_input.py` `AutoDriver`) — spawned from `main.py` when
-  the **OCR Auto-PA** toggle is enabled on the setup screen. Runs in a daemon
-  thread and sets `PASimulator.pending_next_pa = True` at fire-time, same code
-  path as manual PageDown. Manual-press precedence is implicit: the driver
-  inspects `sim.state.curr_stop` / `sim.state.cnt_pa` each cycle and skips its
-  fire on mismatch. Includes the in-window debug panel.
-- **Separate-process** (`_dev_scripts/capture_game.py`) — standalone diagnostic
-  script. Synthesizes PageDown via the `keyboard` library and uses a
-  self-press timestamp guard for manual-press precedence. No debug panel.
+- **In-process** (`auto_input.py` `AutoDriver`) — spawned from `main.py` when **OCR Auto-PA** toggle enabled on setup screen. Runs in daemon thread, sets `PASimulator.pending_next_pa = True` at fire-time, same code path as manual PageDown. Manual-press precedence implicit: driver inspects `sim.state.curr_stop` / `sim.state.cnt_pa` each cycle, skips its fire on mismatch. Includes in-window debug panel.
+- **Separate-process** (`_dev_scripts/capture_game.py`) — standalone diagnostic script. Synthesizes PageDown via `keyboard` library, uses self-press timestamp guard for manual-press precedence. No debug panel.
 
 ## State machine layering
 
-The auto-driver subsystem involves three distinct state machines. They align in
-normal flow but diverge after manual user action — keeping them separate in
-vocabulary prevents the wrong fix landing in the wrong layer.
+Auto-driver subsystem involves three distinct state machines. They align in normal flow but diverge after manual user action — keeping them separate in vocabulary prevents wrong fix landing in wrong layer.
 
 ### Layer 1 — App (sim's own state machine)
 
-State on `AppState` (`curr_stop`, `cnt_pa`, `cnt_pa_at_station`, `at_station`).
-Exists whether the auto-driver is enabled or not. Three press-driven sub-states
-per stop: `APPROACHING_EARLY` → `APPROACHING_FINAL` → `STOPPING`. Spec in
-[DISPLAY.md § Unified State Machine](DISPLAY.md); mental-model summary in
-[CLAUDE.md § App state machine](CLAUDE.md). The auto-driver triggers transitions
-by setting `pending_next_pa=True`, same code path as manual PageDown.
+State on `AppState` (`curr_stop`, `cnt_pa`, `cnt_pa_at_station`, `at_station`). Exists whether auto-driver enabled or not. Three press-driven sub-states per stop: `APPROACHING_EARLY` → `APPROACHING_FINAL` → `STOPPING`. Spec in [DISPLAY.md § Unified State Machine](DISPLAY.md); mental-model summary in [CLAUDE.md § App state machine](CLAUDE.md). Auto-driver triggers transitions by setting `pending_next_pa=True`, same code path as manual PageDown.
 
 ### Layer 2 — AutoDriver belief
 
-Per-segment flag set on the `_Detector` instance: `_segment_start_stop`,
-`departure_observed`, `arrival_observed`, `at_station_observed`. The auto-driver's belief
-about which segment the App layer is mid-way through and which fires it has
-already dispatched. Lives across samples; all flags reset on
-`BADGE_STOPPED→(MOVING|PASSING)` (segment boundary).
+Per-segment flag set on `_Detector` instance: `_segment_start_stop`, `departure_observed`, `arrival_observed`, `at_station_observed`. Auto-driver's belief about which segment App layer is mid-way through and which fires it has already dispatched. Lives across samples; all flags reset on `BADGE_STOPPED→(MOVING|PASSING)` (segment boundary).
 
 ### Layer 3 — AutoDriver's inferred game state
 
-What the auto-driver thinks the IRL game train is doing — expressed as one of
-five canonical named states + a sentinel:
+What auto-driver thinks IRL game train is doing — expressed as one of five canonical named states + sentinel:
 
 | Canonical name | Panel label | Game-side meaning |
 |---|---|---|
 | `IDLE` | Idle | At platform, no in-segment arrival was observed (boot, post-click, or arrival trigger missed by OCR). |
 | `DEPARTING` | Departing | In-transit, rolling out, speed not yet >30 km/h (dep-trigger not observed). |
 | `CRUISING` | Cruising | In-transit at full speed, dep-trigger observed, arr-trigger not yet observed. |
-| `ARRIVING` | Arriving | In-transit, dist crossed below the arrival lead (~900m), decelerating to platform. |
+| `ARRIVING` | Arriving | In-transit, dist crossed below arrival lead (~900m), decelerating to platform. |
 | `STOPPED` | Stopped | At platform, arr-trigger observed in this segment. |
 | `UNKNOWN` | — | OCR FAIL or insufficient context. Sentinel. |
 
-**2026-05-09 rename.** Old wire names embedded the detector's trigger-fire
-shape (`STOPPING_FRESH`, `APPROACHING_BEFORE_DEP`, `APPROACHING_AFTER_DEP`,
-`MOVING_AFTER_ARR`, `STOPPING_AFTER_ARR`) which leaked internal logic into the
-state name. New names describe what the train is *doing* in plain transit
-verbs and line up 1:1 with the user-facing panel labels.
+**2026-05-09 rename.** Old wire names embedded the detector's trigger-fire shape (`STOPPING_FRESH`, `APPROACHING_BEFORE_DEP`, `APPROACHING_AFTER_DEP`, `MOVING_AFTER_ARR`, `STOPPING_AFTER_ARR`) which leaked internal logic into the state name. New names describe what the train is *doing* in plain transit verbs and line up 1:1 with the user-facing panel labels.
 
-**Cross-layer token sharing.** Layer 1's vocabulary (`STOPPING` /
-`APPROACHING_EARLY` / `APPROACHING_FINAL`) is now disjoint from Layer 3 — the
-old suffix discipline isn't needed there. **Layer 2 ↔ Layer 3 share one token
-by design:** `STOPPED` is both a Layer 2 badge value (raw OCR input) and a
-Layer 3 inferred-state value (output). `MOVING` and `PASSING` appear only in
-Layer 2; `IDLE` / `DEPARTING` / `CRUISING` / `ARRIVING` / `UNKNOWN` appear
-only in Layer 3. The collision on `STOPPED` is intentional — the badge is one
-input to the inference, and at the platform with `arrival_observed=True` they
-collapse to the same semantic. **In code and discussion, always disambiguate
-by field name** (`status['badge']` vs `status['inferred_state']`) rather than
-by raw string match. The panel disambiguates visually too: badges render in
-UPPERCASE, Layer 3 states in Title Case ("Stopped").
+**Cross-layer token sharing.** Layer 1's vocabulary (`STOPPING` / `APPROACHING_EARLY` / `APPROACHING_FINAL`) is now disjoint from Layer 3 — old suffix discipline isn't needed there. **Layer 2 ↔ Layer 3 share one token by design:** `STOPPED` is both a Layer 2 badge value (raw OCR input) and a Layer 3 inferred-state value (output). `MOVING` and `PASSING` appear only in Layer 2; `IDLE` / `DEPARTING` / `CRUISING` / `ARRIVING` / `UNKNOWN` appear only in Layer 3. The collision on `STOPPED` is intentional — the badge is one input to the inference, and at the platform with `arrival_observed=True` they collapse to the same semantic. **In code and discussion, always disambiguate by field name** (`status['badge']` vs `status['inferred_state']`) rather than by raw string match. The panel disambiguates visually too: badges render in UPPERCASE, Layer 3 states in Title Case ("Stopped").
 
-These are **inference outputs**, not direct OCR reads. Inputs:
+These = **inference outputs**, not direct OCR reads. Inputs:
 
-- **Raw OCR observations**: `badge_read ∈ {STOPPED, MOVING, PASSING}`,
-  `speed_read`, `distance_read` — single-sample reads of the game HUD.
-- **Layer 2 cache** (per-segment): `departure_observed`, `arrival_observed`,
-  `at_station_observed`. Necessary because OCR alone doesn't distinguish
-  `DEPARTING` from `CRUISING` — both show `badge∈{MOVING,PASSING}`; the cache
-  disambiguates. The flags semantically record "we observed the trigger
-  condition this segment," not "we dispatched a fire" — the dispatcher's
-  mismatch-skip is a separate concern.
+- **Raw OCR observations**: `badge_read ∈ {STOPPED, MOVING, PASSING}`, `speed_read`, `distance_read` — single-sample reads of game HUD.
+- **Layer 2 cache** (per-segment): `departure_observed`, `arrival_observed`, `at_station_observed`. Necessary because OCR alone doesn't distinguish `DEPARTING` from `CRUISING` — both show `badge∈{MOVING,PASSING}`; cache disambiguates. Flags semantically record "we observed the trigger condition this segment," not "we dispatched a fire" — dispatcher's mismatch-skip = separate concern.
 
 **Streaming inference truth table** (per-sample, with cache):
 
@@ -123,33 +77,17 @@ These are **inference outputs**, not direct OCR reads. Inputs:
 | `MOVING` or `PASSING` | False | False | `DEPARTING` |
 | `None` | * | * | `UNKNOWN` |
 
-(`at_station_observed` doesn't appear — it gates dispatch of FIRE_AT_STATION, not
-the inferred state.)
+(`at_station_observed` doesn't appear — gates dispatch of FIRE_AT_STATION, not inferred state.)
 
-**Entry-point inference** (no Layer 2 cache; toggle-ON, click reanchor):
-substitute `distance ≤ lead` for `arrival_observed`. `IDLE` ≡ `STOPPED`
-(collapsed at entry — functionally identical anchoring). `DEPARTING` lumped
-into `CRUISING` (the brief acceleration window is functionally equivalent at
-entry).
+**Entry-point inference** (no Layer 2 cache; toggle-ON, click reanchor): substitute `distance ≤ lead` for `arrival_observed`. `IDLE` ≡ `STOPPED` (collapsed at entry — functionally identical anchoring). `DEPARTING` lumped into `CRUISING` (brief acceleration window functionally equivalent at entry).
 
-The inference function is pluggable; future cross-attribute hardening enriches
-it without changing the named-state vocabulary.
+Inference function pluggable; future cross-attribute hardening enriches it without changing named-state vocabulary.
 
 **Vocabulary discipline.** In design conversations and code comments:
 
-1. **Use the Layer 1 / 2 / 3 named states verbatim** — say *"AutoDriver thinks
-   the game is in `IDLE`"*, not *"badge is STOPPED"* or any invented
-   parallel vocabulary. The badge is one input to the inference; the inferred
-   state is what the design reasons about. The vocabulary separation lets us
-   harden inference without re-litigating design conclusions.
-2. **Use arrow-flow notation for state progressions** — write
-   `STOPPING(queue) → STOPPING(queue exhausted) → APPROACHING_EARLY`, not a
-   multi-column table. Tables fit orthogonal cross-products (Layer 3 × Layer 1
-   alignment table); progressions are a sequence and read as arrows. Tables on
-   transitions read as over-engineered.
-3. **Don't redesign the state machine** — the named states are already
-   implemented in `_Detector.update`. Design how flows interact with them, not
-   what they should be.
+1. **Use Layer 1 / 2 / 3 named states verbatim** — say *"AutoDriver thinks the game is in `IDLE`"*, not *"badge is STOPPED"* or any invented parallel vocabulary. Badge = one input to the inference; inferred state = what design reasons about. Vocabulary separation lets us harden inference without re-litigating design conclusions.
+2. **Use arrow-flow notation for state progressions** — write `STOPPING(queue) → STOPPING(queue exhausted) → APPROACHING_EARLY`, not multi-column table. Tables fit orthogonal cross-products (Layer 3 × Layer 1 alignment table); progressions = sequence, read as arrows. Tables on transitions read as over-engineered.
+3. **Don't redesign the state machine** — named states already implemented in `_Detector.update`. Design how flows interact with them, not what they should be.
 
 ### Layer interaction
 
@@ -161,9 +99,7 @@ Layer 3 observation → event → Layer 2 dispatch (mismatch-skip) → pending_n
                                                          Layer 1 advance via _next_pa
 ```
 
-Layer 2 follows Layer 3. Layer 1 follows Layer 2. The reverse direction —
-Layer 1 drifting from Layer 2 due to user action — is reconciled via dispatcher
-mismatch-skip + flag reset on next `BADGE_STOPPED→(MOVING|PASSING)`.
+Layer 2 follows Layer 3. Layer 1 follows Layer 2. Reverse direction — Layer 1 drifting from Layer 2 due to user action — reconciled via dispatcher mismatch-skip + flag reset on next `BADGE_STOPPED→(MOVING|PASSING)`.
 
 ### When layers diverge
 
@@ -171,11 +107,9 @@ mismatch-skip + flag reset on next `BADGE_STOPPED→(MOVING|PASSING)`.
 |---|---|---|
 | Manual PageDown | Layer 1 advances by one press; Layer 2 unchanged | Dispatcher mismatch-skip on next event; full flag reset on next `STOPPED→(MOVING\|PASSING)` |
 | Click-jump on lower LCD | Layer 1 jumps to STOPPING@target; Layer 2 unchanged | Mismatch-skip for small drift; multi-stop drift waits for next `STOPPED→(MOVING\|PASSING)` reset (or explicit re-anchor flow if implemented) |
-| Auto-driver toggled ON mid-drive | Layer 1 is whatever the user advanced to; Layer 2 has no belief yet | Entry-point flow probes Layer 3, anchors Layer 2 to match the detected segment context |
+| Auto-driver toggled ON mid-drive | Layer 1 = whatever user advanced to; Layer 2 has no belief yet | Entry-point flow probes Layer 3, anchors Layer 2 to match detected segment context |
 
-Layer 3 stays accurate at all times — it observes the game, not the sim.
-Reconciling Layer 1 ↔ Layer 2 is what mismatch-skip and the entry-point flow
-exist to do.
+Layer 3 stays accurate at all times — observes the game, not the sim. Reconciling Layer 1 ↔ Layer 2 = what mismatch-skip and entry-point flow exist to do.
 
 ## Architecture
 
@@ -232,17 +166,13 @@ exist to do.
 
 ## Resolution dependency
 
-Currently calibrated for **2560×1440 native fullscreen game window**. Other
-resolutions need `HUD_BBOX` recalibration and re-extracted digit templates.
-See "Recalibration" below.
+Currently calibrated for **2560×1440 native fullscreen game window**. Other resolutions need `HUD_BBOX` recalibration and re-extracted digit templates. See "Recalibration" below.
 
-The user's setup happens to be 2560×1440 native, which makes this a non-issue for
-their workflow. Multi-resolution support is future work.
+User's setup happens to be 2560×1440 native, which makes this a non-issue for their workflow. Multi-resolution support = future work.
 
 ## HUD layout (2560×1440)
 
-All bboxes are `(x, y, w, h)`. Cell bboxes are HUD-relative; the HUD bbox is
-screen-relative.
+All bboxes = `(x, y, w, h)`. Cell bboxes = HUD-relative; HUD bbox = screen-relative.
 
 | Constant | Value | Notes |
 |---|---|---|
@@ -256,10 +186,7 @@ Position invariant across language modes (EN/JA), game states (running/stopped/a
 
 ## Capture: dxcam (DXGI Output Duplication)
 
-**Why not Win32 PrintWindow or BitBlt-from-desktop:** the game renders via DirectX,
-and the swap chain isn't visible to GDI. Both APIs return all-black frames even with
-`PW_RENDERFULLCONTENT` flag set. **dxcam** uses DXGI Output Duplication (the same
-GPU-level capture API used by Discord/OBS), reading the GPU framebuffer directly.
+**Why not Win32 PrintWindow or BitBlt-from-desktop:** the game renders via DirectX, and the swap chain isn't visible to GDI. Both APIs return all-black frames even with `PW_RENDERFULLCONTENT` flag set. **dxcam** uses DXGI Output Duplication (the same GPU-level capture API used by Discord/OBS), reading the GPU framebuffer directly.
 
 ```python
 import dxcam
@@ -268,7 +195,7 @@ frame = camera.grab()  # full desktop, (H, W, 4) BGRA numpy array
 ```
 
 Notes:
-- BGRA output is DXGI's native format; choosing it avoids requiring opencv as a dep
+- BGRA output = DXGI's native format; choosing it avoids requiring opencv as dep
 - `grab()` can return `None` (no new frame since last call) — retry with brief sleep
 - Game must be **rendering** (not minimized/alt-tabbed in a state where it pauses)
 - Top-right corner where HUD lives must not be covered by other windows
@@ -285,36 +212,23 @@ cell (RGB) → grayscale → threshold (gray < 70) → column-sum > 2 = "has tex
             Find runs of has-text columns separated by gaps → raw bboxes
 ```
 
-The text band excludes the HUD's top/bottom borders and any scenery bleed-through
-near the cell edges.
+Text band excludes HUD's top/bottom borders and any scenery bleed-through near cell edges.
 
 ### Stage 2 — filtering
 
 Three filters in sequence:
 
-1. **Digit-shape filter**: keep only bboxes with `h ≥ 22` and `7 ≤ w ≤ 30`.
-   Drops 'm' suffix strokes (h≈10), label tail fragments, scenery blobs.
-2. **Decimal-stop** (speed only): scan raw bboxes for a small bbox
-   (`h ≤ 10, w ≤ 7`) in the bottom half of the text band — that's the decimal
-   point. Stop accepting digits at its x-position. **Robust against gap variance**;
-   replaces the gap-based heuristic that was failing on `1x.x` and `11x.x`.
-3. **Gap-stop** (safety net): stop accepting digits at first horizontal gap
-   greater than `MAX_GAP`. Distance: 20 (anything past 'm' has bigger gap).
-   Speed: 25 (relaxed because decimal-stop is the primary boundary; 25 catches
-   scenery blobs but lets through wide kerning like '1' to '1' which can be 18px).
+1. **Digit-shape filter**: keep only bboxes with `h ≥ 22` and `7 ≤ w ≤ 30`. Drops 'm' suffix strokes (h≈10), label tail fragments, scenery blobs.
+2. **Decimal-stop** (speed only): scan raw bboxes for small bbox (`h ≤ 10, w ≤ 7`) in bottom half of text band — that's the decimal point. Stop accepting digits at its x-position. **Robust against gap variance**; replaces gap-based heuristic that was failing on `1x.x` and `11x.x`.
+3. **Gap-stop** (safety net): stop accepting digits at first horizontal gap greater than `MAX_GAP`. Distance: 20 (anything past 'm' has bigger gap). Speed: 25 (relaxed because decimal-stop = primary boundary; 25 catches scenery blobs but lets through wide kerning like '1' to '1' which can be 18px).
 
 ### Stage 3 — template matching
 
-Templates: 10 binary glyphs (digits 0-9) extracted from labeled reference
-screenshots via the `KNOWN_VALUES` dict in `ocr.py`.
+Templates: 10 binary glyphs (digits 0-9) extracted from labeled reference screenshots via `KNOWN_VALUES` dict in `ocr.py`.
 
-Matching: each segmented bbox's binary glyph is padded to the size of the
-template, then compared pixel-equality. Score = fraction of matching pixels
-(0.5 = random for binary). Best-scoring template wins per glyph; concatenate
-to integer.
+Matching: each segmented bbox's binary glyph padded to size of template, then compared pixel-equality. Score = fraction of matching pixels (0.5 = random for binary). Best-scoring template wins per glyph; concatenate to integer.
 
-Live scores observed: 0.75–1.00. Below 0.6 is the danger zone (random match
-territory).
+Live scores observed: 0.75–1.00. Below 0.6 = danger zone (random match territory).
 
 ### Tunable constants (in `ocr.py`)
 
@@ -335,99 +249,39 @@ territory).
 
 ## Stopping offset (cm) — shared distance cell
 
-The `DISTANCE_VALUE_BBOX` cell is content-shared and self-identifies via color:
+`DISTANCE_VALUE_BBOX` cell is content-shared and self-identifies via color:
 
-- **Dark text `Nm`** — distance to the next stopping station. Shown during
-  transit, AND at the platform after the cm display dismisses (~5s post-arrival).
-- **Green text `±Ncm`** — stopping offset from the platform's stop mark. Shown
-  briefly after `MOVING→STOPPED` (~5s window). Sign shown only for negative
-  (train stopped past the mark); `0` and positives omit the sign character.
+- **Dark text `Nm`** — distance to next stopping station. Shown during transit, AND at the platform after the cm display dismisses (~5s post-arrival).
+- **Green text `±Ncm`** — stopping offset from the platform's stop mark. Shown briefly after `MOVING→STOPPED` (~5s window). Sign shown only for negative (train stopped past the mark); `0` and positives omit the sign character.
 
-Both readers run unconditionally each capture cycle. Their masks are mutually
-exclusive (`gray < 70` for m-distance, `(G - max(R,B)) > 30` for cm-offset), so
-at most one returns non-None per frame. JSONL records both fields each sample;
-display priority gives cm precedence (transient signal of interest) and falls
-through to m otherwise.
+Both readers run unconditionally each capture cycle. Their masks are mutually exclusive (`gray < 70` for m-distance, `(G - max(R,B)) > 30` for cm-offset), so at most one returns non-None per frame. JSONL records both fields each sample; display priority gives cm precedence (transient signal of interest), falls through to m otherwise.
 
 Two pipeline differences in `read_stopping_offset` vs `read_distance`:
 - **Color mask** as above.
-- **Sign detection**: a small bbox (h ≤ 12, w ≤ 18) in the vertical center of
-  the text band, left of the first digit, is treated as a leading minus. No `+`
-  glyph template — positive case has no sign character at all.
+- **Sign detection**: small bbox (h ≤ 12, w ≤ 18) in vertical center of text band, left of first digit, treated as leading minus. No `+` glyph template — positive case has no sign character at all.
 
-The `cm` suffix is the same green color but smaller than digits, excluded by the
-existing `DIGIT_MIN_H=22` shape filter. Digit templates are reused unchanged —
-binarization is colour-agnostic, the shape matches the dark-text version.
+`cm` suffix = same green color but smaller than digits, excluded by existing `DIGIT_MIN_H=22` shape filter. Digit templates reused unchanged — binarization is colour-agnostic, shape matches dark-text version.
 
-**Overrun semantics.** The game prevents the user from physically stopping in
-the red-text zone — overrun → game resets the train to `0cm`, briefly shows it,
-then black-screens to fast-forward past to the next station. Red text is
-unreachable in normal play. The "no cm reading" state at STOPPED is the normal
-post-display-dismissal state, **not** an out-of-bound signal — interpreting
-overrun requires examining the surrounding badge transitions and the brief `0cm`
-read, not a single null cm sample.
+**Overrun semantics.** The game prevents the user from physically stopping in the red-text zone — overrun → game resets the train to `0cm`, briefly shows it, then black-screens to fast-forward past to the next station. Red text is unreachable in normal play. The "no cm reading" state at STOPPED is the normal post-display-dismissal state, **not** an out-of-bound signal — interpreting overrun requires examining the surrounding badge transitions and the brief `0cm` read, not a single null cm sample.
 
 ## Speed limit (最高速度) — red digits
 
-Cell at `SPEED_LIMIT_VALUE_BBOX`, between speed and distance rows. Red digits +
-dark `km/h` suffix. **Line-dependent** — many lines don't post a cab speed limit;
-empty cell is the normal "no posted limit" state, not OCR fault. `read_speed_limit`
-returns `None` for those frames; speed limits are always in 5/10 km/h increments
-when present (5, 10, …, 75, 95, 110, 120).
+Cell at `SPEED_LIMIT_VALUE_BBOX`, between speed and distance rows. Red digits + dark `km/h` suffix. **Line-dependent** — many lines don't post a cab speed limit; empty cell = normal "no posted limit" state, not OCR fault. `read_speed_limit` returns `None` for those frames; speed limits always in 5/10 km/h increments when present (5, 10, …, 75, 95, 110, 120).
 
-The reader uses `(R - max(G,B)) > RED_TEXT_DELTA` as the color mask — the dark
-`km/h` suffix is excluded automatically. Three complications the reader handles:
+Reader uses `(R - max(G,B)) > RED_TEXT_DELTA` as color mask — dark `km/h` suffix excluded automatically. Three complications the reader handles:
 
-- **Tight kerning glues digit pairs** — at 80, 90, 110 the column-density
-  threshold never drops below `COLUMN_TEXT_MIN` between digit pairs (typically
-  ?-`0`), so segmentation sees one over-wide run instead of two digits.
-  `segment_red_digits` supports two split strategies:
-  - **`argmin` (default)**: find the deepest column-density valley and split
-    there, recursively until each sub-bbox fits `DIGIT_MAX_W`. Precise for
-    cases with a clear inter-digit dip.
-  - **`equal_width` (fallback)**: divide each over-wide run into N equal parts
-    where N = round(width / 18). Ignores column density entirely. Robust to
-    cases where `0`-shaped digits' natural hollows look deeper than the actual
-    digit boundary (limit_100's `0+0` merged blob).
-  `read_speed_limit` runs `argmin` first; if grammar-valid AND
-  `min_score >= ARGMIN_TRUST_SCORE` (0.85, in `ocr.py`), return immediately.
-  Otherwise — argmin grammar-invalid OR low-confidence valid — also run
-  `equal_width` and prefer its grammar-valid result. Threshold gates against
-  argmin's `0+0` misread mode where the split lands inside a digit hollow and
-  produces a confident-but-wrong grammar-valid read; equal_width's symmetric
-  split repairs it (calibrated against 31-frame `100` corpus — low band
-  0.65-0.66, high band 0.92+).
-- **Stroke-weight mismatch** — the red font is bolder than the dark-text font
-  the original digit templates were extracted from, so dark templates alone
-  consistently mismatch certain digit pairs (8 / 6 misread as 4). Two-tier
-  matching: (a) red-text digit templates extracted from limit screenshots into
-  `ocr_templates/digits_red/` (one PNG per digit, full 0–9 coverage as of
-  2026-05-09); (b) dark templates dilated by `SPEED_LIMIT_TEMPLATE_DILATION`
-  (3 px) as fallback for any digit without a red template. Best-of-both score
-  wins per glyph. Re-extract via `_dev_scripts/extract_ocr_assets.py` after
-  adding new `_ocr_calibration/limit_*.png` reference screenshots.
-- **Domain validation** — observed range in JR EAST Train Sim Real is 25–130 km/h
-  in 5/10 km/h increments. The reader validates the final integer against
-  `VALID_SPEED_LIMITS = {25, 30, 35, …, 130}` and returns `None` on out-of-grammar
-  reads. Catches the fallout of split contamination (e.g. 110 occasionally read
-  as 114 because the `0`'s left curve bleeds into the `1`'s split bbox),
-  single-digit corruptions (90 sometimes read as 1), and any future misclassification
-  mode that produces a non-grammar value. Better to return `None` and miss a frame
-  than write a wrong value to the JSONL.
+- **Tight kerning glues digit pairs** — at 80, 90, 110 the column-density threshold never drops below `COLUMN_TEXT_MIN` between digit pairs (typically ?-`0`), so segmentation sees one over-wide run instead of two digits. `segment_red_digits` supports two split strategies:
+  - **`argmin` (default)**: find deepest column-density valley and split there, recursively until each sub-bbox fits `DIGIT_MAX_W`. Precise for cases with clear inter-digit dip.
+  - **`equal_width` (fallback)**: divide each over-wide run into N equal parts where N = round(width / 18). Ignores column density entirely. Robust to cases where `0`-shaped digits' natural hollows look deeper than actual digit boundary (limit_100's `0+0` merged blob).
+  `read_speed_limit` runs `argmin` first; if grammar-valid AND `min_score >= ARGMIN_TRUST_SCORE` (0.85, in `ocr.py`), return immediately. Otherwise — argmin grammar-invalid OR low-confidence valid — also runs `equal_width` and prefers its grammar-valid result. Threshold gates against argmin's `0+0` misread mode where split lands inside a digit hollow and produces a confident-but-wrong grammar-valid read; equal_width's symmetric split repairs it (calibrated against 31-frame `100` corpus — low band 0.65-0.66, high band 0.92+).
+- **Stroke-weight mismatch** — red font is bolder than dark-text font the original digit templates were extracted from, so dark templates alone consistently mismatch certain digit pairs (8 / 6 misread as 4). Two-tier matching: (a) red-text digit templates extracted from limit screenshots into `ocr_templates/digits_red/` (one PNG per digit, full 0–9 coverage as of 2026-05-09); (b) dark templates dilated by `SPEED_LIMIT_TEMPLATE_DILATION` (3 px) as fallback for any digit without a red template. Best-of-both score wins per glyph. Re-extract via `_dev_scripts/extract_ocr_assets.py` after adding new `_ocr_calibration/limit_*.png` reference screenshots.
+- **Domain validation** — observed range in JR EAST Train Sim Real is 25–130 km/h in 5/10 km/h increments. Reader validates final integer against `VALID_SPEED_LIMITS = {25, 30, 35, …, 130}` and returns `None` on out-of-grammar reads. Catches fallout of split contamination (e.g. 110 occasionally read as 114 because `0`'s left curve bleeds into `1`'s split bbox), single-digit corruptions (90 sometimes read as 1), and any future misclassification mode that produces a non-grammar value. Better to return `None` and miss a frame than write a wrong value to JSONL.
 
-**Debugging misreads.** Live-frame OCR misreads don't round-trip cleanly through
-the pipeline: the dxcam BGRA frame and a `pygame.image.save`'d PNG of the same
-instant can produce different `segment_red_digits` bboxes via sub-pixel
-column-density variance. A live `100`→`110` misread may replay to `100`→`160` on
-the saved PNG (grammar-fail → equal_width fallback → correct), masking the
-original mode. To collect a usable corpus, AutoDriver dumps `sl_cell` to
-`_ocr_calibration/_misread_dumps/sl_<ts_ms>_score<NN>_read<NNN>.png` whenever a
-grammar-valid `speed_limit` read scores below `SUSPICIOUS_SPEED_LIMIT_SCORE`
-(0.75, in `auto_input.py`); `ts_ms = int(ts * 1000)` matches the JSONL row.
+**Debugging misreads.** Live-frame OCR misreads don't round-trip cleanly through pipeline: dxcam BGRA frame and `pygame.image.save`'d PNG of same instant can produce different `segment_red_digits` bboxes via sub-pixel column-density variance. A live `100`→`110` misread may replay to `100`→`160` on saved PNG (grammar-fail → equal_width fallback → correct), masking original mode. To collect a usable corpus, AutoDriver dumps `sl_cell` to `_ocr_calibration/_misread_dumps/sl_<ts_ms>_score<NN>_read<NNN>.png` whenever a grammar-valid `speed_limit` read scores below `SUSPICIOUS_SPEED_LIMIT_SCORE` (0.75, in `auto_input.py`); `ts_ms = int(ts * 1000)` matches JSONL row.
 
 ## Badge classification (state cell)
 
-Game shows a pentagon badge in the next-station row, with text inside:
+Game shows pentagon badge in next-station row, with text inside:
 
 | State | EN text | JA text | Color | Meaning |
 |---|---|---|---|---|
@@ -436,10 +290,10 @@ Game shows a pentagon badge in the next-station row, with text inside:
 | PASSING | "Pass" | "通過" | **blue** | Train crossing a station that won't be stopped at; badge still displays the next *stopping* station, but **HUD distance is to the passing station, not the stopping target** |
 
 **Critical observations:**
-- Pentagon shape is **identical** across all three states — only text content + fill colour differ.
-- MOVING and STOPPED both use the same green pentagon; pixel-diff against text-content anchors is what discriminates them.
-- PASSING's blue fill gives the classifier a wide separation margin: cross-state mean diff to MOVING/STOPPED is ~43, vs within-state ~6–10.
-- **STOPPED is canonical, never transient.** The game only shows the STOPPED badge when the train is actually stopped within the platform's stopping range OR when the game has reset the train to a platform. It NEVER flickers STOPPED briefly during deceleration or overrun. Detector logic relies on this: a single STOPPED frame is sufficient to flip `at_station_observed=True`, no debouncing or N-frame consensus needed. Also rules out a recurrence-shape hypothesis ("brief STOPPED reading during overrun resets atstn_obs from a prior segment") — that scenario can't happen by game design.
+- Pentagon shape **identical** across all three states — only text content + fill colour differ.
+- MOVING and STOPPED both use same green pentagon; pixel-diff against text-content anchors discriminates them.
+- PASSING's blue fill gives classifier wide separation margin: cross-state mean diff to MOVING/STOPPED ≈ 43, vs within-state ~6–10.
+- **STOPPED is canonical, never transient.** Game only shows STOPPED badge when train is actually stopped within platform's stopping range OR when game has reset train to a platform. NEVER flickers STOPPED briefly during deceleration or overrun. Detector logic relies on this: single STOPPED frame sufficient to flip `at_station_observed=True`, no debouncing or N-frame consensus needed. Also rules out recurrence-shape hypothesis ("brief STOPPED reading during overrun resets atstn_obs from prior segment") — that scenario can't happen by game design.
 
 ### Classifier
 
@@ -453,17 +307,9 @@ BADGE_ANCHOR_FILES = {
 }
 ```
 
-Per frame: crop badge cell, compute mean-abs-diff against each anchor, pick the
-state with the lowest-diff anchor. Language-agnostic — whichever anchor matches
-best determines the state, regardless of which language the user plays in.
+Per frame: crop badge cell, compute mean-abs-diff against each anchor, pick state with lowest-diff anchor. Language-agnostic — whichever anchor matches best determines state, regardless of which language user plays in.
 
-Diff < 15 = high confidence; real reads sit there. Diff > `BADGE_DIFF_REJECT`
-(50) is rejected at the classifier — `classify_badge_state` returns `(None, diff)`
-so the detector treats it as OCR FAIL. Black-screen / dark-cell garbage frames
-diff 60-110; mid-animation transient spikes at exact transitions hit >70. 50
-cleanly separates real from garbage with margin on both sides. The detector's
-`None` tolerance preserves `prev_badge` across rejected frames, so a one-cycle
-delay on transition detection is the only cost.
+Diff < 15 = high confidence; real reads sit there. Diff > `BADGE_DIFF_REJECT` (50) rejected at classifier — `classify_badge_state` returns `(None, diff)` so detector treats it as OCR FAIL. Black-screen / dark-cell garbage frames diff 60-110; mid-animation transient spikes at exact transitions hit >70. 50 cleanly separates real from garbage with margin on both sides. Detector's `None` tolerance preserves `prev_badge` across rejected frames, so one-cycle delay on transition detection = only cost.
 
 ## State machine — `PaEventDetector`
 
@@ -471,7 +317,7 @@ Lives in `_dev_scripts/capture_game.py` (1b) + `auto_input.py` `_Detector` (1a, 
 
 ### State vocabulary
 
-The state machine works in the Layer 3 named-state vocabulary — see "State machine layering" above for the canonical names + inference truth table. The 5 states (`IDLE`, `DEPARTING`, `CRUISING`, `ARRIVING`, `STOPPED`) + `UNKNOWN` sentinel describe the autodriver's inferred view of where the IRL game train is in its segment cycle. They map onto the per-sample event emissions below.
+State machine works in Layer 3 named-state vocabulary — see "State machine layering" above for canonical names + inference truth table. The 5 states (`IDLE`, `DEPARTING`, `CRUISING`, `ARRIVING`, `STOPPED`) + `UNKNOWN` sentinel describe autodriver's inferred view of where IRL game train is in its segment cycle. They map onto per-sample event emissions below.
 
 **When designing flows that interact with the state machine** (entry-point, resync, click-to-jump): say *"AutoDriver thinks the game is in `IDLE`"*, not *"badge is STOPPED."* The badge is one input to the inference; the inferred state is what the design reasons about. The separation matters for hardening — and avoids design conclusions accidentally over-trusting a single OCR attribute.
 
@@ -483,102 +329,44 @@ The state machine works in the Layer 3 named-state vocabulary — see "State mac
 | `BADGE_MOVING→STOPPED` | badge transition | Train just arrived at platform (logged only — see `FIRE_AT_STATION`) |
 | `SPEED_UP_30` | speed crossed 30 km/h upward AND `departure_observed=False` | Fire departure PA, set `departure_observed=True` |
 | `DIST_DOWN_<lead>` | `badge==MOVING` AND `distance ≤ arrival_lead_m` AND `arrival_observed=False` | Fire arrival PA, set `arrival_observed=True` |
-| `FIRE_AT_STATION` | `badge==STOPPED` AND `arrival_observed=True` AND `at_station_observed=False` | Fire the silent press that flips sim into STOPPING (sets `state.at_station=True`); set `at_station_observed=True` |
+| `FIRE_AT_STATION` | `badge==STOPPED` AND `arrival_observed=True` AND `at_station_observed=False` | Fire silent press that flips sim into STOPPING (sets `state.at_station=True`); set `at_station_observed=True` |
 
-`arrival_lead_m` defaults to **900m**. For 1a, adjust on the setup-screen Lead
-stepper (range 500–1500, ±100m) before launching. For 1b, override with `--lead`
-on the `_dev_scripts/capture_game.py` invocation. Use 1200m for transfer-heavy
-lines (Tokyo, Shinjuku scenarios).
+`arrival_lead_m` defaults to **900m**. For 1a, adjust on setup-screen Lead stepper (range 500–1500, ±100m) before launching. For 1b, override with `--lead` on `_dev_scripts/capture_game.py` invocation. Use 1200m for transfer-heavy lines (Tokyo, Shinjuku scenarios).
 
-**Per-segment observed flags** prevent double-firing within a single segment when
-OCR misreads transiently flip a threshold-crossing condition (e.g. a speed misread
-as `7` between two real `>30` reads would fire `SPEED_UP_30` twice without the
-flag). All three flags (`departure_observed`, `arrival_observed`, `at_station_observed`)
-reset on `BADGE_STOPPED→MOVING`. PASSING transitions do NOT reset flags — PASSING
-is a transient sub-state of MOVING within a segment, not a new segment.
+**Per-segment observed flags** prevent double-firing within a single segment when OCR misreads transiently flip a threshold-crossing condition (e.g. speed misread as `7` between two real `>30` reads would fire `SPEED_UP_30` twice without the flag). All three flags (`departure_observed`, `arrival_observed`, `at_station_observed`) reset on `BADGE_STOPPED→MOVING`. PASSING transitions do NOT reset flags — PASSING = transient sub-state of MOVING within a segment, not new segment.
 
-**`at_station_observed` is gated on `arrival_observed`** so it only triggers in this
-segment's stopping moment. Without that gate, the level test would fire on the
-first capture cycle (train parked at session start with `badge==STOPPED`) and
-desync the simulator before the first real drive begins. Pa-empty stops still
-get the at-station fire — `_fire_at_station` accepts `pa==[]` because the
-APPROACHING→STOPPING transition is silent regardless of pa contents.
+**`at_station_observed` gated on `arrival_observed`** so it only triggers in this segment's stopping moment. Without that gate, level test would fire on first capture cycle (train parked at session start with `badge==STOPPED`) and desync simulator before first real drive begins. Pa-empty stops still get the at-station fire — `_fire_at_station` accepts `pa==[]` because APPROACHING→STOPPING transition silent regardless of pa contents.
 
 ### Arrival is a level test, not a downward crossing
 
-The arrival trigger fires whenever `badge==MOVING AND distance ≤ arrival_lead_m`,
-gated by the per-segment `arrival_observed` flag. It does **not** require a
-downward-crossing of the threshold.
+Arrival trigger fires whenever `badge==MOVING AND distance ≤ arrival_lead_m`, gated by per-segment `arrival_observed` flag. Does **not** require downward-crossing of threshold.
 
-This matters because of PASSING. While the badge reads PASSING, HUD distance is
-to the passing-through station (NOT to the next stopping target). The detector
-ignores those samples entirely:
+This matters because of PASSING. While badge reads PASSING, HUD distance is to the passing-through station (NOT to next stopping target). Detector ignores those samples entirely:
 
-- **Arrival check is gated on `badge==MOVING`** — a PASSING-relative sample at, say,
-  300m to the passing station does not trigger arrival for the actual stopping
-  station that's still 1500m away.
-- **`prev_distance` is no longer tracked** — the level test doesn't need it. The
-  old downward-crossing test (`prev > lead >= curr`) couldn't handle the case
-  where `PASSING→MOVING` resumed with distance already < lead (the first MOVING
-  sample's distance jumps *up* relative to the PASSING-relative prev, defeating
-  the crossing check). Level test handles it cleanly: any MOVING sample with
-  `distance ≤ lead` fires arrival, exactly once per segment.
+- **Arrival check gated on `badge==MOVING`** — PASSING-relative sample at, say, 300m to passing station doesn't trigger arrival for actual stopping station that's still 1500m away.
+- **`prev_distance` no longer tracked** — level test doesn't need it. Old downward-crossing test (`prev > lead >= curr`) couldn't handle case where `PASSING→MOVING` resumed with distance already < lead (first MOVING sample's distance jumps *up* relative to PASSING-relative prev, defeating the crossing check). Level test handles it cleanly: any MOVING sample with `distance ≤ lead` fires arrival, exactly once per segment.
 
-Speed/departure logic is unchanged — speed is own-train and badge-independent.
+Speed/departure logic unchanged — speed = own-train and badge-independent.
 
-**Manual-press precedence.** When a `fire ... PA` event would auto-send PageDown,
-the dispatcher first checks `keys.last_user_pagedown_ts > detector.segment_start_ts`.
-If the user already pressed PageDown manually since the segment began, the
-auto-fire is skipped (logged as `SKIPPED auto-fire (user already pressed ...)`).
-This means: pressing PageDown manually always wins; the auto-driver fills in only
-where you didn't.
+**Manual-press precedence.** When a `fire ... PA` event would auto-send PageDown, dispatcher first checks `keys.last_user_pagedown_ts > detector.segment_start_ts`. If user already pressed PageDown manually since segment began, auto-fire skipped (logged as `SKIPPED auto-fire (user already pressed ...)`). This means: pressing PageDown manually always wins; auto-driver fills in only where you didn't.
 
-**Self-press guard.** The `keyboard.on_press_key` global hook fires on ALL
-PageDown events including the synthetic ones we send. Within `SELF_PRESS_GUARD_S`
-(500ms) of an auto-send, key callbacks ignore the press as our own. Prevents
-self-detection that would mark the segment as "user already pressed".
+**Self-press guard.** `keyboard.on_press_key` global hook fires on ALL PageDown events including synthetic ones we send. Within `SELF_PRESS_GUARD_S` (500ms) of an auto-send, key callbacks ignore press as our own. Prevents self-detection that would mark segment as "user already pressed".
 
-`None` values for distance/speed/badge are tolerated individually — OCR FAIL
-frames don't reset state, so transient unreadable frames don't break segment
-continuity.
+`None` values for distance/speed/badge tolerated individually — OCR FAIL frames don't reset state, so transient unreadable frames don't break segment continuity.
 
-**Cross-attribute reject (black-screen guard).** When `prev_badge == "STOPPED"`
-and the new badge would transition to `MOVING` or `PASSING`, the transition is
-rejected (badge forced to `None`) unless `speed > 0`. The game black-screens
-briefly to fast-forward simulated time, but only while parked at a platform —
-never mid-transit. During that window the badge cell goes uniform-dark and the
-classifier picks whichever anchor pixel-diffs lowest (typically PASSING — blue
-is closer to black than green); the distance cell drops out consistently while
-the speed cell sometimes survives showing the parked-at-platform `0`. The
-structural rule exploits that asymmetry: a real platform departure always shows
-speed climbing from 0 (the game can't fake movement without rendering it), so
-`speed == 0` or `speed is None` at a STOPPED→moving transition is the
-black-screen signature. Without this the spurious PASSING fires a phantom
-`STOPPED→PASSING` and resets the observed-flags as if a new segment began.
-First concrete instance of the cross-attribute hardening philosophy
-([TODO.md § Auto-input/OCR](TODO.md)).
+**Cross-attribute reject (black-screen guard).** When `prev_badge == "STOPPED"` and new badge would transition to `MOVING` or `PASSING`, transition rejected (badge forced to `None`) unless `speed > 0`. The game black-screens briefly to fast-forward simulated time, but only while parked at a platform — never mid-transit. During that window the badge cell goes uniform-dark and the classifier picks whichever anchor pixel-diffs lowest (typically PASSING — blue is closer to black than green); the distance cell drops out consistently while the speed cell sometimes survives showing the parked-at-platform `0`. The structural rule exploits that asymmetry: a real platform departure always shows speed climbing from 0 (the game can't fake movement without rendering it), so `speed == 0` or `speed is None` at a STOPPED→moving transition is the black-screen signature. Without this the spurious PASSING fires a phantom `STOPPED→PASSING` and resets the observed-flags as if a new segment began. First concrete instance of the cross-attribute hardening philosophy ([TODO.md § Auto-input/OCR](TODO.md)).
 
 ## Debug panel (in-process integration only)
 
-When OCR Auto-PA is enabled at the setup screen, `PASimulator` allocates an
-extra `DEBUG_PANEL_HEIGHT = 80` row above the LCD via pygame sub-surfaces. The window
-becomes 730×500 instead of 730×420; the LCD code is **completely unchanged** because
-it gets a sub-surface positioned at `(0, 80)` and thinks it's drawing to a regular
-730×420 screen.
+When OCR Auto-PA enabled at setup screen, `PASimulator` allocates extra `DEBUG_PANEL_HEIGHT = 80` row above LCD via pygame sub-surfaces. Window becomes 730×500 instead of 730×420; LCD code **completely unchanged** because it gets sub-surface positioned at `(0, 80)` and thinks it's drawing to a regular 730×420 screen.
 
-**Strict separation per user requirement:** the panel render logic lives entirely
-in `auto_input.py` (function `draw_debug_panel`). `app.py`'s `_render_panel()`
-helper just hands the sub-surface to the auto-input module. The simulator
-**doesn't know** how the panel renders — colors, layout, fonts, text — all owned
-by `auto_input.py`. Zero `displays/` imports in the panel render code.
+**Strict separation per user requirement:** panel render logic lives entirely in `auto_input.py` (function `draw_debug_panel`). `app.py`'s `_render_panel()` helper just hands sub-surface to auto-input module. Simulator **doesn't know** how panel renders — colors, layout, fonts, text — all owned by `auto_input.py`. Zero `displays/` imports in panel render code.
 
-The panel and LCD never overlap render areas. The panel uses its own background
-color `_PANEL_BG = (18, 22, 28)` (visually distinct from LCD's `DARK_BG`).
+Panel and LCD never overlap render areas. Panel uses its own background color `_PANEL_BG = (18, 22, 28)` (visually distinct from LCD's `DARK_BG`).
 
 ### Layout
 
-3 lines, font ShinGoPr6N-Medium @ 14pt (loaded lazily, supports both Latin + CJK
-so station names in the state line render correctly):
+3 lines, font ShinGoPr6N-Medium @ 14pt (loaded lazily, supports both Latin + CJK so station names in state line render correctly):
 
 ```
 [AUTO-INPUT]   badge: MOVING (d=3.2)
@@ -595,18 +383,13 @@ Confidence color encoding:
 | **Orange** | < 0.75; diff > 15 |
 | **Gray** | None / OCR FAIL |
 
-`dep✓ arr·` flags reflect `auto_input_status["departure_observed"]` and
-`auto_input_status["arrival_observed"]` — the per-segment observed flags reset on
-`BADGE_STOPPED→MOVING` transitions.
+`dep✓ arr·` flags reflect `auto_input_status["departure_observed"]` and `auto_input_status["arrival_observed"]` — per-segment observed flags reset on `BADGE_STOPPED→MOVING` transitions.
 
-State line uses simulator's `state.curr_stop` + the captured `segment_start_stop`
-to display "between A → B" or "stopped at A".
+State line uses simulator's `state.curr_stop` + captured `segment_start_stop` to display "between A → B" or "stopped at A".
 
 ### Width adaptivity
 
-Panel uses whatever surface width the caller provides (`PASimulator` allocates
-the sub-surface at `S_WIDTH` from the active train model). When future train
-models with different LCD widths are added, panel follows automatically.
+Panel uses whatever surface width the caller provides (`PASimulator` allocates the sub-surface at `S_WIDTH` from the active train model). When future train models with different LCD widths are added, panel follows automatically.
 
 ### Status dict (single-writer / single-reader, atomic dict assignment)
 
@@ -635,27 +418,20 @@ models with different LCD widths are added, panel follows automatically.
 }
 ```
 
-**Paused-frame variant.** During paused cycles the loop preserves the prior
-status dict and overlays only `"paused": True` (no fresh OCR fields). Readers
-should treat any field that's stale-looking against `paused=True` accordingly.
+**Paused-frame variant.** During paused cycles loop preserves prior status dict and overlays only `"paused": True` (no fresh OCR fields). Readers should treat any field that's stale-looking against `paused=True` accordingly.
 
-CPython dict assignment is atomic. No lock needed for single writer (BG thread)
-+ single reader (main thread).
+CPython dict assignment is atomic. No lock needed for single writer (BG thread) + single reader (main thread).
 
 ## Sample interval
 
 **5 seconds.** Trade-off:
 
-- **Tighter** would catch threshold crossings more precisely but burns more CPU
-  and could flood logs with redundant identical reads
-- **Wider** would miss events; at 100 km/h the train moves ~140m in 5s, so a
-  wider sample could miss the 900m threshold entirely
+- **Tighter** would catch threshold crossings more precisely but burns more CPU and could flood logs with redundant identical reads
+- **Wider** would miss events; at 100 km/h train moves ~140m in 5s, so wider sample could miss 900m threshold entirely
 
-5s is a good balance for both threshold detection and event cadence.
+5s = good balance for both threshold detection and event cadence.
 
-The state machine is robust to the granularity — `prev_<X>` carries forward
-between samples, and threshold-crossings fire on the first sample after the
-boundary is crossed.
+State machine robust to granularity — `prev_<X>` carries forward between samples, threshold-crossings fire on first sample after boundary crossed.
 
 ## Usage
 
@@ -683,18 +459,16 @@ uv run python _dev_scripts/capture_game.py --no-fire
 uv run python _dev_scripts/capture_game.py --route audio/sobu/1217F
 ```
 
-Stop with Ctrl+C. The script prints one line per sample (badge state, speed,
-distance, scores) plus indented `>>>` lines for state-machine events and
-auto/manual key activity.
+Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distance, scores) plus indented `>>>` lines for state-machine events and auto/manual key activity.
 
 ## Files
 
 | Path | Role |
 |---|---|
 | `auto_input.py` | **Primary** — `AutoDriver` class (in-process daemon thread) + `draw_debug_panel()` (panel render) + `_Detector` state machine + `handle_panel_click()` dispatcher (in-panel buttons, currently the Report download). All auto-input logic lives here. |
-| `main.py` | Reads `auto_input` / `lead_m` / `interval_s` from the setup-screen config dict. Spawns `AutoDriver` when `auto_input=True` and passes the same flag to `PASimulator`. |
-| `setup.py` | OCR Auto-PA toggle pill + Lead/Interval steppers under the route list. `_handle_band_click` updates state; selected route's Enter returns config dict including the auto-input fields. |
-| `app.py` | `PASimulator`: allocates debug sub-surface in `_init_pygame`; `pending_next_pa` flag checked alongside keyboard in `_handle_input_main`; `auto_input_status` dict written by AutoDriver, read by `_render_panel()` which delegates to `auto_input.draw_debug_panel`. `MOUSEBUTTONDOWN` events landing in the panel area get forwarded to `auto_input.handle_panel_click`. `drive_log_path` attribute stashes the live JSONL path so the Report button can find it. **No panel rendering logic lives in app.py.** |
+| `main.py` | Reads `auto_input` / `lead_m` / `interval_s` from setup-screen config dict. Spawns `AutoDriver` when `auto_input=True` and passes same flag to `PASimulator`. |
+| `setup.py` | OCR Auto-PA toggle pill + Lead/Interval steppers under route list. `_handle_band_click` updates state; selected route's Enter returns config dict including auto-input fields. |
+| `app.py` | `PASimulator`: allocates debug sub-surface in `_init_pygame`; `pending_next_pa` flag checked alongside keyboard in `_handle_input_main`; `auto_input_status` dict written by AutoDriver, read by `_render_panel()` which delegates to `auto_input.draw_debug_panel`. `MOUSEBUTTONDOWN` events landing in panel area get forwarded to `auto_input.handle_panel_click`. `drive_log_path` attribute stashes live JSONL path so Report button can find it. **No panel rendering logic lives in app.py.** |
 | `constants.py` | `DEBUG_PANEL_HEIGHT = 80` |
 | `hud_layout.py` | HUD + cell bbox constants for 2560×1440 |
 | `ocr.py` | OCR pipeline + badge classifier; runnable for offline validation (`uv run python ocr.py`) |
@@ -703,24 +477,23 @@ auto/manual key activity.
 | `ocr_templates/digits/*.png` | **Runtime input** — 10 pre-extracted digit glyphs (~20×30 binary PNGs, ~1 KB each). Loaded by `ocr.build_templates()`. Committed. |
 | `ocr_templates/badges/*.png` | **Runtime input** — 6 pre-extracted badge cell crops (111×40 RGB PNGs, ~5 KB each — dims match `BADGE_BBOX`). Loaded by `ocr.load_badge_anchors()`. Committed. |
 | `_ocr_calibration/*.png` | **Local-only** source screenshots (full 2560×1440 desktop captures, ~33 MB total). Gitignored. Only needed when re-extracting `ocr_templates/` after a game HUD layout change. |
-| `_dev_scripts/extract_ocr_assets.py` | One-shot extractor: reads `_ocr_calibration/` source screenshots → writes `ocr_templates/`. Run after re-capturing sources, then commit the diff. |
-| `_recordings/drive_<line>_<diagram>_<TS>.jsonl` | **Blackbox / drive recorder log** — one file per AutoDriver lifetime. Line 0 is `_type: "meta"` (route/diagram/dest/stops); subsequent lines mix `_type: "event"` (badge transitions: arrival / departure / passing_start / passing_end) and `_type: "sample"` (one OCR cycle, ~5s, all OCR fields + sim state including `at_station` / `cnt_pa_at_station` / `at_station_observed` / `inferred_state` / `segment_start_stop`). Written inside `auto_input.py`'s capture loop with per-line `flush()` for crash safety. Local-only / gitignored. Field additions are backward-compatible (plot_drive ignores unknowns); field removals or renames require coordinated update with `plot_drive.py`. |
-| `_experiments/live_captures/` | Saved HUD crops from prior live testing (gitignored — `_experiments/` itself is now an artifact-only folder; OCR + layout modules promoted to root) |
+| `_dev_scripts/extract_ocr_assets.py` | One-shot extractor: reads `_ocr_calibration/` source screenshots → writes `ocr_templates/`. Run after re-capturing sources, then commit diff. |
+| `_recordings/drive_<line>_<diagram>_<TS>.jsonl` | **Blackbox / drive recorder log** — one file per AutoDriver lifetime. Line 0 = `_type: "meta"` (route/diagram/dest/stops); subsequent lines mix `_type: "event"` (badge transitions: arrival / departure / passing_start / passing_end) and `_type: "sample"` (one OCR cycle, ~5s, all OCR fields + sim state including `at_station` / `cnt_pa_at_station` / `at_station_observed` / `inferred_state` / `segment_start_stop`). Written inside `auto_input.py`'s capture loop with per-line `flush()` for crash safety. Local-only / gitignored. Field additions backward-compatible (plot_drive ignores unknowns); field removals or renames require coordinated update with `plot_drive.py`. |
+| `_experiments/live_captures/` | Saved HUD crops from prior live testing (gitignored — `_experiments/` itself = artifact-only folder; OCR + layout modules promoted to root) |
 | `fonts/ShinGoPr6N-Medium.otf` | Latin + CJK font used by debug panel for station names |
 
 ## Recalibration for other resolutions
 
-If the game runs at a different resolution:
+If game runs at different resolution:
 
-1. Capture screenshots in the target resolution with HUD visible (running mode + at-platform mode + passing-through mode)
+1. Capture screenshots in target resolution with HUD visible (running mode + at-platform mode + passing-through mode)
 2. Identify HUD position (top-right); update `HUD_BBOX` in `hud_layout.py`
 3. Crop HUD; identify cell positions within it; update `*_VALUE_BBOX` and `BADGE_BBOX`
-4. Save the 9 source screenshots into `_ocr_calibration/` (gitignored). Filenames must match the keys in `KNOWN_VALUES` (digits) + `BADGE_ANCHOR_FILES` (badges) — both live in `_dev_scripts/extract_ocr_assets.py` and `ocr.py` respectively. PASSING is the rapid-service "Pass" / "通過" blue pentagon (filenames `passing_en.png`, `passing_jp.png`).
+4. Save the 9 source screenshots into `_ocr_calibration/` (gitignored). Filenames must match keys in `KNOWN_VALUES` (digits) + `BADGE_ANCHOR_FILES` (badges) — both live in `_dev_scripts/extract_ocr_assets.py` and `ocr.py` respectively. PASSING = rapid-service "Pass" / "通過" blue pentagon (filenames `passing_en.png`, `passing_jp.png`).
 5. Run `uv run python _dev_scripts/extract_ocr_assets.py` — extracts digit glyphs + badge anchor crops into `ocr_templates/`.
-6. Run `uv run python ocr.py` to sanity-check the new templates load + cross-classify cleanly. Commit the `ocr_templates/` diff.
+6. Run `uv run python ocr.py` to sanity-check new templates load + cross-classify cleanly. Commit the `ocr_templates/` diff.
 
-Digit templates are resolution-specific because exact-pixel matching requires
-the same glyph dimensions.
+Digit templates are resolution-specific because exact-pixel matching requires same glyph dimensions.
 
 ## Limitations
 
@@ -728,9 +501,7 @@ the same glyph dimensions.
 - **Game must be visible**: HUD area (top-right) must not be covered.
 - **Game must be actively rendering**: minimized/alt-tabbed games may stop rendering and produce stale captures.
 - **Scenery bleed**: HUD background is semi-transparent; very dark scenery behind reduces match scores (still reads correctly above ~0.7).
-- **No station-name OCR**: auto-driver doesn't validate which station the user is at; it trusts simulator's `state.curr_stop`. If they desync, manual PageDown is the recovery.
+- **No station-name OCR**: auto-driver doesn't validate which station the user is at; trusts simulator's `state.curr_stop`. If they desync, manual PageDown is the recovery.
 - **Game DRM**: irrelevant to the OCR pipeline (works on legit + cracked installs identically since dxcam reads GPU output regardless of game's startup path).
 
-Pending design (entry-point flow), validation history, calibration insights /
-guardrails, and the priority-ordered backlog all live in
-[WIP_autodriver.md](WIP_autodriver.md).
+Pending design (entry-point flow), validation history, calibration insights / guardrails, and priority-ordered backlog all live in [WIP_autodriver.md](WIP_autodriver.md).

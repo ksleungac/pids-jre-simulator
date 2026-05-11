@@ -1,12 +1,12 @@
 # LCD Display System — Cross-Model Infrastructure
 
-Modular per-train-model architecture for both Upper and Lower LCDs. This doc covers the **cross-model** layer: factory dispatch, mode system, unified state machine, lower-LCD interface contract, the recipe for adding new train models. Per-sub-series renderer specifics live in the per-series docs (see [Per-series displays](#per-series-displays) below).
+Modular per-train-model architecture for both Upper and Lower LCDs. This doc covers **cross-model** layer: factory dispatch, mode system, unified state machine, lower-LCD interface contract, recipe for adding new train models. Per-sub-series renderer specifics live in per-series docs (see [Per-series displays](#per-series-displays) below).
 
-Train-family scope and in-spec/best-effort policy live in [CLAUDE.md](CLAUDE.md) "Mental Model" (preloaded — should already be in head). JSON shapes are in [DATA_FORMAT.md](DATA_FORMAT.md). Cross-cutting code contracts live inline at their code sites (font-loading at the first font init in each model's `upper_lcd.py`; countdown formula at `lower_lcd.py` `draw_times`; PyInstaller path resolution at [`app_paths.py`](app_paths.py) `project_root`).
+Train-family scope and in-spec/best-effort policy live in [CLAUDE.md](CLAUDE.md) "Mental Model" (preloaded — should already be in head). JSON shapes → [DATA_FORMAT.md](DATA_FORMAT.md). Cross-cutting code contracts live inline at code sites (font-loading at first font init in each model's `upper_lcd.py`; countdown formula at `lower_lcd.py` `draw_times`; PyInstaller path resolution at [`app_paths.py`](app_paths.py) `project_root`).
 
 > **EDIT-CONTRACT** — what this doc holds, what it refuses.
 >
-> **Holds:** cross-model invariants — factory dispatch, the mode-cycler contract, the unified-state-machine spec, the lower-LCD interface (state injection + skip animation + terminus handling) that every train-model implementation must satisfy, and the recipe for adding a new train model.
+> **Holds:** cross-model invariants — factory dispatch, mode-cycler contract, unified-state-machine spec, lower-LCD interface (state injection + skip animation + terminus handling) every train-model implementation must satisfy, and recipe for adding a new train model.
 >
 > **Refuses:**
 > - Per-sub-series renderer details (E235-1000's linear bar, E235-0's circular full-route, transfer-info pipeline) — those live in [DISPLAY_E235.md](DISPLAY_E235.md) and future per-series docs
@@ -15,6 +15,8 @@ Train-family scope and in-spec/best-effort policy live in [CLAUDE.md](CLAUDE.md)
 > - Speculative future sections ("When X is implemented, …") — defer until needed; `TODO.md` is the home for pending designs
 > - Design-discussion rationale (multi-paragraph framings of *why* a model exists) — the rule lives here; the rationale lives in `memory/YYYY-MM-DD.md`
 > - Facts already in [CLAUDE.md](CLAUDE.md) mental model / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
+>
+> **Voice:** new reference-shaped entries (cross-model invariants, contracts, recipes, mode-system rules, state-machine spec, edge-case tables) — caveman-full voice (drop articles, fragments OK, `=` for definitional equivalence). Rationale-shaped passages (incident warnings, "Mental model:" framings, narrative examples) — stay normal voice. See [CLAUDE.md § Chat output style](CLAUDE.md).
 >
 > **Before adding:** name the section your edit merges into OR the content it replaces. If neither — you're appending, which is the failure mode this contract fights.
 >
@@ -95,18 +97,18 @@ No redundant prefixes in class names (e.g., `JapaneseDisplay` not `E235_1000Japa
 
 ### DisplayMode + ModeCycler
 
-`DisplayMode` (in `displays/base.py`) is an IntEnum: `KANJI=0`, `FURIGANA=1`, `ENGLISH=2`. `ModeCycler` (same file) cycles through registered modes every `STATION_DISPLAY_INTERVAL` seconds (default 4s). Cycler keeps an `enabled` flag for freezing on a forced mode.
+`DisplayMode` (in `displays/base.py`) = IntEnum: `KANJI=0`, `FURIGANA=1`, `ENGLISH=2`. `ModeCycler` (same file) cycles through registered modes every `STATION_DISPLAY_INTERVAL` seconds (default 4s). Cycler keeps `enabled` flag for freezing on a forced mode.
 
 ### Cycler Sharing Between Upper and Lower
 
-**One cycler, shared.** The upper owns it; the lower receives it as a constructor argument:
+**One cycler, shared.** Upper owns it; lower receives it as constructor argument:
 
 ```python
 self.upper = UpperDisplay(screen, route_data, stops)
 self.lower = LowerDisplay(screen, route_data, stops, self.upper.mode_cycler)
 ```
 
-This keeps modes in lockstep without a parallel timer (no drift, no re-tick). When the upper switches to ENGLISH, the lower switches with it. The cycler's interval, default mode, and `enabled` flag are all controlled from the upper side.
+Keeps modes in lockstep without parallel timer (no drift, no re-tick). When upper switches to ENGLISH, lower switches with it. Cycler's interval, default mode, and `enabled` flag all controlled from upper side.
 
 ### Cycling Behavior
 
@@ -116,17 +118,17 @@ This keeps modes in lockstep without a parallel timer (no drift, no re-tick). Wh
 | 4–8s | FURIGANA | つぎは | とうきょう |
 | 8–12s | ENGLISH | Next | Tōkyō |
 
-**Graceful fallback:** if a station lacks furigana or English data, that mode is skipped in the cycle.
+**Graceful fallback:** if station lacks furigana or English data, that mode skipped in cycle.
 
 ### Stop data keys vs DisplayMode enum
 
-Stop data is a plain dict (merged from `route.json` + `data/translations.json`) — keys are **strings**: `"name"`, `"english"`, `"furigana"`. `DisplayMode` is an internal **enum** tracking which mode is active. Use string keys for stop lookup (`stops[i].get("english")`) — `stops[i].get(DisplayMode.ENGLISH)` silently returns `""` because the enum value isn't a dict key.
+Stop data = plain dict (merged from `route.json` + `data/translations.json`) — keys are **strings**: `"name"`, `"english"`, `"furigana"`. `DisplayMode` = internal **enum** tracking which mode active. Use string keys for stop lookup (`stops[i].get("english")`) — `stops[i].get(DisplayMode.ENGLISH)` silently returns `""` because enum value isn't a dict key.
 
-Naming alignment between `"english"` (data) and `DisplayMode.ENGLISH` (state) is intentional but bridging happens at the manager layer (`UpperDisplay`/`LowerDisplay`), not via direct lookup.
+Naming alignment between `"english"` (data) and `DisplayMode.ENGLISH` (state) intentional but bridging happens at manager layer (`UpperDisplay`/`LowerDisplay`), not via direct lookup.
 
 ### Mode Mapping (Lower-Specific)
 
-The shared cycler ranges over KANJI / FURIGANA / ENGLISH. Lower's `mode_displays` dict maps both KANJI and FURIGANA to `japanese_display` (real PIDS doesn't furigana the route map); ENGLISH is intentionally absent so `mode_displays.get(mode, self.japanese_display)` falls back to Japanese until the ENGLISH renderer is implemented. Result: upper cycles freely through all three; lower stays Japanese.
+Shared cycler ranges over KANJI / FURIGANA / ENGLISH. Lower's `mode_displays` dict maps both KANJI and FURIGANA to `japanese_display` (real PIDS doesn't furigana the route map); ENGLISH intentionally absent so `mode_displays.get(mode, self.japanese_display)` falls back to Japanese until ENGLISH renderer implemented. Result: upper cycles freely through all three; lower stays Japanese.
 
 ### ⚠️ Cycler.enabled vs Cycler.paused
 
@@ -136,7 +138,7 @@ ModeCycler has `enabled`, **not** `paused`. To freeze a forced mode (e.g. in pre
 
 ## Unified State Machine
 
-Every stop follows a two-sub-state cycle: APPROACHING (`at_station=False`) → STOPPING (`at_station=True`) → next stop's APPROACHING → ...
+Every stop follows two-sub-state cycle: APPROACHING (`at_station=False`) → STOPPING (`at_station=True`) → next stop's APPROACHING → ...
 
 State lives on `AppState` (`at_station: bool`, `cnt_pa: int`, `cnt_pa_at_station: int`). Transitions all happen in `app.py` `_next_pa` and its helpers `_next_in_approaching` / `_next_in_stopping` / `_advance_to_next_stop`.
 
@@ -153,7 +155,7 @@ Press counts to fully traverse a stop (advance-into → STOPPING → advance-out
 
 ### Boot state
 
-`AppState.__init__` defaults to `at_station=True`, `cnt_pa_at_station=-1`. So `curr_stop=0` boots into STOPPING — the train is parked at the start platform, no advance-into has happened. First press either plays `pa_at_station[0]` (if non-empty) or advances directly to idx 1.
+`AppState.__init__` defaults to `at_station=True`, `cnt_pa_at_station=-1`. So `curr_stop=0` boots into STOPPING — train parked at start platform, no advance-into has happened. First press either plays `pa_at_station[0]` (if non-empty) or advances directly to idx 1.
 
 ### Prefix mapping
 
@@ -165,83 +167,83 @@ Press counts to fully traverse a stop (advance-into → STOPPING → advance-out
 | `cnt_pa == len(pa) - 1` (final approach PA) | まもなく | まもなく | Arriving at |
 | otherwise (`cnt_pa < last`) | 次は | つぎは | Next |
 
-`at_station=True` is the **only** path to "ただいま" — overrides cnt_pa-based mapping. All at-platform PAs belong in `pa_at_station`, never in `pa[]`.
+`at_station=True` = **only** path to "ただいま" — overrides cnt_pa-based mapping. All at-platform PAs belong in `pa_at_station`, never in `pa[]`.
 
-**Final-approach rule.** Only the LAST entry in `pa[]` flips the prefix to "まもなく"; intermediate approach announcements (e.g. pa[1] of a future 3-PA stop) stay on "次は."
+**Final-approach rule.** Only LAST entry in `pa[]` flips prefix to "まもなく"; intermediate approach announcements (e.g. pa[1] of a future 3-PA stop) stay on "次は."
 
 ### `jump_to_stop` semantic
 
 Click-to-jump (preview ←/→, future click-to-jump on lower LCD) lands in STOPPING@target. Mental model: clicking a station cell means "I'm at platform X." Next press cycles `pa_at_station` or advances, matching the rest of STOPPING. Implementation in `app.py` `jump_to_stop` — sets `at_station=True`, resets `cnt_pa_at_station=-1`, plus all the existing housekeeping (skip, departure_time, cnt_sta).
 
-`_has_pa` predicate (used by `jump_to_stop`'s passing-station roll) accepts a stop with non-empty `pa` OR non-empty `pa_at_station` as a valid landing target. Stops with both empty are treated as passing stations and rolled past.
+`_has_pa` predicate (used by `jump_to_stop`'s passing-station roll) accepts stop with non-empty `pa` OR non-empty `pa_at_station` as valid landing target. Stops with both empty treated as passing stations and rolled past.
 
 ### Circular loop-back
 
-Yamanote-style routes have the same station name at idx 0 and idx N. The duplicate idx 0 is a structural marker for circularity, not a state to visit mid-loop. `_advance_to_next_stop`'s loop-back branch jumps `idx N → idx 1` directly, plays `pa[0]` of the new stop, and lands in APPROACHING.
+Yamanote-style routes have same station name at idx 0 and idx N. Duplicate idx 0 = structural marker for circularity, not a state to visit mid-loop. `_advance_to_next_stop`'s loop-back branch jumps `idx N → idx 1` directly, plays `pa[0]` of new stop, lands in APPROACHING.
 
 ### Skip animation
 
-Skip animation lives in `_advance_to_next_stop`. Entering STOPPING and cycling pa_at_station do not touch skip state — by the time STOPPING is entered, the train has already arrived (skip is whatever the previous advance left it at, with skip_progress catching up to skip via `update_skip_progress`). Within-pa branch zeros skip on every press as a defensive catch-up. See [Lower LCD — Cross-Model Interface § Station Skip Logic](#station-skip-logic-full-spec) below for the full contract.
+Skip animation lives in `_advance_to_next_stop`. Entering STOPPING and cycling pa_at_station don't touch skip state — by the time STOPPING entered, train has already arrived (skip = whatever previous advance left it at, with skip_progress catching up to skip via `update_skip_progress`). Within-pa branch zeros skip on every press as defensive catch-up. See [Lower LCD — Cross-Model Interface § Station Skip Logic](#station-skip-logic-full-spec) below for full contract.
 
 ### Edge cases & guards
 
-**Audio-playing guard.** `_next_pa` early-returns when `audio.is_playing()` — both manual PageDown and `pending_next_pa` from auto-driver are dropped while audio plays. `jump_to_stop` does NOT honor this guard; instead it calls `audio.pause()` itself before mutating state, so callers (preview ←/→, click-to-jump) get a clean handoff without doing their own pause.
+**Audio-playing guard.** `_next_pa` early-returns when `audio.is_playing()` — both manual PageDown and `pending_next_pa` from auto-driver dropped while audio plays. `jump_to_stop` does NOT honor this guard; instead calls `audio.pause()` itself before mutating state, so callers (preview ←/→, click-to-jump) get clean handoff without doing their own pause.
 
-**`cnt_pa` is dead during STOPPING.** Naturally-entered STOPPING (via `_next_in_approaching`'s "pa exhausted" branch) leaves `cnt_pa` at `len(pa)-1`. `jump_to_stop`-entered STOPPING forces `cnt_pa=0`. Both render "ただいま X" because `at_station` overrides the prefix mapping. `cnt_pa` is not read again until `_advance_to_next_stop` resets it to `0` on exit.
+**`cnt_pa` is dead during STOPPING.** Naturally-entered STOPPING (via `_next_in_approaching`'s "pa exhausted" branch) leaves `cnt_pa` at `len(pa)-1`. `jump_to_stop`-entered STOPPING forces `cnt_pa=0`. Both render "ただいま X" because `at_station` overrides prefix mapping. `cnt_pa` not read again until `_advance_to_next_stop` resets it to `0` on exit.
 
-**Terminus (non-circular).** `STOPPING@dest_stop_idx` is a stable end-state — pressing PageDown falls through `_advance_to_next_stop`'s final `else: return` (neither `curr_stop < terminus_idx` nor `circular == 1` is true). Silent no-op, no state change.
+**Terminus (non-circular).** `STOPPING@dest_stop_idx` = stable end-state — pressing PageDown falls through `_advance_to_next_stop`'s final `else: return` (neither `curr_stop < terminus_idx` nor `circular == 1` is true). Silent no-op, no state change.
 
-**`pa=[]` with non-empty `pa_at_station`.** `_is_stopping` accepts either non-empty, so advance lands such a stop in APPROACHING with `cnt_pa=0`, then calls `audio.play_pa(curr_stop, 0)` which silently returns at `audio.py:73` (`pa_index >= len(pa_tracks)`). Display flashes "次は X" with no audio for one press until the user presses again to enter STOPPING. No known route data hits this today, but `_has_pa` tolerates it.
+**`pa=[]` with non-empty `pa_at_station`.** `_is_stopping` accepts either non-empty, so advance lands such a stop in APPROACHING with `cnt_pa=0`, then calls `audio.play_pa(curr_stop, 0)` which silently returns at `audio.py:73` (`pa_index >= len(pa_tracks)`). Display flashes "次は X" with no audio for one press until user presses again to enter STOPPING. No known route data hits this today, but `_has_pa` tolerates it.
 
 ---
 
 ## Code Style Conventions
 
-- **Position constants are inlined** as local variables in each draw method (e.g. `box_x, box_y = 15, 8`). Different train models may need different layouts; keeping positions per-method makes that explicit.
-- **Fonts are shared** as class members defined in `__init__` (e.g. `self.font_type_bold`). Fonts are consistent within a model.
-- See [conventions.md § "Tuneable-params block"](.claude/rules/conventions.md) for the project-wide rule on labeled-local-variables at the top of every draw method.
+- **Position constants inlined** as local variables in each draw method (e.g. `box_x, box_y = 15, 8`). Different train models may need different layouts; per-method positions make that explicit.
+- **Fonts shared** as class members defined in `__init__` (e.g. `self.font_type_bold`). Fonts consistent within a model.
+- See [conventions.md § "Tuneable-params block"](.claude/rules/conventions.md) for project-wide rule on labeled-local-variables at top of every draw method.
 
 ### Mode Renderer Design
 
-Each mode renderer (`JapaneseDisplay`, `FuriganaDisplay`, `EnglishDisplay`) is **self-contained**: owns its fonts, layout, and full set of draw methods. ~90% similarity across renderers is acceptable — different train models may need to diverge freely without reaching into the wrong layer. Canonical shape: `JapaneseDisplay` in `upper_lcd.py` (fonts loaded once in `__init__`, position constants inline per draw method).
+Each mode renderer (`JapaneseDisplay`, `FuriganaDisplay`, `EnglishDisplay`) = **self-contained**: owns its fonts, layout, full set of draw methods. ~90% similarity across renderers acceptable — different train models may need to diverge freely without reaching into wrong layer. Canonical shape: `JapaneseDisplay` in `upper_lcd.py` (fonts loaded once in `__init__`, position constants inline per draw method).
 
 ### Centering Text Across Fonts
 
-Use `surface.get_bounding_rect()` — returns tight visible-pixel bounds. **Do NOT** use `font.get_size()` / `surface.get_size()` for tight centering — those include font leading, which varies significantly per font (Frutiger's leading is much larger than Helvetica's at the same pt size), breaking alignment when swapping fonts.
+Use `surface.get_bounding_rect()` — returns tight visible-pixel bounds. **Do NOT** use `font.get_size()` / `surface.get_size()` for tight centering — those include font leading, which varies significantly per font (Frutiger's leading much larger than Helvetica's at same pt size), breaking alignment when swapping fonts.
 
-Canonical example: `UpperDisplay._draw_station_code_badge` centers two text rows of different sizes inside a small badge, reactive to any font choice.
+Canonical example: `UpperDisplay._draw_station_code_badge` centers two text rows of different sizes inside small badge, reactive to any font choice.
 
-For **horizontal centering inside a fixed-width cell** (e.g. passing-station chevron in the lower LCD): use `(cell_w - element_w) // 2` for true center. Don't copy magic-number approximations like `stops_w * 0.3` — that constant happens to work for the full-route's narrow cells (~1 px off true center) but is ~8 px off in the 8-station view's wide cells.
+For **horizontal centering inside fixed-width cell** (e.g. passing-station chevron in lower LCD): use `(cell_w - element_w) // 2` for true center. Don't copy magic-number approximations like `stops_w * 0.3` — that constant happens to work for full-route's narrow cells (~1 px off true center) but is ~8 px off in 8-station view's wide cells.
 
 ---
 
 ## Lower LCD — Cross-Model Interface
 
-The contract every train model's `LowerDisplay` must satisfy. Per-sub-series renderer specifics (linear full-route, circular full-route, 8-station, transfer-info pipeline, continuity arrows, layout/centering tables, `draw_times` subtleties) live in the per-series docs.
+Contract every train model's `LowerDisplay` must satisfy. Per-sub-series renderer specifics (linear full-route, circular full-route, 8-station, transfer-info pipeline, continuity arrows, layout/centering tables, `draw_times` subtleties) live in per-series docs.
 
 ### State Injection & Skip Animation
 
-The lower needs more per-frame state than the upper (cursor_pos, skip, skip_progress, time_to_next, departure_time, frame_mode, is_last_pa). API mirrors upper's `set_state` / `update` / `draw`, but `set_state` binds an AppState reference rather than copying fields. Called once at app startup; subsequent draws read live state from the bound reference. `update(current_time)` is a no-op (the cycler is shared with upper); `draw(current_time)` dispatches to whichever mode renderer the cycler points at.
+Lower needs more per-frame state than upper (cursor_pos, skip, skip_progress, time_to_next, departure_time, frame_mode, is_last_pa). API mirrors upper's `set_state` / `update` / `draw`, but `set_state` binds AppState reference rather than copying fields. Called once at app startup; subsequent draws read live state from bound reference. `update(current_time)` = no-op (cycler shared with upper); `draw(current_time)` dispatches to whichever mode renderer cycler points at.
 
 ### Station Skip Logic (full spec)
 
-**Single source of truth**: `state.curr_stop` is the only stored "where is the train" index. The visual cursor on the lower LCD is derived: `state.cursor_pos = curr_stop - max(0, skip - skip_progress)`. When no skip is in flight (`skip == 0`), `cursor_pos == curr_stop`.
+**Single source of truth**: `state.curr_stop` = only stored "where is the train" index. Visual cursor on lower LCD derived: `state.cursor_pos = curr_stop - max(0, skip - skip_progress)`. When no skip in flight (`skip == 0`), `cursor_pos == curr_stop`.
 
-**Skip setup happens in `app._next_pa`'s "advance to next stop" branch** (not in the lower-LCD renderer):
+**Skip setup happens in `app._next_pa`'s "advance to next stop" branch** (not in lower-LCD renderer):
 
-- Records `prev_stop = curr_stop`, advances `curr_stop` past passing stations to the next PA station.
+- Records `prev_stop = curr_stop`, advances `curr_stop` past passing stations to next PA station.
 - Sets `skip = curr_stop - prev_stop - 1` (number of passing stations crossed), `skip_progress = 0`, `time_to_next = stops[curr_stop].time` if `skip > 0`.
-- First frame after this: `cursor_pos = curr_stop − skip` = first passing station. The cursor visibly steps onto it.
+- First frame after this: `cursor_pos = curr_stop − skip` = first passing station. Cursor visibly steps onto it.
 
-**Time-based progression**: `AppState.update_skip_progress` increments `skip_progress` at thresholds `time_to_next * i / (skip + 1)`. `cursor_pos` auto-advances because it's derived. No `curr_stop_disp` mutation. Called from the main loop in `app.run()` *before* drawing each frame — keeps the lower display pure rendering.
+**Time-based progression**: `AppState.update_skip_progress` increments `skip_progress` at thresholds `time_to_next * i / (skip + 1)`. `cursor_pos` auto-advances because derived. No `curr_stop_disp` mutation. Called from main loop in `app.run()` *before* drawing each frame — keeps lower display pure rendering.
 
-**Catch-up at next PA tick**: `_next_pa`'s "next PA within current stop" branch zeros `skip` / `skip_progress` / `time_to_next` on every `cnt_pa` increment. Cursor snaps to `curr_stop`. Idempotent — no-op if skip was already 0.
+**Catch-up at next PA tick**: `_next_pa`'s "next PA within current stop" branch zeros `skip` / `skip_progress` / `time_to_next` on every `cnt_pa` increment. Cursor snaps to `curr_stop`. Idempotent — no-op if skip already 0.
 
-**No leak class possible**: the "advance" branch *overwrites* skip from the gap (not appends), and the "within stop" branch unconditionally zeros it. There is no separate "flush" path that could leak.
+**No leak class possible**: "advance" branch *overwrites* skip from gap (not appends), "within stop" branch unconditionally zeros it. No separate "flush" path that could leak.
 
-**Inner circle**: drawn at `curr_stop` (PA target) via `gi == self.state.curr_stop` in `draw_marks`. During skip animation `cursor_pos` lags behind by `skip - skip_progress` — intentional: the pointer (red triangle) shows animation position; the inner dot shows the actual PA target.
+**Inner circle**: drawn at `curr_stop` (PA target) via `gi == self.state.curr_stop` in `draw_marks`. During skip animation `cursor_pos` lags behind by `skip - skip_progress` — intentional: pointer (red triangle) shows animation position; inner dot shows actual PA target.
 
-**State fields**: `skip`, `skip_progress`, `time_to_next` — three integers fully describe the animation. `cursor_pos` is a property on `AppState`, not stored.
+**State fields**: `skip`, `skip_progress`, `time_to_next` — three integers fully describe animation. `cursor_pos` = property on `AppState`, not stored.
 
 **Call order in `app.run()`** — renderer stays pure-read so a future English lower won't need to re-implement skip:
 
@@ -254,17 +256,17 @@ pygame.display.flip()
 
 ### Terminus (`dest_stop_idx`)
 
-Non-circular routes terminate at the route-level `dest`, not at `len(stops) - 1`. Some route data (e.g. Keihin 727B) extends past the operational dest for through-running reference — Keihin 727B's dest is 磯子 (index 40) but stops continue 41..45 to 大船 to capture the through-running segment.
+Non-circular routes terminate at route-level `dest`, not at `len(stops) - 1`. Some route data (e.g. Keihin 727B) extends past operational dest for through-running reference — Keihin 727B's dest is 磯子 (index 40) but stops continue 41..45 to 大船 to capture the through-running segment.
 
-`PASimulator.__init__` resolves `self.dest_stop_idx` once by name-matching `self.dest` against `self.stops`. `_next_pa` computes `terminus_idx = self.dest_stop_idx` (non-circular) or `len(self.stops) - 1` (circular — duplicate-name first-match would be wrong otherwise, but circular routes use the loop-back branch so it doesn't matter).
+`PASimulator.__init__` resolves `self.dest_stop_idx` once by name-matching `self.dest` against `self.stops`. `_next_pa` computes `terminus_idx = self.dest_stop_idx` (non-circular) or `len(self.stops) - 1` (circular — duplicate-name first-match would be wrong otherwise, but circular routes use loop-back branch so doesn't matter).
 
 ---
 
 ## Adding New Train Model
 
 1. Create `displays/train_models/{model_name}/` directory.
-2. Copy and modify `upper_lcd.py` for fonts/positions (often a fork from a sibling sub-series — see [conventions.md § "Display module structure"](.claude/rules/conventions.md) for the copy-don't-reinvent rule when forking).
-3. Implement `lower_lcd.py` with `LowerDisplay`. Subclass an existing model's `LowerDisplay` and override only the slot renderer that differs (precedent: E235-0 subclasses E235-1000 and swaps only the FULL slot's renderer when route is Yamanote).
+2. Copy and modify `upper_lcd.py` for fonts/positions (often a fork from sibling sub-series — see [conventions.md § "Display module structure"](.claude/rules/conventions.md) for copy-don't-reinvent rule when forking).
+3. Implement `lower_lcd.py` with `LowerDisplay`. Subclass existing model's `LowerDisplay` and override only the slot renderer that differs (precedent: E235-0 subclasses E235-1000 and swaps only FULL slot's renderer when route is Yamanote).
 4. Create `__init__.py` exporting `UpperDisplay`, `LowerDisplay` + per-model dimensions/palette (`S_WIDTH`, `S_HEIGHT`, `UPPER_HEIGHT`, `DARK_BG`, `WHITE_BG`).
 5. Register in `displays/train_models/__init__.py`:
 
@@ -272,9 +274,9 @@ Non-circular routes terminate at the route-level `dest`, not at `len(stops) - 1`
    TRAIN_DISPLAYS["{model_name}"] = {ModelName}UpperDisplay
    ```
 
-6. Add a per-series doc (`DISPLAY_{MODEL}.md`) for sub-series-specific renderer rules. Cross-reference from [Per-series displays](#per-series-displays) below.
+6. Add per-series doc (`DISPLAY_{MODEL}.md`) for sub-series-specific renderer rules. Cross-reference from [Per-series displays](#per-series-displays) below.
 
-Per [CLAUDE.md](CLAUDE.md) "Mental Model → Per-model IRL line scope": the new model's IRL line scope determines which routes need full-fidelity behavior; everything else is best-effort.
+Per [CLAUDE.md](CLAUDE.md) "Mental Model → Per-model IRL line scope": new model's IRL line scope determines which routes need full-fidelity behavior; everything else best-effort.
 
 ### Usage
 
@@ -297,7 +299,7 @@ display.draw()
 
 ## Integration with Main Application
 
-Wired in `app.py` `PASimulator.__init__` (creates `upper` + `lower`, passes the upper's `mode_cycler` to the lower so modes stay in lockstep, calls `lower.set_state(self.state)`) and `PASimulator.run` (per-frame call order: `state.update_skip_progress(timestamp)` → `upper.update` + `upper.draw` → `lower.draw` → `pygame.display.flip()`).
+Wired in `app.py` `PASimulator.__init__` (creates `upper` + `lower`, passes upper's `mode_cycler` to lower so modes stay in lockstep, calls `lower.set_state(self.state)`) and `PASimulator.run` (per-frame call order: `state.update_skip_progress(timestamp)` → `upper.update` + `upper.draw` → `lower.draw` → `pygame.display.flip()`).
 
 ---
 
@@ -325,12 +327,12 @@ uv run preview_display.py --lower-view {full,eight,cycle}
 
 **Observe:**
 
-- Mode cycling: upper changes between KANJI / FURIGANA / ENGLISH every 4s; lower stays Japanese until ENGLISH dispatch is enabled.
-- Skip animation: PageDown across a passing-station gap; cursor walks forward through the passing station, inner red dot stays at the new PA target.
+- Mode cycling: upper changes between KANJI / FURIGANA / ENGLISH every 4s; lower stays Japanese until ENGLISH dispatch enabled.
+- Skip animation: PageDown across passing-station gap; cursor walks forward through passing station, inner red dot stays at new PA target.
 - Long-route window flip (Keihin-Tōhoku, Chuo): cursor pos stays correct as window slides.
 - Centering: mock route (11 stops) renders with equal margins; multi-line routes unchanged.
 
-Preview-mode swap inventory is documented at `PASimulator.__init__`'s ``preview`` parameter in `app.py`. `jump_to_stop` semantics live in its docstring at `app.py` `PASimulator.jump_to_stop`. Mock-route stop layout is in [`audio/_mock/main/README.md`](audio/_mock/main/README.md).
+Preview-mode swap inventory documented at `PASimulator.__init__`'s ``preview`` parameter in `app.py`. `jump_to_stop` semantics live in its docstring at `app.py` `PASimulator.jump_to_stop`. Mock-route stop layout → [`audio/_mock/main/README.md`](audio/_mock/main/README.md).
 
 ---
 
