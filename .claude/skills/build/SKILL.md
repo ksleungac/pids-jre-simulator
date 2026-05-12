@@ -112,7 +112,7 @@ $shipExclude = @(
     'dist', 'dist-release', 'build',  # build outputs (would self-recurse)
     'displays',                        # Python source — bundled INTO exe by PyInstaller, not alongside
     'memory', 'lcd_references',        # repo-only / dev refs
-    'audio_src', 'data_tools', 'docs'  # dev tooling / repo-only
+    'audio_src', 'docs'                # dev tooling / repo-only
 )
 
 $shipDirs = Get-ChildItem -Path "." -Directory | Where-Object {
