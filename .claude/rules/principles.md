@@ -395,6 +395,16 @@ When editing any audited doc — domain docs (`DISPLAY.md`, `DATA_FORMAT.md`, `A
 
 **How to apply:** Each audited doc carries an `EDIT-CONTRACT` block at its top — refuse-list, "name what you merge into OR replace" requirement, size gate. Re-read before any non-trivial addition. Skills that write to these docs (`/session-recap`, etc.) re-quote the EDIT-CONTRACT before writing. Periodic sweep via `/distill-docs` (domain docs) or `/distill-rules` (rules corpus) catches what the gate misses (cross-doc drift, cumulative staleness, self-blindness).
 
+### Sync downstream enforcers when reframing doc rules
+When a doc rule is reframed from mechanical (hard regex / fixed threshold) to case-by-case / IRL-matched, audit tooling that hard-encodes the original form. Update or drop the enforcer in the same session.
+
+**Why:** Tools encoding the old form become silent false-alarm generators; users + claude learn to ignore tool output, which then hides real defects. Examples:
+- (2026-05-12) DATA_FORMAT § Compound Destinations reframed 2026-05-07 "always A&\\nB" → "case-by-case match IRL"; `validate_data.py:check_compound_dest_format` kept the hard regex; flagged "Tōkyō&Ueno" as malformed on every run for 5 days; dropped entirely 2026-05-12 (no encodable threshold under case-by-case).
+
+**How to apply:**
+- On any doc rule reframe in DATA_FORMAT / DISPLAY / audited doc, grep for enforcers (`validate_data.py`, `_dev_scripts/*.py`) referencing the rule's hard form; update or drop in the same session.
+- If the reframed rule isn't programmatically encodable (e.g. "match IRL" with no threshold), drop the enforcer entirely — not retained as advisory.
+
 ### Big-bang rewrite when convention shifts
 When a presentation convention (voice, style, naming, layout) changes and affects multiple files, do a one-off rewrite of all in-scope files in a single push plus a write-time gate (EDIT-CONTRACT / inline `# CONTRACT:` / skill rule). Don't propose lazy / incremental adoption where new content uses the new convention while old content stays unchanged.
 

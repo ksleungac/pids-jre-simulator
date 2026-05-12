@@ -23,7 +23,6 @@ import sys
 from pathlib import Path
 
 SUFFIX_RE = re.compile(r"_[A-Z]{2,}$")
-COMPOUND_DEST_RE = re.compile(r"^[^&\s]+&\n[^&]+$")
 AUDIO_ROOT = Path("audio")
 DATA_ROOT = Path("data")
 LINE_ICONS_DIR = DATA_ROOT / "line_icons"
@@ -132,19 +131,6 @@ def check_transfers_by_view(stations_data: dict, lines_data: dict, issues: list)
                             f"'{sname}' view '{view_key}': rows={rows} sum={sum(rows)} — expected {expected} (len(transfers) - len(drop))",
                         )
                     )
-
-
-def check_compound_dest_format(translations: dict, issues: list) -> None:
-    """Compound destinations (key contains '・') must encode english as
-    'A&\\nB' — '&' immediately followed by newline, no space before '&'."""
-    for ja_key, entry in translations.items():
-        if "・" not in ja_key:
-            continue
-        en = entry.get("english", "")
-        if not en:
-            continue
-        if "&" in en and not COMPOUND_DEST_RE.match(en):
-            issues.append(("data/translations.json", f'compound "{ja_key}": english "{en!r}" not in "A&\\nB" form'))
 
 
 def check_route(route_path: Path, translations: dict, train_types: dict, issues: list) -> None:
@@ -304,7 +290,6 @@ def main():
             print(f"  WARNING: code_3 count drifted from documented 22")
 
     issues = []
-    check_compound_dest_format(translations, issues)
     check_lines_json(lines, issues)
     check_stations_transfers(stations, lines, issues)
     check_transfers_by_view(stations, lines, issues)
