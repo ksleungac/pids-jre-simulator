@@ -268,7 +268,7 @@ Mention this safety net in your pre-flight summary so the user knows you have a 
 
 ### Step 7.5 — Splice source-recording artifacts (optional, only if pattern is present)
 
-Some source recordings include capture artifacts that the standard trim/validate pipeline can't clean up. Two patterns seen so far on the keiyo line:
+Some source recordings include capture artifacts that the standard trim/validate pipeline can't clean up. Two patterns surfaced so far (across multiple lines — patterns are recording-source-driven, not line-specific):
 
 **Pattern A — KAK transient** (physical staff-machine cut captured in audio):
 
@@ -481,14 +481,16 @@ Where `keep_until = music_end + 0.5` and `skip_until = voice_start - 0.5` (uses 
 
 If the file is locked when `mv` runs ("Device or resource busy"), the verifier or another player is holding it — close it and retry.
 
-#### Hostile-recording pattern (yamanote-style) — combine fixes in ONE splice
+#### Hostile-recording pattern — combine fixes in ONE splice
 
 When the source recording has multiple problems in the cut zone — sta_cut placed mid-music, residual KAK transient post-cut, no clean silence gap, voice attacks at digital ceiling — fix them all in a single ffmpeg operation. Don't iterate "fix KAK → user verifies → adjust sta_cut → user verifies → add silence pad → user verifies." That triples user verification time.
+
+(First surfaced on Yamanote recordings — pattern is recording-source-driven, not line-specific.)
 
 The combined operation:
 
 1. **Cut music body before its natural sharp end** — addresses pre-cut KAK perception (the music's hard staff-cut moment can sound clicky in the verifier preview). Use `atrim=0:<music_cut>` ending slightly before the music's natural end (e.g. 100–200 ms inside the music body).
-2. **Insert artificial silence** to meet the `~0.3 s pre-voice` convention. Yamanote-style files don't have a natural silence gap wide enough; generate one with `anullsrc=channel_layout=stereo:sample_rate=22050,atrim=duration=0.30`.
+2. **Insert artificial silence** to meet the `~0.3 s pre-voice` convention. Hostile-pattern files don't have a natural silence gap wide enough; generate one with `anullsrc=channel_layout=stereo:sample_rate=22050,atrim=duration=0.30`.
 3. **Skip KAK + first voice burst** — splice through to the inter-syllable quiet zone (or directly to voice content if no quiet zone exists). Use `atrim=<voice_resume>` for the second segment.
 4. **Crossfade both junctions** to avoid audible click at sample-level discontinuities. Use `acrossfade=d=0.03:c1=tri:c2=tri` between music and silence (30 ms is good for music-side fade-out), and `acrossfade=d=0.02` between silence and voice (20 ms is enough since silence side is already at zero).
 5. **Set sta_cut at the start of artificial silence** — gives the convention's 0.3 s pad before voice attack arrives.
@@ -510,7 +512,7 @@ mv <sta>.tmp.mp3 audio/<line>/<diagram>/sta/<sta>.mp3
 
 Then update `sta_cut` to `<music_cut>` (= start of inserted silence).
 
-**Verify with the −8 dB voice-attack threshold** (not the convention's voice_start which assumes a sharp onset — yamanote voices ramp in and cross −8 dB earlier than the peak). Aim for the gap from sta_cut to first window > −8 dB to be 280–340 ms. If short, increase `silence_dur` by ~100 ms and redo.
+**Verify with the −8 dB voice-attack threshold** (not the convention's voice_start which assumes a sharp onset — hostile-pattern voices ramp in and cross −8 dB earlier than the peak). Aim for the gap from sta_cut to first window > −8 dB to be 280–340 ms. If short, increase `silence_dur` by ~100 ms and redo.
 
 **Anti-pattern:** doing this in 2-3 ffmpeg passes (first KAK splice, then sta_cut adjustment, then silence pad). Each pass requires user verification. Combine all three into the single template above.
 
@@ -636,8 +638,12 @@ Every STA file ships with **~0.2 s of silence at each end**:
 - **Don't create a metadata JSON sidecar.** The filename IS the metadata store. If `sta_meta.json` shows up, that's a previous experiment that should be removed.
 - **Front-half placeholders are fine.** When STA source covers only part of a route (e.g., from-某-station-onward), the unsplit stops keep their placeholder `sta` refs until the rest arrives. They'll fail `validate_data.py`'s file-existence check until then — that's expected.
 - **Detector zero-gap pattern → real gap is outside the search window.** When the detector returns `music_end == voice_start` with high confidence, that's NOT a genuinely tight transition — it's a false positive. Probe the waveform manually (Step 12) and run the manual mid-trim recipe.
-- **Source-recording transients (KAK).** Some lines (keiyo) have a loud physical-cut transient captured in the recording. If you spot a -4 to -7 dB peak near `sta_cut`, run Step 7.5 to splice it out before normal trim. Without splicing, the transient gets played at full volume during cut transitions — jarring UX. The detector also misclassifies the KAK's silence boundary as music_end, producing zero-gap false positives.
+- **Source-recording transients (KAK).** Some source recordings have a loud physical-cut transient captured at the staff-machine cut moment (seen on Keiyo + Yamanote so far; recording-source-driven, not line-specific). If you spot a -4 to -7 dB peak near `sta_cut`, run Step 7.5 to splice it out before normal trim. Without splicing, the transient gets played at full volume during cut transitions — jarring UX. The detector also misclassifies the KAK's silence boundary as music_end, producing zero-gap false positives.
 - **Most stations flag EARLY immediately after `trim_sta_silence.py`** — expected, propose-then-apply fixes them. Don't try to "fix" the trim script's `total_shift` math; the propose-then-apply round trip is the design.
+
+## Documentation hook
+
+After Phase A split / Phase B verification lands: if this work surfaced anything line-specific not already in [audio/README.md](../../../audio/README.md) — IRL melody quirk (no-melody station, elaborate-melody region), per-line filename-convention deviation, schema-corner-case usage — propose an entry. Decline if work was routine. (Recording-source patterns like KAK transient / hostile-recording are NOT line-specific; they stay in the skill's Step 7.5 + Gotchas.)
 
 ## Out of scope
 
@@ -649,6 +655,7 @@ Every STA file ships with **~0.2 s of silence at each end**:
 ## Related
 
 - **pa-make** skill — PA workflow (separate; PA has different conventions, no `sta_cut`)
+- `audio/README.md` — per-line IRL + sim quirks catalog (write-gate target above)
 - `DATA_FORMAT.md` — route.json schema reference (field meanings, validation rules)
 - `_dev_scripts/trim_sta_silence.py` — trim leading/trailing/mid-gap silence
 - `_dev_scripts/detect_sta_cut.py` — validate `sta_cut` placement

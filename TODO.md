@@ -77,6 +77,7 @@ The chrome i18n foundation shipped 2026-04-29 evening: `i18n.py`, language picke
 
 - [ ] **Decide 1b debug-frame dump behaviour.** `_dev_scripts/capture_game.py:320` saves a HUD crop every sample interval to `_experiments/live_captures/`. Gitignored, but disk spam if 1b runs long. Options: leave (debugging tool), gate behind `--save-frames` flag (default off), or remove. (Discussed 2026-04-27, deferred.)
 - [ ] **Re-grab `passing_en.png` at native 2560×1440.** Current capture is 2559×1439 — pygame blit handles it, classifier diff=0.00, but a clean re-capture is tidier.
+- [ ] **`validate_data.py` compound-destination rule stale.** Flags `data/translations.json` "東京・上野" english `"Tōkyō&Ueno"` as not in `"A&\nB"` form, but DATA_FORMAT § Compound Destinations was reframed 2026-05-07 to case-by-case (short compound dests stay single-line, omit `\n`). Validator hasn't been updated to match the doc. Either fix validator to honor case-by-case rule, or codify validator's stricter rule as the true contract. Surfaced 2026-05-12 during line-WIP sweep.
 
 ---
 

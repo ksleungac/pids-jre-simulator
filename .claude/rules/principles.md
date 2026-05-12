@@ -86,10 +86,12 @@ Before claiming "X is a bug" or "X works like Y", read the call sites and trace 
 - (2026-05-07) Dismissed `i18n.font_named()` as "by design" from the local docstring; canonical CONTRACT block was in the same grep output, unread.
 - (2026-05-08) Claimed vibe-check + review-dirty needed an explicit primitive-ban grep checklist; the reviewer's preloaded conventions.md + rule-citation pass already covered it.
 - (2026-05-08 PM) Defended green ring on Yamanote time circle citing original code + DISPLAY_E235.md line 252 across multiple user pushbacks; user: *"there is NO green ring."* Both code and doc were stale relative to user's IRL mental model.
+- (2026-05-12) Filled audio/README JJ entry from folder structure alone; route.json content showed JJ is WIP (missing `time` + `sta_code` on every stop, mixed PA convention, terminus `sta: []`). User: *"if you read my [DATA_FORMAT] you will know it is still WIP, so validate data gives out false alarm."* `validate_data.py` confirmed 52 issues. When documenting per-line/per-instance content, read the data file first — folder structure tells you what's there, not what's complete.
 
 **How to apply:**
 - When user pushes back, re-read the source — don't re-justify from memory.
 - When user reframes a concept, sweep related logic in one pass — don't iterate point-fixes.
+- When documenting per-line / per-instance facts, inspect data file content (route.json, similar) + run `validate_data.py` before authoring the entry. Folder shape ≠ data completeness.
 
 ### Verify runtime semantics from primary source
 For code whose behavior depends on deployment frame or external runtime (PyInstaller frozen vs dev, library hooks, threading, I/O timing, OS specifics), verify against primary source — not cached impression.

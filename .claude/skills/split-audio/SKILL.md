@@ -285,6 +285,10 @@ For non-Japanese names: lowercase, spaces → hyphens, strip apostrophes/most pu
 - **Don't create a metadata JSON sidecar** for STA. The filename IS the metadata store. If `sta_meta.json` shows up, that's a previous experiment that should be removed.
 - **Front-half placeholders are fine.** When STA source covers only part of a route (e.g., from-某-station-onward), the unsplit stops keep their placeholder `sta` refs (e.g., `JO19_TYO`, `JO20`) until the rest arrives. They'll fail `validate_data.py`'s file-existence check until then — that's expected.
 
+## Documentation hook
+
+After split + route.json update lands: if this work surfaced anything line-specific not already in [audio/README.md](../../../audio/README.md) — new diagram for existing line, IRL service quirk, filename-convention deviation, schema-corner-case usage — propose an entry. Decline if work was routine split-and-go.
+
 ## Out of scope
 
 - **Variant / arrangement modeling** — current scheme captures song identity, not recording identity. If/when fidelity matters, extend the convention or add a sidecar then. Don't pre-build for it.
@@ -294,5 +298,6 @@ For non-Japanese names: lowercase, spaces → hyphens, strip apostrophes/most pu
 
 ## Related
 
+- `audio/README.md` — per-line IRL + sim quirks catalog (write-gate target above)
 - `DATA_FORMAT.md` — route.json schema reference (field meanings, validation rules)
 - `validate_data.py` — checks audio files referenced by routes exist on disk

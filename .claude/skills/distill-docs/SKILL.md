@@ -29,6 +29,7 @@ In scope:
 - `DISPLAY.md`
 - `DATA_FORMAT.md`
 - `AUTO_INPUT.md`
+- `audio/README.md` (per-line IRL + sim quirks; growing surface as lines accumulate)
 
 Out of scope:
 - `CLAUDE.md` (preloaded; mental-model framing is intentionally generous, slim-rule applies to implementation only — see [principles.md § "Preloaded mental model vs progressive implementation detail"](../../rules/principles.md))
