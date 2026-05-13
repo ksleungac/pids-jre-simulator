@@ -519,10 +519,17 @@ def draw_text_given_width(
         img = draw_text(text, font, color, x + (width - t_w) // 2, y)
         screen.blit(img, (x + (width - t_w) // 2, y))
     else:
-        # Japanese text fits - add even spacing between characters
+        # Japanese text fits - add even spacing between characters.
+        # Per-char measured widths (not uniform stride) — handles mixed-width
+        # text like compound dests `品川･東京` where `･` (U+FF65) is halfwidth.
+        # Uniform-width inputs (every other Japanese render) produce identical
+        # output because their per-char widths all equal the previous t_w_s.
+        char_widths = [font.size(c)[0] for c in text]
         sep = (width - t_w) // (len(text) + 1)
         exp = 7 if len(text) == 2 else 0
+        cumulative = 0
         for i, char in enumerate(text):
-            x_coord = x + sep * (i + 1) + i * t_w_s + (exp if i > 0 else -exp)
+            x_coord = x + sep * (i + 1) + cumulative + (exp if i > 0 else -exp)
             img = draw_text(char, font, color, int(x_coord), y)
             screen.blit(img, (int(x_coord), y))
+            cumulative += char_widths[i]
