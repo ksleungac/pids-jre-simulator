@@ -34,7 +34,14 @@ import dxcam
 import numpy as np
 import pygame
 
-from hud_layout import BADGE_BBOX, DISTANCE_VALUE_BBOX, HUD_BBOX, SPEED_LIMIT_VALUE_BBOX, SPEED_VALUE_BBOX
+from hud_layout import (
+    BADGE_BBOX,
+    CAPTURE_REGION_2560_1440,
+    DISTANCE_VALUE_BBOX,
+    HUD_BBOX_IN_CAPTURE,
+    SPEED_LIMIT_VALUE_BBOX,
+    SPEED_VALUE_BBOX,
+)
 from ocr import (
     build_templates,
     classify_badge_state,
@@ -386,7 +393,7 @@ def _render_report_async(log_path: Path) -> None:
 
         out_path = project_root() / f"{log_path.stem}.html"
         meta, events, samples = load_jsonl(log_path)
-        render_html_report(meta, events, samples, 5, out_path)
+        render_html_report(meta, events, samples, 999, out_path)
         print(f"[Drive recorder] Report saved -> {out_path}")
     except Exception as e:
         print(f"[Drive recorder] Report generation failed: {e}")
@@ -727,7 +734,34 @@ class AutoDriver:
         if camera is None:
             print("[AutoDriver] dxcam.create() returned None — DXGI capture unavailable. Auto-driver disabled.")
             return
-        print(f"[AutoDriver] Started. Lead {self.lead_m}m, interval {self.interval_s}s.")
+        # Resolution gate. HUD bboxes + digit templates are pixel-pinned to
+        # 2560×1440 native fullscreen game window. At any other desktop
+        # resolution the region= grab below either gets clamped or returns a
+        # geometrically wrong slice, producing silent OCR garbage. Fail loud
+        # here so the user sees the cause instead of confused detector output.
+        # One-shot full grab gives the desktop dims; bounded retry mirrors the
+        # main-loop retry pattern (dxcam can return None right after create()).
+        probe = None
+        for _ in range(5):
+            probe = camera.grab()
+            if probe is not None:
+                break
+            if self._stop_event.wait(0.2):
+                return
+        if probe is None:
+            print("[AutoDriver] dxcam returned None on resolution probe — auto-driver disabled.")
+            return
+        ph, pw = probe.shape[:2]
+        if (pw, ph) != (2560, 1440):
+            print(
+                f"[AutoDriver] FATAL: desktop resolution {pw}x{ph}; required 2560x1440. "
+                f"OCR templates + HUD bboxes are pixel-pinned to 2560x1440 native fullscreen. Auto-driver disabled."
+            )
+            return
+        print(
+            f"[AutoDriver] Started. Lead {self.lead_m}m, interval {self.interval_s}s. "
+            f"Capture region {CAPTURE_REGION_2560_1440} (top-right quadrant)."
+        )
 
         # Open per-drive blackbox log (JSONL). One file per AutoDriver lifetime;
         # each sample below appends a line + flushes for crash safety. Path is
@@ -757,7 +791,7 @@ class AutoDriver:
                         continue
                     frame = None
                     for _ in range(5):
-                        frame = camera.grab()
+                        frame = camera.grab(region=CAPTURE_REGION_2560_1440)
                         if frame is not None:
                             break
                         if self._stop_event.wait(0.2):
@@ -766,10 +800,10 @@ class AutoDriver:
                         self._stop_event.wait(self.interval_s)
                         continue
 
-                    d_cell = _crop_cell(frame, HUD_BBOX, DISTANCE_VALUE_BBOX)
-                    s_cell = _crop_cell(frame, HUD_BBOX, SPEED_VALUE_BBOX)
-                    sl_cell = _crop_cell(frame, HUD_BBOX, SPEED_LIMIT_VALUE_BBOX)
-                    b_cell = _crop_cell(frame, HUD_BBOX, BADGE_BBOX)
+                    d_cell = _crop_cell(frame, HUD_BBOX_IN_CAPTURE, DISTANCE_VALUE_BBOX)
+                    s_cell = _crop_cell(frame, HUD_BBOX_IN_CAPTURE, SPEED_VALUE_BBOX)
+                    sl_cell = _crop_cell(frame, HUD_BBOX_IN_CAPTURE, SPEED_LIMIT_VALUE_BBOX)
+                    b_cell = _crop_cell(frame, HUD_BBOX_IN_CAPTURE, BADGE_BBOX)
                     badge, b_diff = classify_badge_state(b_cell, badge_anchors)
                     s_val, _, s_score = read_speed(s_cell, templates)
                     # The DISTANCE cell is shared and self-identifies via color: dark text

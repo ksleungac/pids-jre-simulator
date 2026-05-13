@@ -116,11 +116,11 @@ Layer 3 stays accurate at all times — observes the game, not the sim. Reconcil
 ```
 [JR EAST Train Sim window — DirectX]
               │
-              │ DXGI Output Duplication (dxcam)
+              │ DXGI Output Duplication (dxcam) with region=CAPTURE_REGION_2560_1440
               ▼
-[Full desktop frame — 2560×1440 BGRA]
+[Top-right quadrant — 1280×720 BGRA]
               │
-              │ HUD_BBOX crop
+              │ HUD_BBOX_IN_CAPTURE crop (region-relative coords)
               ▼
 [HUD region — 350×480]
               │
@@ -172,11 +172,13 @@ User's setup happens to be 2560×1440 native, which makes this a non-issue for t
 
 ## HUD layout (2560×1440)
 
-All bboxes = `(x, y, w, h)`. Cell bboxes = HUD-relative; HUD bbox = screen-relative.
+All bboxes = `(x, y, w, h)`. Cell bboxes = HUD-relative; HUD bbox = canonical screen-relative; capture region + HUD-in-region derived.
 
 | Constant | Value | Notes |
 |---|---|---|
-| `HUD_BBOX` | `(2200, 20, 350, 480)` | Top-right corner of game window |
+| `CAPTURE_REGION_2560_1440` | `(1280, 0, 2560, 720)` | dxcam region= signature (left, top, right, bottom). Top-right quadrant of desktop. Production grab path; cuts capture work ~75% vs full-desktop |
+| `HUD_BBOX` | `(2200, 20, 350, 480)` | Canonical screen-relative position. Consumed by `*_from_surface` helpers (1b dev tool) + calibration extractor |
+| `HUD_BBOX_IN_CAPTURE` | `(920, 20, 350, 480)` | Derived: `HUD_BBOX` minus `CAPTURE_REGION_2560_1440` origin. Consumed by production `_crop_cell` against region-grabbed frame |
 | `DISTANCE_VALUE_BBOX` | `(120, 314, 230, 55)` | Right side of "Distance" / "残距離" row (shared with stopping-offset) |
 | `SPEED_VALUE_BBOX` | `(120, 165, 230, 55)` | Right side of "Speed" / "速度" row |
 | `SPEED_LIMIT_VALUE_BBOX` | `(120, 215, 230, 55)` | Right side of "Speed Limit" / "最高速度" row — red digits, line-dependent |
@@ -184,14 +186,17 @@ All bboxes = `(x, y, w, h)`. Cell bboxes = HUD-relative; HUD bbox = screen-relat
 
 Position invariant across language modes (EN/JA), game states (running/stopped/at-platform), and scenes — verified against 7 reference screenshots.
 
+**Region-cut resolution gate.** Production AutoDriver runs a bootstrap full-frame `camera.grab()` at startup, asserts shape `(1440, 2560)`, and refuses to start if desktop ≠ 2560×1440. OCR templates + HUD bboxes are pixel-pinned to that resolution; without the gate `region=` either gets clamped or returns a geometrically wrong slice, producing silent OCR garbage. Sibling shape to other fail-loud invariants in [critical_lessons.md](.claude/rules/critical_lessons.md) (`Runtime-required materials`, `Lazy import ≠ optional dep`, `PyInstaller deployment-frame divergence`).
+
 ## Capture: dxcam (DXGI Output Duplication)
 
 **Why not Win32 PrintWindow or BitBlt-from-desktop:** the game renders via DirectX, and the swap chain isn't visible to GDI. Both APIs return all-black frames even with `PW_RENDERFULLCONTENT` flag set. **dxcam** uses DXGI Output Duplication (the same GPU-level capture API used by Discord/OBS), reading the GPU framebuffer directly.
 
 ```python
 import dxcam
+from hud_layout import CAPTURE_REGION_2560_1440
 camera = dxcam.create(output_color="BGRA")  # native, skips cv2 conversion
-frame = camera.grab()  # full desktop, (H, W, 4) BGRA numpy array
+frame = camera.grab(region=CAPTURE_REGION_2560_1440)  # top-right quadrant 1280×720 BGRA
 ```
 
 Notes:

@@ -5,8 +5,29 @@ Single source of truth for cell positions. Cell coordinates are HUD-relative
 needs to change for other resolutions.
 """
 
-# Full HUD bounding box on the 2560x1440 game window (x, y, w, h)
+# dxcam capture region (left, top, right, bottom) — matches dxcam.grab(region=)
+# signature. Top-right quadrant of 2560×1440 desktop; HUD lives entirely inside
+# this quadrant. Restricting capture to this region cuts dxcam's per-frame work
+# by ~75% versus full-desktop grabs. Production OCR path uses this; 1b dev tool
+# (`_dev_scripts/capture_game.py`) still uses full-desktop grabs against the
+# canonical HUD_BBOX coordinates below.
+CAPTURE_REGION_2560_1440 = (1280, 0, 2560, 720)
+
+# Full HUD bounding box on the 2560x1440 game window (x, y, w, h) — canonical
+# desktop-coordinate reference. Used by the *_from_surface helpers (1b path) and
+# the calibration extractor.
 HUD_BBOX = (2200, 20, 350, 480)
+
+# HUD bbox translated into CAPTURE_REGION_2560_1440-relative coordinates.
+# Production path (`auto_input.py:_crop_cell`) consumes this against the
+# region-grabbed frame. Derived, not authored — change CAPTURE_REGION or
+# HUD_BBOX and this updates automatically.
+HUD_BBOX_IN_CAPTURE = (
+    HUD_BBOX[0] - CAPTURE_REGION_2560_1440[0],
+    HUD_BBOX[1] - CAPTURE_REGION_2560_1440[1],
+    HUD_BBOX[2],
+    HUD_BBOX[3],
+)
 
 # Cells within the HUD crop (HUD-relative coordinates)
 # Value cells contain the right-aligned numeric+unit text only (label excluded).

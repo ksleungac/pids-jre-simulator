@@ -215,16 +215,18 @@ When the user has a named, iterated framework (Rules 1-4, the cascade, the n-row
 - Default to enhancement. Replacements require their own separate ask.
 - Frame within-scope changes in the user's vocabulary at the user's granularity — don't introduce new abstractions when the existing framework covers it.
 
-### Self-propose /third-man at impasse
-When claude has restated the same contested point 3+ rounds with no convergence — or notices itself defending a position instead of re-reading source — proactively offer `/third-man` rather than attempting a 4th restatement.
+### Self-propose /third-man at impasse OR before structural refactors
+When claude has restated the same contested point 3+ rounds with no convergence — or notices itself defending a position instead of re-reading source — proactively offer `/third-man` rather than attempting a 4th restatement. **Also**: before any non-trivial structural refactor (package layout, module split, multi-file restructure, naming-scheme overhaul), proactively offer `/third-man` for design input before coding. Both triggers share the same root: claude's framing-bias is highest exactly when it would otherwise vibe-code through a high-blast-radius decision.
 
 **Why:** /third-man's value is highest exactly at the moment claude can't see its own framing bias. Examples:
 - (2026-05-02) Rule 1 unwind took 5 rounds + 2 third-man invocations; would have shortened with self-triggered offer.
 - (2026-04-30) Badge-width-vs-element-width misread persisted until user invoked /third-man.
+- (2026-05-13) User: *"on the structure, ask the /third-man for ideas, be mindful of vibe coding"* — before OCR-cluster package refactor. Codified the structural-refactor trigger.
 
 **How to apply:**
-- 3 rounds of restating the same contested point + user pushback continuing → single-line offer: *"I think we may be talking past each other; want to spawn /third-man for an independent take?"*
-- The trigger is "I'm restating, not re-reading" — distinct from iteration that incorporates new info.
+- **Impasse trigger**: 3 rounds of restating the same contested point + user pushback continuing → single-line offer: *"I think we may be talking past each other; want to spawn /third-man for an independent take?"*
+- **Structural-refactor trigger**: any refactor that moves ≥3 files, restructures package layout, or changes module boundaries → offer `/third-man` for design input before writing code. Frame as design ask, not impasse: *"Before I start moving files, want me to spawn /third-man for layout ideas?"* Single-file restructures don't qualify — only multi-file structural moves where wrong shape is hard to unwind.
+- The impasse-trigger heuristic is "I'm restating, not re-reading"; the refactor-trigger heuristic is "I'm about to commit to a layout I haven't pressure-tested."
 - Offer only; don't unilaterally invoke.
 
 ### No filler narration
