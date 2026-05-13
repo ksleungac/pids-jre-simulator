@@ -140,7 +140,7 @@ class PaEventDetector:
         # STOPPED→{MOVING,PASSING} departures always show speed climbing from 0;
         # black-screen at platform leaves speed=0 (parked) or None (OCR FAIL).
         # When prev_badge==STOPPED, require speed>0 to accept the transition.
-        # Mirrors auto_input.py:_Detector. See AUTO_INPUT.md § "Cross-attribute reject".
+        # Mirrors auto_input/driver.py:_Detector. See AUTO_INPUT.md § "Cross-attribute reject".
         if self.prev_badge == "STOPPED" and badge in ("MOVING", "PASSING") and (speed is None or speed == 0):
             events.append(f"CROSS-REJECT raw_badge={badge} (prev=STOPPED, speed={speed} — train hasn't moved; likely black-screen at platform)")
             badge = None
