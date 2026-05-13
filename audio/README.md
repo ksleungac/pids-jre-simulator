@@ -93,5 +93,6 @@ Ordered by JR EAST line code. Standard fields omitted (= follows convention). En
 - **Sim quirks:**
   - Dest-cycle via sticky override at 6 stops (田町 / 神田 / 鶯谷 / 目白 / 代々木 / 恵比寿). Resolved at load time by `route_loader.finalize_route`. See [DATA_FORMAT § Stop-Level Destination Override](../DATA_FORMAT.md).
   - Circular wrap-around: `stops[0].name == stops[-1].name` (大崎 appears twice).
+  - Compound dest dot = halfwidth `･` (U+FF65), not fullwidth `・` (U+30FB) — IRL PIDS form. Data canonical in halfwidth across 6 compound-dest entries (品川･東京, 東京･上野, …) + matching translations.json keys.
 - **Audio quirks:** STA filename = `<sta_code>_<code_3>.mp3` when station has `code_3` (e.g. `JY01_TYO.mp3`), bare `<sta_code>.mp3` otherwise (e.g. `JY04.mp3`).
 - **Layout anomaly:** flat shape — `audio/yamanote/{pa,sta,route.json}` directly, no diagram folder. Single canonical service = diagram layer redundant.
