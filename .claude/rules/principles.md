@@ -70,11 +70,13 @@ When asking the user, keep discussion questions ("was that the intent?", "did yo
 ### Skip-confirmation when explicitly signaled
 When the user says "push directly" / "skip my confirmation" at session-end commit time, bypass the per-file gate within `/commit`. Still split commits logically and write meaningful messages — just don't pause between them.
 
-**Why:** Discussion-first matters at decision points, not at session-end housekeeping. Re-asking after a chain authorization wastes the user's cognitive load on permission already granted.
+**Why:** Discussion-first matters at decision points, not at session-end housekeeping. Re-asking after a chain authorization wastes the user's cognitive load on permission already granted. Examples:
+- (2026-05-13) Chain auth ("chain authorized, auto go") covered /session-recap → /commit → /third-man → refactor; I read it as also covering a SECOND /commit after the refactor and skipped recap-before-second-commit. User: *"did you session recap.."* — the second commit was outside the chain's explicit scope and needed re-gating.
 
 **How to apply:**
 - Waiver applies to the current batch only. Next commit-worthy moment requires fresh signal.
 - Chain authorizations ("/review+fix, then /session-recap, then /commit") suppress per-step gates within the chain. Re-gate only if a step encounters something outside the chain's declared scope.
+- **Each /commit consumes its own recap.** /commit skill says "Default: /session-recap always runs before /commit." A chain that explicitly lists ONE commit does not pre-authorize a second commit later in the same session — when a new commit-worthy moment arrives, re-run recap (or get an explicit waiver).
 
 ### Verify before claiming
 Before claiming "X is a bug" or "X works like Y", read the call sites and trace state transitions. Don't infer from partial context.
