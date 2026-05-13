@@ -56,6 +56,20 @@ from displays.train_models.e235_0 import (
     WHITE_BG,
 )
 
+# Cached pygame.font.Font factory. Used by draw methods that pull their font
+# size from a tuneable dict — pygame.font.Font constructs are not free at 15
+# FPS so cache by (filename, size). Lazy: never called at module load (pygame
+# may not be initialized yet); only inside draw methods.
+_font_cache: dict = {}
+
+
+def _font(filename: str, size: int) -> pygame.font.Font:
+    key = (filename, size)
+    if key not in _font_cache:
+        _font_cache[key] = pygame.font.Font(str(project_root() / "fonts" / filename), size)
+    return _font_cache[key]
+
+
 # =============================================================================
 # Region rect manifest — single source of truth for each region's bounds.
 #
@@ -124,6 +138,20 @@ def _bg(region: str):
 # =============================================================================
 
 
+# Tuneable params for KANJI destination rendering. Read by
+# JapaneseDisplay.draw_destination at render time; mutated by the calibration
+# editor (see WIP_calibration_editor.md). Inherited unchanged by FuriganaDisplay.
+_TUNEABLES_DEST_KANJI = {
+    "dest_box_x": 12,
+    "dest_box_y": 56,
+    "dest_box_w": 170,
+    "suffix_right_offset": 10,
+    "suffix_bottom_margin": 5,
+    "font_dest_size": 30,
+    "font_suffix_size": 18,
+}
+
+
 class JapaneseDisplay:
     """Upper LCD Japanese (KANJI) rendering for E235-0."""
 
@@ -136,28 +164,30 @@ class JapaneseDisplay:
         # SysFont scans the Windows font registry, which fails on Chinese/Japanese
         # locale Windows with `TypeError: expected str, bytes or os.PathLike object,
         # not int`. All fonts in this project ship in fonts/ and load via Font(path).
-        self.font_dest = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 35)
         self.font_prefix = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 25)
         self.font_station = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 78)
         self.font_clock = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Roman.otf"), 27)
-        self.font_suffix = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 18)
+        # font_dest + font_suffix loaded lazily via _font() in draw_destination
+        # so their sizes can be tuned via _TUNEABLES_DEST_KANJI at runtime.
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
         """Draw destination with suffix (ゆき/方面)."""
+        t = _TUNEABLES_DEST_KANJI
+        font_dest = _font("ShinGoPr6N-Medium.otf", t["font_dest_size"])
+        font_suffix = _font("ShinGoPr6N-Medium.otf", t["font_suffix_size"])
         with clip(self.screen, DEST_RECT):
             # Per-region bg fill (DARK_BG / debug-grid tint).
             pygame.draw.rect(self.screen, _bg("dest"), DEST_RECT)
 
-            dest_box_x, dest_box_y, dest_box_w = 7, 50, 166
             draw_text_given_width(
-                dest_box_x, dest_box_y, dest_box_w, self.font_dest, dest_text, WHITE_BG, self.screen, collapse=False, script="japanese"
+                t["dest_box_x"], t["dest_box_y"], t["dest_box_w"], font_dest, dest_text, WHITE_BG, self.screen, collapse=False, script="japanese"
             )
 
             suffix = "方面" if route_name == "山手線" else "ゆき"
-            t_w, t_h = self.font_suffix.size(suffix)
-            suffix_x = int(S_WIDTH * 0.25) - t_w - 10
-            suffix_y = UPPER_HEIGHT - t_h - 5
-            suffix_img = self.font_suffix.render(suffix, True, WHITE_BG, _bg("dest"))
+            t_w, t_h = font_suffix.size(suffix)
+            suffix_x = int(S_WIDTH * 0.25) - t_w - t["suffix_right_offset"]
+            suffix_y = UPPER_HEIGHT - t_h - t["suffix_bottom_margin"]
+            suffix_img = font_suffix.render(suffix, True, WHITE_BG, _bg("dest"))
             self.screen.blit(suffix_img, (suffix_x, suffix_y))
 
     def draw_prefix(self, prefix_text: str) -> None:
@@ -223,6 +253,24 @@ class FuriganaDisplay(JapaneseDisplay):
 # =============================================================================
 
 
+# Tuneable params for ENGLISH destination rendering. Read by
+# EnglishDisplay.draw_destination at render time; mutated by the calibration
+# editor (see WIP_calibration_editor.md).
+_TUNEABLES_DEST_ENGLISH = {
+    "for_x": 10,
+    "for_y": 50,
+    "for_color": (182, 182, 199),
+    "two_line_x": 10,
+    "two_line_top_pad": 5,
+    "two_line_max_w": 170,
+    "single_x": 10,
+    "single_max_w": 170,
+    "single_y_offset": 10,
+    "font_dest_size": 24,
+    "font_suffix_size": 20,
+}
+
+
 class EnglishDisplay:
     """Upper LCD English rendering for E235-0."""
 
@@ -231,7 +279,6 @@ class EnglishDisplay:
         self.route_data = route_data
         self.stops = stops
 
-        self.font_dest = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Medium.otf"), 24)
         self.font_main_prefix = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Medium.otf"), 27)
         self.font_station = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 75)
         # Used when station_text contains "\n" — see draw_station's 2-line branch.
@@ -239,59 +286,58 @@ class EnglishDisplay:
         # with the prefix band. Tune in concert with line_gap below.
         self.font_station_2line = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 42)
         self.font_clock = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Roman.otf"), 27)
-        self.font_suffix = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Medium.otf"), 20)
+        # font_dest + font_suffix loaded lazily via _font() in draw_destination
+        # so their sizes can be tuned via _TUNEABLES_DEST_ENGLISH at runtime.
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
         """Draw destination with 'for' label above."""
+        t = _TUNEABLES_DEST_ENGLISH
+        font_dest = _font("HelveticaNeue-Medium.otf", t["font_dest_size"])
+        font_suffix = _font("HelveticaNeue-Medium.otf", t["font_suffix_size"])
         with clip(self.screen, DEST_RECT):
-            for_y = 50
+            for_y = t["for_y"]
 
             # Per-region bg fill (DARK_BG / debug-grid tint).
             pygame.draw.rect(self.screen, _bg("dest"), DEST_RECT)
 
             # Draw "for" label
-            for_img = self.font_suffix.render("for", True, (182, 182, 199), _bg("dest"))
-            self.screen.blit(for_img, (5, for_y))
+            for_img = font_suffix.render("for", True, t["for_color"], _bg("dest"))
+            self.screen.blit(for_img, (t["for_x"], for_y))
 
             # Draw destination name
-            _, for_h = self.font_suffix.size("for")
+            _, for_h = font_suffix.size("for")
             if "\n" in dest_text:
-                # 2-line: lines left-aligned with "for" (x=5), breathing room below
+                # 2-line: lines left-aligned with "for", breathing room below
                 # "for". Uses full-height pitch (font.get_height()) for natural
                 # inter-line spacing — *not* ascent-pitch (that's the station
                 # renderer's tighter stacking). Inter-line gap matters here because
                 # line 1 may contain descenders ("p" of "Airport", "g" of "Shinagawa")
                 # that would collide with line 2's caps under ascent-pitch.
-                two_line_x = 5  # align with "for" left edge
-                two_line_top_pad = 5  # gap between "for" visible bottom and line 1 top
-                two_line_max_w = 175  # extends to right edge of dest region (~180)
-                visible_for_bottom = for_y + self.font_suffix.get_ascent()
-                top_y = visible_for_bottom + two_line_top_pad
-                line_pitch = self.font_dest.get_height()  # full-height pitch — natural inter-line gap
+                visible_for_bottom = for_y + font_suffix.get_ascent()
+                top_y = visible_for_bottom + t["two_line_top_pad"]
+                line_pitch = font_dest.get_height()  # full-height pitch — natural inter-line gap
                 lines = dest_text.split("\n")
                 for i, line in enumerate(lines):
                     y_pos = top_y + i * line_pitch
-                    img = self.font_dest.render(line, True, WHITE_BG)
+                    img = font_dest.render(line, True, WHITE_BG)
                     w = img.get_width()
-                    if w > two_line_max_w:
-                        img = pygame.transform.smoothscale(img, (two_line_max_w, img.get_height()))
-                    self.screen.blit(img, (two_line_x, y_pos))
+                    if w > t["two_line_max_w"]:
+                        img = pygame.transform.smoothscale(img, (t["two_line_max_w"], img.get_height()))
+                    self.screen.blit(img, (t["two_line_x"], y_pos))
             else:
-                # Single line: LEFT-aligned at x=5 (mirrors the 2-line branch
-                # so single- and 2-line renders share a left edge). Vertically
-                # centered between "for" bottom and UPPER_HEIGHT. Smoothscale
-                # fallback if natural width exceeds the dest region — same
-                # defensive shrink the 2-line branch uses.
-                single_x = 5  # align with "for" left edge AND 2-line render
-                single_max_w = 175  # matches two_line_max_w
-                dest_h = self.font_dest.get_height()
+                # Single line: LEFT-aligned (mirrors the 2-line branch so single-
+                # and 2-line renders share a left edge). Vertically centered
+                # between "for" bottom and UPPER_HEIGHT, minus single_y_offset.
+                # Smoothscale fallback if natural width exceeds the dest region —
+                # same defensive shrink the 2-line branch uses.
+                dest_h = font_dest.get_height()
                 zone_top = for_y + for_h
-                single_y = zone_top + (UPPER_HEIGHT - zone_top - dest_h) // 2 - 5
-                img = self.font_dest.render(dest_text, True, WHITE_BG)
+                single_y = zone_top + (UPPER_HEIGHT - zone_top - dest_h) // 2 - t["single_y_offset"]
+                img = font_dest.render(dest_text, True, WHITE_BG)
                 w = img.get_width()
-                if w > single_max_w:
-                    img = pygame.transform.smoothscale(img, (single_max_w, img.get_height()))
-                self.screen.blit(img, (single_x, single_y))
+                if w > t["single_max_w"]:
+                    img = pygame.transform.smoothscale(img, (t["single_max_w"], img.get_height()))
+                self.screen.blit(img, (t["single_x"], single_y))
 
     def draw_prefix(self, prefix_text: str) -> None:
         """Draw English prefix (already translated by UpperDisplay manager)."""

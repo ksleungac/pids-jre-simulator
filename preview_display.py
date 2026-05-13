@@ -132,6 +132,13 @@ def parse_args():
         default="cycle",
         help="Force lower-LCD view: 'full' = full-route, 'eight' = 8-station zoom, 'transfer' = transfer-info panel (requires station with transfers + at_station=True), 'cycle' = normal alternation (default).",
     )
+    parser.add_argument(
+        "--edit",
+        action="store_true",
+        help="Open the calibration editor (WIP_calibration_editor.md). Sim freezes; "
+        "click an editable element on the LCD to focus its `_TUNEABLES_*` dict; ←/→ nudge "
+        "values; Ctrl+S writes back to source. ESC to quit.",
+    )
     return parser.parse_args()
 
 
@@ -213,8 +220,54 @@ def main():
         sim.cleanup()
         return
 
+    if args.edit:
+        _run_edit_loop(sim)
+        sim.cleanup()
+        sys.exit()
+
     sim.run()
     sys.exit()
+
+
+def _run_edit_loop(sim) -> None:
+    """Frozen-frame main loop for `--edit` mode. Sim state does NOT advance.
+
+    Loads `_dev_scripts/calibration_editor.py` via sys.path hack (it's a
+    dev-only tool, never imported by production code). Sidebar overlays
+    the lower-LCD area; events route to the editor first.
+    """
+    from app_paths import project_root
+
+    sys.path.insert(0, str(project_root() / "_dev_scripts"))
+    import calibration_editor  # noqa: E402
+
+    from constants import FRAME_RATE
+
+    calibration_editor.enter_edit_mode(sim)
+
+    clock = pygame.time.Clock()
+    running = True
+    while running:
+        clock.tick(FRAME_RATE)
+        timestamp = time.time()
+
+        # Draw current state without advancing it. upper.update() is what
+        # ticks mode-cycler etc., so omit — frozen mode keeps the boot mode.
+        sim.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
+        sim.lower.draw(timestamp)
+        calibration_editor.draw_overlay(sim.screen)
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+                break
+            if calibration_editor.handle_event(event, sim):
+                continue
+            # Other events ignored — sim is frozen.
+
+        if calibration_editor.should_quit():
+            running = False
 
 
 if __name__ == "__main__":

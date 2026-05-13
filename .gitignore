@@ -47,6 +47,11 @@ _sta_verify_*.json
 # the in-process auto-driver at runtime. Local-only; user-private telemetry.
 /_recordings/
 
+# Calibration editor session scratch — auto-saved on each tweak, cleared on
+# Ctrl+S writeback. Crash-safety only; canonical values land in source .py.
+# See WIP_calibration_editor.md.
+/_calibration_session.json
+
 # Drive-recorder rendered HTML reports (output of plot_drive.py).
 # Self-contained per-drive artifact; user opens locally and shares as needed,
 # not part of the repo.
