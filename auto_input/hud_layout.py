@@ -19,7 +19,7 @@ CAPTURE_REGION_2560_1440 = (1280, 0, 2560, 720)
 HUD_BBOX = (2200, 20, 350, 480)
 
 # HUD bbox translated into CAPTURE_REGION_2560_1440-relative coordinates.
-# Production path (`auto_input.py:_crop_cell`) consumes this against the
+# Production path (`auto_input/driver.py:_crop_cell`) consumes this against the
 # region-grabbed frame. Derived, not authored — change CAPTURE_REGION or
 # HUD_BBOX and this updates automatically.
 HUD_BBOX_IN_CAPTURE = (

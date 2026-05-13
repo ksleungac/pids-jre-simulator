@@ -29,7 +29,7 @@ This split keeps fidelity work (LCD rendering, route data, audio cuts) decoupled
 
 **Two integrations.** Both live in this repo and share OCR + state-machine implementation:
 
-- **In-process** (`auto_input.py` `AutoDriver`) — spawned from `main.py` when **OCR Auto-PA** toggle enabled on setup screen. Runs in daemon thread, sets `PASimulator.pending_next_pa = True` at fire-time, same code path as manual PageDown. Manual-press precedence implicit: driver inspects `sim.state.curr_stop` / `sim.state.cnt_pa` each cycle, skips its fire on mismatch. Includes in-window debug panel.
+- **In-process** (`auto_input/driver.py` `AutoDriver`) — spawned from `main.py` when **OCR Auto-PA** toggle enabled on setup screen. Runs in daemon thread, sets `PASimulator.pending_next_pa = True` at fire-time, same code path as manual PageDown. Manual-press precedence implicit: driver inspects `sim.state.curr_stop` / `sim.state.cnt_pa` each cycle, skips its fire on mismatch. Includes in-window debug panel.
 - **Separate-process** (`_dev_scripts/capture_game.py`) — standalone diagnostic script. Synthesizes PageDown via `keyboard` library, uses self-press timestamp guard for manual-press precedence. No debug panel.
 
 ## State machine layering
@@ -194,7 +194,7 @@ Position invariant across language modes (EN/JA), game states (running/stopped/a
 
 ```python
 import dxcam
-from hud_layout import CAPTURE_REGION_2560_1440
+from auto_input.hud_layout import CAPTURE_REGION_2560_1440
 camera = dxcam.create(output_color="BGRA")  # native, skips cv2 conversion
 frame = camera.grab(region=CAPTURE_REGION_2560_1440)  # top-right quadrant 1280×720 BGRA
 ```
@@ -229,13 +229,13 @@ Three filters in sequence:
 
 ### Stage 3 — template matching
 
-Templates: 10 binary glyphs (digits 0-9) extracted from labeled reference screenshots via `KNOWN_VALUES` dict in `ocr.py`.
+Templates: 10 binary glyphs (digits 0-9) extracted from labeled reference screenshots via `KNOWN_VALUES` dict in `auto_input/ocr.py`.
 
 Matching: each segmented bbox's binary glyph padded to size of template, then compared pixel-equality. Score = fraction of matching pixels (0.5 = random for binary). Best-scoring template wins per glyph; concatenate to integer.
 
 Live scores observed: 0.75–1.00. Below 0.6 = danger zone (random match territory).
 
-### Tunable constants (in `ocr.py`)
+### Tunable constants (in `auto_input/ocr.py`)
 
 | Constant | Value | Rationale |
 |----------|-------|-----------|
@@ -318,7 +318,7 @@ Diff < 15 = high confidence; real reads sit there. Diff > `BADGE_DIFF_REJECT` (5
 
 ## State machine — `PaEventDetector`
 
-Lives in `_dev_scripts/capture_game.py` (1b) + `auto_input.py` `_Detector` (1a, kept in sync). Tracks distance + speed + badge across samples, emits PA-fire event names on transitions.
+Lives in `_dev_scripts/capture_game.py` (1b) + `auto_input/driver.py` `_Detector` (1a, kept in sync). Tracks distance + speed + badge across samples, emits PA-fire event names on transitions.
 
 ### State vocabulary
 
@@ -365,7 +365,7 @@ Speed/departure logic unchanged — speed = own-train and badge-independent.
 
 When OCR Auto-PA enabled at setup screen, `PASimulator` allocates extra `DEBUG_PANEL_HEIGHT = 80` row above LCD via pygame sub-surfaces. Window becomes 730×500 instead of 730×420; LCD code **completely unchanged** because it gets sub-surface positioned at `(0, 80)` and thinks it's drawing to a regular 730×420 screen.
 
-**Strict separation per user requirement:** panel render logic lives entirely in `auto_input.py` (function `draw_debug_panel`). `app.py`'s `_render_panel()` helper just hands sub-surface to auto-input module. Simulator **doesn't know** how panel renders — colors, layout, fonts, text — all owned by `auto_input.py`. Zero `displays/` imports in panel render code.
+**Strict separation per user requirement:** panel render logic lives entirely in `auto_input/driver.py` (function `draw_debug_panel`). `app.py`'s `_render_panel()` helper just hands sub-surface to auto-input module. Simulator **doesn't know** how panel renders — colors, layout, fonts, text — all owned by `auto_input/driver.py`. Zero `displays/` imports in panel render code.
 
 Panel and LCD never overlap render areas. Panel uses its own background color `_PANEL_BG = (18, 22, 28)` (visually distinct from LCD's `DARK_BG`).
 
@@ -470,13 +470,14 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 
 | Path | Role |
 |---|---|
-| `auto_input.py` | **Primary** — `AutoDriver` class (in-process daemon thread) + `draw_debug_panel()` (panel render) + `_Detector` state machine + `handle_panel_click()` dispatcher (in-panel buttons, currently the Report download). All auto-input logic lives here. |
+| `auto_input/` | Package — public surface re-exports `AutoDriver`, `draw_debug_panel`, `handle_panel_click` from `__init__.py`. Internal submodules below. |
+| `auto_input/driver.py` | **Primary** — `AutoDriver` class (in-process daemon thread) + `draw_debug_panel()` (panel render) + `_Detector` state machine + `handle_panel_click()` dispatcher (in-panel buttons, currently the Report download). All auto-input logic lives here. |
+| `auto_input/hud_layout.py` | HUD + cell bbox constants for 2560×1440 (canonical desktop coords + region-cut derived coords) |
+| `auto_input/ocr.py` | OCR pipeline + badge classifier; runnable for offline validation (`uv run python -m auto_input.ocr`) |
 | `main.py` | Reads `auto_input` / `lead_m` / `interval_s` from setup-screen config dict. Spawns `AutoDriver` when `auto_input=True` and passes same flag to `PASimulator`. |
 | `setup.py` | OCR Auto-PA toggle pill + Lead/Interval steppers under route list. `_handle_band_click` updates state; selected route's Enter returns config dict including auto-input fields. |
 | `app.py` | `PASimulator`: allocates debug sub-surface in `_init_pygame`; `pending_next_pa` flag checked alongside keyboard in `_handle_input_main`; `auto_input_status` dict written by AutoDriver, read by `_render_panel()` which delegates to `auto_input.draw_debug_panel`. `MOUSEBUTTONDOWN` events landing in panel area get forwarded to `auto_input.handle_panel_click`. `drive_log_path` attribute stashes live JSONL path so Report button can find it. **No panel rendering logic lives in app.py.** |
 | `constants.py` | `DEBUG_PANEL_HEIGHT = 80` |
-| `hud_layout.py` | HUD + cell bbox constants for 2560×1440 |
-| `ocr.py` | OCR pipeline + badge classifier; runnable for offline validation (`uv run python ocr.py`) |
 | `_dev_scripts/capture_game.py` | Standalone observation/debug script (separate process, synthetic keystrokes, optional `--route` flag for PA-count check) |
 | `_dev_scripts/test_dxcam.py` | Diagnostic — full-desktop dxcam capture + brightness check |
 | `ocr_templates/digits/*.png` | **Runtime input** — 10 pre-extracted digit glyphs (~20×30 binary PNGs, ~1 KB each). Loaded by `ocr.build_templates()`. Committed. |
@@ -492,11 +493,11 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 If game runs at different resolution:
 
 1. Capture screenshots in target resolution with HUD visible (running mode + at-platform mode + passing-through mode)
-2. Identify HUD position (top-right); update `HUD_BBOX` in `hud_layout.py`
+2. Identify HUD position (top-right); update `HUD_BBOX` in `auto_input/hud_layout.py`
 3. Crop HUD; identify cell positions within it; update `*_VALUE_BBOX` and `BADGE_BBOX`
-4. Save the 9 source screenshots into `_ocr_calibration/` (gitignored). Filenames must match keys in `KNOWN_VALUES` (digits) + `BADGE_ANCHOR_FILES` (badges) — both live in `_dev_scripts/extract_ocr_assets.py` and `ocr.py` respectively. PASSING = rapid-service "Pass" / "通過" blue pentagon (filenames `passing_en.png`, `passing_jp.png`).
+4. Save the 9 source screenshots into `_ocr_calibration/` (gitignored). Filenames must match keys in `KNOWN_VALUES` (digits) + `BADGE_ANCHOR_FILES` (badges) — both live in `_dev_scripts/extract_ocr_assets.py` and `auto_input/ocr.py` respectively. PASSING = rapid-service "Pass" / "通過" blue pentagon (filenames `passing_en.png`, `passing_jp.png`).
 5. Run `uv run python _dev_scripts/extract_ocr_assets.py` — extracts digit glyphs + badge anchor crops into `ocr_templates/`.
-6. Run `uv run python ocr.py` to sanity-check new templates load + cross-classify cleanly. Commit the `ocr_templates/` diff.
+6. Run `uv run python -m auto_input.ocr` to sanity-check new templates load + cross-classify cleanly. Commit the `ocr_templates/` diff.
 
 Digit templates are resolution-specific because exact-pixel matching requires same glyph dimensions.
 

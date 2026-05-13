@@ -27,7 +27,7 @@ import pygame
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ocr import (  # noqa: E402
+from auto_input.ocr import (  # noqa: E402
     BADGE_ANCHOR_FILES,
     badge_cell_from_surface,
     extract_glyph,

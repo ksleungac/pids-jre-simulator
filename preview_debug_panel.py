@@ -1,8 +1,8 @@
 """Preview script for the auto-input debug panel.
 
 Iterates the panel's visual design without the game running. Renders the actual
-`draw_debug_panel` from auto_input.py against a set of mock status dicts that
-cover the realistic states (boot / running / paused / etc.).
+`draw_debug_panel` from the auto_input package against a set of mock status dicts
+that cover the realistic states (boot / running / paused / etc.).
 
 Keys:
     1-5    switch scenario

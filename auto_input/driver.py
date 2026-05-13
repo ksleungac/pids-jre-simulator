@@ -34,7 +34,7 @@ import dxcam
 import numpy as np
 import pygame
 
-from hud_layout import (
+from .hud_layout import (
     BADGE_BBOX,
     CAPTURE_REGION_2560_1440,
     DISTANCE_VALUE_BBOX,
@@ -42,7 +42,7 @@ from hud_layout import (
     SPEED_LIMIT_VALUE_BBOX,
     SPEED_VALUE_BBOX,
 )
-from ocr import (
+from .ocr import (
     build_templates,
     classify_badge_state,
     load_badge_anchors,
@@ -383,7 +383,7 @@ def _draw_report_button(surface: pygame.Surface, x: int) -> pygame.Rect:
 def _render_report_async(log_path: Path) -> None:
     """Background-thread report generation so the simulator UI doesn't freeze.
 
-    `auto_input.py` and `plot_drive.py` both live at the project root, so
+    `auto_input/` package and `plot_drive.py` both live at the project root, so
     the import resolves via the standard sys.path that the launching
     `main.py` set up — no per-call sys.path.insert needed (and previously
     accumulated duplicate entries on every click).

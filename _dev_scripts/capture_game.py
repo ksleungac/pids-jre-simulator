@@ -39,8 +39,8 @@ import keyboard
 import pygame
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from hud_layout import HUD_BBOX  # noqa: E402
-from ocr import (  # noqa: E402
+from auto_input.hud_layout import HUD_BBOX  # noqa: E402
+from auto_input.ocr import (  # noqa: E402
     badge_cell_from_surface,
     build_templates,
     classify_badge_state,

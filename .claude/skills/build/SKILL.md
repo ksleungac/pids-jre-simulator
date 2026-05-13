@@ -109,10 +109,10 @@ Copy-Item "dist\JRE-PA-Simulator.exe" "dist-release\JRE-PA-Simulator\"
 # - `.*` prefix (.git, .venv, .claude, .github, .vscode, .idea, ...)
 # - Hard-listed dev / repo-only / build-output folders below.
 $shipExclude = @(
-    'dist', 'dist-release', 'build',  # build outputs (would self-recurse)
-    'displays',                        # Python source — bundled INTO exe by PyInstaller, not alongside
-    'memory', 'lcd_references',        # repo-only / dev refs
-    'audio_src', 'docs'                # dev tooling / repo-only
+    'dist', 'dist-release', 'build',     # build outputs (would self-recurse)
+    'displays', 'auto_input',            # Python source — bundled INTO exe by PyInstaller, not alongside
+    'memory', 'lcd_references',          # repo-only / dev refs
+    'audio_src', 'docs'                  # dev tooling / repo-only
 )
 
 $shipDirs = Get-ChildItem -Path "." -Directory | Where-Object {

@@ -24,7 +24,7 @@ changes).
 
 Full domain reference: AUTO_INPUT.md.
 
-Run validation: uv run python ocr.py
+Run validation: uv run python -m auto_input.ocr
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ from pathlib import Path
 import numpy as np
 import pygame
 
-from hud_layout import BADGE_BBOX, DISTANCE_VALUE_BBOX, HUD_BBOX, SPEED_LIMIT_VALUE_BBOX, SPEED_VALUE_BBOX
+from .hud_layout import BADGE_BBOX, DISTANCE_VALUE_BBOX, HUD_BBOX, SPEED_LIMIT_VALUE_BBOX, SPEED_VALUE_BBOX
 
 BADGE_ANCHOR_FILES: dict[str, list[str]] = {
     "MOVING": ["running_en", "running_ja"],
