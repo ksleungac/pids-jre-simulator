@@ -10,7 +10,7 @@ Direct-manipulation pixel tuning for pygame LCD elements. Sidebar overlay; click
 
 ## Status
 
-v1 shipped 2026-05-13 PM on `feat/calibration-editor`. In active use against E235-0 dest. Graduates once all upper_lcd elements ride the same `_TUNEABLES_*` + suffix convention and the pattern is broadcast-able to lower LCD (see "Trigger to graduate" below).
+v1 shipped 2026-05-13 PM on `feat/calibration-editor`. Upper-LCD framework expanded to 4 elements 2026-05-14 (dest / clock / prefix / station). Phase 1b shipped 2026-05-14 evening: lower-LCD broadcast via `arc` element (5-station view green band scaffold, shape-only — stations + pentagon + minute markers deferred to Phase 2). New mechanics in Phase 1b: polyline-with-per-point-stroke geometry, waypoint + stroke param-kinds, target-driven sidebar layout dispatch, AST-writeback corruption fixed. Graduation gate (b) partially proven by the arc; full sign-off still needs stations/pentagon/minutes.
 
 ---
 
@@ -24,6 +24,7 @@ v1 shipped 2026-05-13 PM on `feat/calibration-editor`. In active use against E23
 | Edit mode | Frozen frame. Sim paused, audio stops |
 | Persistence | Scratch JSON auto-save per change (`_calibration_session.json`, gitignored) + Ctrl+S writeback to source (type-guarded value-swap, no AST rewrite) |
 | Mode-switch | Manual via `L` — sync sim mode to focused dict's family. No auto-switch on row change (disrupts flow) |
+| Sidebar layout | Dispatched from focused element's `target` field on `_REGISTRY` entry: `"upper"` → sidebar below upper LCD (side-by-side LCDs above); `"lower"` → sidebar on right half of doubled window, LCD A spans full window left half (upper + lower visible). Lower-LCD focus auto-switches sim to KANJI so the `japanese_eight_display` renderer dispatches (ENGLISH would fall through to full-route). |
 
 ---
 
@@ -39,6 +40,8 @@ Key naming drives **both** semantics AND free visualization. Editor infers param
 | `_h`, `_height` | height, paired with `_y` | vertical ruler from anchor_y → anchor_y + val |
 | `_color` | RGB tuple | 16px swatch in sidebar row |
 | `_<edge>_offset`, `_<edge>_margin` | edge-anchored offset (`<edge>` ∈ left / right / top / bottom) | ruler at `rect.<edge> ± val` |
+| `_p<N>_x`, `_p<N>_y` | polyline waypoint coord (paired with same-stem sibling) | highlighted ring at `(px, py)` — paired axis read from same dict |
+| `_p<N>_stroke` | per-waypoint band thickness (paired with same-stem `_x`/`_y`) | horizontal bar centered at the waypoint with length = stroke |
 | anything else (`_offset` without edge, `_size`, `_pad`, `_margin` without edge) | recognized but no indicator | tunable still works; no visual feedback — gentle convention pressure |
 
 Pair detection for `_w` / `_h`: same-stem `_x` / `_y` in same dict. Fallback strips `_max` (e.g. `two_line_max_w` → `two_line_x`).
@@ -119,7 +122,7 @@ Sibling to the region-rect dict above. Each region's drawable internals get a `_
 
 **Synthetic rows.** Candidate cyclers use a sentinel `dqn` shape `"__candidate__:<element_id>"` with `type_tag = "candidate"`. `_build_param_rows` returns the normal dict-derived rows; the cycler is prepended in `_on_click` when the focused element has a build-candidates hook. `_draw_focused_indicator` early-returns on `"candidate"` / `"unsupported"` rows.
 
-**Writeback.** AST walks the dict literal `<dict_name> = {...}` at module level, replaces each key's value-side via `ast.Constant` end-col-offset math. Type-guarded (int / float / tuple-of-numeric / str). Multi-line values skipped with warning. Tuple inside dict re-emitted via `repr()`.
+**Writeback.** AST walks the dict literal `<dict_name> = {...}` at module level, replaces each key's value-side via `ast.Constant` end-col-offset math. Type-guarded (int / float / tuple-of-numeric / str). Multi-line values skipped with warning. Tuple inside dict re-emitted via `repr()`. **Iteration is reversed** so rightmost edits land first — earlier-col cols stay accurate when multi-key-per-line schemas (Phase 1b arc polyline) put N values on one line. Forward iteration corrupts source the moment any value's repr length shifts. See [critical_lessons.md § "AST source-edit must iterate values in reverse"](.claude/rules/critical_lessons.md).
 
 ---
 
@@ -128,6 +131,7 @@ Sibling to the region-rect dict above. Each region's drawable internals get a `_
 1. **More elements** registered for tuning (badge / station / route bar) — mechanical pattern: extract `# fmt: off` block → `_TUNEABLES_*` dict, declare hit-test rect, add `_REGISTRY` entry. (Clock + prefix shipped 2026-05-14.)
 2. **Animation play toggle** — for chevron `sweep_duration` etc; need motion to tune.
 3. **Cross-route candidate sampling** for the dest cycler — current = unique dests in loaded route only (Yamanote = 6 compounds). Walk every `audio/*/route.json` + `_mock` for short / long / katakana variety.
+4. **Mouse-drag handles (Phase 2 editor upgrade).** Keyboard-nudge is insufficient for multi-DOF visual targets — the 2026-05-14 arc Phase 1b session surfaced this: user could not reconcile 4 waypoints + 4 per-point strokes against an IRL ref by nudging one param at a time. Real fix = visible draggable dots on the LCD canvas. Click-and-drag a waypoint moves it, the band reshapes in real time, sidebar values update live. General-purpose — applies retroactively to any element with `_x`/`_y` pairs (dest box anchors, station rect corners, future polyline elements). Out of scope until enough Phase 1b/2 tuning friction motivates the lift.
 
 ## Value cycler hook (generalized 2026-05-14)
 
@@ -154,10 +158,39 @@ When `_on_click` focuses an element with cycler config, it pins a `__candidate__
 
 ---
 
+## Polyline-with-per-point-stroke pattern (Phase 1b, lower-LCD)
+
+For curved bands whose shape isn't a clean math primitive (single arc / ellipse / known equation), model the band as a polyline through N waypoints, with per-waypoint stroke.
+
+```python
+_TUNEABLES_ARC = {
+    "arc_p0_x": 540, "arc_p0_y": 441, "arc_p0_stroke": 160,   # current-stop end
+    "arc_p1_x": 461, "arc_p1_y": 310, "arc_p1_stroke": 120,
+    "arc_p2_x": 272, "arc_p2_y": 191, "arc_p2_stroke":  85,
+    "arc_p3_x":   9, "arc_p3_y":  92, "arc_p3_stroke":  55,   # furthest-stop end
+    "arc_color": (116, 193, 30),
+}
+```
+
+Renderer walks `_pN_x/_y/_stroke` triples in numeric order. Outer + inner band edges = waypoint ± local-normal × stroke/2 at each point. Segments between adjacent waypoints linearly interpolate both position (straight line) and thickness (trapezoid). For smoother shapes: add more waypoints. Local normal at junctions = averaged-normal bisector (simple; tight bends may pinch — softer angles softer).
+
+**When to use vs single-primitive arc.** First instinct is the cleanest math (circle: center + radius + start/end angle = 5 numbers). Reach for polyline when:
+- IRL artifact isn't a true single-radius arc (Yamanote 5-station band: shape OK but stroke varies along length — uniform stroke can't match)
+- Variable thickness along the curve (per-segment width)
+- Multi-radius / piecewise shapes
+- Calibrating to a photo where the curve doesn't admit a clean parameterization
+
+**Model the artifact's actual DOFs, not the cleanest math primitive.** Trying to tune a single-radius arc to an IRL band that has variable thickness wastes hours and can't converge. Polyline + per-point stroke matches the DOFs directly. The math primitive is for *rendering speed*, not the *user's mental model*.
+
+**Phase 2 editor implication.** Multi-waypoint shapes are exactly where keyboard-nudge falls down (open thread #4): user can't reconcile N positions + N strokes against a visual target one keystroke at a time. Drag handles needed for serious tuning.
+
+---
+
 ## Rule strength (future standard)
 
 - **New tuneable additions:** must land in module-level `_TUNEABLES_*` dict + follow suffix convention. Hard rule going forward.
 - **Existing inline `# fmt: off` tuneable blocks:** stay as-is. Convert lazily — only when next touched for tuning. No eager backfill sweep.
+- **AST writeback iteration must stay reversed.** Multi-key-per-line schemas (Phase 1b polyline) only stay safe under reverse iteration. See `_dev_scripts/calibration_editor.py:_swap_dict_literal` + [critical_lessons.md § "AST source-edit must iterate values in reverse"](.claude/rules/critical_lessons.md).
 
 ---
 

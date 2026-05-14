@@ -22,6 +22,7 @@ Per-station rendering states: pentagon (current stop), numbered countdown
 No dim/passed treatment — circular loops have no terminal "behind".
 """
 
+import math
 from typing import Dict, List, Optional, Tuple
 import pygame
 import pygame.gfxdraw
@@ -45,6 +46,42 @@ from displays.utils import arrow_points, draw_1col_text_plain, draw_aapolygon
 from displays.train_models.e235_1000.lower_lcd import (
     LowerDisplay as E235_1000_LowerDisplay,
 )
+
+# =============================================================================
+# 5-station view — green curve band geometry (Phase 1 scaffold)
+#
+# Centerline polyline through N waypoints (p0, p1, p2, ...). Band built by
+# offsetting the polyline by ±stroke_w/2 perpendicular to each segment.
+# Straight-line interpolation between waypoints — for smoother shapes, add
+# more waypoints (extend dict with arc_p4_x/_y etc; draw loop reads all
+# arc_pN_x/_y pairs in numeric order). p0 = current-stop end (bottom-right
+# slot side); pN-1 = furthest-stop end (top side).
+#
+# Tuned via the calibration editor (see _dev_scripts/calibration_editor.py).
+# IRL Yamanote band isn't a pure circular arc — multi-waypoint polyline
+# matches the actual shape better than a single-radius circle.
+# =============================================================================
+
+# fmt: off
+# Each waypoint carries its own stroke (band thickness at that point). Outer
+# and inner edges are straight lines between adjacent waypoint offsets, so a
+# stroke that varies across waypoints produces a band whose thickness
+# transitions linearly along each segment.
+_TUNEABLES_ARC = {
+    "arc_p0_x": 507,   "arc_p0_y": 457,   "arc_p0_stroke": 160,   # current-stop end (bottom-right)
+    "arc_p1_x": 461,   "arc_p1_y": 310,   "arc_p1_stroke": 120,
+    "arc_p2_x": 272,   "arc_p2_y": 191,   "arc_p2_stroke": 85,
+    "arc_p3_x": 9,   "arc_p3_y":  92,   "arc_p3_stroke": 55,   # furthest-stop end (top)
+    "arc_color": (116, 193, 30),  # Yamanote-green default
+}
+# fmt: on
+
+# Bounding rect (re-synced each frame from _TUNEABLES_ARC via ARC_RECT.update
+# in draw_arc). Calibration editor uses this as the hit-test rect when the
+# user clicks on the lower LCD. Sized to span the lower-LCD area by default;
+# editor doesn't need pixel-tight bounding since the arc is the only thing
+# on the lower LCD in Phase 1.
+ARC_RECT = pygame.Rect(0, UPPER_HEIGHT, S_WIDTH, S_HEIGHT - UPPER_HEIGHT)
 
 # =============================================================================
 # Canonical Yamanote JY-code ordering for racetrack screen layout.
@@ -894,6 +931,113 @@ class CircularFullRouteDisplay:
 
 
 # =============================================================================
+# Japanese 5-Station Display (E235-0 EIGHT-slot replacement, Phase 1)
+# =============================================================================
+
+
+class JapaneseFiveStationDisplay:
+    """Universal EIGHT-slot replacement for E235-0 — Phase 1 scaffold.
+
+    Today: renders only the big green curve arc per `_TUNEABLES_ARC` module
+    constants. Stations + pentagon + minute markers + per-route adaptation
+    are deferred (Phase 2). The arc is universal — same renderer regardless
+    of which route is loaded into E235-0 (no Yamanote dispatch, unlike the
+    full-route slot which has a linear fallback for out-of-spec routes).
+
+    Same interface as JapaneseEightStationDisplay (the class it replaces):
+    `show_stops(state, current_time)` for the LowerDisplay manager dispatch,
+    and `hit_test` returning None until clickability lands.
+    """
+
+    def __init__(self, screen, route_data, stops):
+        self.screen = screen
+        self.route_data = route_data
+        self.stops = stops
+
+    def show_stops(self, state, current_time: float = 0.0) -> None:
+        """Phase 1: fill lower-LCD bg white, then draw the arc band.
+
+        State and current_time are accepted but ignored — arc is static
+        geometry. Phase 2 will derive station positions from `state.curr_stop`
+        and minute markers from `current_time`.
+        """
+        self.screen.fill(WHITE_BG, ARC_RECT)
+        self._draw_arc()
+
+    def _draw_arc(self) -> None:
+        """Build the band polygon by offsetting the centerline polyline.
+
+        Walks `arc_pN_x` / `arc_pN_y` pairs in N order to collect waypoints.
+        For each waypoint, computes a local normal: segment normal at the
+        endpoints, averaged-normal bisector at junctions. Outer edge sits
+        at waypoint + normal * stroke_w/2; inner at waypoint - normal *
+        stroke_w/2. Closed polygon = outer-forward + inner-reversed.
+        """
+        t = _TUNEABLES_ARC
+        ARC_RECT.update(0, UPPER_HEIGHT, S_WIDTH, S_HEIGHT - UPPER_HEIGHT)
+
+        pts: List[Tuple[float, float]] = []
+        strokes: List[float] = []
+        i = 0
+        while f"arc_p{i}_x" in t and f"arc_p{i}_y" in t:
+            pts.append((float(t[f"arc_p{i}_x"]), float(t[f"arc_p{i}_y"])))
+            # Per-waypoint stroke; missing key defaults to 0 (= invisible).
+            strokes.append(float(t.get(f"arc_p{i}_stroke", 0)))
+            i += 1
+        if len(pts) < 2:
+            return  # degenerate — need at least 2 waypoints for a segment
+
+        color = t["arc_color"]
+
+        outer_pts: List[Tuple[int, int]] = []
+        inner_pts: List[Tuple[int, int]] = []
+
+        def _perp_unit(dx: float, dy: float) -> Tuple[float, float]:
+            mag = math.hypot(dx, dy)
+            if mag == 0:
+                return 0.0, 0.0
+            return dy / mag, -dx / mag
+
+        n = len(pts)
+        for k in range(n):
+            if k == 0:
+                dx, dy = pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]
+                nx, ny = _perp_unit(dx, dy)
+            elif k == n - 1:
+                dx, dy = pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]
+                nx, ny = _perp_unit(dx, dy)
+            else:
+                # Junction: averaged-normal bisector. Simple — for tight
+                # bends the band may pinch on one side; user adds more
+                # waypoints to soften angles.
+                n1x, n1y = _perp_unit(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1])
+                n2x, n2y = _perp_unit(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1])
+                nx, ny = (n1x + n2x) / 2.0, (n1y + n2y) / 2.0
+                mag = math.hypot(nx, ny)
+                if mag > 0:
+                    nx, ny = nx / mag, ny / mag
+            half_w = strokes[k] / 2.0
+            outer_pts.append((int(pts[k][0] + nx * half_w), int(pts[k][1] + ny * half_w)))
+            inner_pts.append((int(pts[k][0] - nx * half_w), int(pts[k][1] - ny * half_w)))
+
+        poly = outer_pts + list(reversed(inner_pts))
+        # Clip to lower-LCD area so the band can't bleed up into the upper
+        # LCD's header when a waypoint's stroke pushes outer-edge offsets
+        # above UPPER_HEIGHT.
+        old_clip = self.screen.get_clip()
+        self.screen.set_clip(ARC_RECT)
+        try:
+            pygame.gfxdraw.filled_polygon(self.screen, poly, color)
+            pygame.gfxdraw.aapolygon(self.screen, poly, color)
+        finally:
+            self.screen.set_clip(old_clip)
+
+    def hit_test(self, state, mx: int, my: int) -> Optional[int]:
+        """Click hit-test. Deferred — Phase 1 has no clickable elements."""
+        return None
+
+
+# =============================================================================
 # E235-0 Lower LCD manager — subclasses E235-1000 to swap full-route renderer
 # =============================================================================
 
@@ -901,15 +1045,19 @@ class CircularFullRouteDisplay:
 class LowerDisplay(E235_1000_LowerDisplay):
     """E235-0 Lower LCD manager.
 
-    Inherits the slot cycler (FULL/EIGHT/TRANSFER) from E235-1000. Overrides
-    only the FULL slot's renderer when the active route is 山手線, swapping
-    in the circular racetrack display. EIGHT (8-station zoom) and TRANSFER
-    inherit unchanged — interim until the E235-0-specific 5-station view
-    lands and replaces the EIGHT slot universally.
+    Inherits the slot cycler (FULL/EIGHT/TRANSFER) from E235-1000. Overrides:
 
-    Out-of-spec routes (any non-Yamanote loaded into E235-0) get the
-    E235-1000 linear full-route renderer as a best-effort fallback,
-    consistent with the project's per-model IRL-line-scope policy.
+    - **FULL slot**: swapped to the circular racetrack display when the
+      active route is 山手線. Out-of-spec routes (any non-Yamanote loaded
+      into E235-0) get the E235-1000 linear full-route renderer as a
+      best-effort fallback, consistent with the per-model IRL-line-scope
+      policy.
+
+    - **EIGHT slot**: swapped to `JapaneseFiveStationDisplay` universally
+      (no dispatch — all routes get the curve, including non-Yamanote
+      best-effort uses).
+
+    TRANSFER slot inherits unchanged.
     """
 
     def __init__(self, screen, route_data, stops, mode_cycler):
@@ -917,3 +1065,5 @@ class LowerDisplay(E235_1000_LowerDisplay):
         # Swap full-route renderer for circular when route is Yamanote.
         if route_data.get("route") == "山手線":
             self.japanese_display = CircularFullRouteDisplay(screen, route_data, stops)
+        # Swap EIGHT slot renderer universally (Phase 1: arc-only scaffold).
+        self.japanese_eight_display = JapaneseFiveStationDisplay(screen, route_data, stops)

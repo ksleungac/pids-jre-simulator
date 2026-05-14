@@ -274,3 +274,73 @@ if (pending_X or held_input) and action_preconditions_met():
 ### Concrete fix applied (this incident)
 - **`app.py:_handle_input_real`**: gate the consumption on `not self.audio.is_pa_playing()`. The held-key path retries naturally; the one-shot pending flag now stays set until audio clears, then runs.
 - **JSONL log expanded** (`auto_input.py`): `at_station`, `cnt_pa_at_station`, `at_station_observed` added to per-sample records so the same incident is debuggable from the recording alone next time. Without these fields the original investigation couldn't distinguish "detector didn't fire" from "fire dropped" from "transition silently regressed."
+
+---
+
+## ⚠️ CRITICAL: AST source-edit must iterate values in reverse when multiple keys can share a line
+
+**Date:** 2026-05-14
+
+### The Incident
+The calibration editor's `commit_to_source` writeback walks a target dict's AST nodes and replaces each value-side via `line[:col_start] + new_repr + line[end_col:]`. The loop iterated **forward** through `zip(target_node.keys, target_node.values)` — with a comment that explicitly justified this as safe because "each key→value is on its own line in our dicts."
+
+Phase 1b of the calibration editor pivoted the arc-element dict to a multi-key-per-line schema:
+
+```python
+"arc_p0_x": 540, "arc_p0_y": 441, "arc_p0_stroke": 70,
+"arc_p1_x": 461, "arc_p1_y": 310, "arc_p1_stroke": 70,
+...
+```
+
+The first Ctrl+S after the schema change wrote back successfully — by coincidence, the user hadn't actually nudged any values yet (focused element, immediately Ctrl+S), so `new_repr == old_repr` for every key. No col-offset shift, no corruption.
+
+The second Ctrl+S, after real tuning, corrupted the source file:
+
+```
+"arc_p3_x": 9,   "arc_p3_y":  9992  "arc_p3_stroke": 7055  # furthest-stop end (top)
+```
+
+Reading the modified `line` with the original AST col-offsets meant the second-key replacement slice started AFTER the first replacement had already shifted the line's length. The slice ate part of one value and bled into the adjacent key's whitespace and value. Three keys collapsed into two malformed-then-unparsable tokens. Editor crashed on next Ctrl+S because `ast.parse(text)` failed on the corrupted source. User lost their tuning work.
+
+### The Rule
+> **When mutating source by AST-walking values in place, process values in REVERSE source order. Then earlier-col values keep their original col-offsets (no edits have happened to their left yet) and replacement remains correct.**
+
+Forward iteration is safe ONLY when each AST value is alone on its line — and that property must be a hard schema invariant, not a happy accident. Multi-key-per-line dicts (alignment-formatted blocks, dense data tables, etc.) make forward iteration unsafe the moment any value's repr length differs from the original.
+
+### Applies To
+- All AST-driven source edits where multiple AST values can appear on the same line.
+- All future writeback paths in dev tools (calibration editor, future codegen utilities that patch existing source).
+- Generalization: any in-place string mutation guided by precomputed offsets must process offsets in DECREASING order, regardless of whether AST is involved.
+
+### The Pattern (Use This Every Time)
+
+```python
+# Wrong:
+for k_node, v_node in zip(target_node.keys, target_node.values):
+    # col_offsets are from the ORIGINAL tree. After the first edit, the
+    # line's length changes — subsequent edits on the same line use cols
+    # that no longer correspond to the intended values.
+    lines[v_node.lineno - 1] = (
+        lines[v_node.lineno - 1][: v_node.col_offset]
+        + new_repr
+        + lines[v_node.lineno - 1][v_node.end_col_offset :]
+    )
+
+# Right (the fix landed in calibration_editor._swap_dict_literal):
+for k_node, v_node in reversed(list(zip(target_node.keys, target_node.values))):
+    # Rightmost edits land first; earlier-col edits then use cols that are
+    # still accurate because no edit has happened to their left.
+    ...
+```
+
+Always-safe alternative when reverse iteration is awkward: sort edits by `(v_lineno, v_col_offset)` descending, apply in that order.
+
+### Why This Matters
+- **Silent data corruption is the worst-case mode.** First Ctrl+S after the schema change "worked" because nothing changed. Second one corrupted, and the user only discovered it when the editor crashed on third Ctrl+S — by then the source file was already broken in git.
+- **The trap is invisible until the schema invariant breaks.** "One key per line" was a true invariant for the first six elements registered (`dest`, `clock`, `prefix`, `station` upper-LCD entries). The arc element broke the invariant; the comment in the writeback code asserting one-per-line became wrong without any code-side warning.
+- **The fix is one keyword** (`reversed(...)`) at the iteration site. Cost ≈ 0. Cost of writing back ad-hoc with col-offsets from a mutated string ≈ user loses minutes of tuning work and a release-pipeline corruption later.
+- **Comments that "justify" subtle invariants need to assert + enforce, not narrate.** The original comment said "each key→value is on its own line in our dicts, so per-line replacement is safe regardless of order." When that invariant changed (Phase 1b schema), the comment quietly went stale. The reverse-iteration approach is unconditionally safe regardless of schema; pick the unconditional fix when available.
+
+### Concrete fix applied (this incident)
+- **`_dev_scripts/calibration_editor.py:_swap_dict_literal`**: iteration changed to `reversed(list(zip(target_node.keys, target_node.values)))`. Comment rewritten to explain the multi-key-per-line risk and why reverse is unconditionally safe.
+- **Source file restored** by hand: `displays/train_models/e235_0/lower_lcd.py` line 75 reconstructed from corruption pattern + eyeballed continuation of the stroke trend. User confirmed values close enough to proceed.

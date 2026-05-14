@@ -27,6 +27,8 @@ from __future__ import annotations
 import ast
 import importlib
 import json
+import math
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -42,11 +44,14 @@ from app_paths import project_root
 #     "rect_module": "displays.train_models.x.upper_lcd",
 #     "rect_attr": "DEST_RECT",
 #     "dicts": [(module_path, dict_name), ...],
+#     "target": "upper" | "lower",  # which LCD the element lives on
+#                                   # (drives sidebar layout in preview_display).
 # }
 _REGISTRY = {
     "dest": {
         "rect_module": "displays.train_models.e235_0.upper_lcd",
         "rect_attr": "DEST_RECT",
+        "target": "upper",
         "dicts": [
             ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_DEST_KANJI"),
             ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_DEST_ENGLISH"),
@@ -55,6 +60,7 @@ _REGISTRY = {
     "clock": {
         "rect_module": "displays.train_models.e235_0.upper_lcd",
         "rect_attr": "CLOCK_RECT",
+        "target": "upper",
         "dicts": [
             # Region-level: position + size of CLOCK_RECT itself. draw_clock
             # syncs CLOCK_RECT from this dict each frame so editor nudges
@@ -67,6 +73,7 @@ _REGISTRY = {
     "prefix": {
         "rect_module": "displays.train_models.e235_0.upper_lcd",
         "rect_attr": "PREFIX_RECT",
+        "target": "upper",
         "dicts": [
             ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_PREFIX_RECT"),
             ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_PREFIX_KANJI"),
@@ -76,10 +83,19 @@ _REGISTRY = {
     "station": {
         "rect_module": "displays.train_models.e235_0.upper_lcd",
         "rect_attr": "STATION_RECT",
+        "target": "upper",
         "dicts": [
             ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_STATION_RECT"),
             ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_STATION_KANJI"),
             ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_STATION_ENGLISH"),
+        ],
+    },
+    "arc": {
+        "rect_module": "displays.train_models.e235_0.lower_lcd",
+        "rect_attr": "ARC_RECT",
+        "target": "lower",
+        "dicts": [
+            ("displays.train_models.e235_0.lower_lcd", "_TUNEABLES_ARC"),
         ],
     },
 }
@@ -145,6 +161,20 @@ def _snapshot_originals() -> None:
 
 def should_quit() -> bool:
     return _should_quit
+
+
+def get_focused_target() -> Optional[str]:
+    """Return 'upper' / 'lower' for the focused element, or None.
+
+    Drives sidebar layout swap in preview_display._run_edit_loop: lower-LCD
+    elements move sidebar to the right half of the doubled window so the
+    full LCD A (upper + lower) stays visible during tuning. Upper elements
+    keep the default sidebar-below-upper-LCD layout.
+    """
+    if _focused_element is None:
+        return None
+    cfg = _REGISTRY.get(_focused_element)
+    return cfg.get("target", "upper") if cfg else None
 
 
 def handle_event(event, sim) -> bool:
@@ -221,18 +251,34 @@ def _cycle_stop(sim, delta: int) -> None:
     print(f"[calibration] Stop = {sim.state.curr_stop} / {n - 1}")
 
 
-def draw_overlay(screen) -> None:
-    """Indicator on LCD (focused-param visual cue) + sidebar overlay on lower area."""
+def draw_overlay(screen, sidebar_layout: str = "below_upper") -> None:
+    """Indicator on LCD (focused-param visual cue) + sidebar overlay.
+
+    sidebar_layout dispatch:
+      "below_upper" (default) — sidebar spans full window width, sits below
+        UPPER_HEIGHT. Used for upper-LCD element focus (side-by-side LCDs
+        above, sidebar covers the lower-LCD area which isn't being tuned).
+      "right_half" — sidebar occupies the right half of the doubled window
+        (x=S_WIDTH..2*S_WIDTH, full height). Used for lower-LCD element
+        focus so LCD A's full vertical extent (upper + lower) stays visible
+        for tuning. LCD B render is skipped by preview_display in this mode.
+    """
     _ensure_fonts()
     _draw_focused_indicator(screen)
     w, h = screen.get_size()
-    from displays.train_models.e235_0 import UPPER_HEIGHT as _UH
+    from displays.train_models.e235_0 import S_WIDTH as _SW, UPPER_HEIGHT as _UH
 
-    sidebar_top = _UH
-    sidebar = pygame.Surface((w, h - sidebar_top), pygame.SRCALPHA)
-    sidebar.fill((20, 20, 30, 230))  # near-opaque dark; user can still glimpse underneath
-    _draw_sidebar_contents(sidebar)
-    screen.blit(sidebar, (0, sidebar_top))
+    if sidebar_layout == "right_half":
+        sidebar = pygame.Surface((_SW, h), pygame.SRCALPHA)
+        sidebar.fill((20, 20, 30, 240))
+        _draw_sidebar_contents(sidebar)
+        screen.blit(sidebar, (_SW, 0))
+    else:
+        sidebar_top = _UH
+        sidebar = pygame.Surface((w, h - sidebar_top), pygame.SRCALPHA)
+        sidebar.fill((20, 20, 30, 230))
+        _draw_sidebar_contents(sidebar)
+        screen.blit(sidebar, (0, sidebar_top))
 
 
 # ── Internals ──────────────────────────────────────────────────────────
@@ -257,6 +303,16 @@ def _on_click(pos, sim) -> bool:
         if rect.collidepoint(pos):
             _focused_element = element_id
             _param_rows = _build_param_rows(cfg["dicts"])
+            # Auto-switch to KANJI when focusing a lower-LCD element. The
+            # EIGHT slot dispatches `japanese_eight_display` only in
+            # KANJI/FURIGANA modes; ENGLISH falls through to the full-route
+            # renderer. Without this switch, clicking the arc in ENGLISH
+            # mode would hide it behind the full-route view.
+            if cfg.get("target") == "lower":
+                from displays.base import DisplayMode
+
+                if sim is not None and sim.upper.mode_cycler.current_mode == DisplayMode.ENGLISH:
+                    sim.upper.mode_cycler.current_mode = DisplayMode.KANJI
             # Pinned candidate-cycler row at the top when this element has
             # cycler config in _REGISTRY (see module-bottom cycler-wiring block).
             cycler = cfg.get("cycler")
@@ -276,16 +332,33 @@ def _on_click(pos, sim) -> bool:
             _scroll_offset = 0
             print(f"[calibration] Focused element: {element_id} ({len(_param_rows)} params)")
             return True
-    # Click in sidebar area: try to focus a row.
-    from displays.train_models.e235_0 import UPPER_HEIGHT as _UH
-
-    if pos[1] >= _UH and _focused_element is not None:
-        row_idx = _row_at_sidebar_y(pos[1] - _UH)
-        if row_idx is not None:
-            _focused_row = row_idx
-            _ensure_focused_visible()
-            return True
+    # Click in sidebar area: try to focus a row. Sidebar geometry depends
+    # on focused element's target (upper = below upper LCD; lower = right
+    # half of doubled window). _sidebar_local_y handles both layouts.
+    if _focused_element is not None:
+        local_y = _sidebar_local_y(pos)
+        if local_y is not None:
+            row_idx = _row_at_sidebar_y(local_y)
+            if row_idx is not None:
+                _focused_row = row_idx
+                _ensure_focused_visible()
+                return True
     return False
+
+
+def _sidebar_local_y(pos) -> Optional[int]:
+    """Convert window-coord click pos to sidebar-local y, or None if outside.
+
+    Sidebar position depends on focused element's target (set in _REGISTRY):
+      "upper" → sidebar below upper LCD: (x∈[0,w], y∈[UPPER_HEIGHT,h])
+      "lower" → sidebar right half: (x∈[S_WIDTH,2*S_WIDTH], y∈[0,h])
+    """
+    from displays.train_models.e235_0 import S_WIDTH as _SW, UPPER_HEIGHT as _UH
+
+    target = _REGISTRY[_focused_element].get("target", "upper")
+    if target == "lower":
+        return pos[1] if pos[0] >= _SW else None
+    return (pos[1] - _UH) if pos[1] >= _UH else None
 
 
 def _resolve_rect(cfg) -> Optional[pygame.Rect]:
@@ -458,12 +531,36 @@ _EDGE_OFFSET_SUFFIXES = (
 )
 
 
+_WAYPOINT_RE = re.compile(r"_p\d+_(x|y)$")
+_STROKE_RE = re.compile(r"_p\d+_stroke$")
+
+
+def _is_waypoint_key(key: str) -> Optional[str]:
+    """Return 'x' or 'y' if key matches the `_p<N>_x|y` waypoint pattern, else None."""
+    m = _WAYPOINT_RE.search(key)
+    return m.group(1) if m else None
+
+
+def _is_stroke_key(key: str) -> bool:
+    """True if key matches the `_p<N>_stroke` per-waypoint thickness pattern."""
+    return bool(_STROKE_RE.search(key))
+
+
 def _param_kind_from_key(key: str):
     for suffix in _EDGE_OFFSET_SUFFIXES:
         if key.endswith(suffix):
             # Return edge label only — caller maps to indicator geometry.
             edge = suffix.rsplit("_", 1)[0].lstrip("_")  # _right_offset → right
             return f"edge_{edge}"
+    if _is_waypoint_key(key) is not None:
+        # Polyline waypoint coords (e.g. arc_p0_x) — indicator = dot at the
+        # waypoint's (px, py). Distinct from generic "x"/"y" which rulers
+        # from screen-edge.
+        return "waypoint"
+    if _is_stroke_key(key):
+        # Per-waypoint band half-width (arc_p0_stroke etc) — indicator =
+        # bar centered at the waypoint with length = stroke value.
+        return "stroke"
     if key.endswith("_x"):
         return "x"
     if key.endswith("_y"):
@@ -474,6 +571,39 @@ def _param_kind_from_key(key: str):
         return "height"
     if key.endswith("_color"):
         return "color"
+    # Polar geometry (arc-style elements). Pair detection in
+    # _paired_polar_center / _paired_polar_radius via stem stripping.
+    if key.endswith("_radius"):
+        return "radius"
+    if key.endswith("_angle"):
+        return "angle"
+    return None
+
+
+def _paired_polar_center(key: str, d: dict):
+    """For radius/angle keys, find paired _center_x + _center_y in same dict.
+
+    Strips the polar suffix and looks for `<stem>_center_x` / `<stem>_center_y`.
+    e.g. `arc_radius` → stem `arc` → `arc_center_x` / `arc_center_y`.
+    """
+    for suffix in ("_radius", "_start_angle", "_end_angle", "_angle"):
+        if key.endswith(suffix):
+            stem = key[: -len(suffix)]
+            cx_key = stem + "_center_x"
+            cy_key = stem + "_center_y"
+            if cx_key in d and cy_key in d:
+                return cx_key, cy_key
+    return None
+
+
+def _paired_polar_radius(key: str, d: dict):
+    """For angle keys, find the paired `_radius` key in same dict."""
+    for suffix in ("_start_angle", "_end_angle", "_angle"):
+        if key.endswith(suffix):
+            stem = key[: -len(suffix)]
+            r_key = stem + "_radius"
+            if r_key in d:
+                return r_key
     return None
 
 
@@ -530,6 +660,12 @@ def _draw_focused_indicator(screen) -> None:
 def _draw_indicator_at(screen) -> None:
     if _focused_element is None or not _param_rows:
         return
+    # Element-specific always-on overlay: arc shows the full waypoint
+    # polyline (faint dots + connecting line) so user sees the whole
+    # shape even while tuning a single waypoint. Runs BEFORE the focused-
+    # param highlight so the focused waypoint's bright ring lands on top.
+    if _focused_element == "arc":
+        _draw_arc_polyline_preview(screen)
     dqn, key, sub_idx, type_tag = _param_rows[_focused_row]
     if type_tag in ("candidate", "unsupported"):
         return  # synthetic / inert rows have no canvas indicator
@@ -602,6 +738,93 @@ def _draw_indicator_at(screen) -> None:
             _draw_v_ruler(screen, color, rect.top, rect.top + val, ruler_x_left)
         elif edge == "bottom":
             _draw_v_ruler(screen, color, rect.bottom - val, rect.bottom, ruler_x_left)
+    elif kind == "waypoint":
+        # Polyline waypoint: highlight ring at (px, py). Resolve paired axis
+        # in same dict — arc_p0_x ↔ arc_p0_y.
+        axis = _is_waypoint_key(key)
+        if axis is None:
+            return
+        stem = key[: -len("_x")]  # both _x and _y are 2 chars
+        px_key = stem + "_x"
+        py_key = stem + "_y"
+        if px_key in d and py_key in d:
+            px = int(d[px_key])
+            py = int(d[py_key])
+            pygame.draw.circle(screen, color, (px, py), 8, 2)
+            pygame.draw.circle(screen, color, (px, py), 2)
+    elif kind == "stroke":
+        # Per-waypoint band thickness: horizontal bar centered at (px, py)
+        # with length = val. Resolves paired _x/_y from `arc_pN_stroke` →
+        # `arc_pN_x` / `arc_pN_y`.
+        stem = key[: -len("_stroke")]
+        px_key = stem + "_x"
+        py_key = stem + "_y"
+        if px_key in d and py_key in d:
+            px = int(d[px_key])
+            py = int(d[py_key])
+            half = max(1, int(val) // 2)
+            pygame.draw.line(screen, color, (px - half, py), (px + half, py), 3)
+            pygame.draw.circle(screen, color, (px, py), 2)
+    elif kind == "radius":
+        # Radial line from center going east, length = val. Center may sit
+        # off-canvas (e.g. arc_center_x < 0); draw clips automatically.
+        center_keys = _paired_polar_center(key, d)
+        if center_keys is None:
+            return
+        cx_key, cy_key = center_keys
+        cx, cy = int(d[cx_key]), int(d[cy_key])
+        _draw_polar_spoke(screen, color, cx, cy, val, angle_deg=0)
+    elif kind == "angle":
+        # Spoke from center at val° (degrees) of length = paired _radius.
+        # Pygame y is inverted: y_end = cy - r·sin(angle) so positive degrees
+        # point UP visually, matching math convention.
+        center_keys = _paired_polar_center(key, d)
+        r_key = _paired_polar_radius(key, d)
+        if center_keys is None or r_key is None:
+            return
+        cx_key, cy_key = center_keys
+        cx, cy = int(d[cx_key]), int(d[cy_key])
+        radius = int(d[r_key])
+        _draw_polar_spoke(screen, color, cx, cy, radius, angle_deg=val)
+
+
+def _draw_arc_polyline_preview(screen) -> None:
+    """Faint dots + connecting line through all arc waypoints.
+
+    Reads `_TUNEABLES_ARC` from the lower_lcd module. Walks `arc_pN_x/_y`
+    pairs in N order. Silent no-op if the dict / keys are missing.
+    """
+    try:
+        mod = importlib.import_module("displays.train_models.e235_0.lower_lcd")
+        t = getattr(mod, "_TUNEABLES_ARC")
+    except (ImportError, AttributeError):
+        return
+    pts = []
+    i = 0
+    while f"arc_p{i}_x" in t and f"arc_p{i}_y" in t:
+        pts.append((int(t[f"arc_p{i}_x"]), int(t[f"arc_p{i}_y"])))
+        i += 1
+    if len(pts) < 2:
+        return
+    dim = (180, 140, 60)
+    pygame.draw.lines(screen, dim, False, pts, 1)
+    for px, py in pts:
+        pygame.draw.circle(screen, dim, (px, py), 4, 1)
+
+
+def _draw_polar_spoke(screen, color, cx: int, cy: int, length: int, angle_deg: float) -> None:
+    """Spoke from (cx, cy) at angle_deg, of given length, with end-cap dot.
+
+    Math convention: 0° = east, 90° = north. Pygame y inverted internally
+    (subtract sin·length so positive degrees visually go up). Center dot
+    drawn separately so user sees where the anchor sits, even off-canvas.
+    """
+    rad = math.radians(angle_deg)
+    end_x = int(cx + length * math.cos(rad))
+    end_y = int(cy - length * math.sin(rad))
+    pygame.draw.line(screen, color, (cx, cy), (end_x, end_y), 1)
+    pygame.draw.circle(screen, color, (end_x, end_y), 4, 1)
+    pygame.draw.circle(screen, color, (cx, cy), 3)
 
 
 def _draw_h_ruler(screen, color, x0: int, x1: int, y: int, tick: int = 3) -> None:
@@ -996,11 +1219,14 @@ def _swap_dict_literal(text: str, dict_name: str, new_values: dict, src_path: Pa
         return text
 
     lines = text.split("\n")
-    # Walk keys in reverse so col-offset edits on later keys don't shift earlier ones.
-    # (Actually AST gives nodes in source order; col-offset edits on the SAME line
-    # would shift downstream cols. Each key→value is on its own line in our
-    # dicts, so per-line replacement is safe regardless of order.)
-    for k_node, v_node in zip(target_node.keys, target_node.values):
+    # Walk keys in REVERSE so col-offset edits on later keys don't shift the
+    # cols of earlier keys on the same line. Multi-key-per-line schemas
+    # (e.g. _TUNEABLES_ARC's `"arc_p0_x": ..., "arc_p0_y": ..., "arc_p0_stroke": ..."`
+    # rows) require this — forward iteration corrupts the file the moment a
+    # value's repr length differs from the original on a multi-key line.
+    # Single-key-per-line dicts are also safe under reverse since each line
+    # has only one edit.
+    for k_node, v_node in reversed(list(zip(target_node.keys, target_node.values))):
         if not isinstance(k_node, ast.Constant) or not isinstance(k_node.value, str):
             continue
         key = k_node.value

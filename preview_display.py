@@ -244,7 +244,10 @@ def _run_edit_loop(sim) -> None:
     Loads `_dev_scripts/calibration_editor.py` via sys.path hack (it's a
     dev-only tool, never imported by production code).
 
-    Layout (side-by-side cross-reference for calibration):
+    Two layouts, dispatched per-frame from the focused element's `target`
+    field in calibration_editor._REGISTRY:
+
+      target=upper (default) — side-by-side cross-reference:
         +----------------+----------------+
         |  UPPER LCD A   |  UPPER LCD B   |
         |  (active mode) |  (ENGLISH)     |
@@ -252,9 +255,18 @@ def _run_edit_loop(sim) -> None:
         |  PARAM PANEL (spans full width) |
         +---------------------------------+
 
-    Window is doubled to 2 × S_WIDTH for the side-by-side. Lower LCD render
-    is skipped entirely in edit mode — it was already hidden under the panel
-    anyway, just wasted work.
+      target=lower — single-LCD with sidebar on right half:
+        +----------------+----------------+
+        |  UPPER LCD A   |                |
+        |                |   PARAM PANEL  |
+        +----------------+   (full height)|
+        |  LOWER LCD A   |                |
+        |                |                |
+        +----------------+----------------+
+
+    Window stays 2×S_WIDTH wide in both layouts. Lower LCD slot pinned to
+    EIGHT (the new 5-station view) and cycler locked so the arc is visible
+    regardless of curr_stop / cycle phase.
     """
     from app_paths import project_root
     from displays.base import DisplayMode
@@ -265,9 +277,8 @@ def _run_edit_loop(sim) -> None:
 
     from constants import FRAME_RATE
 
-    # Resize window for side-by-side, reassign upper-side screen refs to
-    # left-half subsurface. Lower LCD's screen ref is left stale on purpose —
-    # sim.lower.draw is never called in edit mode.
+    # Window doubled for side-by-side OR sidebar-right; LCD A is left half
+    # in both layouts.
     window = pygame.display.set_mode((2 * S_WIDTH, S_HEIGHT))
     lcd_a = window.subsurface((0, 0, S_WIDTH, S_HEIGHT))
     lcd_b_upper = window.subsurface((S_WIDTH, 0, S_WIDTH, UPPER_HEIGHT))
@@ -278,8 +289,24 @@ def _run_edit_loop(sim) -> None:
         sim.upper.furigana_display.screen = screen
         sim.upper.english_display.screen = screen
 
+    def _set_lower_screens(screen):
+        sim.lower.screen = screen
+        sim.lower.japanese_display.screen = screen
+        sim.lower.japanese_eight_display.screen = screen
+        sim.lower.english_display.screen = screen
+        sim.lower.transfer_display.screen = screen
+
     _set_upper_screens(lcd_a)
+    _set_lower_screens(lcd_a)
     sim.screen = lcd_a
+
+    # Pin lower-LCD to EIGHT slot so the arc renders unconditionally when
+    # the user focuses a lower-LCD element. Same lock pattern as --lower-view
+    # eight CLI flag.
+    sim.lower._current_slot = sim.lower._SLOT_EIGHT
+    sim.lower._slot_start = None
+    sim.lower._tick_cycle = lambda current_time: None
+    sim.lower._handle_at_station_edge = lambda state, current_time: None
 
     calibration_editor.enter_edit_mode(sim)
 
@@ -290,24 +317,32 @@ def _run_edit_loop(sim) -> None:
         timestamp = time.time()
         time_text = time.strftime("%H:%M", time.localtime(timestamp))
 
-        # LCD A — active mode, canonical position.
-        _set_upper_screens(lcd_a)
-        sim.upper.draw(time_text)
-
-        # LCD B — locked to ENGLISH, painted into right-half subsurface.
-        # Mode swap is reversible per-frame (save → force → draw → restore).
-        original_mode = sim.upper.mode_cycler.current_mode
-        _set_upper_screens(lcd_b_upper)
-        sim.upper.mode_cycler.current_mode = DisplayMode.ENGLISH
-        try:
-            sim.upper.draw(time_text)
-        finally:
-            sim.upper.mode_cycler.current_mode = original_mode
+        target = calibration_editor.get_focused_target()
+        if target == "lower":
+            # LCD A renders upper + lower; LCD B render skipped (sidebar
+            # overlays the right half). Lower LCD is the tuning target.
             _set_upper_screens(lcd_a)
+            _set_lower_screens(lcd_a)
+            sim.upper.draw(time_text)
+            sim.lower.draw(0.0)
+            sidebar_layout = "right_half"
+        else:
+            # Side-by-side: LCD A active mode, LCD B locked ENGLISH.
+            _set_upper_screens(lcd_a)
+            sim.upper.draw(time_text)
+            original_mode = sim.upper.mode_cycler.current_mode
+            _set_upper_screens(lcd_b_upper)
+            sim.upper.mode_cycler.current_mode = DisplayMode.ENGLISH
+            try:
+                sim.upper.draw(time_text)
+            finally:
+                sim.upper.mode_cycler.current_mode = original_mode
+                _set_upper_screens(lcd_a)
+            sidebar_layout = "below_upper"
 
-        # Overlay paints panel + indicators on the FULL window so panel
-        # spans both LCDs and indicators land on LCD A's coord system.
-        calibration_editor.draw_overlay(window)
+        # Overlay paints panel + indicators on the FULL window so the panel
+        # can land at either layout and indicators reach LCD A's coord system.
+        calibration_editor.draw_overlay(window, sidebar_layout=sidebar_layout)
         pygame.display.flip()
 
         for event in pygame.event.get():
