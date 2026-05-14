@@ -221,6 +221,15 @@ def main():
         return
 
     if args.edit:
+        # Calibration editor v1 is e235_0-only: hit-test rects + _TUNEABLES_*
+        # dicts in _dev_scripts/calibration_editor.py's _REGISTRY all reference
+        # `displays.train_models.e235_0.upper_lcd`. Running with a different
+        # model would size the window via e235_0 dims while the sim renders
+        # the chosen model — silent mismatch + nonsensical layout. Fail loud.
+        if args.model != "e235_0":
+            print(f"[error] --edit requires --model e235_0 (got --model {args.model}).")
+            print("        Editor v1 scope is e235_0 only - see WIP_calibration_editor.md.")
+            sys.exit(1)
         _run_edit_loop(sim)
         sim.cleanup()
         sys.exit()
@@ -233,15 +242,44 @@ def _run_edit_loop(sim) -> None:
     """Frozen-frame main loop for `--edit` mode. Sim state does NOT advance.
 
     Loads `_dev_scripts/calibration_editor.py` via sys.path hack (it's a
-    dev-only tool, never imported by production code). Sidebar overlays
-    the lower-LCD area; events route to the editor first.
+    dev-only tool, never imported by production code).
+
+    Layout (side-by-side cross-reference for calibration):
+        +----------------+----------------+
+        |  UPPER LCD A   |  UPPER LCD B   |
+        |  (active mode) |  (ENGLISH)     |
+        +----------------+----------------+
+        |  PARAM PANEL (spans full width) |
+        +---------------------------------+
+
+    Window is doubled to 2 × S_WIDTH for the side-by-side. Lower LCD render
+    is skipped entirely in edit mode — it was already hidden under the panel
+    anyway, just wasted work.
     """
     from app_paths import project_root
+    from displays.base import DisplayMode
+    from displays.train_models.e235_0 import S_WIDTH, S_HEIGHT, UPPER_HEIGHT
 
     sys.path.insert(0, str(project_root() / "_dev_scripts"))
     import calibration_editor  # noqa: E402
 
     from constants import FRAME_RATE
+
+    # Resize window for side-by-side, reassign upper-side screen refs to
+    # left-half subsurface. Lower LCD's screen ref is left stale on purpose —
+    # sim.lower.draw is never called in edit mode.
+    window = pygame.display.set_mode((2 * S_WIDTH, S_HEIGHT))
+    lcd_a = window.subsurface((0, 0, S_WIDTH, S_HEIGHT))
+    lcd_b_upper = window.subsurface((S_WIDTH, 0, S_WIDTH, UPPER_HEIGHT))
+
+    def _set_upper_screens(screen):
+        sim.upper.screen = screen
+        sim.upper.japanese_display.screen = screen
+        sim.upper.furigana_display.screen = screen
+        sim.upper.english_display.screen = screen
+
+    _set_upper_screens(lcd_a)
+    sim.screen = lcd_a
 
     calibration_editor.enter_edit_mode(sim)
 
@@ -250,12 +288,26 @@ def _run_edit_loop(sim) -> None:
     while running:
         clock.tick(FRAME_RATE)
         timestamp = time.time()
+        time_text = time.strftime("%H:%M", time.localtime(timestamp))
 
-        # Draw current state without advancing it. upper.update() is what
-        # ticks mode-cycler etc., so omit — frozen mode keeps the boot mode.
-        sim.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
-        sim.lower.draw(timestamp)
-        calibration_editor.draw_overlay(sim.screen)
+        # LCD A — active mode, canonical position.
+        _set_upper_screens(lcd_a)
+        sim.upper.draw(time_text)
+
+        # LCD B — locked to ENGLISH, painted into right-half subsurface.
+        # Mode swap is reversible per-frame (save → force → draw → restore).
+        original_mode = sim.upper.mode_cycler.current_mode
+        _set_upper_screens(lcd_b_upper)
+        sim.upper.mode_cycler.current_mode = DisplayMode.ENGLISH
+        try:
+            sim.upper.draw(time_text)
+        finally:
+            sim.upper.mode_cycler.current_mode = original_mode
+            _set_upper_screens(lcd_a)
+
+        # Overlay paints panel + indicators on the FULL window so panel
+        # spans both LCDs and indicators land on LCD A's coord system.
+        calibration_editor.draw_overlay(window)
         pygame.display.flip()
 
         for event in pygame.event.get():

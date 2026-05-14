@@ -10,10 +10,13 @@ gitignored scratch JSON for crash safety. Ctrl+S writes back to source
 writeback (scratch JSON persists for resume).
 
 Interaction:
-    Click DEST_RECT on upper LCD → focus dest element, sidebar shows its
-                                   two dicts (kanji + english).
+    Click any registered element on upper LCD (dest / clock / prefix /
+                                   station today) → focus element, sidebar
+                                   shows its tuneable dicts (region rect +
+                                   per-mode internals).
     ↑/↓                          → cycle focused param row.
-    ←/→                          → nudge value ±1.
+    ←/→                          → nudge value ±1 (or cycle candidate on
+                                   the pinned `<ELEMENT>.value` row).
     Shift+←/→                    → nudge ±10.
     Ctrl+S                       → write back to source.
     ESC                          → quit edit mode.
@@ -49,6 +52,36 @@ _REGISTRY = {
             ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_DEST_ENGLISH"),
         ],
     },
+    "clock": {
+        "rect_module": "displays.train_models.e235_0.upper_lcd",
+        "rect_attr": "CLOCK_RECT",
+        "dicts": [
+            # Region-level: position + size of CLOCK_RECT itself. draw_clock
+            # syncs CLOCK_RECT from this dict each frame so editor nudges
+            # land immediately. Pattern pioneer for region-level tuneables.
+            ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_CLOCK_RECT"),
+            # Per-element internal layout (text y within CLOCK_RECT, font size).
+            ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_CLOCK"),
+        ],
+    },
+    "prefix": {
+        "rect_module": "displays.train_models.e235_0.upper_lcd",
+        "rect_attr": "PREFIX_RECT",
+        "dicts": [
+            ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_PREFIX_RECT"),
+            ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_PREFIX_KANJI"),
+            ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_PREFIX_ENGLISH"),
+        ],
+    },
+    "station": {
+        "rect_module": "displays.train_models.e235_0.upper_lcd",
+        "rect_attr": "STATION_RECT",
+        "dicts": [
+            ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_STATION_RECT"),
+            ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_STATION_KANJI"),
+            ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_STATION_ENGLISH"),
+        ],
+    },
 }
 
 
@@ -65,9 +98,10 @@ _originals: dict = {}
 # Sidebar scroll state — top row index visible. Auto-tracks focused row so
 # selection never lives off-screen. Mousewheel + PgUp/PgDn also move it.
 _scroll_offset: int = 0
-# Per-element candidate cycler state. Currently only "dest" wires this up —
-# generalize when a second element needs it. element_id → dict of:
-#   "candidates": list[str], "idx": int, "original": str
+# Per-element candidate cycler state. Populated by _on_click when an
+# element has a "cycler" entry in _REGISTRY (dest / prefix / station today).
+# Dispatch is element-agnostic through _cycle_candidate / _reset_candidate.
+# element_id → dict of: "candidates": list, "idx": int, "original": any.
 _candidate_state: dict = {}
 
 _SCRATCH_PATH = project_root() / "_calibration_session.json"
@@ -223,11 +257,21 @@ def _on_click(pos, sim) -> bool:
         if rect.collidepoint(pos):
             _focused_element = element_id
             _param_rows = _build_param_rows(cfg["dicts"])
-            # Pinned candidate-cycler row at the top for elements that have
-            # value-cycler support. Currently dest only.
-            if element_id == "dest":
-                _build_dest_candidates(sim)
-                _param_rows.insert(0, ("__candidate__:dest", "value", None, "candidate"))
+            # Pinned candidate-cycler row at the top when this element has
+            # cycler config in _REGISTRY (see module-bottom cycler-wiring block).
+            cycler = cfg.get("cycler")
+            if cycler is not None:
+                candidates, current = cycler["build"](sim)
+                try:
+                    idx = candidates.index(current)
+                except ValueError:
+                    idx = 0
+                _candidate_state[element_id] = {
+                    "candidates": candidates,
+                    "idx": idx,
+                    "original": current,
+                }
+                _param_rows.insert(0, (f"__candidate__:{element_id}", "value", None, "candidate"))
             _focused_row = 0
             _scroll_offset = 0
             print(f"[calibration] Focused element: {element_id} ({len(_param_rows)} params)")
@@ -452,6 +496,38 @@ def _paired_anchor_key(key: str, kind: str, d: dict):
 
 
 def _draw_focused_indicator(screen) -> None:
+    """Paint ruler indicators on LCD A (canonical) + mirror on LCD B
+    (side-by-side cross-reference in edit mode) when the focused dict
+    actually affects the ENGLISH render. Mirror uses a subsurface at
+    x=S_WIDTH so the inner draw function paints at the same rect-local
+    coords without any offset math.
+
+    Dispatch by dict-name suffix:
+      _KANJI / _FURIGANA   → LCD A only (LCD B is always ENGLISH)
+      _ENGLISH             → both LCDs (LCD B always; LCD A when in EN mode)
+      _RECT / no suffix    → both LCDs (region rect or mode-agnostic)
+    """
+    _draw_indicator_at(screen)
+    # Skip LCD B mirror when the tuneable doesn't affect the ENGLISH render.
+    if _focused_element is None or not _param_rows:
+        return
+    dqn, _key, _sub_idx, type_tag = _param_rows[_focused_row]
+    if type_tag in ("candidate", "unsupported"):
+        return
+    dict_name = dqn.rsplit(".", 1)[1]
+    if dict_name.endswith(("_KANJI", "_FURIGANA")):
+        return
+    s_width = screen.get_width() // 2
+    if s_width <= 0:
+        return
+    try:
+        lcd_b = screen.subsurface((s_width, 0, s_width, screen.get_height()))
+    except (ValueError, pygame.error):
+        return  # screen not wide enough for a 2nd LCD (non-edit context)
+    _draw_indicator_at(lcd_b)
+
+
+def _draw_indicator_at(screen) -> None:
     if _focused_element is None or not _param_rows:
         return
     dqn, key, sub_idx, type_tag = _param_rows[_focused_row]
@@ -551,7 +627,7 @@ def _nudge_focused(delta: int, sim=None) -> None:
     if type_tag == "unsupported":
         return
     if type_tag == "candidate":
-        _cycle_dest_candidate(delta, sim)
+        _cycle_candidate(delta, sim)
         return
     mod_path, dict_name = dqn.rsplit(".", 1)
     mod = importlib.import_module(mod_path)
@@ -609,8 +685,8 @@ def _reset_focused(sim=None) -> None:
     _save_scratch()
 
 
-def _build_dest_candidates(sim) -> None:
-    """Collect unique dest strings from current route + stash original."""
+def _build_dest_candidates(sim) -> tuple:
+    """Returns (candidates, current_value) for the dest cycler."""
     stops = sim.stops
     cur_idx = sim.state.curr_stop
     seen: list = []
@@ -622,41 +698,90 @@ def _build_dest_candidates(sim) -> None:
     if route_dest and route_dest not in seen:
         seen.append(route_dest)
     cur_dest = stops[cur_idx].get("dest", route_dest) if 0 <= cur_idx < len(stops) else route_dest
-    try:
-        idx = seen.index(cur_dest)
-    except ValueError:
-        idx = 0
-    _candidate_state["dest"] = {
-        "candidates": seen,
-        "idx": idx,
-        "original": cur_dest,
-    }
+    return seen, cur_dest
 
 
-def _cycle_dest_candidate(delta: int, sim) -> None:
-    state = _candidate_state.get("dest")
+def _apply_dest_value(sim, value: str) -> None:
+    cur = sim.state.curr_stop
+    if 0 <= cur < len(sim.stops):
+        sim.stops[cur]["dest"] = value
+
+
+def _build_prefix_candidates(sim) -> tuple:
+    """Returns (candidates, current_value) for the prefix cycler.
+
+    Candidates read from the canonical _PREFIX_FURIGANA module constant in
+    upper_lcd.py (also keyed by _PREFIX_ENGLISH — same KANJI keys). Source-
+    of-truth dispatch: if the state machine adds a 4th prefix, this picks
+    it up automatically. Never hardcode the list here.
+    """
+    mod = importlib.import_module("displays.train_models.e235_0.upper_lcd")
+    candidates = list(mod._PREFIX_FURIGANA.keys())
+    return candidates, sim.upper.prefix_text
+
+
+def _apply_prefix_value(sim, value: str) -> None:
+    sim.upper.prefix_text = value
+
+
+def _build_station_candidates(sim) -> tuple:
+    """Returns (candidates, current_value) for the station cycler.
+
+    Walks sim.stops collecting kanji station names (dedup, order preserved).
+    Apply drives sim.state.curr_stop — station_text is stop-derived, so
+    cycling also changes dest/badge (same side effect as `[`/`]` keybind).
+    """
+    seen: list = []
+    for stop in sim.stops:
+        name = stop.get("name", "")
+        if name and name not in seen:
+            seen.append(name)
+    cur = ""
+    if 0 <= sim.state.curr_stop < len(sim.stops):
+        cur = sim.stops[sim.state.curr_stop].get("name", "")
+    return seen, cur
+
+
+def _apply_station_value(sim, value: str) -> None:
+    # jump_to_stop already calls UpperDisplay.set_state internally
+    # (app.py:592), so no extra set_state needed here.
+    for idx, stop in enumerate(sim.stops):
+        if stop.get("name", "") == value:
+            sim.jump_to_stop(idx)
+            return
+
+
+def _cycle_candidate(delta: int, sim) -> None:
+    """Cycle the focused element's pinned candidate row. Element-agnostic via
+    _REGISTRY[element]["cycler"]["apply"]."""
+    state = _candidate_state.get(_focused_element)
     if state is None or not state["candidates"]:
+        return
+    cfg = _REGISTRY.get(_focused_element)
+    cycler = cfg.get("cycler") if cfg else None
+    if cycler is None:
         return
     n = len(state["candidates"])
     state["idx"] = (state["idx"] + (1 if delta > 0 else -1)) % n
     new_val = state["candidates"][state["idx"]]
-    cur = sim.state.curr_stop
-    if 0 <= cur < len(sim.stops):
-        sim.stops[cur]["dest"] = new_val
-    # ASCII-safe — repr() escapes kanji for cp1252 stdout.
-    print(f"[calibration] dest = {new_val!r}  ({state['idx'] + 1}/{n})")
+    cycler["apply"](sim, new_val)
+    # ascii() escapes non-ASCII (kanji etc) to \uXXXX so cp1252 stdout
+    # on Windows doesn't crash. repr() preserves unicode visible.
+    print(f"[calibration] {_focused_element} = {ascii(new_val)}  ({state['idx'] + 1}/{n})")
 
 
 def _reset_candidate(sim) -> None:
     state = _candidate_state.get(_focused_element)
     if state is None or sim is None:
         return
+    cfg = _REGISTRY.get(_focused_element)
+    cycler = cfg.get("cycler") if cfg else None
+    if cycler is None:
+        return
     orig = state["original"]
     if orig in state["candidates"]:
         state["idx"] = state["candidates"].index(orig)
-    cur = sim.state.curr_stop
-    if 0 <= cur < len(sim.stops) and _focused_element == "dest":
-        sim.stops[cur]["dest"] = orig
+    cycler["apply"](sim, orig)
 
 
 def _draw_sidebar_contents(surf) -> None:
@@ -902,3 +1027,24 @@ def _swap_dict_literal(text: str, dict_name: str, new_values: dict, src_path: Pa
         line = lines[v_lineno]
         lines[v_lineno] = line[:v_col_start] + new_repr + line[v_end_col:]
     return "\n".join(lines)
+
+
+# ── Cycler config ──────────────────────────────────────────────────────
+# Forward-references functions defined above. Each element with a value
+# cycler gets a "cycler" entry on its _REGISTRY config:
+#   "build": (sim) -> (candidates_list, current_value)
+#   "apply": (sim, value) -> None
+# _on_click pins a synthetic row at the top of the param list when present;
+# _cycle_candidate + _reset_candidate dispatch through this config.
+_REGISTRY["dest"]["cycler"] = {
+    "build": _build_dest_candidates,
+    "apply": _apply_dest_value,
+}
+_REGISTRY["prefix"]["cycler"] = {
+    "build": _build_prefix_candidates,
+    "apply": _apply_prefix_value,
+}
+_REGISTRY["station"]["cycler"] = {
+    "build": _build_station_candidates,
+    "apply": _apply_station_value,
+}

@@ -84,11 +84,54 @@ def _font(filename: str, size: int) -> pygame.font.Font:
 # =============================================================================
 
 DEST_RECT = pygame.Rect(0, 50, 180, UPPER_HEIGHT - 50)
-PREFIX_RECT = pygame.Rect(222, 5, 300, 30)
-STATION_RECT = pygame.Rect(302, 35, 384, 82)
-# Clock blits at y=0 (surface ascender absorbs the y=0..5 strip); the rect
-# spans y=0..35 so clip never amputates the visible glyph caps.
-CLOCK_RECT = pygame.Rect(S_WIDTH - 170, 0, 80, 35)
+# Prefix rect derived from tuneable — see Region rect tuneability pattern in
+# WIP_calibration_editor.md. draw_prefix syncs PREFIX_RECT from this dict
+# each frame.
+_TUNEABLES_PREFIX_RECT = {
+    "prefix_x": 220,
+    "prefix_y": 3,
+    "prefix_w": 220,
+    "prefix_h": 28,
+}
+PREFIX_RECT = pygame.Rect(
+    _TUNEABLES_PREFIX_RECT["prefix_x"],
+    _TUNEABLES_PREFIX_RECT["prefix_y"],
+    _TUNEABLES_PREFIX_RECT["prefix_w"],
+    _TUNEABLES_PREFIX_RECT["prefix_h"],
+)
+_TUNEABLES_STATION_RECT = {
+    "station_x": 302,
+    "station_y": 35,
+    "station_w": 384,
+    "station_h": 82,
+}
+STATION_RECT = pygame.Rect(
+    _TUNEABLES_STATION_RECT["station_x"],
+    _TUNEABLES_STATION_RECT["station_y"],
+    _TUNEABLES_STATION_RECT["station_w"],
+    _TUNEABLES_STATION_RECT["station_h"],
+)
+# Clock blits at `CLOCK_RECT.top + text_y` (text_y may be negative — see
+# _TUNEABLES_CLOCK); the rect's height absorbs the surface ascender so clip
+# never amputates the visible glyph caps.
+#
+# Region rect derived from tuneable so the calibration editor can nudge
+# position/size in-app. draw_clock syncs CLOCK_RECT from this dict each frame.
+# Pattern pioneer for region-level tuneability — broadcast to PREFIX_RECT /
+# STATION_RECT 2026-05-14; BADGE_RECT / PA_HINT_RECT pending.
+# See WIP_calibration_editor.md § "Region-level tuneability pattern".
+_TUNEABLES_CLOCK_RECT = {
+    "clock_x": 560,
+    "clock_y": 0,
+    "clock_w": 75,
+    "clock_h": 28,
+}
+CLOCK_RECT = pygame.Rect(
+    _TUNEABLES_CLOCK_RECT["clock_x"],
+    _TUNEABLES_CLOCK_RECT["clock_y"],
+    _TUNEABLES_CLOCK_RECT["clock_w"],
+    _TUNEABLES_CLOCK_RECT["clock_h"],
+)
 # Badge spans both the framed 68×68 square AND the optional code_3 top band
 # (12 px upward extension when present). Sized to the maximum (with-band)
 # extent so clip never amputates the band when code_3 is set.
@@ -152,6 +195,47 @@ _TUNEABLES_DEST_KANJI = {
 }
 
 
+# Tuneable params for clock rendering. Shared across all modes (JA / FU / EN)
+# since clock visuals don't depend on language family. Read by both
+# JapaneseDisplay.draw_clock and EnglishDisplay.draw_clock.
+_TUNEABLES_CLOCK = {
+    "text_y": -3,
+    "font_size": 29,
+}
+
+
+# Tuneable params for KANJI prefix rendering. Read by
+# JapaneseDisplay.draw_prefix. Inherited unchanged by FuriganaDisplay.
+_TUNEABLES_PREFIX_KANJI = {
+    "text_y": 0,
+    "font_size": 26,
+}
+
+
+# Tuneable params for KANJI station rendering. Read by
+# JapaneseDisplay.draw_station. Inherited unchanged by FuriganaDisplay.
+_TUNEABLES_STATION_KANJI = {
+    "text_bottom_margin": 5,
+    "font_size": 78,
+}
+
+
+# Prefix translations — canonical enumeration of the 3 state-machine prefix
+# strings (set in UpperDisplay.set_state per app state). Module-level so the
+# calibration editor reads candidates directly from here, not duplicated.
+# Keys are the KANJI prefix strings; values are mode-specific translations.
+_PREFIX_FURIGANA = {
+    "次は": "つぎは",
+    "まもなく": "まもなく",
+    "ただいま": "ただいま",
+}
+_PREFIX_ENGLISH = {
+    "次は": "Next",
+    "まもなく": "Arriving at",
+    "ただいま": "Now stopping at",
+}
+
+
 class JapaneseDisplay:
     """Upper LCD Japanese (KANJI) rendering for E235-0."""
 
@@ -164,11 +248,10 @@ class JapaneseDisplay:
         # SysFont scans the Windows font registry, which fails on Chinese/Japanese
         # locale Windows with `TypeError: expected str, bytes or os.PathLike object,
         # not int`. All fonts in this project ship in fonts/ and load via Font(path).
-        self.font_prefix = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 25)
-        self.font_station = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 78)
-        self.font_clock = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Roman.otf"), 27)
-        # font_dest + font_suffix loaded lazily via _font() in draw_destination
-        # so their sizes can be tuned via _TUNEABLES_DEST_KANJI at runtime.
+        # font_prefix / font_station / font_dest / font_suffix / font_clock
+        # loaded lazily via _font() in their respective draw methods so sizes
+        # can be tuned via _TUNEABLES_PREFIX_KANJI / _TUNEABLES_STATION_KANJI /
+        # _TUNEABLES_DEST_KANJI / _TUNEABLES_CLOCK at runtime.
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
         """Draw destination with suffix (ゆき/方面)."""
@@ -192,41 +275,56 @@ class JapaneseDisplay:
 
     def draw_prefix(self, prefix_text: str) -> None:
         """Draw prefix (次は/まもなく/ただいま)."""
+        tr = _TUNEABLES_PREFIX_RECT
+        PREFIX_RECT.update(tr["prefix_x"], tr["prefix_y"], tr["prefix_w"], tr["prefix_h"])
+        t = _TUNEABLES_PREFIX_KANJI
+        font_prefix = _font("ShinGoPr6N-Medium.otf", t["font_size"])
         with clip(self.screen, PREFIX_RECT):
             pygame.draw.rect(self.screen, _bg("prefix"), PREFIX_RECT)
-            prefix_x, prefix_y = int(S_WIDTH * 0.25) + 40, 5
-            prefix_img = self.font_prefix.render(prefix_text, True, WHITE_BG)
-            self.screen.blit(prefix_img, (prefix_x, prefix_y))
+            prefix_img = font_prefix.render(prefix_text, True, WHITE_BG)
+            self.screen.blit(prefix_img, (PREFIX_RECT.left, PREFIX_RECT.top + t["text_y"]))
 
     def draw_station(self, station_text: str) -> None:
         """Draw station name with even character spacing."""
         if not station_text:
             return
 
+        tr = _TUNEABLES_STATION_RECT
+        STATION_RECT.update(tr["station_x"], tr["station_y"], tr["station_w"], tr["station_h"])
+        t = _TUNEABLES_STATION_KANJI
+        font_station = _font("ShinGoPr6N-Medium.otf", t["font_size"])
         with clip(self.screen, STATION_RECT):
-            name_x = int(S_WIDTH * 0.40) + 10
-            max_width = S_WIDTH * 0.54 - 10
-
-            _, name_h = self.font_station.size(station_text)
-            name_y = UPPER_HEIGHT - name_h - 5  # -5 leaves a small bottom margin
+            _, name_h = font_station.size(station_text)
+            name_y = STATION_RECT.bottom - name_h - t["text_bottom_margin"]
 
             # Clip handles the confinement guarantee — any glyph pixel that
-            # would land above STATION_RECT.top (y=35) is dropped at the
-            # pygame layer. The bg fill below is sized to the full STATION_RECT
-            # so the debug-grid tint shows the entire territory.
+            # would land above STATION_RECT.top is dropped at the pygame
+            # layer. The bg fill is sized to the full STATION_RECT so the
+            # debug-grid tint shows the entire territory.
             pygame.draw.rect(self.screen, _bg("station"), STATION_RECT)
 
             draw_text_given_width(
-                name_x, name_y, int(max_width), self.font_station, station_text, WHITE_BG, self.screen, collapse=False, script="japanese"
+                STATION_RECT.left,
+                name_y,
+                STATION_RECT.width,
+                font_station,
+                station_text,
+                WHITE_BG,
+                self.screen,
+                collapse=False,
+                script="japanese",
             )
 
     def draw_clock(self, time_text: str) -> None:
         """Draw clock."""
+        tr = _TUNEABLES_CLOCK_RECT
+        CLOCK_RECT.update(tr["clock_x"], tr["clock_y"], tr["clock_w"], tr["clock_h"])
+        t = _TUNEABLES_CLOCK
+        font_clock = _font("HelveticaNeue-Roman.otf", t["font_size"])
         with clip(self.screen, CLOCK_RECT):
-            clock_x, clock_w, clock_h = S_WIDTH - 170, 80, 25
-            pygame.draw.rect(self.screen, _bg("clock"), pygame.Rect(clock_x, 5, clock_w, clock_h))
-            clock_img = self.font_clock.render(time_text, True, WHITE_BG)
-            self.screen.blit(clock_img, (clock_x, 0))
+            pygame.draw.rect(self.screen, _bg("clock"), CLOCK_RECT)
+            clock_img = font_clock.render(time_text, True, WHITE_BG)
+            self.screen.blit(clock_img, (CLOCK_RECT.left, CLOCK_RECT.top + t["text_y"]))
 
 
 # =============================================================================
@@ -271,6 +369,23 @@ _TUNEABLES_DEST_ENGLISH = {
 }
 
 
+# Tuneable params for ENGLISH prefix rendering. Read by EnglishDisplay.draw_prefix.
+_TUNEABLES_PREFIX_ENGLISH = {
+    "text_y": 0,
+    "font_size": 28,
+}
+
+
+# Tuneable params for ENGLISH station rendering. Read by EnglishDisplay.draw_station.
+# `line_pitch_offset` only fires when station_text contains \n (2-line variant).
+_TUNEABLES_STATION_ENGLISH = {
+    "text_bottom_margin": 0,
+    "line_pitch_offset": 0,
+    "font_size": 75,
+    "font_2line_size": 42,
+}
+
+
 class EnglishDisplay:
     """Upper LCD English rendering for E235-0."""
 
@@ -279,15 +394,11 @@ class EnglishDisplay:
         self.route_data = route_data
         self.stops = stops
 
-        self.font_main_prefix = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Medium.otf"), 27)
-        self.font_station = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 75)
-        # Used when station_text contains "\n" — see draw_station's 2-line branch.
-        # Smaller pt so two lines fit in the ~82px station area without colliding
-        # with the prefix band. Tune in concert with line_gap below.
-        self.font_station_2line = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 42)
-        self.font_clock = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Roman.otf"), 27)
-        # font_dest + font_suffix loaded lazily via _font() in draw_destination
-        # so their sizes can be tuned via _TUNEABLES_DEST_ENGLISH at runtime.
+        # font_prefix / font_station / font_station_2line / font_dest /
+        # font_suffix / font_clock loaded lazily via _font() in their
+        # respective draw methods so sizes can be tuned via
+        # _TUNEABLES_PREFIX_ENGLISH / _TUNEABLES_STATION_ENGLISH /
+        # _TUNEABLES_DEST_ENGLISH / _TUNEABLES_CLOCK at runtime.
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
         """Draw destination with 'for' label above."""
@@ -341,11 +452,14 @@ class EnglishDisplay:
 
     def draw_prefix(self, prefix_text: str) -> None:
         """Draw English prefix (already translated by UpperDisplay manager)."""
+        tr = _TUNEABLES_PREFIX_RECT
+        PREFIX_RECT.update(tr["prefix_x"], tr["prefix_y"], tr["prefix_w"], tr["prefix_h"])
+        t = _TUNEABLES_PREFIX_ENGLISH
+        font_prefix = _font("HelveticaNeue-Medium.otf", t["font_size"])
         with clip(self.screen, PREFIX_RECT):
             pygame.draw.rect(self.screen, _bg("prefix"), PREFIX_RECT)
-            prefix_x, prefix_y = int(S_WIDTH * 0.25) + 40, 5
-            prefix_img = self.font_main_prefix.render(prefix_text, True, WHITE_BG)
-            self.screen.blit(prefix_img, (prefix_x, prefix_y))
+            prefix_img = font_prefix.render(prefix_text, True, WHITE_BG)
+            self.screen.blit(prefix_img, (PREFIX_RECT.left, PREFIX_RECT.top + t["text_y"]))
 
     def draw_station(self, station_text: str) -> None:
         """Draw station name in English (Latin script).
@@ -359,31 +473,28 @@ class EnglishDisplay:
         if not station_text:
             return
 
+        tr = _TUNEABLES_STATION_RECT
+        STATION_RECT.update(tr["station_x"], tr["station_y"], tr["station_w"], tr["station_h"])
+        t = _TUNEABLES_STATION_ENGLISH
+        font_station = _font("HelveticaNeue-Bold.otf", t["font_size"])
+        font_station_2line = _font("HelveticaNeue-Bold.otf", t["font_2line_size"])
+        name_x = STATION_RECT.left
+        max_width = STATION_RECT.width
         with clip(self.screen, STATION_RECT):
-            # fmt: off
-            # --- Station layout params ---
-            name_x             = int(S_WIDTH * 0.40) + 10
-            max_width          = int(S_WIDTH * 0.54 - 10)
-            # 2-line (used when station_text contains "\n"):
-            line_pitch_offset  = 0    # px adjustment to ascent-based pitch (-ve = even tighter, +ve = looser)
-            # -----------------------------
-            # fmt: on
-
             # Single bg fill for the whole station territory. Clip enforces the
             # confinement guarantee — any glyph pixel that would land above
-            # STATION_RECT.top (y=35) is dropped at the pygame layer, so the
-            # earlier clamped-clear-rect dance is no longer needed.
+            # STATION_RECT.top is dropped at the pygame layer.
             pygame.draw.rect(self.screen, _bg("station"), STATION_RECT)
 
             if "\n" in station_text:
                 line1, line2 = station_text.split("\n", 1)
-                font = self.font_station_2line
+                font = font_station_2line
                 font_h = font.get_height()
                 # Line pitch = ascent: line 2's top sits at line 1's baseline → tight
                 # stacking with no descender gap. Tune via line_pitch_offset.
-                line_pitch = font.get_ascent() + line_pitch_offset
+                line_pitch = font.get_ascent() + t["line_pitch_offset"]
                 total_h = line_pitch + font_h
-                top_y = UPPER_HEIGHT - total_h
+                top_y = STATION_RECT.bottom - total_h - t["text_bottom_margin"]
 
                 # Line 1: left-aligned at name_x. Compress horizontally if natural
                 # width exceeds max_width — same defensive smoothscale the dest
@@ -409,18 +520,21 @@ class EnglishDisplay:
                 self.screen.blit(l2_img, (name_x + max_width - l2_w, l2_y))
                 return
 
-            _, name_h = self.font_station.size(station_text)
-            name_y = UPPER_HEIGHT - name_h
+            _, name_h = font_station.size(station_text)
+            name_y = STATION_RECT.bottom - name_h - t["text_bottom_margin"]
 
-            draw_text_given_width(name_x, name_y, max_width, self.font_station, station_text, WHITE_BG, self.screen, collapse=True, script="latin")
+            draw_text_given_width(name_x, name_y, max_width, font_station, station_text, WHITE_BG, self.screen, collapse=True, script="latin")
 
     def draw_clock(self, time_text: str) -> None:
         """Draw clock."""
+        tr = _TUNEABLES_CLOCK_RECT
+        CLOCK_RECT.update(tr["clock_x"], tr["clock_y"], tr["clock_w"], tr["clock_h"])
+        t = _TUNEABLES_CLOCK
+        font_clock = _font("HelveticaNeue-Roman.otf", t["font_size"])
         with clip(self.screen, CLOCK_RECT):
-            clock_x, clock_w, clock_h = S_WIDTH - 170, 80, 25
-            pygame.draw.rect(self.screen, _bg("clock"), pygame.Rect(clock_x, 5, clock_w, clock_h))
-            clock_img = self.font_clock.render(time_text, True, WHITE_BG)
-            self.screen.blit(clock_img, (clock_x, 0))
+            pygame.draw.rect(self.screen, _bg("clock"), CLOCK_RECT)
+            clock_img = font_clock.render(time_text, True, WHITE_BG)
+            self.screen.blit(clock_img, (CLOCK_RECT.left, CLOCK_RECT.top + t["text_y"]))
 
 
 # =============================================================================
@@ -477,17 +591,9 @@ class UpperDisplay:
         # Load station metadata (3-letter codes, future fields)
         self.stations = load_json_relative("data/stations.json")
 
-        # Prefix mappings (inline - no need for separate JSON file)
-        self.prefix_furigana = {
-            "次は": "つぎは",
-            "まもなく": "まもなく",
-            "ただいま": "ただいま",
-        }
-        self.prefix_english = {
-            "次は": "Next",
-            "まもなく": "Arriving at",
-            "ただいま": "Now stopping at",
-        }
+        # Prefix translations live in module-level _PREFIX_FURIGANA /
+        # _PREFIX_ENGLISH constants (above) — single source of truth so the
+        # calibration editor's prefix cycler reads canonical candidates.
 
     def _get_current_dest(self) -> str:
         """Get current destination. Loader fills ``dest`` on every stop via
@@ -517,10 +623,10 @@ class UpperDisplay:
         mode = self.mode_cycler.get_current_mode()
 
         if mode == DisplayMode.ENGLISH:
-            return self.prefix_english.get(self.prefix_text, self.prefix_text)
+            return _PREFIX_ENGLISH.get(self.prefix_text, self.prefix_text)
 
         if mode == DisplayMode.FURIGANA:
-            return self.prefix_furigana.get(self.prefix_text, self.prefix_text)
+            return _PREFIX_FURIGANA.get(self.prefix_text, self.prefix_text)
 
         return self.prefix_text
 

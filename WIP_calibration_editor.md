@@ -10,7 +10,7 @@ Direct-manipulation pixel tuning for pygame LCD elements. Sidebar overlay; click
 
 ## Status
 
-v1 shipped 2026-05-13 PM on `feat/calibration-editor`. In active use against E235-0 dest. Not yet committed. Trigger to graduate: ships AND proves on a second element.
+v1 shipped 2026-05-13 PM on `feat/calibration-editor`. In active use against E235-0 dest. Graduates once all upper_lcd elements ride the same `_TUNEABLES_*` + suffix convention and the pattern is broadcast-able to lower LCD (see "Trigger to graduate" below).
 
 ---
 
@@ -44,6 +44,44 @@ Key naming drives **both** semantics AND free visualization. Editor infers param
 Pair detection for `_w` / `_h`: same-stem `_x` / `_y` in same dict. Fallback strips `_max` (e.g. `two_line_max_w` → `two_line_x`).
 
 Dict-name suffix drives mode-follow-focus: `_KANJI` / `_FURIGANA` → japanese family; `_ENGLISH` → english family. Press `L` to sync sim mode to focused dict when needed.
+
+---
+
+## Region-level tuneability pattern
+
+Per-element internal-layout dicts (`_TUNEABLES_DEST_KANJI` etc.) tune what's INSIDE a region. To tune the region rect itself (position + size of `CLOCK_RECT`, `DEST_RECT`, etc.), declare a sibling `_TUNEABLES_*_RECT` dict at module top and derive the rect from it:
+
+```python
+_TUNEABLES_CLOCK_RECT = {"clock_x": S_WIDTH - 170, "clock_y": 0, "clock_w": 80, "clock_h": 35}
+CLOCK_RECT = pygame.Rect(_TUNEABLES_CLOCK_RECT["clock_x"], _TUNEABLES_CLOCK_RECT["clock_y"],
+                         _TUNEABLES_CLOCK_RECT["clock_w"], _TUNEABLES_CLOCK_RECT["clock_h"])
+```
+
+**Key naming.** Each region rect dict uses `<element>_x` / `<element>_y` / `<element>_w` / `<element>_h` where `<element>` = rect-name minus `_RECT`, lowercased (e.g. `CLOCK_RECT` → `clock_*`, `DEST_RECT` → `dest_*`). The shared stem lets pair-detection wire `_w` ↔ `_x` and `_h` ↔ `_y` rulers automatically — bare `x`/`y`/`w`/`h` keys don't pair because pair-detection requires a same-stem `_x`/`_y` candidate (and `x` alone doesn't end with `_x`).
+
+The draw method syncs `CLOCK_RECT` from the dict each frame via `CLOCK_RECT.update(tr["clock_x"], tr["clock_y"], tr["clock_w"], tr["clock_h"])` so editor nudges land immediately (pygame.Rect is mutable in place — editor's `getattr(mod, "CLOCK_RECT")` reads the live value). Register both dicts on the same element in `_REGISTRY` so a single click on the region surfaces region + internal tuneables together.
+
+**Convention compliance:** the region rect drives the clip wrap AND the bg fill AND the debug-grid tint (per DISPLAY_E235.md § "Element confinement"). Don't draw a sub-sized bg rect with hand-tuned magic numbers — fill the full region rect, let clip + font ascender handle visible glyph alignment.
+
+**Pioneers:** `CLOCK_RECT` + `PREFIX_RECT` (2026-05-14). Other region rects (`DEST_RECT`, `STATION_RECT`, `BADGE_RECT`, `PA_HINT_RECT`) convert lazily when each element next needs in-editor positioning.
+
+---
+
+## Per-element internal-layout dict shape (emerging convention)
+
+Sibling to the region-rect dict above. Each region's drawable internals get a `_TUNEABLES_<ELEMENT>[_MODE]` dict at module top, where `_MODE` (`_KANJI` / `_FURIGANA` / `_ENGLISH`) is appended only when font + sizes diverge across modes.
+
+| Region | Per-mode font diverges? | Dict shape |
+|---|---|---|
+| Clock | No (same font + size JA/EN) | Single `_TUNEABLES_CLOCK` |
+| Prefix | Yes (ShinGo 25 vs HelveticaNeue 27) | `_TUNEABLES_PREFIX_KANJI` + `_TUNEABLES_PREFIX_ENGLISH` |
+| Destination | Yes | `_TUNEABLES_DEST_KANJI` + `_TUNEABLES_DEST_ENGLISH` |
+
+**Key conventions inside:**
+- **Terse: only include what's actually tuneable.** If the text is anchored to `RECT.left` by design (single-drawable element), don't include `text_x` — anchor is implicit. Same for `text_y` if at `RECT.top`. Adding a knob signals "this could vary."
+- **Position keys are RECT-relative.** `text_y: -3` means `RECT.top + (-3)`. Convention: offsets are negative-allowed nudges from the natural anchor. (Absolute screen coords belong in `_TUNEABLES_*_RECT`, not here.)
+- **Font filename stays hardcoded in draw method.** Only font size is tuneable. Filename is a structural choice (script family), not a layout knob.
+- **Sub-element prefix.** When a dict tunes multiple drawables (e.g. dest = box + suffix), each gets its own stem prefix (`dest_box_x`, `suffix_right_offset`). Single-drawable dicts use bare `text_x`/`text_y` since the only thing being positioned is "the text."
 
 ---
 
@@ -85,16 +123,44 @@ Dict-name suffix drives mode-follow-focus: `_KANJI` / `_FURIGANA` → japanese f
 
 ---
 
-## Open threads (graduate when ≥1 lands)
+## Open threads
 
-1. **More elements** registered for tuning (badge / station / clock / route bar) — mechanical pattern: extract `# fmt: off` block → `_TUNEABLES_*` dict, declare hit-test rect, add `_REGISTRY` entry.
-2. **2D point drag handles** — drag on canvas to set `_x` + `_y` of a focused row pair instead of nudging.
-3. **Animation play toggle** — for chevron `sweep_duration` etc; need motion to tune.
-4. **Cross-route candidate sampling** for the dest cycler — current = unique dests in loaded route only (Yamanote = 6 compounds). Walk every `audio/*/route.json` + `_mock` for short / long / katakana variety.
-5. **Generalize candidate-cycler** beyond dest — declare per-element `build_candidates` + `apply` hooks in `_REGISTRY` rather than hardcoded `_build_dest_candidates`.
+1. **More elements** registered for tuning (badge / station / route bar) — mechanical pattern: extract `# fmt: off` block → `_TUNEABLES_*` dict, declare hit-test rect, add `_REGISTRY` entry. (Clock + prefix shipped 2026-05-14.)
+2. **Animation play toggle** — for chevron `sweep_duration` etc; need motion to tune.
+3. **Cross-route candidate sampling** for the dest cycler — current = unique dests in loaded route only (Yamanote = 6 compounds). Walk every `audio/*/route.json` + `_mock` for short / long / katakana variety.
+
+## Value cycler hook (generalized 2026-05-14)
+
+Per-element value cyclers register via the `_REGISTRY[element]["cycler"]` dict, populated at module bottom of `calibration_editor.py` (forward-refs functions defined mid-file):
+
+```python
+_REGISTRY["<element>"]["cycler"] = {
+    "build": <fn>,    # (sim) -> (candidates_list, current_value)
+    "apply": <fn>,    # (sim, value) -> None
+}
+```
+
+When `_on_click` focuses an element with cycler config, it pins a `__candidate__:<element>` row at row 0 of the param list. ←/→ on that row routes through `_cycle_candidate` (element-agnostic dispatch via cfg). `R` resets through `_reset_candidate`. Same dispatch for any future cyclable element — no per-element branching in the editor.
+
+**Wired:**
+- `dest` — candidates = unique dests in loaded route (walks `sim.stops` at click time); apply mutates `sim.stops[curr]["dest"]`.
+- `prefix` — candidates = keys of `upper_lcd._PREFIX_FURIGANA` (canonical module constant enumerating the 3 state-machine prefix strings); apply mutates `sim.upper.prefix_text` (UpperDisplay's English mode translates at render time, so kanji cycle drives English render too).
+- `station` — candidates = unique kanji station names from `sim.stops` (`stop["name"]`); apply jumps `sim.state.curr_stop` to the matching stop (same mechanism as `[`/`]` keybind). Side effect: dest + badge also reflect the new stop, since they're stop-derived too.
+
+**Not wired (intentional):**
+- `clock` — clock value is the current time, doesn't make sense to cycle.
+
+**Rule — `build` reads from canonical source, never hardcoded.** Cycler candidates must derive from the project's existing source-of-truth for that element (route data, module constants, enum members). Hardcoding the list creates silent drift: if the source ever changes (new state added, value renamed), the cycler shows stale candidates with no error. If the canonical source is method-local or scattered, **promote it to a module-level constant first**, then read from there (precedent: `_PREFIX_FURIGANA` promoted out of `UpperDisplay.__init__` 2026-05-14 specifically to feed the prefix cycler).
+
+---
+
+## Rule strength (future standard)
+
+- **New tuneable additions:** must land in module-level `_TUNEABLES_*` dict + follow suffix convention. Hard rule going forward.
+- **Existing inline `# fmt: off` tuneable blocks:** stay as-is. Convert lazily — only when next touched for tuning. No eager backfill sweep.
 
 ---
 
 ## Trigger to graduate
 
-This doc deletes when v1 (a) ships AND proves on a second element, OR (b) fails proof and the idea is dropped. The current v1 is in the "ships, prove on 2nd element" phase. Once a non-dest element rides the same registry + suffix convention without architectural change, the framework story lands in `conventions.md` / a dedicated skill, and this doc dissolves.
+This doc deletes when (a) all upper_lcd elements are customizable through `_TUNEABLES_*` + suffix convention AND (b) the pattern is broadcast-able to lower LCD without architectural change. At that point the framework story lands in `conventions.md` / a dedicated skill, the `conventions.md § UI code style` pointer goes in, and this doc dissolves.
