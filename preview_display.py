@@ -44,6 +44,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 import pygame
 
@@ -139,6 +140,14 @@ def parse_args():
         "click an editable element on the LCD to focus its `_TUNEABLES_*` dict; ←/→ nudge "
         "values; Ctrl+S writes back to source. ESC to quit.",
     )
+    parser.add_argument(
+        "--overlay",
+        type=str,
+        default=None,
+        help="Path to a reference image (e.g. IRL photo) to render semi-transparent "
+        "over the lower LCD area during --edit mode. Toggle on/off with `O`. Useful for "
+        "matching waypoint positions to the IRL artifact by direct visual alignment.",
+    )
     return parser.parse_args()
 
 
@@ -230,7 +239,7 @@ def main():
             print(f"[error] --edit requires --model e235_0 (got --model {args.model}).")
             print("        Editor v1 scope is e235_0 only - see WIP_calibration_editor.md.")
             sys.exit(1)
-        _run_edit_loop(sim)
+        _run_edit_loop(sim, overlay_path=args.overlay)
         sim.cleanup()
         sys.exit()
 
@@ -238,7 +247,7 @@ def main():
     sys.exit()
 
 
-def _run_edit_loop(sim) -> None:
+def _run_edit_loop(sim, overlay_path: Optional[str] = None) -> None:
     """Frozen-frame main loop for `--edit` mode. Sim state does NOT advance.
 
     Loads `_dev_scripts/calibration_editor.py` via sys.path hack (it's a
@@ -282,6 +291,21 @@ def _run_edit_loop(sim) -> None:
     window = pygame.display.set_mode((2 * S_WIDTH, S_HEIGHT))
     lcd_a = window.subsurface((0, 0, S_WIDTH, S_HEIGHT))
     lcd_b_upper = window.subsurface((S_WIDTH, 0, S_WIDTH, UPPER_HEIGHT))
+
+    # Reference-image overlay (--overlay <path>). Loaded after set_mode so
+    # convert_alpha() has a display surface. Toggled in-editor with `O`.
+    if overlay_path is not None:
+        p = Path(overlay_path)
+        if not p.exists():
+            print(f"[error] --overlay path not found: {p}")
+            sys.exit(1)
+        try:
+            overlay_surf = pygame.image.load(str(p)).convert_alpha()
+        except (pygame.error, OSError) as e:
+            print(f"[error] failed to load --overlay image: {e}")
+            sys.exit(1)
+        calibration_editor.set_overlay(overlay_surf)
+        print(f"[overlay] loaded {p.name} {overlay_surf.get_size()}  -- press O to toggle")
 
     def _set_upper_screens(screen):
         sim.upper.screen = screen

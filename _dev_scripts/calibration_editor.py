@@ -120,7 +120,32 @@ _scroll_offset: int = 0
 # element_id → dict of: "candidates": list, "idx": int, "original": any.
 _candidate_state: dict = {}
 
+# Drag state for waypoint handles (arc element Phase 1b). Set on
+# MOUSEBUTTONDOWN over a handle; cleared on MOUSEBUTTONUP. While set,
+# MOUSEMOTION updates the underlying `arc_pN_x` / `arc_pN_y` values.
+_dragging_waypoint: Optional[int] = None  # waypoint index, or None
+_HANDLE_HIT_R = 12  # Figma-style generous hit radius (px)
+_HANDLE_VISUAL_R = 5  # visible filled circle radius
+_HANDLE_VISUAL_R_DRAG = 7  # enlarged while dragging
+
+# Reference-image overlay (--overlay flag). Set once via set_overlay() at
+# launch; rendered on top of LCD A's lower-LCD area at _OVERLAY_ALPHA when
+# _overlay_visible. Default placement: letterbox-fit into ARC_RECT, center.
+# Hold Alt and drag → reposition. Hold Alt + scroll → zoom. Toggle vis: `O`.
+# Offset / scale / visibility persisted to gitignored `_overlay_state.json`
+# so re-launches resume the alignment from the previous session.
+_overlay_surf: Optional["pygame.Surface"] = None
+_overlay_visible: bool = True
+_OVERLAY_ALPHA = 128  # 0 = invisible, 255 = opaque
+_overlay_offset_x: int = 0
+_overlay_offset_y: int = 0
+_overlay_scale: float = 1.0
+_overlay_dragging: bool = False
+_overlay_drag_mouse_start: Optional[tuple] = None
+_overlay_drag_offset_start: Optional[tuple] = None
+
 _SCRATCH_PATH = project_root() / "_calibration_session.json"
+_OVERLAY_STATE_PATH = project_root() / "_overlay_state.json"
 
 _sidebar_font: Optional[pygame.font.Font] = None
 _sidebar_header_font: Optional[pygame.font.Font] = None
@@ -163,6 +188,54 @@ def should_quit() -> bool:
     return _should_quit
 
 
+def set_overlay(surf) -> None:
+    """Install a reference image to render over the lower LCD during edit.
+
+    Called once by preview_display.py after pygame.display.set_mode (so
+    convert_alpha() has a display). Loads persisted offset/scale/visibility
+    from `_overlay_state.json` if present, so re-launch resumes alignment.
+    Toggle visibility in-editor with `O`.
+    """
+    global _overlay_surf
+    _overlay_surf = surf
+    _load_overlay_state()
+
+
+def _save_overlay_state() -> None:
+    """Persist current overlay offset/scale/visibility to gitignored JSON."""
+    if _overlay_surf is None:
+        return
+    try:
+        _OVERLAY_STATE_PATH.write_text(
+            json.dumps(
+                {
+                    "offset_x": _overlay_offset_x,
+                    "offset_y": _overlay_offset_y,
+                    "scale": _overlay_scale,
+                    "visible": _overlay_visible,
+                }
+            )
+        )
+    except OSError as e:
+        print(f"[overlay] WARN: state save failed: {e}")
+
+
+def _load_overlay_state() -> None:
+    """Restore overlay offset/scale/visibility from gitignored JSON, if present."""
+    global _overlay_offset_x, _overlay_offset_y, _overlay_scale, _overlay_visible
+    if not _OVERLAY_STATE_PATH.exists():
+        return
+    try:
+        data = json.loads(_OVERLAY_STATE_PATH.read_text())
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"[overlay] WARN: state corrupt, starting fresh: {e}")
+        return
+    _overlay_offset_x = int(data.get("offset_x", 0))
+    _overlay_offset_y = int(data.get("offset_y", 0))
+    _overlay_scale = float(data.get("scale", 1.0))
+    _overlay_visible = bool(data.get("visible", True))
+
+
 def get_focused_target() -> Optional[str]:
     """Return 'upper' / 'lower' for the focused element, or None.
 
@@ -179,12 +252,60 @@ def get_focused_target() -> Optional[str]:
 
 def handle_event(event, sim) -> bool:
     """Dispatch a pygame event. Returns True if absorbed."""
-    global _should_quit
+    global _should_quit, _dragging_waypoint, _overlay_dragging
+    global _overlay_drag_mouse_start, _overlay_drag_offset_start
+    global _overlay_offset_x, _overlay_offset_y, _overlay_scale
+    global _overlay_visible
     if event.type == pygame.QUIT:
         return False  # let caller close
+    alt_held = bool(pygame.key.get_mods() & pygame.KMOD_ALT)
     if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+        # Alt+click anywhere on LCD A → grab the overlay for reposition.
+        # Takes priority so the user can drag the overlay even when the
+        # cursor sits on a waypoint handle.
+        if alt_held and _overlay_surf is not None and _overlay_visible:
+            _overlay_dragging = True
+            _overlay_drag_mouse_start = event.pos
+            _overlay_drag_offset_start = (_overlay_offset_x, _overlay_offset_y)
+            return True
+        # Waypoint drag takes priority over click-to-focus when arc focused
+        # and the cursor sits on a handle (generous Figma hit radius).
+        wp_idx = _arc_waypoint_at_pos(event.pos)
+        if wp_idx is not None:
+            _dragging_waypoint = wp_idx
+            _focus_waypoint_row(wp_idx)
+            _apply_waypoint_drag(event.pos)
+            return True
         return _on_click(event.pos, sim)
+    if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+        if _overlay_dragging:
+            _overlay_dragging = False
+            _overlay_drag_mouse_start = None
+            _overlay_drag_offset_start = None
+            _save_overlay_state()
+            return True
+        if _dragging_waypoint is not None:
+            _dragging_waypoint = None
+            return True
+        return False
+    if event.type == pygame.MOUSEMOTION:
+        if _overlay_dragging and _overlay_drag_mouse_start is not None:
+            dx = event.pos[0] - _overlay_drag_mouse_start[0]
+            dy = event.pos[1] - _overlay_drag_mouse_start[1]
+            _overlay_offset_x = _overlay_drag_offset_start[0] + dx
+            _overlay_offset_y = _overlay_drag_offset_start[1] + dy
+            return True
+        if _dragging_waypoint is not None:
+            _apply_waypoint_drag(event.pos)
+            return True
+        return False
     if event.type == pygame.MOUSEWHEEL:
+        # Alt + wheel zooms the overlay (preserve aspect). Otherwise scroll sidebar.
+        if alt_held and _overlay_surf is not None and _overlay_visible:
+            step = 1.05 if event.y > 0 else (1.0 / 1.05)
+            _overlay_scale = max(0.1, min(10.0, _overlay_scale * step))
+            _save_overlay_state()
+            return True
         _scroll_by(-event.y * 3)
         return True
     if event.type == pygame.KEYDOWN:
@@ -222,6 +343,23 @@ def handle_event(event, sim) -> bool:
             return True
         if event.key == pygame.K_RIGHTBRACKET:
             _cycle_stop(sim, 1)
+            return True
+        if event.key == pygame.K_o:
+            if _overlay_surf is None:
+                print("[calibration] No overlay loaded -- pass --overlay <path> to enable.")
+                return True
+            _overlay_visible = not _overlay_visible
+            print(f"[calibration] Overlay {'ON' if _overlay_visible else 'OFF'}")
+            _save_overlay_state()
+            return True
+        # Alt + = / - → zoom overlay (laptop keyboard fallback for wheel).
+        # Step matches the wheel: 5% per press, clamped 0.1×..10×.
+        if alt_held and event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_MINUS):
+            if _overlay_surf is None or not _overlay_visible:
+                return True
+            step = 1.05 if event.key in (pygame.K_EQUALS, pygame.K_PLUS) else (1.0 / 1.05)
+            _overlay_scale = max(0.1, min(10.0, _overlay_scale * step))
+            _save_overlay_state()
             return True
     return False
 
@@ -264,6 +402,7 @@ def draw_overlay(screen, sidebar_layout: str = "below_upper") -> None:
         for tuning. LCD B render is skipped by preview_display in this mode.
     """
     _ensure_fonts()
+    _draw_reference_overlay(screen)
     _draw_focused_indicator(screen)
     w, h = screen.get_size()
     from displays.train_models.e235_0 import S_WIDTH as _SW, UPPER_HEIGHT as _UH
@@ -625,6 +764,39 @@ def _paired_anchor_key(key: str, kind: str, d: dict):
     return None
 
 
+def _draw_reference_overlay(screen) -> None:
+    """Composite the loaded reference image over LCD A's lower-LCD area.
+
+    No-op if no overlay set or toggled off. Scales the source image to fit
+    ARC_RECT preserving aspect ratio (letterboxed inside the rect). Alpha
+    set per-blit via per-surface alpha (set_alpha) so the underlying LCD
+    is visible through it. Renders only on LCD A (the live tuning canvas);
+    LCD B side-by-side stays clean.
+    """
+    if _overlay_surf is None or not _overlay_visible:
+        return
+    try:
+        mod = importlib.import_module("displays.train_models.e235_0.lower_lcd")
+        arc_rect = getattr(mod, "ARC_RECT")
+    except (ImportError, AttributeError):
+        return
+    src_w, src_h = _overlay_surf.get_size()
+    if src_w == 0 or src_h == 0:
+        return
+    # Base scale: letterbox-fit into arc_rect, preserving aspect. User's
+    # _overlay_scale multiplies on top so Alt+wheel zooms about the centered
+    # default. Alt+drag pans via _overlay_offset_x/_y.
+    fit_scale = min(arc_rect.width / src_w, arc_rect.height / src_h)
+    eff_scale = fit_scale * _overlay_scale
+    dst_w = max(1, int(src_w * eff_scale))
+    dst_h = max(1, int(src_h * eff_scale))
+    scaled = pygame.transform.smoothscale(_overlay_surf, (dst_w, dst_h))
+    scaled.set_alpha(_OVERLAY_ALPHA)
+    dst_x = arc_rect.x + (arc_rect.width - dst_w) // 2 + _overlay_offset_x
+    dst_y = arc_rect.y + (arc_rect.height - dst_h) // 2 + _overlay_offset_y
+    screen.blit(scaled, (dst_x, dst_y))
+
+
 def _draw_focused_indicator(screen) -> None:
     """Paint ruler indicators on LCD A (canonical) + mirror on LCD B
     (side-by-side cross-reference in edit mode) when the focused dict
@@ -788,28 +960,98 @@ def _draw_indicator_at(screen) -> None:
         _draw_polar_spoke(screen, color, cx, cy, radius, angle_deg=val)
 
 
-def _draw_arc_polyline_preview(screen) -> None:
-    """Faint dots + connecting line through all arc waypoints.
+def _arc_waypoints() -> list:
+    """Return list of (idx, x, y) for every arc waypoint, in N order.
 
-    Reads `_TUNEABLES_ARC` from the lower_lcd module. Walks `arc_pN_x/_y`
-    pairs in N order. Silent no-op if the dict / keys are missing.
+    Empty list if dict / keys missing. Used by hit-test + render.
     """
     try:
         mod = importlib.import_module("displays.train_models.e235_0.lower_lcd")
         t = getattr(mod, "_TUNEABLES_ARC")
     except (ImportError, AttributeError):
-        return
-    pts = []
+        return []
+    out = []
     i = 0
     while f"arc_p{i}_x" in t and f"arc_p{i}_y" in t:
-        pts.append((int(t[f"arc_p{i}_x"]), int(t[f"arc_p{i}_y"])))
+        out.append((i, int(t[f"arc_p{i}_x"]), int(t[f"arc_p{i}_y"])))
         i += 1
-    if len(pts) < 2:
+    return out
+
+
+def _arc_waypoint_at_pos(pos) -> Optional[int]:
+    """Hit-test mouse pos against arc waypoints. Returns idx or None.
+
+    Only returns a hit when the arc element is focused — keeps drag handles
+    inert when tuning other elements (no accidental grabs).
+    """
+    if _focused_element != "arc":
+        return None
+    mx, my = pos
+    r_sq = _HANDLE_HIT_R * _HANDLE_HIT_R
+    for idx, px, py in _arc_waypoints():
+        dx = px - mx
+        dy = py - my
+        if dx * dx + dy * dy <= r_sq:
+            return idx
+    return None
+
+
+def _focus_waypoint_row(idx: int) -> None:
+    """Jump sidebar focus to the dragged waypoint's `_x` row (auto-scrolls).
+
+    QOL: numeric feedback for the waypoint you're moving stays visible
+    without manual ↑/↓ navigation. `_x` chosen as the canonical pair anchor
+    (the indicator paired-ruler logic also keys off `_x` rows).
+    """
+    global _focused_row
+    target_key = f"arc_p{idx}_x"
+    for row_i, (_dqn, key, _sub, _tag) in enumerate(_param_rows):
+        if key == target_key:
+            _focused_row = row_i
+            _ensure_focused_visible()
+            return
+
+
+def _apply_waypoint_drag(pos) -> None:
+    """Write mouse pos into `arc_p<idx>_x` / `_y` for the dragged waypoint.
+
+    Live update — band reshapes next frame. Scratch saved per motion so a
+    crash mid-drag doesn't lose the new position.
+    """
+    if _dragging_waypoint is None:
         return
-    dim = (180, 140, 60)
-    pygame.draw.lines(screen, dim, False, pts, 1)
-    for px, py in pts:
-        pygame.draw.circle(screen, dim, (px, py), 4, 1)
+    try:
+        mod = importlib.import_module("displays.train_models.e235_0.lower_lcd")
+        t = getattr(mod, "_TUNEABLES_ARC")
+    except (ImportError, AttributeError):
+        return
+    idx = _dragging_waypoint
+    x_key = f"arc_p{idx}_x"
+    y_key = f"arc_p{idx}_y"
+    if x_key not in t or y_key not in t:
+        return
+    t[x_key] = int(pos[0])
+    t[y_key] = int(pos[1])
+    _save_scratch()
+
+
+def _draw_arc_polyline_preview(screen) -> None:
+    """Figma-style filled grab handles at each waypoint.
+
+    Renders only when arc element is focused (caller-gated). The smooth
+    Catmull-Rom band IS the preview — straight-line connector dropped
+    (would visibly diverge from the rendered curve). Handles use a generous
+    hit radius (_HANDLE_HIT_R) but a smaller visible circle so they don't
+    crowd the band. Dragged handle enlarges + recolors for feedback.
+    """
+    fill = (245, 245, 250)
+    border = (40, 40, 50)
+    drag_fill = (120, 200, 255)
+    for idx, px, py in _arc_waypoints():
+        is_dragging = idx == _dragging_waypoint
+        r = _HANDLE_VISUAL_R_DRAG if is_dragging else _HANDLE_VISUAL_R
+        pygame.draw.circle(screen, drag_fill if is_dragging else fill, (px, py), r)
+        pygame.draw.circle(screen, border, (px, py), r, 1)
 
 
 def _draw_polar_spoke(screen, color, cx: int, cy: int, length: int, angle_deg: float) -> None:
@@ -1115,10 +1357,17 @@ def _draw_sidebar_contents(surf) -> None:
         thumb_y = track_top + int((track_h - thumb_h) * _scroll_offset / max_offset)
         pygame.draw.rect(surf, (140, 140, 160, 255), pygame.Rect(w - scrollbar_w, thumb_y, scrollbar_w, thumb_h))
 
-    # Footer hint.
+    # Footer hint. Second line surfaces when an overlay is loaded (Alt-modified
+    # gestures + O toggle exist only in that mode).
     hint = "↑/↓ select   ←/→ nudge   Shift+←/→ ±10   R reset   L sync mode   Wheel/PgUp/Dn scroll   Ctrl+S save   ESC quit"
     hint_img = _sidebar_hint_font.render(hint, True, (160, 160, 170))
-    surf.blit(hint_img, (pad_x, h - 20))
+    if _overlay_surf is not None:
+        hint2 = "O toggle overlay   Alt+drag pan overlay   Alt+Wheel / Alt+=/- zoom overlay (aspect kept)"
+        hint2_img = _sidebar_hint_font.render(hint2, True, (160, 160, 170))
+        surf.blit(hint_img, (pad_x, h - 36))
+        surf.blit(hint2_img, (pad_x, h - 20))
+    else:
+        surf.blit(hint_img, (pad_x, h - 20))
 
 
 # ── Persistence ────────────────────────────────────────────────────────

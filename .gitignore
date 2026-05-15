@@ -51,6 +51,9 @@ _sta_verify_*.json
 # Ctrl+S writeback. Crash-safety only; canonical values land in source .py.
 # See WIP_calibration_editor.md.
 /_calibration_session.json
+# Overlay position/scale/visibility persisted across editor launches.
+# Dev-aid state (--overlay), not source-mapped values — survives commit.
+/_overlay_state.json
 
 # Drive-recorder rendered HTML reports (output of plot_drive.py).
 # Self-contained per-drive artifact; user opens locally and shares as needed,

@@ -10,7 +10,11 @@ Direct-manipulation pixel tuning for pygame LCD elements. Sidebar overlay; click
 
 ## Status
 
-v1 shipped 2026-05-13 PM on `feat/calibration-editor`. Upper-LCD framework expanded to 4 elements 2026-05-14 (dest / clock / prefix / station). Phase 1b shipped 2026-05-14 evening: lower-LCD broadcast via `arc` element (5-station view green band scaffold, shape-only — stations + pentagon + minute markers deferred to Phase 2). New mechanics in Phase 1b: polyline-with-per-point-stroke geometry, waypoint + stroke param-kinds, target-driven sidebar layout dispatch, AST-writeback corruption fixed. Graduation gate (b) partially proven by the arc; full sign-off still needs stations/pentagon/minutes.
+v1 shipped 2026-05-13 PM on `feat/calibration-editor`. Upper-LCD framework expanded to 4 elements 2026-05-14 (dest / clock / prefix / station). Phase 1b shipped 2026-05-14 evening: lower-LCD broadcast via `arc` element (5-station view green band scaffold, shape-only — stations + pentagon + minute markers deferred to Phase 2). New mechanics in Phase 1b: polyline-with-per-point-stroke geometry, waypoint + stroke param-kinds, target-driven sidebar layout dispatch, AST-writeback corruption fixed.
+
+Phase 2 editor upgrades shipped 2026-05-15: (a) Figma-style drag handles for arc waypoints (filled circles with generous hit radius, sidebar auto-jumps to dragged waypoint's `_x` row); (b) centripetal Catmull-Rom centerline replaces straight-line polyline (passes through every waypoint, C1 continuity at junctions, endpoint phantom-neighbor reflection); (c) `arc_smoothing` tuneable for post-densification 3-tap [1,2,1]/4 averaging passes — relaxes the band away from exact waypoint pull when "nodes too strong" perception kicks in; (d) bumped 4 → 7 waypoints, p0/p6 = band end-caps + p1..p5 = 5 station slots rendered as time-circle proxies (pre-IRL stand-ins for direct station-on-band tuning); (e) `--overlay <path>` CLI flag → semi-transparent IRL reference image blit over lower LCD, Alt+drag pan / Alt+wheel-or-`=`/`-` zoom (aspect kept) / `O` toggle, offset/scale/visibility persisted to gitignored `_overlay_state.json` so re-launches resume alignment.
+
+Graduation gate (b) partially proven by the arc; full sign-off still needs the real time-circle render (arrival-minute number, current-stop pentagon) replacing the proxies — copy the primitive from `e235_1000.lower_lcd` per conventions.md § "Forking a sibling-model renderer".
 
 ---
 
@@ -131,7 +135,7 @@ Sibling to the region-rect dict above. Each region's drawable internals get a `_
 1. **More elements** registered for tuning (badge / station / route bar) — mechanical pattern: extract `# fmt: off` block → `_TUNEABLES_*` dict, declare hit-test rect, add `_REGISTRY` entry. (Clock + prefix shipped 2026-05-14.)
 2. **Animation play toggle** — for chevron `sweep_duration` etc; need motion to tune.
 3. **Cross-route candidate sampling** for the dest cycler — current = unique dests in loaded route only (Yamanote = 6 compounds). Walk every `audio/*/route.json` + `_mock` for short / long / katakana variety.
-4. **Mouse-drag handles (Phase 2 editor upgrade).** Keyboard-nudge is insufficient for multi-DOF visual targets — the 2026-05-14 arc Phase 1b session surfaced this: user could not reconcile 4 waypoints + 4 per-point strokes against an IRL ref by nudging one param at a time. Real fix = visible draggable dots on the LCD canvas. Click-and-drag a waypoint moves it, the band reshapes in real time, sidebar values update live. General-purpose — applies retroactively to any element with `_x`/`_y` pairs (dest box anchors, station rect corners, future polyline elements). Out of scope until enough Phase 1b/2 tuning friction motivates the lift.
+4. ~~**Mouse-drag handles (Phase 2 editor upgrade).**~~ Shipped 2026-05-15 (waypoints only). Figma-style filled grab handles render at every `arc_pN_x/_y` pair when arc focused; click-and-drag updates the underlying dict values live, band reshapes next frame, sidebar auto-jumps focus to the dragged waypoint's `_x` row. Generous 12px hit radius, 5px visible (7px enlarged + blue fill while dragging). Extension to other `_x`/`_y` pairs (region rects, text anchors) deferred — current scope was Phase 1b/2 arc friction.
 
 ## Value cycler hook (generalized 2026-05-14)
 
@@ -172,7 +176,7 @@ _TUNEABLES_ARC = {
 }
 ```
 
-Renderer walks `_pN_x/_y/_stroke` triples in numeric order. Outer + inner band edges = waypoint ± local-normal × stroke/2 at each point. Segments between adjacent waypoints linearly interpolate both position (straight line) and thickness (trapezoid). For smoother shapes: add more waypoints. Local normal at junctions = averaged-normal bisector (simple; tight bends may pinch — softer angles softer).
+Renderer walks `_pN_x/_y/_stroke` triples in numeric order. Outer + inner band edges = waypoint ± local-normal × stroke/2 at each point. **Centerline densification = centripetal Catmull-Rom spline (alpha=0.5)** between adjacent waypoint pairs (Phase 2, 2026-05-15) — the spline passes through every waypoint with C1 continuity at junctions, and endpoints use reflected phantom neighbors so the curve doesn't fly off. Stroke linearly interpolates between adjacent waypoint strokes along the densified arc. For smoother shapes: add more waypoints OR bump `arc_smoothing` (3-tap [1,2,1]/4 averaging passes applied to interior centerline samples; endpoints fixed) — smoothing relaxes the band away from precise waypoint pull when "nodes have too strong of a power to the curve" feedback surfaces.
 
 **When to use vs single-primitive arc.** First instinct is the cleanest math (circle: center + radius + start/end angle = 5 numbers). Reach for polyline when:
 - IRL artifact isn't a true single-radius arc (Yamanote 5-station band: shape OK but stroke varies along length — uniform stroke can't match)
@@ -182,7 +186,7 @@ Renderer walks `_pN_x/_y/_stroke` triples in numeric order. Outer + inner band e
 
 **Model the artifact's actual DOFs, not the cleanest math primitive.** Trying to tune a single-radius arc to an IRL band that has variable thickness wastes hours and can't converge. Polyline + per-point stroke matches the DOFs directly. The math primitive is for *rendering speed*, not the *user's mental model*.
 
-**Phase 2 editor implication.** Multi-waypoint shapes are exactly where keyboard-nudge falls down (open thread #4): user can't reconcile N positions + N strokes against a visual target one keystroke at a time. Drag handles needed for serious tuning.
+**Phase 2 editor implication (delivered).** Multi-waypoint shapes are exactly where keyboard-nudge falls down (closed thread #4): drag handles for `_pN_x/_y` pairs land in 2026-05-15, plus `--overlay <path>` IRL-ref blit with Alt+drag pan / Alt+wheel zoom for direct visual alignment. The overlay's position/scale/visibility persist to `_overlay_state.json` (gitignored) so multi-session tuning resumes alignment.
 
 ---
 

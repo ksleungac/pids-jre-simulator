@@ -50,30 +50,50 @@ from displays.train_models.e235_1000.lower_lcd import (
 # =============================================================================
 # 5-station view — green curve band geometry (Phase 1 scaffold)
 #
-# Centerline polyline through N waypoints (p0, p1, p2, ...). Band built by
-# offsetting the polyline by ±stroke_w/2 perpendicular to each segment.
-# Straight-line interpolation between waypoints — for smoother shapes, add
-# more waypoints (extend dict with arc_p4_x/_y etc; draw loop reads all
-# arc_pN_x/_y pairs in numeric order). p0 = current-stop end (bottom-right
-# slot side); pN-1 = furthest-stop end (top side).
+# Centerline = centripetal Catmull-Rom spline through 7 waypoints:
+#   p0          — band start end-cap (no station marker, taper)
+#   p1..p5      — 5 station slots, each rendered as a time-circle proxy.
+#                 p1 = current stop; p5 = furthest ahead.
+#   p6          — band end end-cap (no station marker, taper)
+#
+# Station positions ARE the geometry — the IRL band's shape is defined by
+# where the 5 station markers sit along it. End-caps extend the band a bit
+# past the outermost stations so the band visually terminates beyond the
+# station row rather than at it.
+#
+# Spline passes through every waypoint, gives C1 continuity at junctions,
+# and uses neighbor waypoints to compute tangents (endpoints get reflected
+# phantom neighbors). Each waypoint carries its own stroke (band thickness);
+# strokes linearly interpolate along the densified centerline.
 #
 # Tuned via the calibration editor (see _dev_scripts/calibration_editor.py).
-# IRL Yamanote band isn't a pure circular arc — multi-waypoint polyline
-# matches the actual shape better than a single-radius circle.
+# IRL Yamanote band isn't a pure circular arc — Catmull-Rom + per-point
+# stroke matches the IRL DOFs (variable thickness, non-uniform curvature).
 # =============================================================================
 
 # fmt: off
-# Each waypoint carries its own stroke (band thickness at that point). Outer
-# and inner edges are straight lines between adjacent waypoint offsets, so a
-# stroke that varies across waypoints produces a band whose thickness
-# transitions linearly along each segment.
 _TUNEABLES_ARC = {
-    "arc_p0_x": 507,   "arc_p0_y": 457,   "arc_p0_stroke": 160,   # current-stop end (bottom-right)
-    "arc_p1_x": 461,   "arc_p1_y": 310,   "arc_p1_stroke": 120,
-    "arc_p2_x": 272,   "arc_p2_y": 191,   "arc_p2_stroke": 85,
-    "arc_p3_x": 9,   "arc_p3_y":  92,   "arc_p3_stroke": 55,   # furthest-stop end (top)
+    # p0 — band start end-cap (just past current-stop side, no marker).
+    "arc_p0_x": 528,   "arc_p0_y": 480,   "arc_p0_stroke": 103,
+    # p1..p5 — 5 station slots, time-circle proxy renders at each.
+    "arc_p1_x": 467,   "arc_p1_y": 354,   "arc_p1_stroke": 100,   # current stop
+    "arc_p2_x": 417,   "arc_p2_y": 286,   "arc_p2_stroke":  85,
+    "arc_p3_x": 365,   "arc_p3_y": 234,   "arc_p3_stroke":  67,
+    "arc_p4_x": 299,   "arc_p4_y": 187,   "arc_p4_stroke":  56,
+    "arc_p5_x": 231,   "arc_p5_y": 154,   "arc_p5_stroke":  48,   # furthest stop
+    # p6 — band end end-cap (just past furthest stop, no marker).
+    "arc_p6_x":   2,   "arc_p6_y": 102,   "arc_p6_stroke":  25,
     "arc_color": (116, 193, 30),  # Yamanote-green default
+    # Post-densification smoothing passes. 0 = pure Catmull-Rom (curve
+    # passes exactly through every waypoint). Higher = each iteration
+    # applies a 3-tap [1,2,1]/4 averaging filter to interior centerline
+    # samples (endpoints fixed) which relaxes the band away from precise
+    # waypoint pull, producing a more natural sweeping shape. Stroke
+    # taper is smoothed in the same pass. Try 3-10.
+    "arc_smoothing": 0,
 }
+# Indices of waypoints rendered as station markers (time-circle proxies).
+_ARC_STATION_SLOTS = (1, 2, 3, 4, 5)
 # fmt: on
 
 # Bounding rect (re-synced each frame from _TUNEABLES_ARC via ARC_RECT.update
@@ -82,6 +102,92 @@ _TUNEABLES_ARC = {
 # editor doesn't need pixel-tight bounding since the arc is the only thing
 # on the lower LCD in Phase 1.
 ARC_RECT = pygame.Rect(0, UPPER_HEIGHT, S_WIDTH, S_HEIGHT - UPPER_HEIGHT)
+
+
+def _build_catmull_rom_centerline(
+    pts: List[Tuple[float, float]],
+    strokes: List[float],
+    samples_per_seg: int,
+) -> Tuple[List[Tuple[float, float]], List[float]]:
+    """Densify waypoint polyline into a smooth centerline + per-sample strokes.
+
+    Centripetal Catmull-Rom (alpha=0.5) between each waypoint pair. The
+    spline passes through every waypoint. Endpoints use reflected phantom
+    neighbors (p_-1 = p0 + (p0 - p1)). Strokes linearly interpolate along
+    each segment. Returns (centerline_points, per_sample_strokes), both of
+    length n*samples_per_seg + 1, ending exactly on the last waypoint.
+    """
+    n = len(pts)
+    if n < 2:
+        return list(pts), list(strokes)
+
+    phantom_left = (2 * pts[0][0] - pts[1][0], 2 * pts[0][1] - pts[1][1])
+    phantom_right = (2 * pts[-1][0] - pts[-2][0], 2 * pts[-1][1] - pts[-2][1])
+    ext = [phantom_left] + list(pts) + [phantom_right]
+
+    alpha = 0.5
+    centerline: List[Tuple[float, float]] = []
+    sample_strokes: List[float] = []
+    for k in range(n - 1):
+        p0, p1, p2, p3 = ext[k], ext[k + 1], ext[k + 2], ext[k + 3]
+        s_a, s_b = strokes[k], strokes[k + 1]
+        t0 = 0.0
+        t1 = t0 + max(math.hypot(p1[0] - p0[0], p1[1] - p0[1]) ** alpha, 1e-9)
+        t2 = t1 + max(math.hypot(p2[0] - p1[0], p2[1] - p1[1]) ** alpha, 1e-9)
+        t3 = t2 + max(math.hypot(p3[0] - p2[0], p3[1] - p2[1]) ** alpha, 1e-9)
+        for s in range(samples_per_seg):
+            u = s / samples_per_seg
+            t = t1 + u * (t2 - t1)
+            a1x = (t1 - t) / (t1 - t0) * p0[0] + (t - t0) / (t1 - t0) * p1[0]
+            a1y = (t1 - t) / (t1 - t0) * p0[1] + (t - t0) / (t1 - t0) * p1[1]
+            a2x = (t2 - t) / (t2 - t1) * p1[0] + (t - t1) / (t2 - t1) * p2[0]
+            a2y = (t2 - t) / (t2 - t1) * p1[1] + (t - t1) / (t2 - t1) * p2[1]
+            a3x = (t3 - t) / (t3 - t2) * p2[0] + (t - t2) / (t3 - t2) * p3[0]
+            a3y = (t3 - t) / (t3 - t2) * p2[1] + (t - t2) / (t3 - t2) * p3[1]
+            b1x = (t2 - t) / (t2 - t0) * a1x + (t - t0) / (t2 - t0) * a2x
+            b1y = (t2 - t) / (t2 - t0) * a1y + (t - t0) / (t2 - t0) * a2y
+            b2x = (t3 - t) / (t3 - t1) * a2x + (t - t1) / (t3 - t1) * a3x
+            b2y = (t3 - t) / (t3 - t1) * a2y + (t - t1) / (t3 - t1) * a3y
+            cx = (t2 - t) / (t2 - t1) * b1x + (t - t1) / (t2 - t1) * b2x
+            cy = (t2 - t) / (t2 - t1) * b1y + (t - t1) / (t2 - t1) * b2y
+            centerline.append((cx, cy))
+            sample_strokes.append(s_a * (1.0 - u) + s_b * u)
+    centerline.append(pts[-1])
+    sample_strokes.append(strokes[-1])
+    return centerline, sample_strokes
+
+
+def _smooth_centerline(
+    centerline: List[Tuple[float, float]],
+    strokes: List[float],
+    iterations: int,
+) -> Tuple[List[Tuple[float, float]], List[float]]:
+    """Relax the centerline + strokes via repeated [1,2,1]/4 averaging.
+
+    Endpoints stay fixed (don't smooth the band's first/last terminations).
+    Interior samples blend with neighbors. Each iteration is a gentle
+    low-pass; piling on iterations approaches a globally smooth shape
+    that's less dominated by individual waypoint positions — Catmull-Rom
+    waypoints become guides, not strict pass-throughs.
+    """
+    n = len(centerline)
+    if n < 3 or iterations <= 0:
+        return centerline, strokes
+    cur_c = list(centerline)
+    cur_s = list(strokes)
+    for _ in range(iterations):
+        new_c = list(cur_c)
+        new_s = list(cur_s)
+        for i in range(1, n - 1):
+            new_c[i] = (
+                (cur_c[i - 1][0] + 2 * cur_c[i][0] + cur_c[i + 1][0]) / 4.0,
+                (cur_c[i - 1][1] + 2 * cur_c[i][1] + cur_c[i + 1][1]) / 4.0,
+            )
+            new_s[i] = (cur_s[i - 1] + 2 * cur_s[i] + cur_s[i + 1]) / 4.0
+        cur_c = new_c
+        cur_s = new_s
+    return cur_c, cur_s
+
 
 # =============================================================================
 # Canonical Yamanote JY-code ordering for racetrack screen layout.
@@ -965,13 +1071,15 @@ class JapaneseFiveStationDisplay:
         self._draw_arc()
 
     def _draw_arc(self) -> None:
-        """Build the band polygon by offsetting the centerline polyline.
+        """Build the band polygon by offsetting a centripetal Catmull-Rom centerline.
 
         Walks `arc_pN_x` / `arc_pN_y` pairs in N order to collect waypoints.
-        For each waypoint, computes a local normal: segment normal at the
-        endpoints, averaged-normal bisector at junctions. Outer edge sits
-        at waypoint + normal * stroke_w/2; inner at waypoint - normal *
-        stroke_w/2. Closed polygon = outer-forward + inner-reversed.
+        Densifies the centerline via centripetal Catmull-Rom spline (passes
+        through every waypoint, C1 continuity, neighbor points define tangents).
+        Endpoints get reflected-phantom neighbors so the spline doesn't fly off.
+        Per-waypoint stroke linearly interpolates along each segment. Outer
+        edge = sample + local_normal * stroke/2; inner = sample - normal *
+        stroke/2. Local normal via central difference on the dense centerline.
         """
         t = _TUNEABLES_ARC
         ARC_RECT.update(0, UPPER_HEIGHT, S_WIDTH, S_HEIGHT - UPPER_HEIGHT)
@@ -981,44 +1089,45 @@ class JapaneseFiveStationDisplay:
         i = 0
         while f"arc_p{i}_x" in t and f"arc_p{i}_y" in t:
             pts.append((float(t[f"arc_p{i}_x"]), float(t[f"arc_p{i}_y"])))
-            # Per-waypoint stroke; missing key defaults to 0 (= invisible).
             strokes.append(float(t.get(f"arc_p{i}_stroke", 0)))
             i += 1
         if len(pts) < 2:
-            return  # degenerate — need at least 2 waypoints for a segment
+            return
 
         color = t["arc_color"]
 
+        # Centerline densification — _SAMPLES_PER_SEG sub-points per waypoint
+        # pair. 20 is enough to look smooth at this canvas size; bump if visible
+        # faceting appears on tight curves.
+        SAMPLES_PER_SEG = 20
+        centerline, sample_strokes = _build_catmull_rom_centerline(pts, strokes, SAMPLES_PER_SEG)
+        smoothing = int(t.get("arc_smoothing", 0))
+        if smoothing > 0:
+            centerline, sample_strokes = _smooth_centerline(centerline, sample_strokes, smoothing)
+
+        # Local normal at each centerline sample via central difference.
+        n = len(centerline)
         outer_pts: List[Tuple[int, int]] = []
         inner_pts: List[Tuple[int, int]] = []
-
-        def _perp_unit(dx: float, dy: float) -> Tuple[float, float]:
-            mag = math.hypot(dx, dy)
-            if mag == 0:
-                return 0.0, 0.0
-            return dy / mag, -dx / mag
-
-        n = len(pts)
         for k in range(n):
             if k == 0:
-                dx, dy = pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]
-                nx, ny = _perp_unit(dx, dy)
+                dx = centerline[1][0] - centerline[0][0]
+                dy = centerline[1][1] - centerline[0][1]
             elif k == n - 1:
-                dx, dy = pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]
-                nx, ny = _perp_unit(dx, dy)
+                dx = centerline[k][0] - centerline[k - 1][0]
+                dy = centerline[k][1] - centerline[k - 1][1]
             else:
-                # Junction: averaged-normal bisector. Simple — for tight
-                # bends the band may pinch on one side; user adds more
-                # waypoints to soften angles.
-                n1x, n1y = _perp_unit(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1])
-                n2x, n2y = _perp_unit(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1])
-                nx, ny = (n1x + n2x) / 2.0, (n1y + n2y) / 2.0
-                mag = math.hypot(nx, ny)
-                if mag > 0:
-                    nx, ny = nx / mag, ny / mag
-            half_w = strokes[k] / 2.0
-            outer_pts.append((int(pts[k][0] + nx * half_w), int(pts[k][1] + ny * half_w)))
-            inner_pts.append((int(pts[k][0] - nx * half_w), int(pts[k][1] - ny * half_w)))
+                dx = centerline[k + 1][0] - centerline[k - 1][0]
+                dy = centerline[k + 1][1] - centerline[k - 1][1]
+            mag = math.hypot(dx, dy)
+            if mag == 0:
+                nx, ny = 0.0, 0.0
+            else:
+                nx, ny = dy / mag, -dx / mag
+            half_w = sample_strokes[k] / 2.0
+            cx, cy = centerline[k]
+            outer_pts.append((int(cx + nx * half_w), int(cy + ny * half_w)))
+            inner_pts.append((int(cx - nx * half_w), int(cy - ny * half_w)))
 
         poly = outer_pts + list(reversed(inner_pts))
         # Clip to lower-LCD area so the band can't bleed up into the upper
@@ -1029,6 +1138,25 @@ class JapaneseFiveStationDisplay:
         try:
             pygame.gfxdraw.filled_polygon(self.screen, poly, color)
             pygame.gfxdraw.aapolygon(self.screen, poly, color)
+            # Time-circle proxies at the 5 station slots. Pre-IRL stand-in so
+            # the user can eyeball station positioning against the IRL ref
+            # while tuning waypoint coords. Phase 2 replaces with the real
+            # time-circle render (arrival-minute number, current-stop
+            # pentagon, etc.) once station data wires in.
+            # NOTE: radius + colors deliberately NOT in _TUNEABLES_ARC. They
+            # are placeholder geometry; promoting to tuneables would invite
+            # bikeshedding on values that will be replaced wholesale once
+            # the Phase 2 time-circle primitive lands (copy from
+            # e235_1000.lower_lcd per conventions.md § "Forking a sibling-
+            # model renderer: copy primitives, don't reinvent").
+            for slot in _ARC_STATION_SLOTS:
+                cx_key = f"arc_p{slot}_x"
+                cy_key = f"arc_p{slot}_y"
+                if cx_key not in t or cy_key not in t:
+                    continue
+                cx, cy = int(t[cx_key]), int(t[cy_key])
+                pygame.gfxdraw.filled_circle(self.screen, cx, cy, 12, (245, 245, 250))
+                pygame.gfxdraw.aacircle(self.screen, cx, cy, 12, (40, 40, 50))
         finally:
             self.screen.set_clip(old_clip)
 
