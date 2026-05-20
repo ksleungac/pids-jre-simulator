@@ -7,7 +7,6 @@ import pygame
 import i18n
 from app_paths import project_root
 from constants import SETUP_KEY_REPEAT_DELAY, SETUP_KEY_REPEAT_INTERVAL
-from displays.utils import draw_station_code_badge
 
 
 class SetupScreen:
@@ -53,9 +52,10 @@ class SetupScreen:
         self.instruction_font = i18n.font(16, bold=True)
         self.control_font = i18n.font(14, bold=True)
         self.route_font_cjk = i18n.font_for_lang("zh_HK", 18, bold=True)
-        # Line badge re-uses NeueFrutigerWorld-Bold (PIDS-canon, same font as the
-        # LCD's station-code badges) for visual consistency with the LCD.
-        self.badge_font = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 18)
+        # Line badge icons — authentic Wikipedia SVG-sourced PNGs from
+        # data/line_icons/, same assets the transfer-info display uses.
+        self._line_icon_cache: dict[str, pygame.Surface] = {}
+        self._line_icon_h = 38  # target height; width scales proportionally
 
         # Translation tables for EN mode lookup of route-level data fields.
         # zh_HK / zh_CN modes keep route-data text in kanji (no source data exists
@@ -239,7 +239,6 @@ class SetupScreen:
                 x=30,
                 cy=row_top + self.row_height // 2,
                 line_code=route.get("line_code", ""),
-                color=route.get("color", self.dim_color),
             )
             text_x = badge_right + 12
 
@@ -423,34 +422,38 @@ class SetupScreen:
         )
         self._tutorial_btn_rect = rect
 
-    def _draw_line_badge(self, x: int, cy: int, line_code: str, color: tuple) -> int:
-        """Draw a JR-style line marker (2-letter code only, no station number) via
-        the LCD's canonical badge helper. Vertically centered at `cy`. Returns the
-        right-edge x for placing subsequent content — when line_code is empty
-        (route has no sta_code), no badge is drawn and `x` is returned unchanged
-        so text isn't pushed right by a phantom badge width."""
-        # ── tuneable params ────────────────
-        badge_w, badge_h = 38, 38
-        # ────────────────────────────────────
+    def _load_line_icon(self, line_code: str) -> pygame.Surface | None:
+        """Load and cache a line icon PNG from data/line_icons/.
+
+        Returns the scaled surface, or None if the icon file doesn't exist.
+        Aspect ratio is preserved; height is fixed to ``_line_icon_h``."""
+        if line_code in self._line_icon_cache:
+            return self._line_icon_cache[line_code]
+        path = project_root() / "data" / "line_icons" / f"{line_code}.png"
+        if not path.exists():
+            self._line_icon_cache[line_code] = None
+            return None
+        img = pygame.image.load(str(path)).convert_alpha()
+        sw, sh = img.get_size()
+        target_w = int(round(sw * (self._line_icon_h / sh)))
+        scaled = pygame.transform.smoothscale(img, (target_w, self._line_icon_h))
+        self._line_icon_cache[line_code] = scaled
+        return scaled
+
+    def _draw_line_badge(self, x: int, cy: int, line_code: str) -> int:
+        """Draw a JR line badge from the authentic PNG icon set. Vertically
+        centered at `cy`. Returns the right-edge x for placing subsequent
+        content — when line_code is empty or icon is missing, no badge is
+        drawn and `x` is returned unchanged so text isn't pushed right by
+        a phantom badge width."""
         if not line_code:
             return x
-        draw_station_code_badge(
-            self.screen,
-            x=x,
-            y=cy - badge_h // 2,
-            w=badge_w,
-            h=badge_h,
-            sta_code=line_code,
-            color=color,
-            font_prefix=self.badge_font,
-            font_num=self.badge_font,  # unused in line-marker mode
-            ring_black=2,
-            ring_color=3,
-            outer_radius=5,
-            color_radius=3,
-            interior_radius=0,
-        )
-        return x + badge_w
+        icon = self._load_line_icon(line_code)
+        if icon is None:
+            return x
+        icon_w, icon_h = icon.get_size()
+        self.screen.blit(icon, (x, cy - icon_h // 2))
+        return x + icon_w
 
     def _draw_scrollbar(self) -> None:
         """Draw a scrollbar indicator on the right side."""

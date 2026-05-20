@@ -4,6 +4,7 @@ Long-term curated memories. One-line pointers — daily logs hold the detail.
 
 ---
 
+- [2026-05-20](2026-05-20.md) — code_3 edge cases checked and closed; swapped programmatic setup-screen badges for authentic Wikipedia SVG-sourced PNG line icons
 - [2026-05-14](2026-05-14.md) — native 1080p OCR feasibility probe (gitignored `_dev_scripts/_probe_1080p.py`); 2/6 references read correct at synthesized 1080p — pipeline geometry sound, failure modes are `1` thin-stroke segmentation + `9` red-template at small scale; production roadmap captured in `WIP_1080p_ocr.md`; post-refactor /review+fix found 6 dangling stale `auto_input.py` refs that third-man missed → principles.md § /third-man entry extended with pre-commit-grep sub-bullet
 - [2026-05-13 PM](2026-05-13.md) — OCR cluster → `auto_input/` package (move-only, no internal split per third-man); `__init__.py` re-exports keep production import paths unchanged, only `_dev_scripts/` rewritten; downstream syncs landed same commit (build `$shipExclude`, AUTO_INPUT.md Files table, in-code docstrings); principles.md § "Skip-confirmation" gained "each /commit consumes its own recap" sub-bullet after I skipped recap before the second commit
 - [2026-05-13 dot fix](2026-05-13.md) — Yamanote compound-dest middle dot → halfwidth `･` (U+FF65) per IRL: data swap across 3 files (route.json + translations.json keys), audio/README JY bullet codified
