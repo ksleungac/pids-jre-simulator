@@ -5,7 +5,7 @@ import json
 import pygame
 
 import i18n
-from app_paths import project_root
+from app_paths import project_root, load_json_relative
 from constants import SETUP_KEY_REPEAT_DELAY, SETUP_KEY_REPEAT_INTERVAL
 
 
@@ -60,8 +60,8 @@ class SetupScreen:
         # Translation tables for EN mode lookup of route-level data fields.
         # zh_HK / zh_CN modes keep route-data text in kanji (no source data exists
         # today); only the chrome strings around it translate.
-        self._translations = self._load_data_json("translations.json")
-        self._train_types = self._load_data_json("train_types.json")
+        self._translations = load_json_relative("data/translations.json")
+        self._train_types = load_json_relative("data/train_types.json")
 
         # Colors — lifted dark slate. Bright enough to read comfortably without
         # going full light mode; controls keep ~20-RGB-step contrast above bg
@@ -89,29 +89,23 @@ class SetupScreen:
         self._lead_plus_rect: pygame.Rect | None = None
         self._interval_minus_rect: pygame.Rect | None = None
         self._interval_plus_rect: pygame.Rect | None = None
+        self._last_mouse_pos = (0, 0)
 
-    @staticmethod
-    def _load_data_json(filename: str) -> dict:
-        path = project_root() / "data" / filename
-        try:
-            with open(path, encoding="utf-8") as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {}
-
-    def scan_routes(self, base_dir: str = "audio") -> list:
+    def scan_routes(self, base_dir: str | None = None) -> list:
         """Scan for available routes by finding route.json files.
 
         Groups routes by name, then by train diagram.
         Extracts diagram from folder name when available (e.g., nambu/4027F/route.json).
 
         Args:
-            base_dir: Base directory to scan for routes
+            base_dir: Base directory to scan for routes (defaults to "audio" under project root)
 
         Returns:
             List of route dictionaries
         """
         self.routes = []
+        if base_dir is None:
+            base_dir = str(project_root() / "audio")
 
         if not os.path.exists(base_dir):
             print(f"Audio directory '{base_dir}' not found")
@@ -477,6 +471,53 @@ class SetupScreen:
         # Draw scrollbar thumb
         pygame.draw.rect(self.screen, (180, 180, 180), pygame.Rect(bar_x, thumb_y, bar_width, int(thumb_height)), border_radius=3)
 
+    def _get_route_index_at_pos(self, pos: tuple[int, int]) -> int | None:
+        """Resolve a screen coordinate to a route list index, if within bounds."""
+        mx, my = pos
+        # Check horizontal bounds (row width is screen_width - 40, starting at x=20)
+        if 20 <= mx <= self.screen.get_width() - 20:
+            # Check vertical bounds of currently drawn visible route list rows
+            list_top = 70
+            num_drawn = min(self.max_visible, len(self.routes) - self.scroll_offset)
+            list_bottom = list_top + num_drawn * self.row_height
+            if list_top <= my < list_bottom:
+                idx = self.scroll_offset + (my - list_top) // self.row_height
+                if 0 <= idx < len(self.routes):
+                    return idx
+        return None
+
+    def _handle_scroll(self, scroll_amount: int) -> None:
+        """Handle list viewport scrolling and update selection under cursor."""
+        max_offset = max(0, len(self.routes) - self.max_visible)
+        self.scroll_offset = max(0, min(max_offset, self.scroll_offset + scroll_amount))
+
+        # Update selection based on cursor position
+        m_pos = pygame.mouse.get_pos()
+        hovered_idx = self._get_route_index_at_pos(m_pos)
+        if hovered_idx is not None:
+            self.selected_idx = hovered_idx
+        else:
+            # Not over the list, clamp selected_idx to the new visible area to prevent viewport snap-back
+            self.selected_idx = max(self.scroll_offset, min(self.selected_idx, self.scroll_offset + self.max_visible - 1))
+            self.selected_idx = max(0, min(len(self.routes) - 1, self.selected_idx))
+
+    def _confirm_route_selection(self, selected: dict) -> dict | None:
+        """Load full route data and return selection config."""
+        try:
+            with open(os.path.join(selected["path"], "route.json"), encoding="utf-8") as f:
+                route_data = json.load(f)
+            return {
+                "action": "select",
+                "work_dir": selected["path"],
+                "route_data": route_data,
+                "auto_input": self.auto_input_enabled,
+                "lead_m": self.lead_m,
+                "interval_s": self.interval_s,
+            }
+        except Exception as e:
+            print(f"Error loading route data: {e}")
+            return None
+
     def run(self) -> dict | None:
         """Run the setup screen loop. Returns an action-keyed dict or None.
 
@@ -505,22 +546,47 @@ class SetupScreen:
         pygame.key.set_repeat(SETUP_KEY_REPEAT_DELAY, SETUP_KEY_REPEAT_INTERVAL)
 
         running = True
+        clock = pygame.time.Clock()
 
         try:
             while running:
+                clock.tick(60)
                 self.draw(self.selected_idx)
 
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         return None
-                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                        # ? Tutorial button takes priority — sits above the
-                        # OCR auto-PA band, so check it first.
-                        if self._tutorial_btn_rect is not None and self._tutorial_btn_rect.collidepoint(event.pos):
-                            return {"action": "run_tutorial"}
-                        self._handle_band_click(event.pos)
+                    if event.type == pygame.MOUSEBUTTONDOWN:
+                        if event.button == 1:
+                            # ? Tutorial button takes priority — sits above the
+                            # OCR auto-PA band, so check it first.
+                            if self._tutorial_btn_rect is not None and self._tutorial_btn_rect.collidepoint(event.pos):
+                                return {"action": "run_tutorial"}
+
+                            # Check if click is on route list
+                            clicked_idx = self._get_route_index_at_pos(event.pos)
+                            if clicked_idx is not None:
+                                self.selected_idx = clicked_idx
+                                selected = self.routes[self.selected_idx]
+                                return self._confirm_route_selection(selected)
+
+                            self._handle_band_click(event.pos)
+                            continue
+
+                    elif event.type == pygame.MOUSEWHEEL:
+                        # Modern mouse wheel support
+                        self._handle_scroll(-event.y)
                         continue
-                    if event.type == pygame.KEYDOWN:
+
+                    elif event.type == pygame.MOUSEMOTION:
+                        # Motion guard
+                        if event.pos != self._last_mouse_pos:
+                            self._last_mouse_pos = event.pos
+                            hovered_idx = self._get_route_index_at_pos(event.pos)
+                            if hovered_idx is not None:
+                                self.selected_idx = hovered_idx
+
+                    elif event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_ESCAPE:
                             return None
                         elif event.key == pygame.K_UP:
@@ -530,21 +596,7 @@ class SetupScreen:
                         elif event.key == pygame.K_RETURN:
                             if self.routes:
                                 selected = self.routes[self.selected_idx]
-                                # Load full route data
-                                try:
-                                    with open(os.path.join(selected["path"], "route.json"), encoding="utf-8") as f:
-                                        route_data = json.load(f)
-                                    return {
-                                        "action": "select",
-                                        "work_dir": selected["path"],
-                                        "route_data": route_data,
-                                        "auto_input": self.auto_input_enabled,
-                                        "lead_m": self.lead_m,
-                                        "interval_s": self.interval_s,
-                                    }
-                                except Exception as e:
-                                    print(f"Error loading route data: {e}")
-                                    return None
+                                return self._confirm_route_selection(selected)
         finally:
             # Restore original key repeat state when exiting setup screen
             # This ensures the main simulator doesn't inherit modified key repeat settings
