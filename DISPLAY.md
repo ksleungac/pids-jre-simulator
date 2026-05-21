@@ -70,7 +70,7 @@ displays/
     │   │                    # exports UpperDisplay, LowerDisplay
     │   ├── upper_lcd.py     # JapaneseDisplay, FuriganaDisplay, EnglishDisplay, UpperDisplay
     │   ├── lower_lcd.py     # JapaneseDisplay (linear full-route),
-    │   │                    # JapaneseEightStationDisplay, EnglishDisplay (placeholder),
+    │   │                    # JapaneseEightStationDisplay, EnglishDisplay,
     │   │                    # LowerDisplay
     │   └── transfer_info.py # E235-1000 concrete render_transfer
     └── e235_0/
@@ -128,7 +128,12 @@ Naming alignment between `"english"` (data) and `DisplayMode.ENGLISH` (state) in
 
 ### Mode Mapping (Lower-Specific)
 
-Shared cycler ranges over KANJI / FURIGANA / ENGLISH. Lower's `mode_displays` dict maps both KANJI and FURIGANA to `japanese_display` (real PIDS doesn't furigana the route map); ENGLISH intentionally absent so `mode_displays.get(mode, self.japanese_display)` falls back to Japanese until ENGLISH renderer implemented. Result: upper cycles freely through all three; lower stays Japanese.
+Shared cycler ranges over KANJI / FURIGANA / ENGLISH. The `LowerDisplay` manager reads the active language mode from the cycler and passes it to its internal `_pick_renderer(mode)` method.
+
+- For KANJI and FURIGANA, it dispatches to the Japanese full-route or 8-station views.
+- For ENGLISH, it dispatches to the `EnglishDisplay` (or falls back to the Japanese 8-station view if a specialized English zoomed view isn't implemented). 
+
+Because the lower display has its own internal state machine for alternating between FULL and EIGHT station views (the "slot cycler"), it uses dynamic dispatch (`_pick_renderer`) rather than a simple dictionary map.
 
 ### ⚠️ Cycler.enabled vs Cycler.paused
 
@@ -315,7 +320,7 @@ uv run preview_display.py --model e235_0 --route yamanote
 # Real route
 uv run preview_display.py --route yamanote
 
-# Force English mode (lower stays Japanese until placeholder is filled in)
+# Force English mode
 uv run preview_display.py --mode english
 
 # Static screenshot
@@ -327,7 +332,7 @@ uv run preview_display.py --lower-view {full,eight,cycle}
 
 **Observe:**
 
-- Mode cycling: upper changes between KANJI / FURIGANA / ENGLISH every 4s; lower stays Japanese until ENGLISH dispatch enabled.
+- Mode cycling: upper changes between KANJI / FURIGANA / ENGLISH every 4s; lower dispatches to EnglishDisplay for the full-route slot during ENGLISH mode.
 - Skip animation: PageDown across passing-station gap; cursor walks forward through passing station, inner red dot stays at new PA target.
 - Long-route window flip (Keihin-Tōhoku, Chuo): cursor pos stays correct as window slides.
 - Centering: mock route (11 stops) renders with equal margins; multi-line routes unchanged.

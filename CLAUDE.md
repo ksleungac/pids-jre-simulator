@@ -148,7 +148,7 @@ pids_jre_simulator/
 │   └── train_models/e235_1000/
 │       ├── __init__.py                # Per-model dimensions/palette: S_WIDTH, S_HEIGHT, UPPER_HEIGHT, DARK_BG, WHITE_BG (defined before class imports for partial-module safety)
 │       ├── upper_lcd.py               # JapaneseDisplay + FuriganaDisplay (inherits Japanese, no override) + EnglishDisplay + UpperDisplay manager
-│       └── lower_lcd.py               # JapaneseDisplay (full route) + JapaneseEightStationDisplay (8-station zoomed) + EnglishDisplay placeholder + LowerDisplay manager (24s view-cycler)
+│       └── lower_lcd.py               # JapaneseDisplay (full route) + JapaneseEightStationDisplay (8-station zoomed) + EnglishDisplay (full route) + LowerDisplay manager (24s view-cycler)
 ├── data/
 │   ├── translations.json              # Station names (furigana, english) — for LCD rendering
 │   ├── train_types.json               # Train type English translations

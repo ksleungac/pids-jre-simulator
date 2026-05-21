@@ -121,12 +121,12 @@ Each sub-series's `lower_lcd.py` declares its own renderer set:
 **E235-1000** (`displays/train_models/e235_1000/lower_lcd.py`):
 - **JapaneseDisplay** — full route-map renderer (linear bar). Owns layout calc, marks, pointer, times.
 - **JapaneseEightStationDisplay** — 8-station zoomed view (alternates with the full-route view via the slot cycler).
-- **EnglishDisplay** — placeholder. `show_stops` clears the lower-region background only — no labels, no markers. Deliberately empty: it's a clear "English not implemented yet" signal, vs a stale Japanese render bleeding through.
+- **EnglishDisplay** — linear full-route display. Renders Romaji station names rotated 45 degrees counter-clockwise using HelveticaNeue-Bold at 17 pt. Employs 4x supersampling with bilinear downscaling (via `rotozoom`) to eliminate pixelation and applies a horizontal squeeze compression on long station names (exceeding 110px in 1x scale) before rotation. Draws "min" instead of "分" for minute markers.
 
 **E235-0** (`displays/train_models/e235_0/lower_lcd.py`):
 - **CircularFullRouteDisplay** — Yamanote-only circular racetrack. Replaces E235-1000's linear `JapaneseDisplay` for the FULL slot when `route_data["route"] == "山手線"`.
 - **8-station + transfer-info** — interim inheritance from E235-1000 (until 5-station replacement lands).
-- **EnglishDisplay** — placeholder, same as E235-1000.
+- **EnglishDisplay** — inherits E235-1000's linear `EnglishDisplay` as a linear fallback for non-Yamanote routes.
 
 **JapaneseDisplay (E235-1000) methods:**
 
@@ -320,7 +320,7 @@ Slot rotation. Three slots with per-slot durations: `FULL` 12s / `EIGHT` 12s / `
 
 **Slot reconciliation**: when `_current_slot` is no longer in the available slot list (lock kicked in mid-FULL, window closed mid-TRANSFER, station with no transfers reached mid-TRANSFER), `_tick_cycle` snaps to `slots[0]` and resets the timer.
 
-**Critical invariant** — `_tick_cycle(current_time)` is called from `LowerDisplay.draw()` UNCONDITIONALLY, BEFORE language-mode dispatch. Nesting it in the `KANJI/FURIGANA` branch pauses the timer during `ENGLISH` (≈1/3 of every language cycle) and cadence drifts long. `_pick_renderer(mode)` is a pure function of `_current_slot` + mode (TRANSFER overrides language; otherwise Japanese slots dispatch to full/eight, ENGLISH falls back to japanese_display while EnglishDisplay is a stub).
+**Critical invariant** — `_tick_cycle(current_time)` is called from `LowerDisplay.draw()` UNCONDITIONALLY, BEFORE language-mode dispatch. Nesting it in the `KANJI/FURIGANA` branch pauses the timer during `ENGLISH` (≈1/3 of every language cycle) and cadence drifts long. `_pick_renderer(mode)` is a pure function of `_current_slot` + mode (TRANSFER overrides language; otherwise Japanese slots dispatch to full/eight, ENGLISH dispatches to `english_display` for the full-route slot, falling back to `japanese_eight_display` for the 8-station zoomed slot).
 
 #### Per-cell mini badge
 

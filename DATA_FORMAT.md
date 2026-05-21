@@ -389,7 +389,7 @@ Stations train traversed **before** simulator's active route begins — typicall
 - Pre-route cells render `INACTIVE_COLOR` regardless of train position — "always passed."
 - Window logic operates on `pre_stops + stops` combined. Long combined journeys (>28 cells) flip from first-window view to last-window view exactly once, same final shape as native long routes — but trigger differs: native uses **early-flip** (when `remaining < STOPS_QUANTITY`); pre_stops routes use **late-flip** (when train would scroll off right edge of first window). Late-flip keeps through-service prefix visible at boot. See `_get_stops_list_disp` in `lower_lcd.py` for branching.
 - App's `state.curr_stop` still indexes into `stops[]` (sim truth); display code shifts by `len(pre_stops)` internally.
-- Translations / furigana / English not required for pre-route stations — lower LCD shows kanji only.
+- Translations / furigana / English are loaded and displayed for pre-route stations during language cycling.
 
 ### Stop-Level Fields
 

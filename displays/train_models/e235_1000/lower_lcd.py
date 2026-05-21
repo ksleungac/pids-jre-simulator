@@ -7,14 +7,10 @@ Modes share `ModeCycler` with the Upper LCD — when both modes are
 implemented for the lower, switching the upper into ENGLISH will pull the
 lower along in lockstep.
 
-**English mode is currently a placeholder.** `EnglishDisplay.show_stops`
-only clears the background — no romaji station labels yet. While that's
-the case, `LowerDisplay.draw()` routes ENGLISH to `japanese_display`
-(hardcoded fallback in the dispatch if/else), so the lower keeps showing
-kanji while the upper cycles freely through all three modes. To enable
-real English rendering: implement `EnglishDisplay.show_stops`, then
-change the ENGLISH branch in `LowerDisplay.draw()` to dispatch to
-`self.english_display` instead of `self.japanese_display`.
+English mode is fully implemented for the full-route slot, rendering Romaji
+station names rotated 45 degrees counter-clockwise with high-quality
+supersampled bilinear anti-aliasing and horizontal squeeze compression for
+long station names to prevent overlapping.
 """
 
 import math
@@ -470,40 +466,56 @@ class JapaneseDisplay:
                 # 分-marker only renders alongside a time number — passing stations
                 # (no `time` key) at line-end / dest must not get a stranded 分.
                 if local_i == self.per_line - 1 or gi == dest_idx:
-                    minute_w, minute_h = self.font_minute.size("分")
-                    minute_y = int(l_y + (self.bar_height - minute_h) / 2)
+                    self.draw_minute_marker(local_i, gi, f_stops[-1][0], ptr, l_y, dest_idx)
 
-                    # Row-end cells widen the bar by `row_tail_extra` (see
-                    # show_stops). Shift the 分 marker right by the same amount
-                    # so it stays at the right edge of the widened bar. Mid-row
-                    # dest cells (Yamanote stop-level dest override) get no
-                    # widening, so no shift either.
-                    last_gi = f_stops[-1][0]
-                    is_row_end = local_i == self.per_line - 1 or gi == last_gi
-                    cell_extra = 10 if is_row_end else 0  # mirror show_stops `row_tail_extra`
-                    minute_x = int(x + ptr + self.stops_w + cell_extra)
+    def draw_minute_marker(self, local_i: int, gi: int, last_gi: int, ptr: int, l_y: int, dest_idx: int) -> None:
+        marker_text = getattr(self, "minute_marker_text", "分")
+        minute_w, _ = self.font_minute.size(marker_text)
+        _, text_h = self.font_minute.size(marker_text)
+        minute_y = int(l_y + (self.bar_height - text_h) / 2)
 
-                    # White separator caps the bar's right edge when there's no
-                    # continuity tail. Suppress when this cell flows into the
-                    # continuity chevrons — bar should be visually continuous.
-                    is_continuity_tail = (local_i == self.per_line - 1 and self.continuity[0]) or (gi == last_gi and self.continuity[2])
+        # Row-end cells widen the bar by `row_tail_extra` (see
+        # show_stops). Shift the 分 marker right by the same amount
+        # so it stays at the right edge of the widened bar. Mid-row
+        # dest cells (Yamanote stop-level dest override) get no
+        # widening, so no shift either.
+        is_row_end = local_i == self.per_line - 1 or gi == last_gi
+        cell_extra = 10 if is_row_end else 0  # mirror show_stops `row_tail_extra`
+        minute_x = int(self.x + ptr + self.stops_w + cell_extra)
 
-                    pygame.draw.rect(
-                        self.screen,
-                        self.color,
-                        pygame.Rect(minute_x, int(l_y), minute_w, self.bar_height),
-                    )
-                    if not is_continuity_tail:
-                        pygame.draw.rect(
-                            self.screen,
-                            WHITE_BG,
-                            pygame.Rect(minute_x + minute_w - 3, int(l_y), 3, self.bar_height),
-                        )
+        # White separator caps the bar's right edge when there's no
+        # continuity tail. Suppress when this cell flows into the
+        # continuity chevrons — bar should be visually continuous.
+        is_continuity_tail = (local_i == self.per_line - 1 and self.continuity[0]) or (gi == last_gi and self.continuity[2])
 
-                    # 分 character keeps its original position (no cell_extra shift) —
-                    # only the 分-marker bg rect follows the widened bar's right edge.
-                    minute_img = self.font_minute.render("分", True, WHITE_BG)
-                    self.screen.blit(minute_img, (int(x + ptr + self.stops_w * 0.85), minute_y))
+        pygame.draw.rect(
+            self.screen,
+            self.color,
+            pygame.Rect(minute_x, int(l_y), minute_w, self.bar_height),
+        )
+        if not is_continuity_tail:
+            pygame.draw.rect(
+                self.screen,
+                WHITE_BG,
+                pygame.Rect(minute_x + minute_w - 3, int(l_y), 3, self.bar_height),
+            )
+
+        # marker character keeps its original position (no cell_extra shift) —
+        # only the marker bg rect follows the widened bar's right edge.
+        minute_img = self.font_minute.render(marker_text, True, WHITE_BG)
+        offset = getattr(self, "minute_marker_offset", self.stops_w * 0.85)
+        self.screen.blit(minute_img, (int(self.x + ptr + offset), minute_y))
+
+    def draw_station_name(self, stop, text_color: Tuple[int, int, int], x: int, y: int) -> None:
+        draw_stops_text(
+            self.font_stops,
+            stop.get("name", ""),
+            text_color,
+            x,
+            y,
+            self.stops_w,
+            self.screen,
+        )
 
     # CONTRACT: row_head_extra / row_tail_extra magic numbers MUST stay in sync
     # with draw_ptr's pentagon `head_extra` and draw_times' 分-marker `cell_extra`.
@@ -568,7 +580,7 @@ class JapaneseDisplay:
         # -----------------------------------------------
         # fmt: on
 
-        minute_w, _ = self.font_minute.size("分")
+        minute_w, _ = self.font_minute.size("分")  # Layout always uses fixed "分" width
         last_gi = f_stops[-1][0] if f_stops else -1
 
         for gi, stop in f_stops:
@@ -690,14 +702,11 @@ class JapaneseDisplay:
                     chevron_gap=cont_chev_gap,
                 )
 
-            draw_stops_text(
-                self.font_stops,
-                stop.get("name", ""),
+            self.draw_station_name(
+                stop,
                 text_color,
                 int(x + ptr),
                 int(l_y - 7),
-                self.stops_w,
-                self.screen,
             )
 
         self.draw_marks(f_stops, dest_idx, cursor_pos, curr_stop)
@@ -1425,27 +1434,101 @@ class JapaneseEightStationDisplay:
 
 
 # =============================================================================
-# English Display (ENGLISH mode — placeholder)
+# English Display (ENGLISH mode — full-route Romaji)
 # =============================================================================
 
 
-class EnglishDisplay:
-    """Lower LCD English rendering for E235-1000 (placeholder).
+class EnglishDisplay(JapaneseDisplay):
+    """Lower LCD English rendering for E235-1000.
 
-    Not yet implemented. Clears the lower-region background so cycling into
-    ENGLISH mode shows a clean blank frame instead of stale Japanese
-    rendering. Real implementation will mirror JapaneseDisplay's structure
-    with romaji station labels and Latin-script fonts.
+    Inherits from JapaneseDisplay and overrides fonts, station name drawing
+    (with 45-degree counter-clockwise rotated Romaji names), and the travel time
+    minute marker ("min").
     """
 
     def __init__(self, screen, route_data, stops):
-        self.screen = screen
-        self.route_data = route_data
-        self.stops = stops
-        self.y = int(S_HEIGHT * 0.28)
+        super().__init__(screen, route_data, stops)
+        # CONTRACT: load fonts from file paths only — never `pygame.font.SysFont()`.
+        # See conventions.md § "Never pygame.font.SysFont() in production code".
+        self.font_stops = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 17)
+        # 4x supersampled font to eliminate pixelation and jaggedness on rotated text
+        self.font_stops_supersampled = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 17 * 4)
+        self.font_minute = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), FONT_STOPS_MINUTE_SIZE)
 
-    def show_stops(self, state, current_time: float = 0.0) -> None:
-        pygame.draw.rect(self.screen, WHITE_BG, pygame.Rect(0, self.y, S_WIDTH, S_HEIGHT - self.y))
+    @property
+    def minute_marker_text(self) -> str:
+        return "min"
+
+    @property
+    def minute_marker_offset(self) -> float:
+        return self.stops_w - 6
+
+    def draw_station_name(self, stop, text_color: Tuple[int, int, int], x: int, y: int) -> None:
+        # Get English name, fallback to Japanese name if not translated
+        english_name = stop.get("english", stop.get("name", ""))
+        if not english_name:
+            return
+
+        # Normalize newlines (could be literal \n or escaped \\n)
+        english_name = english_name.replace("\\n", "\n")
+        lines = english_name.split("\n")
+
+        # --- Tuneable layout params (adjust freely) ---
+        angle = 45.0
+        target_x_offset = self.stops_w // 2  # center on cell
+        target_y_offset = 4  # 3px above bar top (closer to bar, lowered by 3px from y + 1)
+        line_separation = 13.0  # perpendicular separation in px for 2-line stations
+        scale_factor = 4.0  # 4x supersampling scale factor
+        # -----------------------------------------------
+
+        rad = math.radians(angle)
+        cos_a, sin_a = math.cos(rad), math.sin(rad)
+
+        base_tx = x + target_x_offset
+        base_ty = y + target_y_offset
+
+        def draw_line(text: str, tx: float, ty: float):
+            # Render using the 4x larger supersampled font for high-definition anti-aliasing
+            text_surf = self.font_stops_supersampled.render(text, True, text_color)
+
+            W, H = text_surf.get_size()
+            max_w_super = 110.0 * scale_factor  # 110px threshold in 1x space to prevent neighbor overlapping
+            if W > max_w_super:
+                # Horizontally compress long station names to avoid overlapping with neighbors
+                text_surf = pygame.transform.smoothscale(text_surf, (int(max_w_super), H))
+                W, H = text_surf.get_size()
+
+            # rotozoom does bilinear filtering when scaling down (scale = 1/4 = 0.25)
+            rotated_surf = pygame.transform.rotozoom(text_surf, angle, 1.0 / scale_factor)
+            W_rot, H_rot = rotated_surf.get_size()
+
+            # Vector from center of the scaled-down original surface to its bottom-left corner
+            dx, dy = -W / (2.0 * scale_factor), H / (2.0 * scale_factor)
+
+            # Rotate vector (taking screen Y inversion into account)
+            dx_rot = dx * cos_a + dy * sin_a
+            dy_rot = -dx * sin_a + dy * cos_a
+
+            # Locate top-left of rotated surface to blit
+            blit_x = int(tx - (W_rot / 2.0 + dx_rot))
+            blit_y = int(ty - (H_rot / 2.0 + dy_rot))
+            self.screen.blit(rotated_surf, (blit_x, blit_y))
+
+        if len(lines) == 1:
+            draw_line(lines[0], base_tx, base_ty)
+        else:
+            # 2-line stacking: Line 1 shifted up-left (-perp), Line 2 shifted down-right (+perp)
+            # Perpendicular vector pointing down-right is (sin_a, cos_a)
+            half_sep = line_separation / 2.0
+
+            tx1 = base_tx - half_sep * sin_a
+            ty1 = base_ty - half_sep * cos_a
+
+            tx2 = base_tx + half_sep * sin_a
+            ty2 = base_ty + half_sep * cos_a
+
+            draw_line(lines[0], tx1, ty1)
+            draw_line(lines[1], tx2, ty2)
 
 
 # =============================================================================
@@ -1630,14 +1713,19 @@ class LowerDisplay:
         TRANSFER slot wins over language (transfer-info is dual-language —
         renders identically regardless of upper's KANJI/FURIGANA/ENGLISH).
         Other slots fall through to the existing language dispatch:
-        Japanese → full-route or 8-station per slot; ENGLISH → falls back
-        to japanese_display while EnglishDisplay is a stub.
+        Japanese → full-route or 8-station per slot; ENGLISH → dispatches
+        to english_display for full-route, falls back to japanese_eight_display for 8-station.
         """
+        # CONTRACT: _pick_renderer is a pure function of _current_slot + mode.
+        # See DISPLAY_E235.md § "View cycler (LowerDisplay)".
         if self._current_slot == self._SLOT_TRANSFER:
             return self.transfer_display
         if mode in (DisplayMode.KANJI, DisplayMode.FURIGANA):
             return self.japanese_eight_display if self._current_slot == self._SLOT_EIGHT else self.japanese_display
-        return self.japanese_display
+        # ENGLISH mode
+        if self._current_slot == self._SLOT_FULL:
+            return self.english_display
+        return self.japanese_eight_display
 
     def draw(self, current_time: float = 0.0) -> None:
         """Dispatch to the active slot's renderer.
