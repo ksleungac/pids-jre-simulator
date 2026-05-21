@@ -330,6 +330,7 @@ def draw_continuity_triangle(
 # Boilerplate route-map disclaimer — same text on both full-route and
 # 8-station views, anchored bottom-right. Source: real PIDS reference.
 ROUTE_DISCLAIMER = "のりかえ、待合せ時間は含まれません。電車により多少時間が異なります。一部区間では時間を表示しません。"
+EN_ROUTE_DISCLAIMER = "Transfer and waiting times are not included. Times may differ by train. In the part of journey, time is not shown."
 
 
 def draw_route_disclaimer(
@@ -338,9 +339,12 @@ def draw_route_disclaimer(
     right_x: int,
     bottom_y: int,
     color,
+    text: str | None = None,
 ) -> None:
     """Render the route-map disclaimer right- and bottom-anchored to (right_x, bottom_y)."""
-    img = font.render(ROUTE_DISCLAIMER, True, color)
+    if text is None:
+        text = ROUTE_DISCLAIMER
+    img = font.render(text, True, color)
     w, h = img.get_size()
     screen.blit(img, (right_x - w, bottom_y - h))
 

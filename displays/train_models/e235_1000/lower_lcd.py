@@ -49,6 +49,7 @@ from displays.utils import (
     draw_route_disclaimer,
     draw_continuity_arrow,
     draw_continuity_triangle,
+    EN_ROUTE_DISCLAIMER,
 )
 
 # =============================================================================
@@ -89,6 +90,14 @@ class JapaneseDisplay:
         self.font_time = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), FONT_TIME_SIZE)
         self.font_minute = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), FONT_STOPS_MINUTE_SIZE)
         self.font_disclaimer = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 10)
+        # Hardcoded bar-extension width computed from the canonical ShinGo font.
+        # EnglishDisplay overrides font_minute (Helvetica) but NOT this — the
+        # route-map bar extension must stay the same pixel width IRL.
+        self._minute_w, _ = self.font_minute.size("分")
+
+    @property
+    def disclaimer_text(self) -> str:
+        return "のりかえ、待合せ時間は含まれません。電車により多少時間が異なります。一部区間では時間を表示しません。"
 
     def _calculate_layout(self) -> None:
         """Calculate station display layout based on route length.
@@ -470,7 +479,10 @@ class JapaneseDisplay:
 
     def draw_minute_marker(self, local_i: int, gi: int, last_gi: int, ptr: int, l_y: int, dest_idx: int) -> None:
         marker_text = getattr(self, "minute_marker_text", "分")
-        minute_w, _ = self.font_minute.size(marker_text)
+        # Bar extension width is hardcoded to the Japanese "分" glyph width —
+        # never use marker_text (e.g. English "min") for this, or the route-map
+        # bar will extend further right in English than IRL.
+        minute_w = self._minute_w
         _, text_h = self.font_minute.size(marker_text)
         minute_y = int(l_y + (self.bar_height - text_h) / 2)
 
@@ -580,7 +592,7 @@ class JapaneseDisplay:
         # -----------------------------------------------
         # fmt: on
 
-        minute_w, _ = self.font_minute.size("分")  # Layout always uses fixed "分" width
+        minute_w = self._minute_w  # Layout always uses fixed "分" width
         last_gi = f_stops[-1][0] if f_stops else -1
 
         for gi, stop in f_stops:
@@ -713,7 +725,7 @@ class JapaneseDisplay:
         self.draw_ptr(f_stops, dest_idx, cursor_pos, curr_stop, state.at_station)
         self.draw_times(f_stops, dest_idx, cursor_pos, current_time, state.departure_time, state.is_last_pa, state.at_station, curr_stop)
 
-        draw_route_disclaimer(self.screen, self.font_disclaimer, S_WIDTH - 8, S_HEIGHT - 4, (0, 0, 0))
+        draw_route_disclaimer(self.screen, self.font_disclaimer, S_WIDTH - 8, S_HEIGHT - 4, (0, 0, 0), self.disclaimer_text)
 
     def hit_test(self, state, mx: int, my: int) -> Optional[int]:
         """Map LCD-local (mx, my) to a sim_index for click-to-jump.
@@ -846,6 +858,10 @@ class JapaneseEightStationDisplay:
 
         # Cached window from last show_stops call — read by hit_test.
         self._last_window: Optional[List[Tuple[int, Dict]]] = None
+
+    @property
+    def disclaimer_text(self) -> str:
+        return "のりかえ、待合せ時間は含まれません。電車により多少時間が異なります。一部区間では時間を表示しません。"
 
     # ------------------------------------------------------------------
     # Window
@@ -1405,7 +1421,7 @@ class JapaneseEightStationDisplay:
         self.draw_ptr(window, cursor_pos, curr_stop, state.at_station)
         self.draw_times(window, dest_idx, cursor_pos, current_time, state.departure_time, state.is_last_pa, state.at_station, curr_stop)
 
-        draw_route_disclaimer(self.screen, self.font_disclaimer, S_WIDTH - 8, S_HEIGHT - 4, (0, 0, 0))
+        draw_route_disclaimer(self.screen, self.font_disclaimer, S_WIDTH - 8, S_HEIGHT - 4, (0, 0, 0), self.disclaimer_text)
 
     def hit_test(self, state, mx: int, my: int) -> Optional[int]:
         """Map LCD-local (mx, my) to a sim_index for click-to-jump.
@@ -1454,6 +1470,7 @@ class EnglishDisplay(JapaneseDisplay):
         # 4x supersampled font to eliminate pixelation and jaggedness on rotated text
         self.font_stops_supersampled = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 17 * 4)
         self.font_minute = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), FONT_STOPS_MINUTE_SIZE)
+        self.font_disclaimer = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Medium.otf"), 9)
 
     @property
     def minute_marker_text(self) -> str:
@@ -1462,6 +1479,10 @@ class EnglishDisplay(JapaneseDisplay):
     @property
     def minute_marker_offset(self) -> float:
         return self.stops_w - 6
+
+    @property
+    def disclaimer_text(self) -> str:
+        return EN_ROUTE_DISCLAIMER
 
     def draw_station_name(self, stop, text_color: Tuple[int, int, int], x: int, y: int) -> None:
         # Get English name, fallback to Japanese name if not translated
