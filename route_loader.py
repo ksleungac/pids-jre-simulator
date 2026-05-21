@@ -52,7 +52,7 @@ def _merge_station_translations(route_data: dict, station_db: dict) -> None:
 
     Stop-level fields take precedence; only fill what isn't already set.
     """
-    for stop in route_data.get("stops", []):
+    for stop in route_data.get("pre_stops", []) + route_data.get("stops", []):
         name = stop.get("name", "")
         if not name or name not in station_db:
             continue
