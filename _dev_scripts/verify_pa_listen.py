@@ -108,29 +108,63 @@ def draw_seek_bar(
 
 
 class Player:
+    """IDLE → HEAD → GAP → TAIL → DONE."""
+
     def __init__(self) -> None:
         self.state = "IDLE"
-        self.start_tick = 0
+        self._head_stop_at = 0
+        self._gap_until = 0
+        self._tail_start = 0.0
+        self._seg_start_ms = 0
+        self._path: Path | None = None
 
-    def begin(self, path: Path) -> None:
+    def begin(self, path: Path, duration: float = 0.0) -> None:
         pygame.mixer.music.stop()
         pygame.mixer.music.unload()
         pygame.mixer.music.load(str(path))
         pygame.mixer.music.play()
-        self.start_tick = pygame.time.get_ticks()
-        self.state = "PLAYING"
+        self._path = path
+        self._tail_start = max(0.0, duration - PREVIEW_DURATION)
+        now = pygame.time.get_ticks()
+        self._head_stop_at = now + int(PREVIEW_DURATION * 1000)
+        self._seg_start_ms = now
+        self.state = "HEAD"
 
     def position(self) -> float | None:
-        if self.state == "PLAYING":
-            return (pygame.time.get_ticks() - self.start_tick) / 1000.0
+        now = pygame.time.get_ticks()
+        if self.state == "HEAD":
+            return (now - self._seg_start_ms) / 1000.0
+        if self.state == "TAIL":
+            return self._tail_start + (now - self._seg_start_ms) / 1000.0
+        if self.state == "GAP":
+            return PREVIEW_DURATION
         return None
 
     def tick(self) -> None:
-        if self.state == "PLAYING":
+        now = pygame.time.get_ticks()
+        if self.state == "HEAD":
             if not pygame.mixer.music.get_busy():
-                self.state = "DONE"
-            elif (pygame.time.get_ticks() - self.start_tick) / 1000.0 >= PREVIEW_DURATION:
+                self.state = "GAP" if self._tail_start > 0 else "DONE"
+            elif now >= self._head_stop_at:
                 pygame.mixer.music.fadeout(FADE_MS)
+                self._gap_until = now + FADE_MS + 300
+                self.state = "GAP"
+        elif self.state == "GAP":
+            if now >= self._gap_until and self._tail_start > 0:
+                assert self._path is not None
+                pygame.mixer.music.stop()
+                pygame.mixer.music.unload()
+                pygame.mixer.music.load(str(self._path))
+                try:
+                    pygame.mixer.music.play(start=self._tail_start)
+                except pygame.error:
+                    pygame.mixer.music.play()
+                self._seg_start_ms = pygame.time.get_ticks()
+                self.state = "TAIL"
+            elif now >= self._gap_until:
+                self.state = "DONE"
+        elif self.state == "TAIL":
+            if not pygame.mixer.music.get_busy():
                 self.state = "DONE"
 
     def stop(self) -> None:
@@ -227,7 +261,7 @@ def main() -> int:
     edit_mode = False
     edit_buffer = ""
 
-    player.begin(items[idx]["path"])
+    player.begin(items[idx]["path"], items[idx].get("duration", 0.0))
 
     btn_w, btn_h = 150, 56
     detail_x = LIST_W + 40
@@ -249,7 +283,7 @@ def main() -> int:
             list_scroll = idx
         elif idx >= list_scroll + visible_rows:
             list_scroll = idx - visible_rows + 1
-        player.begin(items[idx]["path"])
+        player.begin(items[idx]["path"], items[idx].get("duration", 0.0))
 
     def record(verdict: str) -> None:
         pa = items[idx]["pa"]
@@ -328,7 +362,7 @@ def main() -> int:
                         if idx + 1 < len(items):
                             jump_to(idx + 1)
                     elif ev.key == pygame.K_r:
-                        player.begin(items[idx]["path"])
+                        player.begin(items[idx]["path"], items[idx].get("duration", 0.0))
                     elif ev.key == pygame.K_UP:
                         jump_to(idx - 1)
                     elif ev.key == pygame.K_DOWN:
@@ -356,7 +390,7 @@ def main() -> int:
                         elif fail_rect.collidepoint(ev.pos):
                             record("FAIL")
                         elif replay_rect.collidepoint(ev.pos):
-                            player.begin(items[idx]["path"])
+                            player.begin(items[idx]["path"], items[idx].get("duration", 0.0))
 
         player.tick()
         item = items[idx]
@@ -434,11 +468,13 @@ def main() -> int:
                 screen.blit(placeholder, (note_rect.x + 4, note_rect.y + 2))
 
         phase_label = {
-            "PLAYING": f"playing  [0 → {PREVIEW_DURATION:.0f}s]",
+            "HEAD": f"playing head  [0 → {PREVIEW_DURATION:.0f}s]",
+            "GAP": "head done — loading tail...",
+            "TAIL": f"playing tail  [{PREVIEW_DURATION:.0f}s from end]",
             "DONE": "playback done — verdict?",
             "IDLE": "",
         }.get(player.state, "")
-        phase_color = ACCENT if player.state == "PLAYING" else DIM
+        phase_color = ACCENT if player.state in ("HEAD", "TAIL") else DIM
         phase = font_h2.render(phase_label, True, phase_color)
         screen.blit(phase, (detail_x, 160))
 

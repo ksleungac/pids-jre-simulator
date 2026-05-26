@@ -238,6 +238,20 @@ uv run python _dev_scripts/trim_pa_silence.py audio/<line>/<diagram>/pa
 - **Idempotent** on already-trimmed files — onset is detected, gap ≤ TARGET → skip.
 - **Noisy-source recordings** (flat hum at -50 to -45 dB) — the onset detector sees the flat profile vs. the sharp voice attack and trims correctly. The old -40 dB gate saw the hum as "content" and skipped.
 
+#### Step 7.3 — Trim-amount summary
+
+After trimming, parse the output and present files sorted by most-trimmed → least. User needs to see which files had the most silence removed to prioritize by-ear verification. Format:
+
+```
+Top trimmed (lead removed):
+  18       2220ms
+  22       2170ms
+  36       1950ms
+  ...
+```
+
+Construct by extracting `trim_lead Xms` from each line, sort descending, show all (or top ~12 if >30 files).
+
 #### Step 7.5 — Final validate
 
 ```bash
@@ -252,9 +266,11 @@ Fast -40 dB gate after trimming. Expect 0 flags on low-noise files; a few flags 
 uv run python _dev_scripts/verify_pa_listen.py audio/<line>/<diagram>
 ```
 
-Plays first 3s of each PA segment. PASS/FAIL per file, notes editable. Verdicts persist to `audio_src/<line>/<diagram>/pa_verify_results.json`. Includes both `pa` and `pa_at_station` entries.
+Plays first 3s of each PA segment (head), then last 3s before EOF (tail) — sequential auto-playback so you hear both ends. Seeks via `pygame.mixer.music.play(start=offset)` (same mechanism as STA verifier). PASS/FAIL per file, notes editable. Verdicts persist to `audio_src/<line>/<diagram>/pa_verify_results.json`. Includes both `pa` and `pa_at_station` entries.
 
 Keys: P pass  F fail  R replay  E edit note  ↑↓ navigate  Q/ESC quit
+
+**IMPORTANT: do not launch this from bash tool — pygame audio mixer won't reach the user's speakers.** Generate the `--only` filter from NOT_REVIEWED entries and present it; user runs it themselves.
 
 ## Conventions
 
