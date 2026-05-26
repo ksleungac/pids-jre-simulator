@@ -9,6 +9,15 @@
             "command": "input=$(cat); case \"$input\" in *CLAUDE_COMMIT_VIA_SKILL=1*) exit 0 ;; *\"git commit\"*) printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Direct git commit blocked: this project requires the /commit skill (commit-hygiene gate that runs file-classification, splits unrelated changes, and surfaces the session-recap pre-flight). Run /commit. If you are already inside the /commit skill flow, prepend CLAUDE_COMMIT_VIA_SKILL=1 to the git commit call as the bypass marker.\"}}' ;; *) exit 0 ;; esac"
           }
         ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run _dev_scripts/edit_nudge_hook.py 2>/dev/null || exit 0"
+          }
+        ]
       }
     ],
     "PostToolUse": [

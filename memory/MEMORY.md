@@ -4,6 +4,7 @@ Long-term curated memories. One-line pointers — daily logs hold the detail.
 
 ---
 
+- [2026-05-26 nudge](2026-05-26.md) — PreToolUse(Edit) context nudge hook: one-liner reminders for display renderers/route_loader/route.json; dual-ROI framing (bug-prevention + token-savings) codified in conventions.md sensor tiers
 - [2026-05-26 keihin](2026-05-26.md) — keihin/1275A PA trim: 59 files lead-trimmed (onset 0.22–2.35s), 58+1 verified PASS; verify_pa_listen head+tail playback via `play(start=...)` seek (STA pattern); pa-make skill +2 steps (trim-amount summary, "don't bash-launch GUI audio tools")
 - [2026-05-26 sensors](2026-05-26.md) — Sensor buildout: `_*/` import ban + `.ttf` ban (pre-commit), `check_deps.py` (build gate), `check_harness.py` (session-init), `stale_ref_hook.py` (PostToolUse Edit); `/build` skill 6→3 steps; sensor tiers codified in `conventions.md § Tooling`
 - [2026-05-26 data](2026-05-26.md) — PA silence cleaning: voice-onset detection replaces -40dB gate (noise_floor+12dB+attack-slope), `trim_pa_silence.py` + `verify_pa_listen.py` shipped; tokaido/1865E 42/42 trimmed + by-ear verified; pa-make skill Step 7 rewritten
