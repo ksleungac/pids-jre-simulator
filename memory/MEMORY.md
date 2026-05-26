@@ -4,6 +4,7 @@ Long-term curated memories. One-line pointers — daily logs hold the detail.
 
 ---
 
+- [2026-05-26 data](2026-05-26.md) — PA silence cleaning: voice-onset detection replaces -40dB gate (noise_floor+12dB+attack-slope), `trim_pa_silence.py` + `verify_pa_listen.py` shipped; tokaido/1865E 42/42 trimmed + by-ear verified; pa-make skill Step 7 rewritten
 - [2026-05-26 PM](2026-05-26.md) — Harness reduction cont'd: session-recap compressed (278→148), `sweep_todo.py` + `session_init.py` scripts for pre-digested init (3-4 Reads → 1 Bash, MEMORY.md truncated to last 10); hook ideas #3-5 parked pending OpenCode compat
 - [2026-05-26](2026-05-26.md) — Harness reduction: preloaded rules compression (critical_lessons 277→91, principles 422→308, CLAUDE.md 216→170), PostToolUse commit-classification hook, distill-memory skill deleted; new principle sub-bullet on token-cost asymmetry (preloaded=compress, on-demand=rationale OK, mechanical=hooks)
 - [2026-05-21 late](2026-05-21.md) — EnglishDisplay disclaimer font HelveticaNeue-Roman → Medium; English mode verified clean on sobu/1217F (disclaimer text + continuity chevrons all correct)
