@@ -12,7 +12,7 @@ triggers:
 
 Capture **what was learned this session** and **codify synchronously** into canonical home. Daily log captures narrative continuity (what happened + why) for next-session pickup; **rules / learnings / preferences live in canonical home, written this session, not deferred.**
 
-**No log-only / promote-candidate intermediate state.** Every learning, correction, or preference either lands in canonical home this recap (with dedup-by-re-read) or omitted entirely. Defer-and-distill is gone — `/distill-memory` becomes safety-net audit, not primary route.
+**No log-only / promote-candidate intermediate state.** Every learning, correction, or preference either lands in canonical home this recap (with dedup-by-re-read) or omitted entirely. Codify-or-omit; no deferred middle bucket.
 
 Two operations:
 - **Codify** — write rule/fact to canonical home (`principles.md` / `conventions.md` / `CLAUDE.md` / domain doc / inline `# CONTRACT:` / skill).
@@ -180,7 +180,7 @@ Preloaded files (`CLAUDE.md`, `.claude/rules/*`) hold what humans keep in their 
    - **Both-shaped** (correction has BOTH canonical content AND a behavioral binding about how to use it) → save in BOTH homes. Canonical content → domain doc (read on demand); behavioral binding → `principles.md` / `conventions.md` (preloaded every session). A rule that lives only in a domain doc fires only when claude opens the doc. Concrete (2026-04-30 incident): "for autodriver discussions use Layer 1/2/3 names + arrow flow + don't redesign" → AUTO_INPUT.md gets the canonical names + arrows AND conventions.md gets the binding rule.
    - **Passing remark with no rule shape** → OMIT. No log-only bucket. The daily log narrates the session, not the preferences ledger.
 
-   **When in doubt, classify rule-shaped, not omit.** Correction = rule-shaped if violating it would cause same mistake in any future session on this project — even without explicit "always" wording. Cost asymmetry: over-promotion = bloat (auditable via `/distill-memory`); under-promotion = recurrence (paid by user, who has named it costly: "same thing happens 2 times are frustrating enough already"). User's Step 2 review = safety net for false-positive promotions.
+   **When in doubt, classify rule-shaped, not omit.** Correction = rule-shaped if violating it would cause same mistake in any future session on this project — even without explicit "always" wording. Cost asymmetry: over-promotion = bloat (auditable via `/distill-rules`); under-promotion = recurrence (paid by user). User's Step 2 review = safety net for false-positive promotions.
 
 2. **Mandatory dedup-by-re-read before any write.** Before writing to ANY target file: re-read in full, search for overlapping entries by topic/wording, merge in place if overlap exists, write new entry only if no overlap. Cached-impression dedup forbidden — that failure mode documented (claude operating from memory of what file says vs. what it actually says). One extra file read = trivial; duplicate-rule drift = high cost.
 

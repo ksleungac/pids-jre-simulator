@@ -1,6 +1,6 @@
 ---
 name: distill-rules
-description: Periodic audit of the rules corpus (currently principles.md only). Sibling to /distill-docs — same shape (discussion-first, item-by-item, EDIT-CONTRACT-gated) but with restructure + rephrase moves allowed because rule-shape evolution IS the work for rules corpus, not a drift risk. Scan for accumulated bloat (recurrence lists, sibling cross-refs, connective tissue, manufactured compounds, nested sub-rules with own incident, misplaced how-to-apply bullets, multi-paragraph incident traces).
+description: Periodic audit of the rules corpus (principles.md, conventions.md, critical_lessons.md). Scan for accumulated bloat — recurrence lists, sibling cross-refs, connective tissue, nested sub-rules, multi-paragraph incident traces. Discussion-first, item-by-item. Restructure + rephrase allowed.
 triggers:
   - /distill-rules
   - distill rules
@@ -14,26 +14,21 @@ triggers:
 
 ## Purpose
 
-The rules corpus (`principles.md`) accumulates bloat differently from domain docs. Each session that triggers a recurrence of an existing principle appends a "Recurred YYYY-MM-DD" note; sibling cross-refs accumulate as each new entry explains itself against prior ones; sub-rules nest inside parent how-to-apply bullets when they share a domain; multi-paragraph incident narratives sit where one-line examples would suffice.
+The rules corpus (`.claude/rules/`) accumulates bloat: recurrence notes, sibling cross-refs, nested sub-rules, multi-paragraph incident narratives. Write-time EDIT-CONTRACTs catch most of it; this skill is the periodic sweep for what the gate misses.
 
-The write-time `EDIT-CONTRACT` block at the top of `principles.md` catches most of this at write-time. This skill is the periodic sweep that catches what the gate misses — cross-entry duplication, cumulative staleness, self-blindness when the author is too close to see their own bloat.
-
-Pair this skill with the EDIT-CONTRACT, the same way `/distill-docs` pairs with the per-doc EDIT-CONTRACTs in domain docs. With strong gates in place it runs roughly **every 1-2 months** (more often if drift accelerates after `/session-recap` has been writing heavily to `principles.md`).
-
-NOT for one-off tidying of a specific entry — just edit in place. NOT for general rule audit ("is this rule still relevant?") — that's a different conversation; this skill is bloat-shape removal + restructure under the EDIT-CONTRACT.
+Runs every 1-2 months. NOT for one-off tidying — just edit in place. NOT for "is this rule still relevant?" — that's a different conversation.
 
 ## Scope
 
 In scope:
-- `.claude/rules/principles.md`
+- `.claude/rules/principles.md` — EDIT-CONTRACT at top; entries are rule + why + how-to-apply
+- `.claude/rules/conventions.md` — reference-shaped entries (naming, style, tooling)
+- `.claude/rules/critical_lessons.md` — incident entries: rule + pattern + scope
 
 Out of scope:
-- `.claude/rules/conventions.md` — no `EDIT-CONTRACT` yet; folding into this skill is premature until accumulated bloat justifies it.
-- `.claude/rules/critical_lessons.md` — same; entries are heavier-shape (each is a labeled incident with explicit "The Rule" / "The Pattern" structure) and bloat-pattern set differs.
 - `.claude/rules/redlines.md` — small + stable.
-- Domain docs (DISPLAY.md, DATA_FORMAT.md, AUTO_INPUT.md, DISPLAY_E235.md) — handled by `/distill-docs`.
-- `.claude/skills/*/SKILL.md` — updated proactively per `feedback_proactive_skill_updates`.
-- `CLAUDE.md`, `memory/*.md`, `TODO.md` — out of scope.
+- Domain docs — handled by `/distill-docs`.
+- `CLAUDE.md`, skills, `memory/*.md`, `TODO.md`.
 
 ## When to run
 
@@ -43,9 +38,9 @@ Out of scope:
 
 ## Process
 
-### Step 1 — Load `principles.md` + record baseline
+### Step 1 — Load target files + record baseline
 
-Capture:
+Load all in-scope files under `.claude/rules/`. Capture per file:
 - Total line count
 - Entry count per `## Section` heading
 - Entries with **nested sub-bullets** that look like rules-in-disguise (own trigger / own incident / own how-to-apply paragraph)
@@ -190,18 +185,17 @@ Recognize these and don't flag them:
 4. **Restructure + rephrase ARE allowed** (unlike `/distill-docs`). Rule-shape evolution IS the work for rules corpus — folding overlapping entries, promoting nested sub-rules to peers, compressing multi-paragraph Why to one-line examples. The discipline difference: domain docs describe stable code (restructuring risks doc/code drift); rules corpus describes evolving judgment shapes (restructuring is the audit's purpose).
 5. **Promotion vs folding rule.** Sub-rule has own trigger + own incident → promote to peer. Sub-bullet is a domain instance of parent (same trigger, different scope) → fold into parent as a sub-bullet.
 6. **EDIT-CONTRACT-first sequencing.** If the contract is missing or doesn't cover the patterns this pass surfaced, write/update the contract first as the gate. The contract gates the trim pass itself, not just future drift.
-7. **Don't expand scope mid-pass.** Scope is `principles.md` only. If you notice bloat in `conventions.md` / `critical_lessons.md` / a skill / an inline contract during the pass, note it in the wrap report; don't pull it into the current proposal.
+7. **Don't expand scope mid-pass.** Scope is `.claude/rules/` files only. If you notice bloat in a skill / domain doc / inline contract during the pass, note it in the wrap report; don't pull it into the current proposal.
 8. **Don't auto-commit.** User runs `/commit` themselves.
 
 ## Scope
 
-- **Does** scan `principles.md` for the named bloat shapes against the EDIT-CONTRACT refuse-list.
-- **Does** verify each finding via daily-log read / canonical-home check / sibling-rule existence check.
-- **Does** propose trims, promotions, folds, migrations item-by-item, ask before each.
-- **Does** run `/third-man` zero-context validation on non-trivial shape changes.
-- **Does** apply EDIT-CONTRACT updates first if the contract is missing or stale.
-- **Does** record before/after baselines (line count + entry count + section structure).
+- **Does** scan all in-scope rules files for bloat shapes.
+- **Does** verify each finding against primary source.
+- **Does** propose changes item-by-item, wait for approval.
+- **Does** apply EDIT-CONTRACT updates first if missing or stale.
+- **Does** record before/after baselines.
 - **Does not** autofix without discussion.
-- **Does not** restructure beyond what was item-approved (no "while I'm here, let me reorganize sections").
-- **Does not** audit `conventions.md` / `critical_lessons.md` / domain docs / skills / CLAUDE.md / memory — out of scope.
+- **Does not** restructure beyond what was approved.
+- **Does not** touch domain docs, CLAUDE.md, skills, memory.
 - **Does not** auto-commit.

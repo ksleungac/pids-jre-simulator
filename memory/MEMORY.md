@@ -4,6 +4,7 @@ Long-term curated memories. One-line pointers — daily logs hold the detail.
 
 ---
 
+- [2026-05-26](2026-05-26.md) — Harness reduction: preloaded rules compression (critical_lessons 277→91, principles 422→308, CLAUDE.md 216→170), PostToolUse commit-classification hook, distill-memory skill deleted; new principle sub-bullet on token-cost asymmetry (preloaded=compress, on-demand=rationale OK, mechanical=hooks)
 - [2026-05-21 late](2026-05-21.md) — EnglishDisplay disclaimer font HelveticaNeue-Roman → Medium; English mode verified clean on sobu/1217F (disclaimer text + continuity chevrons all correct)
 - [2026-05-21](2026-05-21.md) — Ralph review+fix: EnglishDisplay docstring, draw_minute_marker marker_text fix, ocr.py argmin guard; two-cycle clean
 - [2026-05-20](2026-05-20.md) — code_3 edge cases checked and closed; swapped setup-screen badges for authentic Wikipedia PNG line icons; implemented full mouse interactions (hover, wheel scroll, click-to-confirm) on the route selection setup screen, and ran two rigorous review+fix cycles using subagents to eliminate duplicate code and 100% CPU spinning.

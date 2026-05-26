@@ -11,12 +11,13 @@
         ]
       }
     ],
-    "UserPromptSubmit": [
+    "PostToolUse": [
       {
+        "matcher": "Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
-            "command": "printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"Drop articles/filler/pleasantries/hedging. Fragments OK. Plain over complex. Cut self-justifying connective tissue.\\nMaterial-consequence/security/clarification: write normal. Casual/chatty/pushback register ≠ carve-out.\"}}'"
+            "command": "input=$(cat); echo \"$input\" | grep -q 'git status' && uv run _dev_scripts/classify_commit.py --hook 2>/dev/null || exit 0"
           }
         ]
       }

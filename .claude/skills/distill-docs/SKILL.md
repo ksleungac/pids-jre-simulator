@@ -121,7 +121,7 @@ Baseline (current → after-proposal):
 ### Total proposed removal: ~<line-count> lines across <file-count> files
 ```
 
-Wait for user decisions per finding. Don't apply until the user signs off, item by item — same discipline as `/distill-memory` and `/vibe-check`. Batch-approval within one shape category is fine if the user signals it ("remove all history notes").
+Wait for user decisions per finding. Don't apply until the user signs off, item by item — same discipline as `/distill-rules` and `/vibe-check`. Batch-approval within one shape category is fine if the user signals it ("remove all history notes").
 
 ### Step 5 — Apply approved changes
 
