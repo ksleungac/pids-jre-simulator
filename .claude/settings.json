@@ -20,6 +20,15 @@
             "command": "input=$(cat); echo \"$input\" | grep -q 'git status' && uv run _dev_scripts/classify_commit.py --hook 2>/dev/null || exit 0"
           }
         ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run _dev_scripts/stale_ref_hook.py 2>/dev/null || exit 0"
+          }
+        ]
       }
     ]
   }

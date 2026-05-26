@@ -62,6 +62,16 @@ def main():
         print("=== Memory index — not found ===\n")
 
     try:
+        from check_harness import main as harness_check
+
+        result = harness_check()
+        if result != 0:
+            print("=== Harness integrity — BROKEN (see above) ===\n")
+        # clean pass is already printed by check_harness
+    except Exception as e:
+        print(f"=== Harness integrity check failed: {e} ===\n")
+
+    try:
         from sweep_todo import get_recent_commits, keyword_match, parse_todo
 
         sections = parse_todo()
