@@ -6,9 +6,7 @@ Japanese Train PA (Public Address) Simulator — pygame-based app simulating sta
 
 Before doing anything else, every session:
 
-1. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context.
-2. Read [memory/MEMORY.md](memory/MEMORY.md) — long-term memory index.
-3. Skim [TODO.md](TODO.md) — centralized backlog grouped by area.
+Run `uv run _dev_scripts/session_init.py` — dumps today's + yesterday's memory, MEMORY.md index, and TODO sweep in one shot. Read the output instead of opening files individually.
 
 `principles.md`, `conventions.md`, `critical_lessons.md`, `redlines.md` auto-load as memory files — already in context.
 
