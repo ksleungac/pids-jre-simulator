@@ -845,6 +845,9 @@ class JapaneseEightStationDisplay:
         self.font_badge_prefix = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 8)
         self.font_badge_num = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 11)
         self.font_disclaimer = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 10)
+        # Hardcoded bar-extension width from the canonical ShinGo "分" glyph.
+        # Subclasses override font_minute but NOT this — bar width stays fixed.
+        self._minute_w, _ = self.font_minute.size("分")
 
         # Derived band geometry (top_y of each row)
         _, t_h = self.font_stops.size("東")
@@ -862,6 +865,10 @@ class JapaneseEightStationDisplay:
     @property
     def disclaimer_text(self) -> str:
         return "のりかえ、待合せ時間は含まれません。電車により多少時間が異なります。一部区間では時間を表示しません。"
+
+    def _label_text(self, stop: Dict) -> str:
+        """Return the station name text for labels. Subclasses override for English."""
+        return stop.get("name", "")
 
     # ------------------------------------------------------------------
     # Window
@@ -1233,8 +1240,10 @@ class JapaneseEightStationDisplay:
 
                 # 分-marker — line-end (rightmost cell) or mid-window dest
                 if local_i == len(window) - 1 or gi == dest_idx:
-                    minute_w, minute_h = self.font_minute.size("分")
-                    minute_y = int(y + (self.bar_height - minute_h) / 2)
+                    marker_text = getattr(self, "minute_marker_text", "分")
+                    minute_w = self._minute_w
+                    _, text_h = self.font_minute.size(marker_text)
+                    minute_y = int(y + (self.bar_height - text_h) / 2)
 
                     pygame.draw.rect(
                         self.screen,
@@ -1247,8 +1256,9 @@ class JapaneseEightStationDisplay:
                         pygame.Rect(int(x + ptr + self.stops_w + minute_w - 3), int(y), 3, self.bar_height),
                     )
 
-                    minute_img = self.font_minute.render("分", True, WHITE_BG)
-                    self.screen.blit(minute_img, (int(x + ptr + self.stops_w * 0.85), minute_y))
+                    minute_img = self.font_minute.render(marker_text, True, WHITE_BG)
+                    offset = getattr(self, "minute_marker_offset", self.stops_w * 0.85)
+                    self.screen.blit(minute_img, (int(x + ptr + offset), minute_y))
 
     # ------------------------------------------------------------------
     # Continuation triangle (rightmost-cell-is-not-terminal indicator)
@@ -1290,8 +1300,8 @@ class JapaneseEightStationDisplay:
         # fmt: on
 
         bar_right = self.x + self.cells * self.stops_w
-        minute_w, _ = self.font_minute.size("分")
-        # 分 marker extends `minute_w` past bar_right (see draw_times).
+        minute_w = self._minute_w
+        # marker extends `minute_w` past bar_right (see draw_times).
         tip_left_x = bar_right + minute_w + triangle_pad_x
         cy = self.bar_y + self.bar_height // 2
         points = [
@@ -1411,7 +1421,7 @@ class JapaneseEightStationDisplay:
 
             # Vertical kanji label — black on active range, dim grey otherwise
             label_color = (0, 0, 0) if is_active else INACTIVE_COLOR
-            self._draw_label(stop.get("name", ""), cell_x, label_color)
+            self._draw_label(self._label_text(stop), cell_x, label_color)
 
             # Per-cell station code badge
             self._draw_badge(stop, cell_x)
@@ -1552,6 +1562,80 @@ class EnglishDisplay(JapaneseDisplay):
             draw_line(lines[1], tx2, ty2)
 
 
+class EnglishEightStationDisplay(JapaneseEightStationDisplay):
+    """Lower LCD English 8-station zoomed-in view for E235-1000.
+
+    Inherits from JapaneseEightStationDisplay and overrides fonts, station
+    label drawing (45° rotated Romaji), disclaimer, and minute marker.
+    """
+
+    def __init__(self, screen, route_data, stops):
+        super().__init__(screen, route_data, stops)
+        self.font_stops = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 22)
+        self.font_stops_supersampled = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 22 * 4)
+        self.font_minute = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), FONT_STOPS_MINUTE_SIZE + 3)
+        self.font_disclaimer = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Medium.otf"), 9)
+
+    @property
+    def minute_marker_text(self) -> str:
+        return "min"
+
+    @property
+    def minute_marker_offset(self) -> float:
+        return self.stops_w - 6
+
+    @property
+    def disclaimer_text(self) -> str:
+        return EN_ROUTE_DISCLAIMER
+
+    def _label_text(self, stop: Dict) -> str:
+        return stop.get("english", stop.get("name", ""))
+
+    def _draw_label(self, text: str, cell_x: int, color: Tuple[int, int, int]) -> None:
+        """Render 45° counter-clockwise rotated Romaji in the label band."""
+        if not text:
+            return
+
+        rad = math.radians(45.0)
+        cos_a, sin_a = math.cos(rad), math.sin(rad)
+        scale_factor = 4.0
+
+        bottom_y = self.label_top_y + self.label_box_h
+        base_tx = cell_x + self.stops_w // 2
+        base_ty = self.bar_y - 5  # 5px above the colored bar
+
+        def draw_line(st: str, tx: float, ty: float):
+            text_surf = self.font_stops_supersampled.render(st, True, color)
+            W, H = text_surf.get_size()
+            max_w_super = 144.0 * scale_factor
+            if W > max_w_super:
+                text_surf = pygame.transform.smoothscale(text_surf, (int(max_w_super), H))
+                W, H = text_surf.get_size()
+            rotated_surf = pygame.transform.rotozoom(text_surf, 45.0, 1.0 / scale_factor)
+            W_rot, H_rot = rotated_surf.get_size()
+            dx, dy = -W / (2.0 * scale_factor), H / (2.0 * scale_factor)
+            dx_rot = dx * cos_a + dy * sin_a
+            dy_rot = -dx * sin_a + dy * cos_a
+            blit_x = int(tx - (W_rot / 2.0 + dx_rot))
+            blit_y = int(ty - (H_rot / 2.0 + dy_rot))
+            self.screen.blit(rotated_surf, (blit_x, blit_y))
+
+        # Normalize escaped newlines from JSON
+        text = text.replace("\\n", "\n")
+        lines = text.split("\n")
+
+        if len(lines) == 1:
+            draw_line(lines[0], base_tx, base_ty)
+        else:
+            half_sep = 13.0 / 2.0
+            tx1 = base_tx - half_sep * sin_a
+            ty1 = base_ty - half_sep * cos_a
+            tx2 = base_tx + half_sep * sin_a
+            ty2 = base_ty + half_sep * cos_a
+            draw_line(lines[0], tx1, ty1)
+            draw_line(lines[1], tx2, ty2)
+
+
 # =============================================================================
 # Lower Display Manager
 # =============================================================================
@@ -1595,6 +1679,7 @@ class LowerDisplay:
         self.japanese_display = JapaneseDisplay(screen, route_data, stops)
         self.japanese_eight_display = JapaneseEightStationDisplay(screen, route_data, stops)
         self.english_display = EnglishDisplay(screen, route_data, stops)
+        self.english_eight_display = EnglishEightStationDisplay(screen, route_data, stops)
         self.transfer_display = TransferInfoDisplay(screen, route_data, stops)
 
         self.mode_cycler = mode_cycler
@@ -1735,7 +1820,7 @@ class LowerDisplay:
         renders identically regardless of upper's KANJI/FURIGANA/ENGLISH).
         Other slots fall through to the existing language dispatch:
         Japanese → full-route or 8-station per slot; ENGLISH → dispatches
-        to english_display for full-route, falls back to japanese_eight_display for 8-station.
+        to english_display for full-route, english_eight_display for 8-station.
         """
         # CONTRACT: _pick_renderer is a pure function of _current_slot + mode.
         # See DISPLAY_E235.md § "View cycler (LowerDisplay)".
@@ -1746,7 +1831,7 @@ class LowerDisplay:
         # ENGLISH mode
         if self._current_slot == self._SLOT_FULL:
             return self.english_display
-        return self.japanese_eight_display
+        return self.english_eight_display
 
     def draw(self, current_time: float = 0.0) -> None:
         """Dispatch to the active slot's renderer.

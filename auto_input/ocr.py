@@ -631,25 +631,18 @@ def read_speed_limit(cell: np.ndarray, templates: Templates) -> tuple[int | None
     dilated_t = _get_dilated_dark_templates(templates)
 
     argmin_attempt = _try_read_speed_limit(cell, "argmin", red_t, dilated_t)
-    if argmin_attempt is not None:
-        a_val, a_raw, a_score = argmin_attempt
-        if a_val is not None and a_score >= ARGMIN_TRUST_SCORE:
-            return a_val, a_raw, a_score
+    a_val, a_raw, a_score = argmin_attempt
+    if a_val is not None and a_score >= ARGMIN_TRUST_SCORE:
+        return a_val, a_raw, a_score
 
     eqw_attempt = _try_read_speed_limit(cell, "equal_width", red_t, dilated_t)
-    if eqw_attempt is not None:
-        e_val, e_raw, e_score = eqw_attempt
-        if e_val is not None:
-            return e_val, e_raw, e_score
+    e_val, e_raw, e_score = eqw_attempt
+    if e_val is not None:
+        return e_val, e_raw, e_score
 
-    # Neither path produced a confident grammar-valid read. Prefer argmin's grammar-
-    # valid (low-score) result over its raw fallback; fall through to equal_width's
-    # raw read if argmin couldn't segment at all.
-    if argmin_attempt is not None:
-        return argmin_attempt
-    if eqw_attempt is not None:
-        return eqw_attempt
-    return None, "", 1.0
+    # Neither path produced a confident grammar-valid read. Fall back to argmin's
+    # result (grammar-valid at low score, or raw fallback).
+    return argmin_attempt
 
 
 def _try_read_speed_limit(
@@ -657,10 +650,9 @@ def _try_read_speed_limit(
     split_strategy: str,
     red_t: Templates,
     dilated_t: Templates,
-) -> tuple[int | None, str, float] | None:
-    """Single-strategy attempt at reading the speed-limit cell. Returns the same shape
-    as `read_speed_limit` (value, raw, min_score), or None if segmentation produced
-    nothing usable. Caller drives the 2-try retry."""
+) -> tuple[int | None, str, float]:
+    """Single-strategy attempt at reading the speed-limit cell.
+    Returns (value, raw, min_score). Caller drives the 2-try retry."""
     red, digit_bboxes = segment_red_digits(cell, split_strategy=split_strategy)
     band_top, band_bot = TEXT_BAND_Y
     band = red[band_top:band_bot]
