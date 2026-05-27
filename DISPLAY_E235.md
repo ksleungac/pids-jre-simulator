@@ -362,9 +362,9 @@ Drawn instead of the chevron when `curr_stop == 0`. Its `overhang` must equal `i
 
 Use `(stops_w - arrow_w) // 2` for true horizontal centering. The full-route's `stops_w * 0.3` constant is an approximation that's only ~1 px off true center for narrow `stops_w=42` cells but ~8 px off for the 8-station view's `stops_w=82` cells. Don't copy the magic number across.
 
-#### Continuity arrow scaffolding
+#### Continuity triangle (8-station view)
 
-`_draw_continuation_marker` is defined but **deliberately not called** from `show_stops`. The user has a known-buggy continuity-arrow helper in their full-route renderer; the 8-station version is parked here as scaffolding until the two implementations can be reconciled. `side_margin = 44` reserves the px the triangle will need when wired in. See the multi-line comment block above the method body for the wire-up instructions.
+When the route continues past the visible window, the last cell's bar extends into a right-pointing triangle (via `draw_continuity_triangle`). Drawn after `draw_times` so it extends past the 分 marker when present. Color matches the last cell's active/inactive state. No chevron arrows — just the triangle. The 分 marker's 3px white cap is suppressed on the last cell so the triangle attaches flush.
 
 #### Layout tuneable params
 

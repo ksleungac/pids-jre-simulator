@@ -815,8 +815,8 @@ class JapaneseEightStationDisplay:
         # --- Layout params (adjust freely) ---
         # Top of the lower-LCD region (just below upper LCD)
         self.top_y = UPPER_HEIGHT
-        # Side margin — reserves space at the bar's left and right ends for
-        # future continuity arrows (route-continues indicators).
+        # Side margin — reserves space at the bar's right end for the
+        # continuity triangle (route-continues indicator).
         self.side_margin = 44
         # Cell geometry — 8 cells distributed across the inner width.
         self.cells = min(self.VISIBLE_COUNT, len(self.display_stops))
@@ -1250,66 +1250,16 @@ class JapaneseEightStationDisplay:
                         self.color,
                         pygame.Rect(int(x + ptr + self.stops_w), int(y), minute_w, self.bar_height),
                     )
-                    pygame.draw.rect(
-                        self.screen,
-                        WHITE_BG,
-                        pygame.Rect(int(x + ptr + self.stops_w + minute_w - 3), int(y), 3, self.bar_height),
-                    )
+                    if local_i != len(window) - 1:
+                        pygame.draw.rect(
+                            self.screen,
+                            WHITE_BG,
+                            pygame.Rect(int(x + ptr + self.stops_w + minute_w - 3), int(y), 3, self.bar_height),
+                        )
 
                     minute_img = self.font_minute.render(marker_text, True, WHITE_BG)
                     offset = getattr(self, "minute_marker_offset", self.stops_w * 0.85)
                     self.screen.blit(minute_img, (int(x + ptr + offset), minute_y))
-
-    # ------------------------------------------------------------------
-    # Continuation triangle (rightmost-cell-is-not-terminal indicator)
-    # ------------------------------------------------------------------
-    # NOTE: deliberately NOT called from `show_stops` yet. The user has an
-    # existing continuity-arrow helper in their full-route renderer that's
-    # known-buggy; this 8-station version is parked here as scaffolding
-    # until that helper is reviewed and the two implementations can be
-    # reconciled. Wire `self._draw_continuation_marker(window)` at the end
-    # of `show_stops`'s Pass 2 (after `draw_times`) once the design is
-    # finalised. Side margin (`self.side_margin = 44`) reserves the px the
-    # triangle will need on the right-hand end of the bar.
-    #
-    # PRE_STOPS NOTE: when wiring this in, the early-return guard below
-    # currently compares against `len(self.stops)` (sim space). With pre_stops,
-    # `last_gi` comes from the window in DISPLAY space, so the comparison must
-    # be against `len(self.display_stops) - 1` instead — otherwise the marker
-    # silently never renders on pre_stops routes.
-
-    def _draw_continuation_marker(self, window: List[Tuple[int, Dict]]) -> None:
-        """Small right-pointing triangle past the 分 marker.
-
-        Drawn when the rightmost visible station is not the route's terminal —
-        signals "the route continues beyond this view." Colored in the route
-        color so it reads as a natural extension of the bar.
-        """
-        if not window:
-            return
-        last_gi = window[-1][0]
-        if last_gi >= len(self.stops) - 1:
-            return
-
-        # fmt: off
-        # --- Continuation marker params (adjust freely) ---
-        triangle_w = 8
-        triangle_pad_x = 4  # gap after the 分 marker
-        triangle_pad_y = 6  # vertical inset within bar height
-        # ---------------------------------------------------
-        # fmt: on
-
-        bar_right = self.x + self.cells * self.stops_w
-        minute_w = self._minute_w
-        # marker extends `minute_w` past bar_right (see draw_times).
-        tip_left_x = bar_right + minute_w + triangle_pad_x
-        cy = self.bar_y + self.bar_height // 2
-        points = [
-            (tip_left_x, self.bar_y + triangle_pad_y),
-            (tip_left_x + triangle_w, cy),
-            (tip_left_x, self.bar_y + self.bar_height - triangle_pad_y),
-        ]
-        draw_aapolygon(self.screen, self.color, points)
 
     # ------------------------------------------------------------------
     # Per-cell station code badge
@@ -1398,26 +1348,25 @@ class JapaneseEightStationDisplay:
         window_start = window[0][0] if window else 0
 
         # Pass 1: bars + labels + badges (per-cell rendering)
+        last_gi = window[-1][0] if window else -1
+        route_continues = last_gi < len(self.display_stops) - 1
+        # fmt: off
+        cont_tri_w = 12  # triangle tip width (matches full-route's draw_continuity_triangle default)
+        # fmt: on
+
         for gi, stop in window:
             local_i = gi - window_start
             cell_x = self.x + local_i * self.stops_w
             l_y = self.bar_y
 
             is_active = gi >= cursor_pos and gi <= dest_idx
+            bar_color = self.color if is_active else INACTIVE_COLOR
 
-            # Bar background
-            if is_active:
-                pygame.draw.rect(
-                    self.screen,
-                    self.color,
-                    pygame.Rect(cell_x, l_y, self.stops_w, self.bar_height),
-                )
-            else:
-                pygame.draw.rect(
-                    self.screen,
-                    INACTIVE_COLOR,
-                    pygame.Rect(cell_x, l_y, self.stops_w, self.bar_height),
-                )
+            pygame.draw.rect(
+                self.screen,
+                bar_color,
+                pygame.Rect(cell_x, l_y, self.stops_w, self.bar_height),
+            )
 
             # Vertical kanji label — black on active range, dim grey otherwise
             label_color = (0, 0, 0) if is_active else INACTIVE_COLOR
@@ -1430,6 +1379,22 @@ class JapaneseEightStationDisplay:
         self.draw_marks(window, dest_idx, cursor_pos, curr_stop)
         self.draw_ptr(window, cursor_pos, curr_stop, state.at_station)
         self.draw_times(window, dest_idx, cursor_pos, current_time, state.departure_time, state.is_last_pa, state.at_station, curr_stop)
+
+        # Continuity triangle — after draw_times so it extends past the 分 marker.
+        if route_continues:
+            last_cell_x = self.x + (last_gi - window_start) * self.stops_w
+            last_active = cursor_pos <= last_gi <= dest_idx
+            tri_color = self.color if last_active else INACTIVE_COLOR
+            has_minute = last_active and self.display_stops[last_gi].get("time") is not None
+            tri_x = last_cell_x + self.stops_w + (self._minute_w if has_minute else 0)
+            draw_continuity_triangle(
+                self.screen,
+                int(tri_x),
+                self.bar_y,
+                self.bar_height,
+                tri_color,
+                tri_w=cont_tri_w,
+            )
 
         draw_route_disclaimer(self.screen, self.font_disclaimer, S_WIDTH - 8, S_HEIGHT - 4, (0, 0, 0), self.disclaimer_text)
 
