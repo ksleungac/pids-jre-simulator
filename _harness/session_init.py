@@ -14,8 +14,9 @@ from pathlib import Path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-# Allow importing sibling modules
+# Allow importing sibling modules and _dev_scripts/ helpers (e.g. sweep_todo)
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "_dev_scripts"))
 
 
 def read_if_exists(path, label):
