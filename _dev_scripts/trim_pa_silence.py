@@ -1,7 +1,7 @@
-"""Trim PA lead/trail to ~80ms before/after voice, using onset detection.
+"""Trim PA lead silence to ~80ms before voice onset.
 
-Voice onset = first frame where amplitude exceeds noise_floor + 12dB
-AND delta over 30ms > 6dB (sharp attack, not flat noise).
+Voice onset detected by RMS amplitude with adaptive threshold + sustained-voice gate.
+Room hum transients are filtered out by requiring voice to persist for 200ms.
 
     uv run python _dev_scripts/trim_pa_silence.py audio/tokaido/1865E/pa
 """
@@ -11,6 +11,8 @@ from pathlib import Path
 import librosa, numpy as np
 
 TARGET_S = 0.080
+SUSTAINED_FRAMES = 20  # 200ms at 10ms hop
+SUSTAINED_RATIO = 0.7  # fraction of sustained window above threshold
 
 
 def _find_ffmpeg() -> str:
@@ -44,10 +46,38 @@ def _ffprobe_dur(path: Path) -> float:
 
 
 def detect_voice_onset(rms_db: np.ndarray, noise_floor: float) -> float:
-    """Return time (seconds) of voice onset, or 0.0."""
-    for i in range(3, len(rms_db)):
-        if rms_db[i] > noise_floor + 12 and (rms_db[i] - rms_db[i - 3]) > 6:
-            return round(i * 0.01, 3)
+    r"""Return time (seconds) of voice onset, or 0.0.
+
+    Two-stage:
+    1. Find candidate: RMS > noise_floor + threshold AND delta > min_slope over 30ms.
+    2. Sustained-voice gate: next 200ms must stay mostly above sustain_floor.
+       Transient room-hum spikes don't qualify — voice must persist.
+    """
+    if noise_floor > -40:
+        threshold_db = 14
+        min_slope = 7
+        sustain_margin = 10
+        sustain_ratio = 0.85
+    elif noise_floor > -50:
+        threshold_db = 12
+        min_slope = 6
+        sustain_margin = 8
+        sustain_ratio = 0.75
+    else:
+        threshold_db = 10
+        min_slope = 6
+        sustain_margin = 6
+        sustain_ratio = 0.70
+
+    threshold = noise_floor + threshold_db
+    sustain_floor = noise_floor + sustain_margin
+
+    for i in range(3, len(rms_db) - SUSTAINED_FRAMES):
+        if rms_db[i] > threshold and (rms_db[i] - rms_db[i - 3]) > min_slope:
+            end = i + SUSTAINED_FRAMES
+            above = sum(1 for j in range(i, end) if rms_db[j] > sustain_floor)
+            if above >= SUSTAINED_FRAMES * sustain_ratio:
+                return round(i * 0.01, 3)
     return 0.0
 
 

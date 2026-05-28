@@ -1,18 +1,28 @@
-"""Quick by-ear PA verifier.
+"""Quick by-ear PA verifier with manual start-trim controls.
 
-For each PA in a route, plays the first PREVIEW_DURATION seconds. Click/key PASS or
-FAIL per station. Persists verdicts to audio_src/<line>/<diagram>/pa_verify_results.json.
+For each PA in a route, plays the first PREVIEW_DURATION seconds (head→tail cycle).
+Click/key PASS or FAIL per station. Persists verdicts to
+audio_src/<line>/<diagram>/pa_verify_results.json.
 
     uv run python _dev_scripts/verify_pa_listen.py audio/tokaido/1865E
 
 Keys: P=Pass  F=Fail  R=Replay  E=Edit note  N=Next without verdict  Q/Esc=Quit
       ↑↓ navigate  Wheel=scroll sidebar
+      [/] adjust start-trim  T apply trim  Z reset trim
+      (hold Shift while adjusting for fine 0.01s steps)
+
+Interactive trim: drag the red marker on the seek bar (or use [/]) to set the cut
+point. R replays from the trim offset in continuous scrub mode (no 3s cycle) so you
+can hear exactly where voice starts. T commits the trim by lossless-cutting the mp3
+with ffmpeg.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -24,6 +34,7 @@ LIST_TOP = 60
 ROW_H = 26
 FADE_MS = 120
 PREVIEW_DURATION = 3.0
+TARGET_PAD = 0.08  # silence before voice onset after trim
 
 BG = (24, 24, 28)
 PANEL = (38, 38, 44)
@@ -38,6 +49,7 @@ FAIL_COLOR = (210, 70, 70)
 REPLAY_COLOR = (90, 120, 200)
 PLAYED_TINT = (60, 130, 90)
 UNTOUCHED_TINT = (60, 60, 70)
+TRIM_OVERLAY = (200, 60, 60)
 CURSOR = (255, 240, 100)
 
 
@@ -70,6 +82,7 @@ def draw_seek_bar(
     duration: float,
     position: float | None,
     font: pygame.font.Font,
+    trim_start: float = 0.0,
 ) -> None:
     if duration <= 0:
         return
@@ -77,19 +90,30 @@ def draw_seek_bar(
     def x_for(t: float) -> int:
         return rect.x + int(rect.w * (max(0.0, min(duration, t)) / duration))
 
-    # Played portion (tinted) up to position
+    head_end = min(PREVIEW_DURATION, duration)
+
+    # Base bar (untouched gray)
+    pygame.draw.rect(screen, UNTOUCHED_TINT, rect, border_radius=4)
+
+    # Head preview region (0 → PREVIEW_DURATION, offset by trim_start)
+    head_end_x = x_for(head_end)
+    if head_end_x > rect.x:
+        pygame.draw.rect(screen, PLAYED_TINT, (rect.x, rect.y, head_end_x - rect.x, rect.h))
+
+    # Played portion up to cursor (tinted on top)
     if position is not None and position > 0:
         pos_x = x_for(position)
         if pos_x > rect.x:
             pygame.draw.rect(screen, PLAYED_TINT, (rect.x, rect.y, pos_x - rect.x, rect.h))
 
-    # Base bar
-    pygame.draw.rect(screen, UNTOUCHED_TINT, rect, border_radius=4)
-    # Played tint again on top (for border-radius fill)
-    if position is not None and position > 0:
-        pos_x = x_for(position)
-        if pos_x > rect.x:
-            pygame.draw.rect(screen, PLAYED_TINT, (rect.x, rect.y, pos_x - rect.x, rect.h))
+    # Pending trim overlay: red hatch over [0, trim_start] — what will be cut
+    if trim_start > 0:
+        ts_x = x_for(trim_start)
+        s = pygame.Surface((ts_x - rect.x, rect.h), pygame.SRCALPHA)
+        s.fill((*TRIM_OVERLAY, 140))
+        screen.blit(s, (rect.x, rect.y))
+        # Red marker line at trim-start
+        pygame.draw.line(screen, TRIM_OVERLAY, (ts_x, rect.y - 8), (ts_x, rect.bottom + 8), 2)
 
     pygame.draw.rect(screen, (90, 90, 100), rect, width=1, border_radius=4)
 
@@ -108,7 +132,7 @@ def draw_seek_bar(
 
 
 class Player:
-    """IDLE → HEAD → GAP → TAIL → DONE."""
+    """IDLE -> HEAD -> GAP -> TAIL -> DONE. Scrub mode: HEAD plays indefinitely (no stop/cycle)."""
 
     def __init__(self) -> None:
         self.state = "IDLE"
@@ -116,41 +140,50 @@ class Player:
         self._gap_until = 0
         self._tail_start = 0.0
         self._seg_start_ms = 0
+        self._head_start_offset = 0.0
         self._path: Path | None = None
+        self._scrub = False
 
-    def begin(self, path: Path, duration: float = 0.0) -> None:
+    def begin(self, path: Path, duration: float = 0.0, head_start: float = 0.0, scrub: bool = False) -> None:
         pygame.mixer.music.stop()
         pygame.mixer.music.unload()
         pygame.mixer.music.load(str(path))
-        pygame.mixer.music.play()
+        try:
+            pygame.mixer.music.play(start=head_start)
+        except pygame.error:
+            pygame.mixer.music.play()
         self._path = path
-        self._tail_start = max(0.0, duration - PREVIEW_DURATION)
-        now = pygame.time.get_ticks()
-        self._head_stop_at = now + int(PREVIEW_DURATION * 1000)
-        self._seg_start_ms = now
+        self._head_start_offset = head_start
+        self._tail_start = max(head_start, duration - PREVIEW_DURATION)
+        self._scrub = scrub
+        self._head_stop_at = 0  # scrub mode: no auto-stop
+        if not scrub:
+            now = pygame.time.get_ticks()
+            self._head_stop_at = now + int(PREVIEW_DURATION * 1000)
+        self._seg_start_ms = pygame.time.get_ticks()
         self.state = "HEAD"
 
     def position(self) -> float | None:
         now = pygame.time.get_ticks()
         if self.state == "HEAD":
-            return (now - self._seg_start_ms) / 1000.0
+            return self._head_start_offset + (now - self._seg_start_ms) / 1000.0
         if self.state == "TAIL":
             return self._tail_start + (now - self._seg_start_ms) / 1000.0
         if self.state == "GAP":
-            return PREVIEW_DURATION
+            return self._head_start_offset + PREVIEW_DURATION
         return None
 
     def tick(self) -> None:
         now = pygame.time.get_ticks()
         if self.state == "HEAD":
             if not pygame.mixer.music.get_busy():
-                self.state = "GAP" if self._tail_start > 0 else "DONE"
-            elif now >= self._head_stop_at:
+                self.state = "GAP" if (not self._scrub and self._tail_start > self._head_start_offset) else "DONE"
+            elif not self._scrub and self._head_stop_at > 0 and now >= self._head_stop_at:
                 pygame.mixer.music.fadeout(FADE_MS)
                 self._gap_until = now + FADE_MS + 300
                 self.state = "GAP"
         elif self.state == "GAP":
-            if now >= self._gap_until and self._tail_start > 0:
+            if now >= self._gap_until and self._tail_start > self._head_start_offset:
                 assert self._path is not None
                 pygame.mixer.music.stop()
                 pygame.mixer.music.unload()
@@ -170,6 +203,26 @@ class Player:
     def stop(self) -> None:
         pygame.mixer.music.fadeout(FADE_MS)
         self.state = "DONE"
+
+
+def _find_ffmpeg() -> str:
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    candidates = [
+        Path.home()
+        / "AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.1-full_build/bin/ffmpeg.exe",
+        Path("C:/ProgramData/chocolatey/bin/ffmpeg.exe"),
+        Path("C:/ffmpeg/bin/ffmpeg.exe"),
+        Path("C:/Program Files/ffmpeg/bin/ffmpeg.exe"),
+    ]
+    winget_root = Path.home() / "AppData/Local/Microsoft/WinGet/Packages"
+    if winget_root.exists():
+        candidates.extend(winget_root.glob("Gyan.FFmpeg_*/ffmpeg-*/bin/ffmpeg.exe"))
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    return "ffmpeg"
 
 
 def main() -> int:
@@ -260,6 +313,18 @@ def main() -> int:
     verdicts: dict[str, str] = {}
     edit_mode = False
     edit_buffer = ""
+    trim_start: float = 0.0
+    dragging_trim = False
+
+    def begin_with_trim(replay: bool = False) -> None:
+        nonlocal trim_start
+        # Start playback with optional trim offset. In scrub mode (trim>0+replay) plays continuously without cycling.
+        item = items[idx]
+        offset = trim_start if replay else 0.0
+        scrub = trim_start > 0 and replay
+        if not replay:
+            trim_start = 0.0  # fresh navigation resets trim
+        player.begin(item["path"], item.get("duration", 0.0), head_start=offset, scrub=scrub)
 
     player.begin(items[idx]["path"], items[idx].get("duration", 0.0))
 
@@ -269,6 +334,7 @@ def main() -> int:
     fail_rect = pygame.Rect(detail_x + btn_w + 20, WINDOW_H - 90, btn_w, btn_h)
     replay_rect = pygame.Rect(detail_x + 2 * (btn_w + 20), WINDOW_H - 90, btn_w, btn_h)
     note_rect = pygame.Rect(detail_x, 134, WINDOW_W - detail_x - 20, 26)
+    seek_rect = pygame.Rect(detail_x, 230, WINDOW_W - detail_x - 20, 18)
 
     def current_verdict_for(pa: str) -> str:
         if pa in verdicts:
@@ -276,14 +342,15 @@ def main() -> int:
         return prior_verdicts.get(pa, "")
 
     def jump_to(new_idx: int) -> None:
-        nonlocal idx, edit_mode, list_scroll
+        nonlocal idx, edit_mode, list_scroll, trim_start
         edit_mode = False
+        trim_start = 0.0
         idx = max(0, min(len(items) - 1, new_idx))
         if idx < list_scroll:
             list_scroll = idx
         elif idx >= list_scroll + visible_rows:
             list_scroll = idx - visible_rows + 1
-        player.begin(items[idx]["path"], items[idx].get("duration", 0.0))
+        begin_with_trim()
 
     def record(verdict: str) -> None:
         pa = items[idx]["pa"]
@@ -330,6 +397,47 @@ def main() -> int:
         except AttributeError:
             pass
 
+    def apply_trim() -> bool:
+        nonlocal trim_start
+        if trim_start <= 0:
+            return False
+        item = items[idx]
+        src = Path(item["path"])
+        dur = item.get("duration", 0.0)
+        keep_start = trim_start
+        if keep_start >= dur - 0.1:
+            return False
+        new_dur = dur - keep_start
+        player.stop()
+        pygame.mixer.music.unload()
+        tmp = src.with_suffix(".tmp.mp3")
+        cmd = [
+            _find_ffmpeg(),
+            "-y",
+            "-loglevel",
+            "error",
+            "-ss",
+            f"{keep_start:.3f}",
+            "-i",
+            str(src),
+            "-t",
+            f"{new_dur:.3f}",
+            "-c",
+            "copy",
+            str(tmp),
+        ]
+        try:
+            subprocess.run(cmd, check=True)
+            shutil.move(str(tmp), str(src))
+        except (subprocess.CalledProcessError, OSError) as e:
+            print(f"trim failed for {src.name}: {e}", file=sys.stderr)
+            return False
+        item["duration"] = new_dur
+        print(f"trimmed {item['pa']}: -{keep_start:.3f}s start  new dur {new_dur:.2f}s")
+        trim_start = 0.0
+        begin_with_trim()
+        return True
+
     def list_row_at(pos: tuple[int, int]) -> int | None:
         x, y = pos
         if x >= LIST_W or y < LIST_TOP:
@@ -352,6 +460,9 @@ def main() -> int:
                     elif ev.key == pygame.K_BACKSPACE:
                         edit_buffer = edit_buffer[:-1]
                 else:
+                    fine = bool(ev.mod & pygame.KMOD_SHIFT)
+                    step = 0.01 if fine else 0.1
+                    cur_dur = items[idx].get("duration", 0.0)
                     if ev.key in (pygame.K_q, pygame.K_ESCAPE):
                         running = False
                     elif ev.key == pygame.K_p:
@@ -362,13 +473,22 @@ def main() -> int:
                         if idx + 1 < len(items):
                             jump_to(idx + 1)
                     elif ev.key == pygame.K_r:
-                        player.begin(items[idx]["path"], items[idx].get("duration", 0.0))
+                        begin_with_trim(replay=True)
                     elif ev.key == pygame.K_UP:
                         jump_to(idx - 1)
                     elif ev.key == pygame.K_DOWN:
                         jump_to(idx + 1)
                     elif ev.key == pygame.K_e:
                         start_edit()
+                    elif ev.key == pygame.K_LEFTBRACKET:  # [
+                        trim_start = max(0.0, trim_start - step)
+                    elif ev.key == pygame.K_RIGHTBRACKET:  # ]
+                        trim_start = min(cur_dur - 0.1, trim_start + step)
+                    elif ev.key == pygame.K_t:
+                        apply_trim()
+                    elif ev.key == pygame.K_z:
+                        trim_start = 0.0
+                        begin_with_trim()  # replay from 0
             elif ev.type == pygame.TEXTINPUT and edit_mode:
                 edit_buffer += ev.text
             elif ev.type == pygame.MOUSEWHEEL:
@@ -381,6 +501,12 @@ def main() -> int:
                 else:
                     if note_rect.collidepoint(ev.pos):
                         start_edit()
+                    elif seek_rect.collidepoint(ev.pos):
+                        # Start trim drag: set trim marker to click position
+                        dragging_trim = True
+                        dur = items[idx].get("duration", 0.0)
+                        frac = (ev.pos[0] - seek_rect.x) / max(1, seek_rect.w)
+                        trim_start = round(max(0.0, min(dur - 0.1, frac * dur)), 2)
                     else:
                         row = list_row_at(ev.pos)
                         if row is not None:
@@ -390,7 +516,16 @@ def main() -> int:
                         elif fail_rect.collidepoint(ev.pos):
                             record("FAIL")
                         elif replay_rect.collidepoint(ev.pos):
-                            player.begin(items[idx]["path"], items[idx].get("duration", 0.0))
+                            begin_with_trim(replay=True)
+            elif ev.type == pygame.MOUSEMOTION and dragging_trim:
+                dur = items[idx].get("duration", 0.0)
+                frac = (ev.pos[0] - seek_rect.x) / max(1, seek_rect.w)
+                trim_start = round(max(0.0, min(dur - 0.1, frac * dur)), 2)
+            elif ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
+                if dragging_trim:
+                    dragging_trim = False
+                    if trim_start > 0:
+                        begin_with_trim(replay=True)
 
         player.tick()
         item = items[idx]
@@ -411,8 +546,8 @@ def main() -> int:
                 pygame.draw.rect(screen, ROW_HOVER, row_rect)
             verdict = current_verdict_for(it["pa"])
             marker, marker_color = {
-                "PASS": ("✓", PASS_COLOR),
-                "FAIL": ("✗", FAIL_COLOR),
+                "PASS": ("\u2713", PASS_COLOR),
+                "FAIL": ("\u2717", FAIL_COLOR),
             }.get(verdict, ("·", DIM))
             screen.blit(font_row.render(marker, True, marker_color), (12, row_y + 4))
             label = font_row.render(f"{it['stop']}", True, FG if i == idx else (210, 210, 215))
@@ -420,9 +555,9 @@ def main() -> int:
             pa_label = font_small.render(it["pa"], True, DIM)
             screen.blit(pa_label, (LIST_W - 12 - pa_label.get_width(), row_y + 7))
         if list_scroll > 0:
-            screen.blit(font_small.render("▲", True, DIM), (LIST_W - 16, LIST_TOP - 14))
+            screen.blit(font_small.render("\u25b2", True, DIM), (LIST_W - 16, LIST_TOP - 14))
         if list_scroll + visible_rows < len(items):
-            screen.blit(font_small.render("▼", True, DIM), (LIST_W - 16, WINDOW_H - 16))
+            screen.blit(font_small.render("\u25bc", True, DIM), (LIST_W - 16, WINDOW_H - 16))
 
         # Right: detail panel
         panel_rect = pygame.Rect(LIST_W + 20, 20, WINDOW_W - LIST_W - 40, WINDOW_H - 130)
@@ -444,15 +579,15 @@ def main() -> int:
             pygame.draw.rect(screen, ROW_HOVER, note_rect, border_radius=4)
         if edit_mode:
             pygame.draw.rect(screen, ROW_ACTIVE, note_rect, border_radius=4)
-            cursor = "▍" if (pygame.time.get_ticks() // 500) % 2 == 0 else " "
-            txt = font_body.render(f"✎  {edit_buffer}{cursor}", True, FG)
+            cursor_symbol = "\u258d" if (pygame.time.get_ticks() // 500) % 2 == 0 else " "
+            txt = font_body.render(f"\u270e  {edit_buffer}{cursor_symbol}", True, FG)
             screen.blit(txt, (note_rect.x + 4, note_rect.y + 2))
         else:
             note_text = notes.get(pa, "")
             resolved = notes_resolved.get(pa, False)
             if note_text:
                 color = DIM if resolved else ACCENT
-                prefix = "✓" if resolved else "✎"
+                prefix = "\u2713" if resolved else "\u270e"
                 txt = font_body.render(f"{prefix}  {note_text}", True, color)
                 screen.blit(txt, (note_rect.x + 4, note_rect.y + 2))
                 if resolved:
@@ -464,16 +599,20 @@ def main() -> int:
                         1,
                     )
             else:
-                placeholder = font_body.render("✎  (click to add note)", True, (90, 90, 100))
+                placeholder = font_body.render("\u270e  (click to add note)", True, (90, 90, 100))
                 screen.blit(placeholder, (note_rect.x + 4, note_rect.y + 2))
 
-        phase_label = {
-            "HEAD": f"playing head  [0 → {PREVIEW_DURATION:.0f}s]",
-            "GAP": "head done — loading tail...",
-            "TAIL": f"playing tail  [{PREVIEW_DURATION:.0f}s from end]",
-            "DONE": "playback done — verdict?",
-            "IDLE": "",
-        }.get(player.state, "")
+        offset_str = f" [from {trim_start:.2f}s]" if trim_start > 0 else ""
+        if player._scrub:
+            phase_label = f"scrubbing from {trim_start:.1f}s — listen for voice onset"
+        else:
+            phase_label = {
+                "HEAD": f"playing head  [0 → {PREVIEW_DURATION:.0f}s]",
+                "GAP": "head done — loading tail...",
+                "TAIL": f"playing tail  [{PREVIEW_DURATION:.0f}s from end]",
+                "DONE": "playback done — verdict?",
+                "IDLE": "",
+            }.get(player.state, "")
         phase_color = ACCENT if player.state in ("HEAD", "TAIL") else DIM
         phase = font_h2.render(phase_label, True, phase_color)
         screen.blit(phase, (detail_x, 160))
@@ -483,14 +622,23 @@ def main() -> int:
         if dur > 0 and pos is not None and pos > dur:
             pos = dur
 
-        seek_rect = pygame.Rect(detail_x, 230, WINDOW_W - detail_x - 20, 18)
-        draw_seek_bar(screen, seek_rect, dur, pos, font_small)
+        draw_seek_bar(screen, seek_rect, dur, pos, font_small, trim_start=trim_start)
+
+        # Trim status line
+        if trim_start > 0:
+            new_dur = dur - trim_start
+            trim_msg = f"pending trim: -{trim_start:.2f}s start  →  new dur {new_dur:.2f}s"
+            screen.blit(font_small.render(trim_msg, True, TRIM_OVERLAY), (detail_x, 268))
 
         if edit_mode:
             hint = font_body.render("Enter save   Esc cancel", True, ACCENT)
         else:
-            hint = font_body.render("P pass   F fail   R replay   E edit note   ↑↓ navigate   Q quit", True, DIM)
-        screen.blit(hint, (detail_x, WINDOW_H - 130))
+            hint_lines = [
+                "P pass   F fail   R replay   E edit note   ↑↓ navigate   Q quit",
+                "Trim:  drag seek bar  or  [/] adjust   T apply   Z reset   (Shift = fine 0.01s)",
+            ]
+            screen.blit(font_body.render(hint_lines[0], True, DIM), (detail_x, WINDOW_H - 148))
+            screen.blit(font_body.render(hint_lines[1], True, DIM), (detail_x, WINDOW_H - 124))
 
         draw_button(screen, pass_rect, "PASS  (P)", PASS_COLOR, font_btn, pass_rect.collidepoint(mouse))
         draw_button(screen, fail_rect, "FAIL  (F)", FAIL_COLOR, font_btn, fail_rect.collidepoint(mouse))
@@ -510,8 +658,8 @@ def main() -> int:
     print(f"  FAIL: {len(failed)}")
     if failed:
         print("\nFailed:")
-        for pa in failed:
-            print(f"  - {pa}")
+        for pa_val in failed:
+            print(f"  - {pa_val}")
     if len(verdicts) < len(items):
         skipped = [it["pa"] for it in items if it["pa"] not in verdicts]
         print(f"\nNot reviewed: {len(skipped)}  ({', '.join(skipped[:5])}{'...' if len(skipped) > 5 else ''})")
@@ -526,24 +674,26 @@ def main() -> int:
 
     full_items = []
     for stop in route["stops"]:
-        for pa in stop.get("pa", []):
-            full_items.append({"stop": stop["name"], "pa": pa})
+        for pa_val in stop.get("pa", []):
+            full_items.append({"stop": stop["name"], "pa": pa_val})
+        for pa_val in stop.get("pa_at_station", []):
+            full_items.append({"stop": stop["name"], "pa": pa_val})
 
     merged_items = []
     for fi in full_items:
-        pa = fi["pa"]
-        if pa in verdicts:
-            verdict = verdicts[pa]
-        elif pa in prior_by_pa:
-            verdict = prior_by_pa[pa].get("verdict", "NOT_REVIEWED")
+        pa_val = fi["pa"]
+        if pa_val in verdicts:
+            verdict = verdicts[pa_val]
+        elif pa_val in prior_by_pa:
+            verdict = prior_by_pa[pa_val].get("verdict", "NOT_REVIEWED")
         else:
             verdict = "NOT_REVIEWED"
-        note = notes.get(pa, prior_by_pa.get(pa, {}).get("note", ""))
-        resolved = notes_resolved.get(pa, prior_by_pa.get(pa, {}).get("note_resolved", False))
-        item = {**fi, "verdict": verdict, "note": note}
+        note = notes.get(pa_val, prior_by_pa.get(pa_val, {}).get("note", ""))
+        resolved = notes_resolved.get(pa_val, prior_by_pa.get(pa_val, {}).get("note_resolved", False))
+        item_out = {**fi, "verdict": verdict, "note": note}
         if note:
-            item["note_resolved"] = bool(resolved)
-        merged_items.append(item)
+            item_out["note_resolved"] = bool(resolved)
+        merged_items.append(item_out)
 
     summary_pass = sum(1 for it in merged_items if it["verdict"] == "PASS")
     summary_fail = sum(1 for it in merged_items if it["verdict"] == "FAIL")
