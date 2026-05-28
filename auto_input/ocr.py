@@ -41,13 +41,16 @@ from .hud_layout import BADGE_BBOX, DISTANCE_VALUE_BBOX, HUD_BBOX, SPEED_LIMIT_V
 
 BADGE_ANCHOR_FILES: dict[str, list[str]] = {
     "MOVING": ["running_en", "running_ja"],
-    "STOPPED": ["stopping_en", "stopping_next_station"],
+    # stopping_next_station = 1440p anchor stem; stopping_ja = 1080p anchor stem.
+    # load_badge_anchors skips missing files, so both coexist without branching.
+    "STOPPED": ["stopping_en", "stopping_next_station", "stopping_ja"],
     # PASSING is a transient sub-state of MOVING: badge displays the next *stopping*
     # station while the train crosses an intermediate passing-through station. While
     # PASSING, the HUD distance is to the passing station (NOT the next stopping
     # target), so arrival-PA logic must skip it. Blue pentagon vs MOVING/STOPPED's
     # green — cross-anchor diff ~43 vs within-state ~6, well-separated.
-    "PASSING": ["passing_en", "passing_jp"],
+    # passing_jp = 1440p anchor stem; passing_ja = 1080p anchor stem.
+    "PASSING": ["passing_en", "passing_jp", "passing_ja"],
 }
 
 # Reject threshold — diff > this means no anchor is a credible match. Real reads
@@ -110,6 +113,67 @@ RED_TEXT_DELTA = 50  # pixel is "red text" when (R - max(G,B)) > this
 # Sweet-spot calibration: 2x mismatches `6` as `4` on limit 65; 4x+ over-blooms and
 # mismatches `9` as `5` on limit 90. 3x clean across all three.
 SPEED_LIMIT_TEMPLATE_DILATION = 3
+# avg width of a red-text digit at 1440p; used by equal-width split fallback in segment_red_digits
+_TYPICAL_RED_DIGIT_WIDTH = 18
+
+
+@dataclass(frozen=True)
+class SegConfig:
+    """Per-resolution segmentation constants for the digit OCR pipeline.
+
+    Defaults are the 1440p module-level constants above. Construct a scaled
+    instance via ``seg_for_scale(0.75)`` for 1080p, or use ``SEG_DEFAULT``
+    for 1440p.
+    """
+
+    # fmt: off
+    text_band_y:      tuple[int, int] = TEXT_BAND_Y
+    digit_min_h:      int             = DIGIT_MIN_H
+    digit_min_w:      int             = DIGIT_MIN_W
+    digit_max_w:      int             = DIGIT_MAX_W
+    decimal_max_h:    int             = DECIMAL_MAX_H
+    decimal_max_w:    int             = DECIMAL_MAX_W
+    distance_max_gap: int             = DISTANCE_MAX_GAP
+    speed_max_gap:    int             = SPEED_MAX_GAP
+    sign_band_y:      tuple[int, int] = SIGN_BAND_Y
+    sign_max_h:       int             = SIGN_MAX_H
+    sign_max_w:       int             = SIGN_MAX_W
+    column_text_min:       int             = COLUMN_TEXT_MIN
+    red_digit_typical_w:   int             = _TYPICAL_RED_DIGIT_WIDTH
+    # fmt: on
+
+
+# 1440p default — pass to read_* functions at native resolution.
+SEG_DEFAULT = SegConfig()
+
+
+def seg_for_scale(scale: float) -> SegConfig:
+    """Derive a SegConfig by proportionally scaling all 1440p pixel thresholds.
+
+    Use ``seg_for_scale(0.75)`` for 1080p. All values floored at 1.
+    """
+
+    def sc(v: int) -> int:
+        return max(1, int(round(v * scale)))
+
+    def sc2(t: tuple[int, int]) -> tuple[int, int]:
+        return (sc(t[0]), sc(t[1]))
+
+    return SegConfig(
+        text_band_y=sc2(TEXT_BAND_Y),
+        digit_min_h=sc(DIGIT_MIN_H),
+        digit_min_w=sc(DIGIT_MIN_W),
+        digit_max_w=sc(DIGIT_MAX_W),
+        decimal_max_h=sc(DECIMAL_MAX_H),
+        decimal_max_w=sc(DECIMAL_MAX_W),
+        distance_max_gap=sc(DISTANCE_MAX_GAP),
+        speed_max_gap=sc(SPEED_MAX_GAP),
+        sign_band_y=sc2(SIGN_BAND_Y),
+        sign_max_h=sc(SIGN_MAX_H),
+        sign_max_w=sc(SIGN_MAX_W),
+        column_text_min=max(1, int(round(COLUMN_TEXT_MIN * scale))),
+        red_digit_typical_w=sc(_TYPICAL_RED_DIGIT_WIDTH),
+    )
 
 
 def crop_cell_from_surface(surf: pygame.Surface, cell_bbox: tuple[int, int, int, int]) -> np.ndarray:
@@ -203,6 +267,8 @@ def segment_chars(
     cell: np.ndarray,
     max_gap: int = DISTANCE_MAX_GAP,
     stop_at_decimal: bool = False,
+    *,
+    seg: SegConfig | None = None,
 ) -> list[tuple[int, int, int, int]]:
     """Return list of (x0, y0, x1, y1) bboxes, one per character, ordered left-to-right.
 
@@ -211,13 +277,17 @@ def segment_chars(
     `stop_at_decimal=True` (used by speed OCR) finds the small decimal-point bbox in
     the bottom half of the text band and uses its x as a hard stop — robust to gap
     variance from anti-aliasing differences.
+
+    `seg` overrides module-level segmentation constants for non-1440p resolutions.
+    Pass ``seg_for_scale(0.75)`` for 1080p; omit for 1440p (uses module defaults).
     """
+    _seg = seg or SEG_DEFAULT
     gray = cell.mean(axis=2)
     dark = gray < DARK_THRESHOLD
-    band_top, band_bot = TEXT_BAND_Y
+    band_top, band_bot = _seg.text_band_y
     band = dark[band_top:band_bot]
 
-    col_has_text = band.sum(axis=0) > COLUMN_TEXT_MIN
+    col_has_text = band.sum(axis=0) > _seg.column_text_min
     raw: list[tuple[int, int, int, int]] = []
     in_char = False
     x_start = 0
@@ -243,7 +313,7 @@ def segment_chars(
     for bb in raw:
         w = bb[2] - bb[0]
         h = bb[3] - bb[1]
-        if h >= DIGIT_MIN_H and DIGIT_MIN_W <= w <= DIGIT_MAX_W:
+        if h >= _seg.digit_min_h and _seg.digit_min_w <= w <= _seg.digit_max_w:
             shape_filtered.append(bb)
 
     decimal_x: int | None = None
@@ -252,7 +322,7 @@ def segment_chars(
         for bb in raw:
             w = bb[2] - bb[0]
             h = bb[3] - bb[1]
-            if h <= DECIMAL_MAX_H and w <= DECIMAL_MAX_W and bb[1] >= baseline_y:
+            if h <= _seg.decimal_max_h and w <= _seg.decimal_max_w and bb[1] >= baseline_y:
                 decimal_x = bb[0]
                 break
 
@@ -290,20 +360,26 @@ class Templates:
         return best_char, best_score
 
 
+def _resize_nn(arr: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
+    """Nearest-neighbor resize for binary uint8 arrays. Pure numpy, no extra deps."""
+    row_idx = np.round(np.linspace(0, arr.shape[0] - 1, target_h)).astype(int)
+    col_idx = np.round(np.linspace(0, arr.shape[1] - 1, target_w)).astype(int)
+    return arr[np.ix_(row_idx, col_idx)]
+
+
 def compare(a: np.ndarray, b: np.ndarray) -> float:
-    """Fraction of pixels matching after centering both glyphs in a common canvas."""
-    h = max(a.shape[0], b.shape[0])
-    w = max(a.shape[1], b.shape[1])
+    """Fraction of pixels matching after resizing the template (b) to the glyph (a) shape.
 
-    def pad(arr: np.ndarray) -> np.ndarray:
-        out = np.zeros((h, w), dtype=np.uint8)
-        oy = (h - arr.shape[0]) // 2
-        ox = (w - arr.shape[1]) // 2
-        out[oy : oy + arr.shape[0], ox : ox + arr.shape[1]] = arr
-        return out
-
-    pa, pb = pad(a), pad(b)
-    return float((pa == pb).sum() / pa.size)
+    Previously center-padded both arrays to a max-size canvas — worked within a
+    single resolution but gave poor scores when glyph and template sizes differ
+    significantly (e.g. 1080p glyph vs 1440p template). Nearest-neighbor resize
+    is exact at identical sizes (no-op path) and correct across resolutions, so
+    1440p templates can be used directly against 1080p glyphs without a separate
+    1080p dark-digit template set.
+    """
+    if a.shape != b.shape:
+        b = _resize_nn(b, a.shape[0], a.shape[1])
+    return float((a == b).sum() / a.size)
 
 
 def build_templates(assets_dir: Path | None = None) -> Templates:
@@ -329,18 +405,20 @@ def build_templates(assets_dir: Path | None = None) -> Templates:
     return Templates(glyphs)
 
 
-def read_distance(cell: np.ndarray, templates: Templates) -> tuple[int | None, str, float]:
+def read_distance(cell: np.ndarray, templates: Templates, seg: SegConfig | None = None) -> tuple[int | None, str, float]:
     """Read distance value from a distance cell. Returns (meters_int, raw_text, min_score)."""
-    return _read_value(cell, templates, max_gap=DISTANCE_MAX_GAP)
+    _seg = seg or SEG_DEFAULT
+    return _read_value(cell, templates, max_gap=_seg.distance_max_gap, seg=_seg)
 
 
-def read_speed(cell: np.ndarray, templates: Templates) -> tuple[int | None, str, float]:
+def read_speed(cell: np.ndarray, templates: Templates, seg: SegConfig | None = None) -> tuple[int | None, str, float]:
     """Read speed integer from a speed cell. Stops at decimal-point bbox so .X digit doesn't slip in.
     Returns (kmh_int, raw_text, min_score)."""
-    return _read_value(cell, templates, max_gap=SPEED_MAX_GAP, stop_at_decimal=True)
+    _seg = seg or SEG_DEFAULT
+    return _read_value(cell, templates, max_gap=_seg.speed_max_gap, stop_at_decimal=True, seg=_seg)
 
 
-def read_stopping_offset(cell: np.ndarray, templates: Templates) -> tuple[int | None, str, float]:
+def read_stopping_offset(cell: np.ndarray, templates: Templates, seg: SegConfig | None = None) -> tuple[int | None, str, float]:
     """Read green stopping-offset cm value from the (m/cm-shared) distance cell at STOPPED.
 
     Returns (offset_cm, raw, min_score). `offset_cm` is signed int (negative = train
@@ -357,14 +435,15 @@ def read_stopping_offset(cell: np.ndarray, templates: Templates) -> tuple[int | 
     DIGIT_MIN_H shape filter excludes it as not-a-digit. Digit templates are reused
     (binarization is colour-agnostic; shape is identical to dark-text digits).
     """
+    _seg = seg or SEG_DEFAULT
     R = cell[..., 0].astype(int)
     G = cell[..., 1].astype(int)
     B = cell[..., 2].astype(int)
     green = (G - np.maximum(R, B)) > GREEN_TEXT_DELTA
 
-    band_top, band_bot = TEXT_BAND_Y
+    band_top, band_bot = _seg.text_band_y
     band = green[band_top:band_bot]
-    col_has_text = band.sum(axis=0) > COLUMN_TEXT_MIN
+    col_has_text = band.sum(axis=0) > _seg.column_text_min
 
     raw_bboxes: list[tuple[int, int, int, int]] = []
     in_char = False
@@ -389,14 +468,14 @@ def read_stopping_offset(cell: np.ndarray, templates: Templates) -> tuple[int | 
 
     digit_bboxes: list[tuple[int, int, int, int]] = []
     sign_bbox: tuple[int, int, int, int] | None = None
-    sign_y_min, sign_y_max = SIGN_BAND_Y
+    sign_y_min, sign_y_max = _seg.sign_band_y
     for bb in raw_bboxes:
         w = bb[2] - bb[0]
         h = bb[3] - bb[1]
         bb_y_mid = (bb[1] + bb[3]) // 2
-        if h >= DIGIT_MIN_H and DIGIT_MIN_W <= w <= DIGIT_MAX_W:
+        if h >= _seg.digit_min_h and _seg.digit_min_w <= w <= _seg.digit_max_w:
             digit_bboxes.append(bb)
-        elif h <= SIGN_MAX_H and w <= SIGN_MAX_W and sign_y_min <= bb_y_mid <= sign_y_max:
+        elif h <= _seg.sign_max_h and w <= _seg.sign_max_w and sign_y_min <= bb_y_mid <= sign_y_max:
             if sign_bbox is None or bb[0] < sign_bbox[0]:
                 sign_bbox = bb
 
@@ -438,15 +517,15 @@ def _dilate_binary(arr: np.ndarray, iters: int) -> np.ndarray:
 VALID_SPEED_LIMITS: frozenset[int] = frozenset(range(25, 131, 5))
 
 
-_TYPICAL_RED_DIGIT_WIDTH = 18  # avg width of a red-text digit; used by the equal-width split strategy fallback
-
 # Score threshold below which a grammar-valid argmin read is distrusted and equal_width
 # is also tried. Calibrated on 31-frame chuo `100` corpus: low-confidence band is
 # 0.65-0.66 (always wrong-or-uncertain), high-confidence band is 0.92+ (always correct).
 ARGMIN_TRUST_SCORE = 0.85
 
 
-def segment_red_digits(cell: np.ndarray, split_strategy: str = "argmin") -> tuple[np.ndarray, list[tuple[int, int, int, int]]]:
+def segment_red_digits(
+    cell: np.ndarray, split_strategy: str = "argmin", *, seg: SegConfig | None = None
+) -> tuple[np.ndarray, list[tuple[int, int, int, int]]]:
     """Color-mask + segment + glued-digit split + shape filter for the red speed-limit cell.
 
     Returns `(red_mask, digit_bboxes)`. `red_mask` is the full-cell binary mask of
@@ -472,14 +551,15 @@ def segment_red_digits(cell: np.ndarray, split_strategy: str = "argmin") -> tupl
     Used by `read_speed_limit` and by the red-template extractor in
     `_dev_scripts/extract_ocr_assets.py`.
     """
+    _seg = seg or SEG_DEFAULT
     R = cell[..., 0].astype(int)
     G = cell[..., 1].astype(int)
     B = cell[..., 2].astype(int)
     red = (R - np.maximum(G, B)) > RED_TEXT_DELTA
 
-    band_top, band_bot = TEXT_BAND_Y
+    band_top, band_bot = _seg.text_band_y
     band = red[band_top:band_bot]
-    col_has_text = band.sum(axis=0) > COLUMN_TEXT_MIN
+    col_has_text = band.sum(axis=0) > _seg.column_text_min
 
     raw_bboxes: list[tuple[int, int, int, int]] = []
     in_char = False
@@ -517,10 +597,10 @@ def segment_red_digits(cell: np.ndarray, split_strategy: str = "argmin") -> tupl
         for bb in raw_bboxes:
             x0, _, x1, _ = bb
             w = x1 - x0
-            if w <= DIGIT_MAX_W:
+            if w <= _seg.digit_max_w:
                 split_bboxes.append(bb)
                 continue
-            n = max(2, round(w / _TYPICAL_RED_DIGIT_WIDTH))
+            n = max(2, round(w / _seg.red_digit_typical_w))
             for i in range(n):
                 sx0 = x0 + (w * i) // n
                 sx1 = x0 + (w * (i + 1)) // n
@@ -529,12 +609,12 @@ def segment_red_digits(cell: np.ndarray, split_strategy: str = "argmin") -> tupl
                     split_bboxes.append(fbb)
     else:
         # Recursive split at deepest column-density valley until each sub-bbox fits
-        # DIGIT_MAX_W or no clear valley remains.
+        # digit_max_w or no clear valley remains.
         queue: list[tuple[int, int, int, int]] = list(raw_bboxes)
         while queue:
             bb = queue.pop(0)
             x0, _, x1, _ = bb
-            if x1 - x0 <= DIGIT_MAX_W:
+            if x1 - x0 <= _seg.digit_max_w:
                 split_bboxes.append(bb)
                 continue
             col_sums = band[:, x0:x1].sum(axis=0)
@@ -553,7 +633,7 @@ def segment_red_digits(cell: np.ndarray, split_strategy: str = "argmin") -> tupl
                 if fbb is not None:
                     queue.append(fbb)
 
-    digit_bboxes = [bb for bb in split_bboxes if bb[3] - bb[1] >= DIGIT_MIN_H and DIGIT_MIN_W <= bb[2] - bb[0] <= DIGIT_MAX_W]
+    digit_bboxes = [bb for bb in split_bboxes if bb[3] - bb[1] >= _seg.digit_min_h and _seg.digit_min_w <= bb[2] - bb[0] <= _seg.digit_max_w]
     return red, digit_bboxes
 
 
@@ -589,7 +669,9 @@ def _get_dilated_dark_templates(templates: Templates) -> Templates:
     return cached
 
 
-def read_speed_limit(cell: np.ndarray, templates: Templates) -> tuple[int | None, str, float]:
+def read_speed_limit(
+    cell: np.ndarray, templates: Templates, seg: SegConfig | None = None, red_templates: Templates | None = None
+) -> tuple[int | None, str, float]:
     """Read red speed-limit (最高速度) value in km/h. Returns (kmh|None, raw, min_score).
 
     `None` is a valid result, not a failure: speed-limit is line-dependent — some lines
@@ -627,15 +709,15 @@ def read_speed_limit(cell: np.ndarray, templates: Templates) -> tuple[int | None
     returned as None — common misread modes (8→4 mismatch giving `45`, contaminated
     splits giving `170`, single-digit reads giving `1`) all fail this check.
     """
-    red_t = _get_red_digit_templates()
+    red_t = red_templates if red_templates is not None else _get_red_digit_templates()
     dilated_t = _get_dilated_dark_templates(templates)
 
-    argmin_attempt = _try_read_speed_limit(cell, "argmin", red_t, dilated_t)
+    argmin_attempt = _try_read_speed_limit(cell, "argmin", red_t, dilated_t, seg=seg)
     a_val, a_raw, a_score = argmin_attempt
     if a_val is not None and a_score >= ARGMIN_TRUST_SCORE:
         return a_val, a_raw, a_score
 
-    eqw_attempt = _try_read_speed_limit(cell, "equal_width", red_t, dilated_t)
+    eqw_attempt = _try_read_speed_limit(cell, "equal_width", red_t, dilated_t, seg=seg)
     e_val, e_raw, e_score = eqw_attempt
     if e_val is not None:
         return e_val, e_raw, e_score
@@ -650,11 +732,14 @@ def _try_read_speed_limit(
     split_strategy: str,
     red_t: Templates,
     dilated_t: Templates,
+    *,
+    seg: SegConfig | None = None,
 ) -> tuple[int | None, str, float]:
     """Single-strategy attempt at reading the speed-limit cell.
     Returns (value, raw, min_score). Caller drives the 2-try retry."""
-    red, digit_bboxes = segment_red_digits(cell, split_strategy=split_strategy)
-    band_top, band_bot = TEXT_BAND_Y
+    _seg = seg or SEG_DEFAULT
+    red, digit_bboxes = segment_red_digits(cell, split_strategy=split_strategy, seg=_seg)
+    band_top, band_bot = _seg.text_band_y
     band = red[band_top:band_bot]
 
     def best_match(glyph: np.ndarray) -> tuple[str, float]:
@@ -744,8 +829,10 @@ def _try_read_speed_limit(
     return None, "", 1.0
 
 
-def _read_value(cell: np.ndarray, templates: Templates, max_gap: int, stop_at_decimal: bool = False) -> tuple[int | None, str, float]:
-    bboxes = segment_chars(cell, max_gap=max_gap, stop_at_decimal=stop_at_decimal)
+def _read_value(
+    cell: np.ndarray, templates: Templates, max_gap: int, stop_at_decimal: bool = False, seg: SegConfig | None = None
+) -> tuple[int | None, str, float]:
+    bboxes = segment_chars(cell, max_gap=max_gap, stop_at_decimal=stop_at_decimal, seg=seg)
     chars: list[str] = []
     min_score = 1.0
     for bbox in bboxes:
@@ -779,9 +866,11 @@ def main() -> int:
     anchors = load_badge_anchors()
     anchor_count = sum(len(v) for v in anchors.values())
     print(f"Badge anchors: {anchor_count} across states {sorted(anchors.keys())}")
-    expected_anchor_count = sum(len(v) for v in BADGE_ANCHOR_FILES.values())
-    if anchor_count < expected_anchor_count:
-        print(f"[FAIL] expected {expected_anchor_count} anchors, got {anchor_count}.")
+    # Each state must have ≥1 anchor. BADGE_ANCHOR_FILES lists per-state stems including
+    # resolution-specific names (some won't exist in every dir — that's expected).
+    missing_states = [s for s, lst in anchors.items() if not lst]
+    if missing_states:
+        print(f"[FAIL] states with no anchors: {missing_states} — re-run extract_ocr_assets.py.")
         return 1
 
     # Cross-classify each anchor against all anchors — every anchor's lowest-diff match

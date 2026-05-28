@@ -43,6 +43,10 @@ import plotly.graph_objects as go
 
 from app_paths import project_root
 
+# PowerShell defaults stdout to cp1252; route name + station kanji crash on print.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+
 ROOT = project_root()
 RECORDINGS_DIR = ROOT / "_recordings"
 
@@ -579,7 +583,9 @@ def build_section_figure(
     # Layout ────────────────────────────────────────────────────────
     fig.update_layout(
         height=height,
-        margin=dict(l=64, r=64, t=52, b=40),
+        # Compact (overview) drops the right-side y-tick labels to free horizontal
+        # space for dense station packing, so its right margin can shrink too.
+        margin=dict(l=64, r=16 if compact else 64, t=52, b=40),
         plot_bgcolor="white",
         paper_bgcolor="white",
         showlegend=False,
@@ -601,8 +607,8 @@ def build_section_figure(
     # same pixel size as one minor y-cell (10 km/h, matching the y-axis minor
     # grid). MAJOR x-dtick is a coarser label-friendly interval — picked
     # independently so the chart isn't crowded with timestamps.
-    # Assumes container ≈ 1372px plot-area (80vw on 1920px screen).
-    _ASSUMED_PLOT_W = 1372
+    # Assumes container ≈ 1550px plot-area (90vw on 1920px screen).
+    _ASSUMED_PLOT_W = 1550
     _plot_h = height - 52 - 40
     _y_px_per_unit = _plot_h / max(ymax + 10, 1)
     # Target = one y-MINOR (10 km/h) in pixels, so x-minor matches y-minor.
@@ -667,20 +673,22 @@ def build_section_figure(
     )
     # Right-side y-axis labels via per-tick annotations (yaxis2 didn't render
     # reliably). Anchored at x=1 in paper coords so they sit on the right edge
-    # of the plot, with xshift to position outside.
-    for tick_y in range(0, ymax + 1, 20):
-        fig.add_annotation(
-            x=1,
-            y=tick_y,
-            xref="paper",
-            yref="y",
-            text=str(tick_y),
-            showarrow=False,
-            xanchor="left",
-            yanchor="middle",
-            xshift=6,
-            font=dict(size=14, color="#334155", weight="bold"),
-        )
+    # of the plot, with xshift to position outside. Skipped on compact overview
+    # — single-axis labelling there gives more horizontal room for station packing.
+    if not compact:
+        for tick_y in range(0, ymax + 1, 20):
+            fig.add_annotation(
+                x=1,
+                y=tick_y,
+                xref="paper",
+                yref="y",
+                text=str(tick_y),
+                showarrow=False,
+                xanchor="left",
+                yanchor="middle",
+                xshift=6,
+                font=dict(size=14, color="#334155", weight="bold"),
+            )
     return fig
 
 
@@ -702,7 +710,7 @@ body {
   font-feature-settings: "tnum" 1, "ss01" 1;
 }
 .container {
-  max-width: 80vw;
+  max-width: 90vw;
   margin: 0 auto;
   padding: 32px 32px 48px;
 }
@@ -817,15 +825,15 @@ body {
   font-family: 'Yu Mincho', 'YuMincho', 'Hiragino Mincho ProN', 'Hiragino Mincho Pro', 'MS Mincho', serif;
 }
 /* Segment overlay sits over the overview chart's plot area. Margins:
-   chart layout l=64, r=64, t=52, b=40; section-body padding = 4px each side.
-   So overlay = (4+64)px from container edges horizontally, (4+52)px from top,
-   (4+40)px from bottom. Each segment button is positioned by % of plot width. */
+   compact chart layout l=64, r=16, t=52, b=40; section-body padding = 4px each side.
+   So overlay = (4+64)px left, (4+16)px right, (4+52)px top, (4+40)px bottom.
+   Each segment button is positioned by % of plot width. */
 .overview-segments-overlay {
   position: absolute;
   top: 56px;
   bottom: 44px;
   left: 68px;
-  right: 68px;
+  right: 20px;
   pointer-events: none;
   z-index: 5;
 }

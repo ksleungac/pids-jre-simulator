@@ -116,13 +116,13 @@ Layer 3 stays accurate at all times — observes the game, not the sim. Reconcil
 ```
 [JR EAST Train Sim window — DirectX]
               │
-              │ DXGI Output Duplication (dxcam) with region=CAPTURE_REGION_2560_1440
+              │ DXGI Output Duplication (dxcam) with region=profile.capture_region
               ▼
-[Top-right quadrant — 1280×720 BGRA]
+[Desktop quadrant BGRA  (1280×720 @ 1440p  |  960×540 @ 1080p)]
               │
-              │ HUD_BBOX_IN_CAPTURE crop (region-relative coords)
+              │ profile.hud_bbox_in_capture crop (region-relative coords)
               ▼
-[HUD region — 350×480]
+[HUD region  (350×480 @ 1440p  |  262×360 @ 1080p)]
               │
        ┌──────┼──────┐
        ▼      ▼      ▼
@@ -166,13 +166,20 @@ Layer 3 stays accurate at all times — observes the game, not the sim. Reconcil
 
 ## Resolution dependency
 
-Currently calibrated for **2560×1440 native fullscreen game window**. Other resolutions need `HUD_BBOX` recalibration and re-extracted digit templates. See "Recalibration" below.
+Supported: **2560×1440** and **1920×1080**. `auto_input/driver.py` auto-detects at startup via bootstrap full-frame grab → `PROFILES[(w, h)]` → fatal if not found. `_dev_scripts/capture_game.py` does the same; `--res 1080p|1440p` overrides.
 
-User's setup happens to be 2560×1440 native, which makes this a non-issue for their workflow. Multi-resolution support = future work.
+**`ResolutionProfile`** (frozen dataclass, `auto_input/hud_layout.py`) — carries all per-resolution constants: `capture_region`, `hud_bbox`, `hud_bbox_in_capture`, cell bboxes (`badge_bbox`, `distance_value_bbox`, `speed_value_bbox`, `speed_limit_value_bbox`), `templates_subdir`, `badges_subdir`, `scale`. `PROFILES` dict maps `(desktop_w, desktop_h)` → profile. Adding a new resolution = add a `ResolutionProfile` entry to `PROFILES`.
 
-## HUD layout (2560×1440)
+**Template strategy across resolutions:**
+- **Dark digit templates** (0–9): extracted at 1440p; reused at all resolutions via NN-resize in `compare()` (template resized to match glyph at comparison time). No re-extraction per resolution.
+- **Red digit templates**: resolution-specific (bolder font at different px dimensions). 1440p: `ocr_templates/digits_red/`. 1080p: `ocr_templates/1080p/digits_red/`.
+- **Badge anchors**: resolution-specific (pentagon dimensions differ). 1440p: `ocr_templates/badges/`. 1080p: `ocr_templates/1080p/badges/`.
 
-All bboxes = `(x, y, w, h)`. Cell bboxes = HUD-relative; HUD bbox = canonical screen-relative; capture region + HUD-in-region derived.
+**`SegConfig`** — frozen dataclass of all segmentation thresholds (`digit_min_h`, `digit_min_w`, text-band Y bounds, gap limits, etc.). `SEG_DEFAULT` = 1440p values. `seg_for_scale(s)` returns a proportionally scaled copy. All OCR readers accept optional `seg=` param; `None` = use `SEG_DEFAULT`. Capture loops pass `seg=seg_for_scale(profile.scale)`.
+
+## HUD layout
+
+All bboxes = `(x, y, w, h)`. Cell bboxes = HUD-relative; HUD bbox = canonical screen-relative; capture region + HUD-in-region derived. Values below are 1440p baseline; 1080p = ×0.75 rounded. Live in `PROFILE_1920_1080` / `PROFILE_2560_1440` in `auto_input/hud_layout.py`. The flat constants below are backward-compat (consumed by `*_from_surface` dev-tool helpers + calibration extractor).
 
 | Constant | Value | Notes |
 |---|---|---|
@@ -186,7 +193,7 @@ All bboxes = `(x, y, w, h)`. Cell bboxes = HUD-relative; HUD bbox = canonical sc
 
 Position invariant across language modes (EN/JA), game states (running/stopped/at-platform), and scenes — verified against 7 reference screenshots.
 
-**Region-cut resolution gate.** Production AutoDriver runs a bootstrap full-frame `camera.grab()` at startup, asserts shape `(1440, 2560)`, and refuses to start if desktop ≠ 2560×1440. OCR templates + HUD bboxes are pixel-pinned to that resolution; without the gate `region=` either gets clamped or returns a geometrically wrong slice, producing silent OCR garbage. Sibling shape to other fail-loud invariants in [critical_lessons.md](.claude/rules/critical_lessons.md) (`Runtime-required materials`, `Lazy import ≠ optional dep`, `PyInstaller deployment-frame divergence`).
+**Resolution gate.** Production AutoDriver runs a bootstrap full-frame `camera.grab()` at startup → probes `(w, h)` → `PROFILES.get((w, h))` → fatal if not found. Prevents OCR running with wrong-resolution bboxes / templates. Sibling to other fail-loud invariants in [critical_lessons.md](.claude/rules/critical_lessons.md).
 
 ## Capture: dxcam (DXGI Output Duplication)
 
@@ -194,9 +201,10 @@ Position invariant across language modes (EN/JA), game states (running/stopped/a
 
 ```python
 import dxcam
-from auto_input.hud_layout import CAPTURE_REGION_2560_1440
+from auto_input.hud_layout import PROFILES
+profile = PROFILES[(desktop_w, desktop_h)]  # resolved at startup from bootstrap grab
 camera = dxcam.create(output_color="BGRA")  # native, skips cv2 conversion
-frame = camera.grab(region=CAPTURE_REGION_2560_1440)  # top-right quadrant 1280×720 BGRA
+frame = camera.grab(region=profile.capture_region)  # right-half quadrant, resolution-dependent
 ```
 
 Notes:
@@ -252,6 +260,8 @@ Live scores observed: 0.75–1.00. Below 0.6 = danger zone (random match territo
 | `DISTANCE_MAX_GAP` | 20 | Inter-digit gap < 20; m-stroke gap > 20 |
 | `SPEED_MAX_GAP` | 25 | Wider for narrow `1`-to-`1` kerning (~18 px) |
 
+These are fields on `SegConfig` (frozen dataclass, `auto_input/ocr.py`). `SEG_DEFAULT` uses the 1440p values above. `seg_for_scale(s)` scales all pixel-threshold fields proportionally — pass the result as `seg=` to any OCR reader to run at a different resolution.
+
 ## Stopping offset (cm) — shared distance cell
 
 `DISTANCE_VALUE_BBOX` cell is content-shared and self-identifies via color:
@@ -306,11 +316,13 @@ Pixel-diff against 6 anchor templates:
 
 ```python
 BADGE_ANCHOR_FILES = {
-    "MOVING":  ["running_en", "running_ja"],             # Next, 次停車駅
-    "STOPPED": ["stopping_en", "stopping_next_station"], # Stopping at, 停車中
-    "PASSING": ["passing_en", "passing_jp"],             # Pass, 通過
+    "MOVING":  ["running_en",  "running_ja"],
+    "STOPPED": ["stopping_en", "stopping_next_station", "stopping_ja"],  # stopping_ja = 1080p alt
+    "PASSING": ["passing_en",  "passing_jp",            "passing_ja"],   # passing_ja  = 1080p alt
 }
 ```
+
+`load_badge_anchors(badges_dir)` silently skips missing files — each resolution dir loads its own 6 available crops. 1440p dir has the original 6 stems; 1080p dir has `stopping_ja` + `passing_ja` in place of `stopping_next_station` + `passing_jp`.
 
 Per frame: crop badge cell, compute mean-abs-diff against each anchor, pick state with lowest-diff anchor. Language-agnostic — whichever anchor matches best determines state, regardless of which language user plays in.
 
@@ -462,6 +474,16 @@ uv run python _dev_scripts/capture_game.py --no-fire
 
 # Pass --route to enable PA-count cross-check
 uv run python _dev_scripts/capture_game.py --route audio/sobu/1217F
+
+# Force resolution (default = auto-detect from first frame)
+uv run python _dev_scripts/capture_game.py --res 1080p
+```
+
+**Offline calibration validation** (no live game required):
+
+```bash
+uv run python _dev_scripts/validate_ocr.py           # default: 1080p
+uv run python _dev_scripts/validate_ocr.py --res 1440p
 ```
 
 Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distance, scores) plus indented `>>>` lines for state-machine events and auto/manual key activity.
@@ -480,30 +502,32 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 | `constants.py` | `DEBUG_PANEL_HEIGHT = 80` |
 | `_dev_scripts/capture_game.py` | Standalone observation/debug script (separate process, synthetic keystrokes, optional `--route` flag for PA-count check) |
 | `_dev_scripts/test_dxcam.py` | Diagnostic — full-desktop dxcam capture + brightness check |
-| `ocr_templates/digits/*.png` | **Runtime input** — 10 pre-extracted digit glyphs (~20×30 binary PNGs, ~1 KB each). Loaded by `auto_input.ocr.build_templates()`. Committed. |
-| `ocr_templates/badges/*.png` | **Runtime input** — 6 pre-extracted badge cell crops (111×40 RGB PNGs, ~5 KB each — dims match `BADGE_BBOX`). Loaded by `auto_input.ocr.load_badge_anchors()`. Committed. |
-| `_ocr_calibration/*.png` | **Local-only** source screenshots (full 2560×1440 desktop captures, ~33 MB total). Gitignored. Only needed when re-extracting `ocr_templates/` after a game HUD layout change. |
-| `_dev_scripts/extract_ocr_assets.py` | One-shot extractor: reads `_ocr_calibration/` source screenshots → writes `ocr_templates/`. Run after re-capturing sources, then commit diff. |
+| `ocr_templates/digits/*.png` | **Runtime input** — 10 pre-extracted digit glyphs (~20×30 binary PNGs). Loaded by `build_templates()`. Reused at all resolutions via NN-resize. Committed. |
+| `ocr_templates/digits_red/*.png` | **Runtime input** — 10 red-font digit glyphs (1440p). Loaded by `build_templates(red_dir)`. Committed. |
+| `ocr_templates/badges/*.png` | **Runtime input** — 6 badge cell crops (111×40 RGB, 1440p). Loaded by `load_badge_anchors()`. Committed. |
+| `ocr_templates/1080p/digits_red/*.png` | **Runtime input** — 10 red-font digit glyphs (1080p, ~14×20 px). Committed. |
+| `ocr_templates/1080p/badges/*.png` | **Runtime input** — 6 badge cell crops (83×30 RGB, 1080p). Committed. |
+| `_ocr_calibration/*.png` | **Local-only** 1440p source screenshots (~33 MB). Gitignored. Source for `extract_ocr_assets.py`. |
+| `_ocr_calibration_1080p/*.png` | **Local-only** 1080p source screenshots. Gitignored. Source for 1080p extraction passes. |
+| `_dev_scripts/extract_ocr_assets.py` | One-shot extractor: reads `_ocr_calibration*/` → writes `ocr_templates/`. Run after re-capturing sources, then commit diff. |
+| `_dev_scripts/validate_ocr.py` | Offline validation: badge + speed-limit + stopping-offset reads against labeled calibration screenshots. `--res 1080p\|1440p`. All tests PASS before deploying at that resolution. |
 | `_recordings/drive_<line>_<diagram>_<TS>.jsonl` | **Blackbox / drive recorder log** — one file per AutoDriver lifetime. Line 0 = `_type: "meta"` (route/diagram/dest/stops); subsequent lines mix `_type: "event"` (badge transitions: arrival / departure / passing_start / passing_end) and `_type: "sample"` (one OCR cycle, ~5s, all OCR fields + sim state including `at_station` / `cnt_pa_at_station` / `at_station_observed` / `inferred_state` / `segment_start_stop`). Written inside `auto_input/driver.py`'s capture loop with per-line `flush()` for crash safety. Local-only / gitignored. Field additions backward-compatible (plot_drive ignores unknowns); field removals or renames require coordinated update with `plot_drive.py`. |
 | `_experiments/live_captures/` | Saved HUD crops from prior live testing (gitignored — `_experiments/` itself = artifact-only folder; OCR + layout modules now bundled into `auto_input/` package) |
 | `fonts/ShinGoPr6N-Medium.otf` | Latin + CJK font used by debug panel for station names |
 
-## Recalibration for other resolutions
+## Recalibration for a new resolution
 
-If game runs at different resolution:
-
-1. Capture screenshots in target resolution with HUD visible (running mode + at-platform mode + passing-through mode)
-2. Identify HUD position (top-right); update `HUD_BBOX` in `auto_input/hud_layout.py`
-3. Crop HUD; identify cell positions within it; update `*_VALUE_BBOX` and `BADGE_BBOX`
-4. Save the 9 source screenshots into `_ocr_calibration/` (gitignored). Filenames must match keys in `KNOWN_VALUES` (digits) + `BADGE_ANCHOR_FILES` (badges) — both live in `_dev_scripts/extract_ocr_assets.py` and `auto_input/ocr.py` respectively. PASSING = rapid-service "Pass" / "通過" blue pentagon (filenames `passing_en.png`, `passing_jp.png`).
-5. Run `uv run python _dev_scripts/extract_ocr_assets.py` — extracts digit glyphs + badge anchor crops into `ocr_templates/`.
-6. Run `uv run python -m auto_input.ocr` to sanity-check new templates load + cross-classify cleanly. Commit the `ocr_templates/` diff.
-
-Digit templates are resolution-specific because exact-pixel matching requires same glyph dimensions.
+1. Capture native screenshots at target resolution — same content states as existing `_ocr_calibration/` set (running_en/ja, stopping_en/ja, passing_en/ja, all `limit_*`, `stopping_position`).
+2. Add a `ResolutionProfile` to `auto_input/hud_layout.py` with scaled `hud_bbox` + cell bboxes; add to `PROFILES`. `_scale_bbox(bbox, s)` helper scales the 1440p reference.
+3. Save source screenshots to `_ocr_calibration_<res>/` (gitignored parallel dir).
+4. Add `BADGE_ANCHOR_FILES_<res>` + `KNOWN_LIMIT_VALUES_<res>` to `_dev_scripts/extract_ocr_assets.py`; add extraction passes in `main()` for the new resolution.
+5. Run `uv run python _dev_scripts/extract_ocr_assets.py` → produces `ocr_templates/<res>/badges/` + `ocr_templates/<res>/digits_red/`. **Dark digit templates are not re-extracted** — `compare()` NN-resizes 1440p templates to match glyph size at runtime.
+6. Run `uv run python _dev_scripts/validate_ocr.py --res <res>` (after adding the resolution's ground-truth to `CAL_DATA`). All tests should PASS before committing.
+7. Commit the `ocr_templates/<res>/` diff.
 
 ## Limitations
 
-- **Fixed resolution**: 2560×1440 only. Other resolutions need full recalibration.
+- **Supported resolutions**: 2560×1440 and 1920×1080. Adding new resolutions = `ResolutionProfile` entry + template extraction + validation. See "Recalibration".
 - **Game must be visible**: HUD area (top-right) must not be covered.
 - **Game must be actively rendering**: minimized/alt-tabbed games may stop rendering and produce stale captures.
 - **Scenery bleed**: HUD background is semi-transparent; very dark scenery behind reduces match scores (still reads correctly above ~0.7).

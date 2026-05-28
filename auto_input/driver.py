@@ -34,15 +34,10 @@ import dxcam
 import numpy as np
 import pygame
 
-from .hud_layout import (
-    BADGE_BBOX,
-    CAPTURE_REGION_2560_1440,
-    DISTANCE_VALUE_BBOX,
-    HUD_BBOX_IN_CAPTURE,
-    SPEED_LIMIT_VALUE_BBOX,
-    SPEED_VALUE_BBOX,
-)
+from .hud_layout import PROFILES
 from .ocr import (
+    DEFAULT_TEMPLATES_DIR,
+    Templates,
     build_templates,
     classify_badge_state,
     load_badge_anchors,
@@ -50,6 +45,7 @@ from .ocr import (
     read_speed,
     read_speed_limit,
     read_stopping_offset,
+    seg_for_scale,
 )
 
 if TYPE_CHECKING:
@@ -716,29 +712,15 @@ class AutoDriver:
             self._thread = None
 
     def _run(self) -> None:
-        print("[AutoDriver] Loading OCR templates + badge anchors...")
-        templates = build_templates()
-        badge_anchors = load_badge_anchors()
-        missing = set("0123456789") - templates.glyphs.keys()
-        if missing:
-            print(f"[AutoDriver] FATAL: missing digit templates: {sorted(missing)} — auto-driver disabled.")
-            print("[AutoDriver] Re-run `uv run python _dev_scripts/extract_ocr_assets.py` to re-extract from _ocr_calibration/.")
-            return
-        if not any(badge_anchors.values()):
-            print("[AutoDriver] FATAL: no badge anchors loaded — auto-driver disabled.")
-            print("[AutoDriver] Re-run `uv run python _dev_scripts/extract_ocr_assets.py` to re-extract from _ocr_calibration/.")
-            return
-
         print("[AutoDriver] Initializing dxcam...")
         camera = dxcam.create(output_color="BGRA")
         if camera is None:
             print("[AutoDriver] dxcam.create() returned None — DXGI capture unavailable. Auto-driver disabled.")
             return
-        # Resolution gate. HUD bboxes + digit templates are pixel-pinned to
-        # 2560×1440 native fullscreen game window. At any other desktop
-        # resolution the region= grab below either gets clamped or returns a
-        # geometrically wrong slice, producing silent OCR garbage. Fail loud
-        # here so the user sees the cause instead of confused detector output.
+        # Resolution gate. HUD bboxes scale per ResolutionProfile; templates
+        # reused across resolutions via NN-resize in compare(). Probe desktop
+        # dims → PROFILES.get((w,h)) → fail loud if unsupported so user sees
+        # the cause instead of silent OCR garbage at wrong bbox geometry.
         # One-shot full grab gives the desktop dims; bounded retry mirrors the
         # main-loop retry pattern (dxcam can return None right after create()).
         probe = None
@@ -752,15 +734,39 @@ class AutoDriver:
             print("[AutoDriver] dxcam returned None on resolution probe — auto-driver disabled.")
             return
         ph, pw = probe.shape[:2]
-        if (pw, ph) != (2560, 1440):
-            print(
-                f"[AutoDriver] FATAL: desktop resolution {pw}x{ph}; required 2560x1440. "
-                f"OCR templates + HUD bboxes are pixel-pinned to 2560x1440 native fullscreen. Auto-driver disabled."
-            )
+        profile = PROFILES.get((pw, ph))
+        if profile is None:
+            supported = ", ".join(f"{w}×{h}" for w, h in sorted(PROFILES))
+            print(f"[AutoDriver] FATAL: desktop resolution {pw}×{ph} not supported. " f"Supported: {supported}. Auto-driver disabled.")
+            return
+        seg = seg_for_scale(profile.scale)
+
+        # Dark digit templates: always load from 1440p set. The resize-in-compare
+        # approach (compare() in ocr.py) handles cross-resolution matching without
+        # needing a separate 1080p dark-digit template set.
+        templates = build_templates()
+        missing = set("0123456789") - templates.glyphs.keys()
+        if missing:
+            print(f"[AutoDriver] FATAL: missing digit templates: {sorted(missing)} — auto-driver disabled.")
+            print("[AutoDriver] Re-run `uv run python _dev_scripts/extract_ocr_assets.py` to re-extract from _ocr_calibration/.")
+            return
+
+        # Red digit templates: prefer resolution-specific set; fall back to the
+        # global cache (1440p) via None so read_speed_limit uses _get_red_digit_templates().
+        red_dir = (
+            DEFAULT_TEMPLATES_DIR / profile.templates_subdir / "digits_red" if profile.templates_subdir else DEFAULT_TEMPLATES_DIR / "digits_red"
+        )
+        red_templates: Templates | None = build_templates(red_dir) if red_dir.exists() else None
+
+        badges_dir = DEFAULT_TEMPLATES_DIR / profile.badges_subdir
+        badge_anchors = load_badge_anchors(badges_dir)
+        if not any(badge_anchors.values()):
+            print(f"[AutoDriver] FATAL: no badge anchors at {badges_dir} — auto-driver disabled.")
+            print("[AutoDriver] Re-run `uv run python _dev_scripts/extract_ocr_assets.py` to re-extract.")
             return
         print(
-            f"[AutoDriver] Started. Lead {self.lead_m}m, interval {self.interval_s}s. "
-            f"Capture region {CAPTURE_REGION_2560_1440} (top-right quadrant)."
+            f"[AutoDriver] Started {pw}×{ph}. Lead {self.lead_m}m, interval {self.interval_s}s. "
+            f"Capture region {profile.capture_region} (top-right quadrant)."
         )
 
         # Open per-drive blackbox log (JSONL). One file per AutoDriver lifetime;
@@ -791,7 +797,7 @@ class AutoDriver:
                         continue
                     frame = None
                     for _ in range(5):
-                        frame = camera.grab(region=CAPTURE_REGION_2560_1440)
+                        frame = camera.grab(region=profile.capture_region)
                         if frame is not None:
                             break
                         if self._stop_event.wait(0.2):
@@ -800,21 +806,22 @@ class AutoDriver:
                         self._stop_event.wait(self.interval_s)
                         continue
 
-                    d_cell = _crop_cell(frame, HUD_BBOX_IN_CAPTURE, DISTANCE_VALUE_BBOX)
-                    s_cell = _crop_cell(frame, HUD_BBOX_IN_CAPTURE, SPEED_VALUE_BBOX)
-                    sl_cell = _crop_cell(frame, HUD_BBOX_IN_CAPTURE, SPEED_LIMIT_VALUE_BBOX)
-                    b_cell = _crop_cell(frame, HUD_BBOX_IN_CAPTURE, BADGE_BBOX)
+                    hud = profile.hud_bbox_in_capture
+                    d_cell = _crop_cell(frame, hud, profile.distance_value_bbox)
+                    s_cell = _crop_cell(frame, hud, profile.speed_value_bbox)
+                    sl_cell = _crop_cell(frame, hud, profile.speed_limit_value_bbox)
+                    b_cell = _crop_cell(frame, hud, profile.badge_bbox)
                     badge, b_diff = classify_badge_state(b_cell, badge_anchors)
-                    s_val, _, s_score = read_speed(s_cell, templates)
+                    s_val, _, s_score = read_speed(s_cell, templates, seg=seg)
                     # The DISTANCE cell is shared and self-identifies via color: dark text
                     # `Nm` (distance to next stop, both transit and ~5s+ after arriving at
                     # platform) vs green text `+/-Ncm` (stopping offset, briefly after
                     # arrival). Run both readers unconditionally — their masks are
                     # mutually exclusive, only one returns non-None per frame.
-                    d_val, _, d_score = read_distance(d_cell, templates)
-                    offset_val, _, offset_score = read_stopping_offset(d_cell, templates)
+                    d_val, _, d_score = read_distance(d_cell, templates, seg=seg)
+                    offset_val, _, offset_score = read_stopping_offset(d_cell, templates, seg=seg)
                     # Speed limit (最高速度): line-dependent, often empty. None is normal.
-                    sl_val, _, sl_score = read_speed_limit(sl_cell, templates)
+                    sl_val, _, sl_score = read_speed_limit(sl_cell, templates, seg=seg, red_templates=red_templates)
                     sample_ts = time.time()
                     if sl_val is not None and sl_score < SUSPICIOUS_SPEED_LIMIT_SCORE:
                         _dump_misread_speed_limit_cell(sl_cell, sl_val, sl_score, sample_ts)
