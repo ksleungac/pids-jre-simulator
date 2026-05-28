@@ -1656,6 +1656,7 @@ class LowerDisplay:
         self._current_slot: int = self._SLOT_FULL
         self._slot_start: float | None = None
         self._prev_at_station: bool | None = None
+        self._prev_curr_stop: int | None = None
 
     def set_state(self, state) -> None:
         """Bind to an AppState instance. Subsequent draws read live state."""
@@ -1767,16 +1768,24 @@ class LowerDisplay:
         at_station=True is captured as the first observation without firing
         the edge, so the cycle starts on its default slot rather than
         force-jumping to transfer.
+
+        Also fires on cross-stop jumps (curr_stop changed while at_station
+        stayed True) so jump_to_stop → arrow-key previewing shows transfer
+        info immediately at each stop.
         """
         if self._prev_at_station is None:
             self._prev_at_station = state.at_station
+            self._prev_curr_stop = state.curr_stop
             return
-        if state.at_station and not self._prev_at_station:
+        stop_changed = state.curr_stop != self._prev_curr_stop
+        rising = state.at_station and (not self._prev_at_station or stop_changed)
+        if rising:
             slots = self._available_slots(state)
             if self._SLOT_TRANSFER in slots:
                 self._current_slot = self._SLOT_TRANSFER
                 self._slot_start = current_time
         self._prev_at_station = state.at_station
+        self._prev_curr_stop = state.curr_stop
 
     def _pick_renderer(self, mode):
         """Pick the renderer for the current slot + language mode.

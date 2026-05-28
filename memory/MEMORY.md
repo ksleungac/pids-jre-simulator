@@ -4,6 +4,7 @@ Long-term curated memories. One-line pointers — daily logs hold the detail.
 
 ---
 
+- [2026-05-28](2026-05-28.md) — Deferred-findings triage: 2 removed not-real, paths re-synced to auto_input/ split; 3 fixes (jump_to_stop cross-stop transfer-reveal now intended, mixer.set_reserved(1), _sta_paused exception reset); principles.md Discussion-first gained per-item-gating-for-trivial-batches bullet
 - [2026-05-27](2026-05-27.md) — 8-station continuity triangle: extends from last cell bar after 分 marker when route continues; dormant scaffolding removed; TODO.md purged 34 stale [x] items; ENGLISH EIGHT slot confirmed shipped
 - [2026-05-26 nudge](2026-05-26.md) — PreToolUse(Edit) context nudge hook: one-liner reminders for display renderers/route_loader/route.json; dual-ROI framing (bug-prevention + token-savings) codified in conventions.md sensor tiers
 - [2026-05-26 keihin](2026-05-26.md) — keihin/1275A PA trim: 59 files lead-trimmed (onset 0.22–2.35s), 58+1 verified PASS; verify_pa_listen head+tail playback via `play(start=...)` seek (STA pattern); pa-make skill +2 steps (trim-amount summary, "don't bash-launch GUI audio tools")

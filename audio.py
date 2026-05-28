@@ -81,6 +81,9 @@ class AudioPlayer:
         # different audio sources. _sta_sound is held to keep the Sound
         # alive for the channel's lifetime; pygame stops playback if the
         # Sound is GC'd mid-play.
+        # Reserve channel 0 so any future Sound.play() without an explicit
+        # channel can't steal it from STA.
+        mixer.set_reserved(1)
         self._sta_channel = mixer.Channel(0)
         self._sta_sound: Optional[mixer.Sound] = None
         # pygame.Channel.get_busy() returns True even on a paused channel,
@@ -244,6 +247,9 @@ class AudioPlayer:
             self._sta_play_start_ts = time.monotonic()
         except Exception as e:
             print(f"STA playback error: {type(e).__name__}: {e}")
+            # A failed fresh-play attempt invalidates any prior pause state —
+            # nothing is playing, so "paused" is incoherent.
+            self._sta_paused = False
 
     def pause(self) -> None:
         """Pause both PA and STA streams. Used by jump_to_stop /
