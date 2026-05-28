@@ -274,12 +274,20 @@ def check_route_loads(route_path: Path, station_db: dict, issues: list) -> None:
 
 def main():
     quiet = "--quiet" in sys.argv
+    route_arg = None
+    if "--route" in sys.argv:
+        idx = sys.argv.index("--route")
+        if idx + 1 >= len(sys.argv):
+            print("--route requires an argument", file=sys.stderr)
+            sys.exit(1)
+        route_arg = Path(sys.argv[idx + 1])
+
     translations = load(DATA_ROOT / "translations.json")
     train_types = load(DATA_ROOT / "train_types.json")
     stations = load(DATA_ROOT / "stations.json")
     lines = load(DATA_ROOT / "lines.json")
 
-    if not quiet:
+    if not quiet and route_arg is None:
         print(f"translations.json: {len(translations)} entries")
         print(f"train_types.json:  {len(train_types)} entries")
         print(f"stations.json:     {len(stations)} entries")
@@ -290,16 +298,22 @@ def main():
             print(f"  WARNING: code_3 count drifted from documented 22")
 
     issues = []
-    check_lines_json(lines, issues)
-    check_stations_transfers(stations, lines, issues)
-    check_transfers_by_view(stations, lines, issues)
-    for route_path in sorted(AUDIO_ROOT.rglob("route.json")):
+
+    if route_arg is None:
+        check_lines_json(lines, issues)
+        check_stations_transfers(stations, lines, issues)
+        check_transfers_by_view(stations, lines, issues)
+        route_paths = sorted(AUDIO_ROOT.rglob("route.json"))
+    else:
+        route_paths = [route_arg]
+
+    for route_path in route_paths:
         check_route(route_path, translations, train_types, issues)
         check_route_loads(route_path, translations, issues)
         check_route_transfer_view(route_path, stations, issues)
 
     if not issues:
-        if not quiet:
+        if not quiet and route_arg is None:
             print("\nAll routes clean.")
         return 0
 

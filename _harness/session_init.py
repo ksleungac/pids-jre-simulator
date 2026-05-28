@@ -4,7 +4,7 @@ Replaces 3-4 separate Read calls at session start.
 Outputs: today's memory, yesterday's memory, MEMORY.md index, TODO sweep.
 
 Usage:
-    uv run _dev_scripts/session_init.py
+    uv run _harness/session_init.py
 """
 
 import io

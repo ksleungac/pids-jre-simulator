@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run _dev_scripts/edit_nudge_hook.py 2>/dev/null || exit 0"
+            "command": "uv run _harness/edit_nudge_hook.py 2>/dev/null || exit 0"
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "input=$(cat); echo \"$input\" | grep -q 'git status' && uv run _dev_scripts/classify_commit.py --hook 2>/dev/null || exit 0"
+            "command": "input=$(cat); echo \"$input\" | grep -q 'git status' && uv run _harness/classify_commit.py --hook 2>/dev/null || exit 0"
           }
         ]
       },
@@ -35,7 +35,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run _dev_scripts/stale_ref_hook.py 2>/dev/null || exit 0"
+            "command": "uv run _harness/stale_ref_hook.py 2>/dev/null || exit 0"
+          },
+          {
+            "type": "command",
+            "command": "uv run _harness/route_json_hook.py 2>/dev/null || exit 0"
           }
         ]
       }

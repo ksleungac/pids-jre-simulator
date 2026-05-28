@@ -39,7 +39,7 @@ After version is confirmed, run all sub-steps in sequence without pausing. If an
 **2a — Dep pre-flight**
 
 ```powershell
-uv run _dev_scripts/check_deps.py
+uv run _harness/check_deps.py
 ```
 
 If non-zero, stop and surface the violations. See `critical_lessons.md §3`.

@@ -4,7 +4,7 @@ Catches critical_lessons.md §3: lazy import ≠ optional dep. Any third-party p
 imported anywhere in production code (including nested/conditional imports) must be in
 [project.dependencies], not [dev].
 
-Run:  uv run _dev_scripts/check_deps.py
+Run:  uv run _harness/check_deps.py
 Also called as a pre-flight gate by /build.
 """
 
@@ -91,6 +91,7 @@ def _allowed_imports(root: Path) -> set[str]:
 
 
 def main() -> int:
+    sys.stdout.reconfigure(encoding="utf-8")
     root = Path(__file__).resolve().parent.parent
 
     allowed = _allowed_imports(root)

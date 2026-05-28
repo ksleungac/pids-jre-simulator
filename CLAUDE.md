@@ -6,7 +6,7 @@ Japanese Train PA (Public Address) Simulator — pygame-based app simulating sta
 
 Before doing anything else, every session:
 
-Run `uv run _dev_scripts/session_init.py` — dumps today's + yesterday's memory, MEMORY.md index, and TODO sweep in one shot. Read the output instead of opening files individually.
+Run `uv run _harness/session_init.py` — dumps today's + yesterday's memory, MEMORY.md index, and TODO sweep in one shot. Read the output instead of opening files individually.
 
 `principles.md`, `conventions.md`, `critical_lessons.md`, `redlines.md` auto-load as memory files — already in context.
 

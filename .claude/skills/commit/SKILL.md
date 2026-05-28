@@ -25,7 +25,7 @@ Keep each commit to one logical change. Mixing related data + program changes is
 
 ### Step 1 — Inventory + classify
 
-Run `git status --short`. The PostToolUse hook (`_dev_scripts/classify_commit.py`) auto-injects a classification report — read it instead of classifying manually. The report covers: file buckets, branch name, session-recap existence, data+program mix warnings.
+Run `git status --short`. The PostToolUse hook (`_harness/classify_commit.py`) auto-injects a classification report — read it instead of classifying manually. The report covers: file buckets, branch name, session-recap existence, data+program mix warnings.
 
 ### Step 2 — Relatedness test
 
@@ -44,5 +44,5 @@ For bulk additions: subject names the largest change; body enumerates the rest w
 - Stage specific files only — **never** `git add -A` / `git add .`.
 - Prepend `CLAUDE_COMMIT_VIA_SKILL=1` — mandatory; the PreToolUse hook blocks `git commit` without this marker.
 - Use Bash (not PowerShell) for the commit: `CLAUDE_COMMIT_VIA_SKILL=1 git commit -m "$(cat <<'EOF' ... EOF)"`.
-- Include `Co-Authored-By:` trailer.
+- Include `Co-Authored-By:` trailer — read the exact model name from the session system info (e.g. `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`). Never guess; the system info is always present.
 - Verify with `git status --short` after.
