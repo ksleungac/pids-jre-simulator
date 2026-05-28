@@ -47,7 +47,7 @@ This project has codified rules and dormant-scaffolding patterns; surface findin
 3. Read `memory/MEMORY.md` — long-term curated index
 4. Read `.claude/rules/critical_lessons.md`, `conventions.md`, `principles.md` — codified rules to apply
 5. Read `.claude/skills/vibe-check/SKILL.md` Step 2 — the 10 smell categories you will apply as Lens 2
-6. For any domain doc in the diff (`DISPLAY.md`, `DATA_FORMAT.md`, `AUTO_INPUT.md`), read its EDIT-CONTRACT block at the top
+6. For any domain doc in the diff (`DISPLAY.md`, `DATA_FORMAT.md`, `auto_input/README.md`), read its EDIT-CONTRACT block at the top
 
 ## Three review lenses (apply ALL three to the in-scope diff)
 

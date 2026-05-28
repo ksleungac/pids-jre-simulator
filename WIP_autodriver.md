@@ -1,6 +1,6 @@
 # WIP — Auto-driver (pending design + history)
 
-Working notes for the auto-input subsystem. Current-state facts live in [AUTO_INPUT.md](AUTO_INPUT.md). This doc holds:
+Working notes for the auto-input subsystem. Current-state facts live in [auto_input/README.md](auto_input/README.md). This doc holds:
 
 - **Pending design** — entry-point flow + Layer 1 silent-advance, yet to be implemented.
 - **Validation history** — chronological record of live + offline validation milestones.
@@ -101,7 +101,7 @@ Full backlog lives in [TODO.md § Auto-input / OCR](TODO.md). Two items gate the
 
 Context to load:
 
-- [AUTO_INPUT.md](AUTO_INPUT.md) — current-state facts.
+- [auto_input/README.md](auto_input/README.md) — current-state facts.
 - This doc — entry-point flow design + history + calibration.
 - `memory/2026-05-09.md` + `memory/2026-05-09-overnight.md` — Layer 3 rename + panel redesign + signal-flag fix.
 - `memory/2026-05-08.md` — black-screen-at-platform crisis + cross-attribute hardening.

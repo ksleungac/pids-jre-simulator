@@ -11,7 +11,7 @@ and `sim.state.cnt_pa` directly. If the user manually pressed PageDown ahead of
 an auto-fire (advancing the simulator state), the auto-fire detects the mismatch
 and skips. No synthetic keystrokes, no keyboard hooks, no parallel route loading.
 
-Architecture pointer: AUTO_INPUT.md "Architecture" section.
+Architecture pointer: auto_input/README.md "Architecture" section.
 
 Usage (from `main.py`):
     driver = AutoDriver(sim, lead_m=900, interval_s=5)
@@ -67,7 +67,7 @@ class Layer3State:
     Renamed 2026-05-09 from trigger-fire-shape names (STOPPING_FRESH,
     APPROACHING_BEFORE_DEP, etc.) to verb-form transit vocabulary. The new
     names describe what the train is *doing*, not which detector flag has
-    flipped. See AUTO_INPUT.md § "Layer 3 — AutoDriver's inferred game state"
+    flipped. See auto_input/README.md § "Layer 3 — AutoDriver's inferred game state"
     for the full inference truth table.
     """
 
@@ -569,7 +569,7 @@ class _Detector:
     `_fire_departure` / `_fire_arrival`).
 
     `inferred_state()` returns the canonical Layer 3 state — what AutoDriver
-    thinks the IRL game train is doing. See AUTO_INPUT.md § "Layer 3" for the
+    thinks the IRL game train is doing. See auto_input/README.md § "Layer 3" for the
     inference truth table.
 
     PASSING badge handling: while the badge reads PASSING the HUD distance is to
@@ -589,7 +589,7 @@ class _Detector:
     def inferred_state(self) -> str:
         """Return the canonical Layer 3 state for the current sample.
 
-        Pure function of `prev_badge` + Layer 2 cache. See AUTO_INPUT.md
+        Pure function of `prev_badge` + Layer 2 cache. See auto_input/README.md
         § "Layer 3 — AutoDriver's inferred game state" for the truth table.
         """
         badge = self.prev_badge
@@ -616,7 +616,7 @@ class _Detector:
         # speed climbing from 0 (the game can't fake movement without rendering it),
         # so when prev_badge==STOPPED, require speed>0 to accept the transition.
         # Without this the spurious PASSING fires a phantom STOPPED→PASSING and resets
-        # observed-flags as if a new segment began. See AUTO_INPUT.md § "Cross-attribute reject".
+        # observed-flags as if a new segment began. See auto_input/README.md § "Cross-attribute reject".
         if self.prev_badge == "STOPPED" and badge in ("MOVING", "PASSING") and (speed is None or speed == 0):
             print(
                 f"          [AD] >>> CROSS-REJECT raw_badge={badge} (prev=STOPPED, speed={speed} — train hasn't moved; likely black-screen at platform)"

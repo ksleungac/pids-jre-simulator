@@ -214,7 +214,7 @@ class PASimulator:
         # background thread) to request a PA fire from the main thread. The input
         # loop checks this alongside keyboard.is_pressed("page down") and resets
         # to False after firing — so auto-fires take the same code path as manual
-        # PageDown presses. See AUTO_INPUT.md.
+        # PageDown presses. See auto_input/README.md.
         self.pending_next_pa: bool = False
 
         # Latest OCR readings + detector state, written by AutoDriver thread, read
@@ -456,7 +456,7 @@ class PASimulator:
 
         ``pending_next_pa`` is checked alongside the manual PageDown — an
         auto-input driver running in a background thread sets it to fire a PA
-        through the same code path. See AUTO_INPUT.md.
+        through the same code path. See auto_input/README.md.
         """
         try:
             # Gate consumption on audio: `_next_pa` no-ops while a PA is mid-play

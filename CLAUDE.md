@@ -159,7 +159,7 @@ Consult when needed, not upfront:
 - **Data/JSON** → [DATA_FORMAT.md](DATA_FORMAT.md)
 - **LCD displays** → [DISPLAY.md](DISPLAY.md) (cross-model); [DISPLAY_E235.md](DISPLAY_E235.md) (per-sub-series)
 - **Audio/Diagram** → `/pa-make` or `/sta-make` skill; per-line quirks in [audio/README.md](audio/README.md)
-- **Auto-input / OCR** → [AUTO_INPUT.md](AUTO_INPUT.md)
+- **Auto-input / OCR** → [auto_input/README.md](auto_input/README.md)
 - **Code contracts** → inline `# CONTRACT:` blocks at code sites
 - **Preview** → `uv run preview_display.py` (PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit)
 - **Build/Release** → `/build` + `/release` skills

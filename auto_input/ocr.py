@@ -22,7 +22,7 @@ source screenshots that were used to extract them live under `_ocr_calibration/`
 after re-capturing source screenshots (only needed if the game HUD layout
 changes).
 
-Full domain reference: AUTO_INPUT.md.
+Full domain reference: auto_input/README.md.
 
 Run validation: uv run python -m auto_input.ocr
 """
@@ -55,7 +55,7 @@ BADGE_ANCHOR_FILES: dict[str, list[str]] = {
 # diff 60-110; mid-animation transient spikes >70. 50 cleanly separates real
 # from garbage with margin on both sides. Gate lives in classify_badge_state:
 # rejected frames return (None, diff) so the detector treats them as OCR FAIL.
-# See AUTO_INPUT.md § "Badge classification".
+# See auto_input/README.md § "Badge classification".
 BADGE_DIFF_REJECT = 50.0
 
 # Tightened threshold: text is near-black (~0-40), HUD bg is light (~200+), scenery
@@ -172,7 +172,7 @@ def classify_badge_state(cell: np.ndarray, anchors: dict[str, list[np.ndarray]])
 
     Returns (None, diff) when best_diff > BADGE_DIFF_REJECT — no anchor is a credible
     match (dark-cell garbage from black-screen frames, mid-animation spikes, etc.).
-    Diff value is preserved for diagnostics. See AUTO_INPUT.md § "Badge classification".
+    Diff value is preserved for diagnostics. See auto_input/README.md § "Badge classification".
     """
     best_state: str | None = None
     best_diff = float("inf")

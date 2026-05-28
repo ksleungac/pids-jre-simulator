@@ -4,6 +4,7 @@ Long-term curated memories. One-line pointers — daily logs hold the detail.
 
 ---
 
+- [2026-05-28 root-tidy](2026-05-28.md) — AUTO_INPUT.md → auto_input/README.md (all refs updated); compare_fonts/grid → _dev_scripts/; session-recap placement table gained auto_input/README.md row
 - [2026-05-28 harness](2026-05-28.md) — route_json_hook PostToolUse sensor + validate_data.py --route; _harness/ folder (moved 7 scripts from _dev_scripts/); check_harness.py regex generalized; commit skill co-author tightened; conventions.md: sensor design principle (flag not inject) + hook UTF-8 stdout pattern
 - [2026-05-28 PA](2026-05-28.md) — TODO data-task triage (transfer-info + EN + joban deferrals); chuo/1654T 32-PA trim + by-ear (7 FAIL → manual trim); verify_pa_listen.py gained interactive trim controls (mouse-drag seek bar, scrub playback, ffmpeg apply); trim_pa_silence.py onset detector v2: sustained-voice gate + adaptive threshold (5/6 better vs old); spectral flatness dead end for low-bitrate PA MP3s
 - [2026-05-28](2026-05-28.md) — Deferred-findings triage: 2 removed not-real, paths re-synced to auto_input/ split; 3 fixes (jump_to_stop cross-stop transfer-reveal now intended, mixer.set_reserved(1), _sta_paused exception reset); principles.md Discussion-first gained per-item-gating-for-trivial-batches bullet

@@ -9,11 +9,11 @@ Feasibility scaffold for running OCR auto-input on a game window rendered at 192
 > **Refuses:**
 > - History notes ("we tried X but it didn't work, then tried Y") — keep only the conclusion that informs next-session work
 > - Code-snippet illustrations longer than 5 lines — link to `file:line` instead
-> - Facts already in [AUTO_INPUT.md](AUTO_INPUT.md) — cross-reference, don't restate
+> - Facts already in [auto_input/README.md](auto_input/README.md) — cross-reference, don't restate
 >
 > **Voice:** caveman-full for findings (terse, fragments OK); normal voice for rationale where misreading would mislead.
 >
-> **Graduation:** dissolves into AUTO_INPUT.md § "Resolution dependency" + § "Recalibration" when 1080p production path actually lands. Precedent: `WIP_transfer_display.md` → DISPLAY.md (2026-05-05).
+> **Graduation:** dissolves into auto_input/README.md § "Resolution dependency" + § "Recalibration" when 1080p production path actually lands. Precedent: `WIP_transfer_display.md` → DISPLAY.md (2026-05-05).
 
 ## Premise
 
@@ -56,5 +56,5 @@ When the user has captured native 1080p references and wants to wire production 
 - Read this doc + `_dev_scripts/_probe_1080p.py` first. The probe is the closest existing approximation of the 1080p pipeline; production design should converge with it, not diverge.
 - Don't reuse the probe's monkey-patched approach in production. Module-level constant mutation is fine for a probe; production needs a real config abstraction (per item 4 above).
 - Production design is structural — propose `/third-man` for layout ideas before writing code (per `principles.md § Self-propose /third-man at impasse OR before structural refactors`).
-- The 1080p path will touch: `auto_input/driver.py`, `auto_input/hud_layout.py`, `auto_input/ocr.py`, `_dev_scripts/extract_ocr_assets.py`. Downstream syncs: AUTO_INPUT.md § "Resolution dependency" + § "Recalibration"; build skill if any new top-level dir gets added; CLAUDE.md mental model line on resolution support.
-- After production lands: dissolve this doc into AUTO_INPUT.md and delete (per the conventions.md graduation rule).
+- The 1080p path will touch: `auto_input/driver.py`, `auto_input/hud_layout.py`, `auto_input/ocr.py`, `_dev_scripts/extract_ocr_assets.py`. Downstream syncs: auto_input/README.md § "Resolution dependency" + § "Recalibration"; build skill if any new top-level dir gets added; CLAUDE.md mental model line on resolution support.
+- After production lands: dissolve this doc into auto_input/README.md and delete (per the conventions.md graduation rule).

@@ -14,7 +14,7 @@ The committed runtime assets under `ocr_templates/` are a few KB total.
 Run after re-capturing reference screenshots (e.g. game HUD layout changed):
     uv run python _dev_scripts/extract_ocr_assets.py
 
-Then commit the diff under `ocr_templates/`. Domain reference: AUTO_INPUT.md.
+Then commit the diff under `ocr_templates/`. Domain reference: auto_input/README.md.
 """
 
 from __future__ import annotations
@@ -175,7 +175,7 @@ def main() -> int:
     if not SOURCES_DIR.exists():
         print(f"ERROR: {SOURCES_DIR} not found.")
         print("Re-capture reference screenshots into that folder before running this script.")
-        print("See AUTO_INPUT.md § Recalibration for the full list of expected files.")
+        print("See auto_input/README.md § Recalibration for the full list of expected files.")
         return 1
 
     print(f"Extracting from {SOURCES_DIR.name}/ -> {OUT_DIR.name}/\n")

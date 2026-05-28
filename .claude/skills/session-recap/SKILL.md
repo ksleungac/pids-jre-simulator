@@ -97,6 +97,7 @@ Consult this before ANY doc write, not only at recap time.
 | Red lines | `.claude/rules/redlines.md` | CLAUDE.md |
 | Past-mistake lessons | `.claude/rules/critical_lessons.md` | anywhere else |
 | Build/distribution | `.claude/skills/build/SKILL.md` | CLAUDE.md |
+| Auto-input / OCR domain | `auto_input/README.md` | CLAUDE.md |
 | JSON field definitions | `DATA_FORMAT.md` | CLAUDE.md |
 | LCD cross-model infra | `DISPLAY.md` | CLAUDE.md |
 | LCD per-sub-series | `DISPLAY_E235.md` | DISPLAY.md |
