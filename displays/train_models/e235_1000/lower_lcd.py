@@ -1557,17 +1557,17 @@ class EnglishEightStationDisplay(JapaneseEightStationDisplay):
         return stop.get("english", stop.get("name", ""))
 
     def _draw_label(self, text: str, cell_x: int, color: Tuple[int, int, int]) -> None:
-        """Render 45° counter-clockwise rotated Romaji in the label band."""
+        """Render 60° counter-clockwise rotated Romaji in the label band."""
         if not text:
             return
 
-        rad = math.radians(45.0)
+        rad = math.radians(60.0)
         cos_a, sin_a = math.cos(rad), math.sin(rad)
         scale_factor = 4.0
 
         bottom_y = self.label_top_y + self.label_box_h
-        base_tx = cell_x + self.stops_w // 2
-        base_ty = self.bar_y - 5  # 5px above the colored bar
+        base_tx = cell_x + self.stops_w // 2 + 6
+        base_ty = self.bar_y - 3  # 3px above the colored bar
 
         def draw_line(st: str, tx: float, ty: float):
             text_surf = self.font_stops_supersampled.render(st, True, color)
@@ -1576,7 +1576,7 @@ class EnglishEightStationDisplay(JapaneseEightStationDisplay):
             if W > max_w_super:
                 text_surf = pygame.transform.smoothscale(text_surf, (int(max_w_super), H))
                 W, H = text_surf.get_size()
-            rotated_surf = pygame.transform.rotozoom(text_surf, 45.0, 1.0 / scale_factor)
+            rotated_surf = pygame.transform.rotozoom(text_surf, 60.0, 1.0 / scale_factor)
             W_rot, H_rot = rotated_surf.get_size()
             dx, dy = -W / (2.0 * scale_factor), H / (2.0 * scale_factor)
             dx_rot = dx * cos_a + dy * sin_a
@@ -1592,7 +1592,7 @@ class EnglishEightStationDisplay(JapaneseEightStationDisplay):
         if len(lines) == 1:
             draw_line(lines[0], base_tx, base_ty)
         else:
-            half_sep = 13.0 / 2.0
+            half_sep = 22.0 / 2.0
             tx1 = base_tx - half_sep * sin_a
             ty1 = base_ty - half_sep * cos_a
             tx2 = base_tx + half_sep * sin_a
