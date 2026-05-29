@@ -1470,10 +1470,10 @@ class EnglishDisplay(JapaneseDisplay):
         lines = english_name.split("\n")
 
         # --- Tuneable layout params (adjust freely) ---
-        angle = 45.0
-        target_x_offset = self.stops_w // 2  # center on cell
-        target_y_offset = 4  # 3px above bar top (closer to bar, lowered by 3px from y + 1)
-        line_separation = 13.0  # perpendicular separation in px for 2-line stations
+        angle = 60.0
+        target_x_offset = self.stops_w // 2 + 6  # +6px right (visual weight correction for tilted text)
+        target_y_offset = 6  # 5px above bar top
+        line_separation = 15.0  # perpendicular separation in px for 2-line stations
         scale_factor = 4.0  # 4x supersampling scale factor
         # -----------------------------------------------
 
@@ -1488,7 +1488,7 @@ class EnglishDisplay(JapaneseDisplay):
             text_surf = self.font_stops_supersampled.render(text, True, text_color)
 
             W, H = text_surf.get_size()
-            max_w_super = 110.0 * scale_factor  # 110px threshold in 1x space to prevent neighbor overlapping
+            max_w_super = 105.0 * scale_factor  # 105px threshold in 1x space to prevent neighbor overlapping
             if W > max_w_super:
                 # Horizontally compress long station names to avoid overlapping with neighbors
                 text_surf = pygame.transform.smoothscale(text_surf, (int(max_w_super), H))

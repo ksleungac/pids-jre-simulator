@@ -816,5 +816,38 @@
     "成田空港": {
         "furigana": "なりたくうこう",
         "english": "Narita Airport\nTerminal 1"
+    },
+    "衣笠": {
+        "english": "Kinugasa"
+    },
+    "横須賀": {
+        "english": "Yokosuka"
+    },
+    "田浦": {
+        "english": "Taura"
+    },
+    "東逗子": {
+        "english": "Higashi-Zushi"
+    },
+    "逗子": {
+        "english": "Zushi"
+    },
+    "鎌倉": {
+        "english": "Kamakura"
+    },
+    "北鎌倉": {
+        "english": "Kita-Kamakura"
+    },
+    "東戸塚": {
+        "english": "Higashi-Totsuka"
+    },
+    "保土ヶ谷": {
+        "english": "Hodogaya"
+    },
+    "新川崎": {
+        "english": "Shin-Kawasaki"
+    },
+    "西大井": {
+        "english": "Nishi-Ōi"
     }
 }
