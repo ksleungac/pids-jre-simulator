@@ -16,7 +16,7 @@ Reproduce the PyInstaller build locally: produce a one-file exe with version met
 
 **Version** (e.g. `0.5.2`, `v0.5.2`, `0.5.2b`).
 
-- If the user didn't provide a version in the invocation, **ask for it first**. Do not guess, do not reuse a version from a prior session, do not read it from git tags — ask.
+- If the user didn't provide a version in the invocation, **ask for it first**. Do not guess, do not reuse a version from a prior session, do not read it from git tags — ask. (The version supplied here is embedded into the exe's PE metadata via `version_info.txt`; the running app reads it back through `app_paths.app_version()` for the update check — so the version you stamp at build time IS the single source of truth, no separate constant.)
 - **Subversion letters are NOT betas.** `a`, `b`, `c` are sequential sub-revisions of the same patch (user's scheme). Do not treat `b` as "beta" and suppress it anywhere — it must survive into the exe metadata and filenames verbatim.
 - **Normalize for filenames/display**: strip any leading `v`, then always re-add `v` in output filenames (see Step 3). So `0.5.2` and `v0.5.2` both produce `JRE-PA-Simulator-v0.5.2-distribution.zip`.
 - **Parse into a 4-tuple `(major, minor, patch, sub)`** for the Windows version resource:

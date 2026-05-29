@@ -12,6 +12,7 @@ import pygame
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 
 import i18n
+import update_check
 from language_picker import LanguagePicker
 from setup import SetupScreen
 from app import PASimulator
@@ -44,6 +45,10 @@ def main():
     # Initialize pygame for the setup screen
     pygame.init()
     pygame.mixer.init()
+
+    # Kick off the fail-silent update check early so its 3s network window
+    # overlaps the picker/setup screens; the setup screen polls the result.
+    update_check.check_async()
 
     # Repo root (dev) / alongside-exe (frozen) — single canonical helper.
     from app_paths import project_root

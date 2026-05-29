@@ -74,6 +74,11 @@
     "zh_HK": "? 教學",
     "zh_CN": "? 教程"
   },
+  "setup.update_hint": {
+    "en": "Update available: v{version}",
+    "zh_HK": "有新版本:v{version}",
+    "zh_CN": "有新版本:v{version}"
+  },
 
   "tutorial.step_header": {
     "en": "Step {n} of {total}",

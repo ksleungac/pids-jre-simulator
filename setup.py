@@ -2,9 +2,11 @@
 
 import os
 import json
+import webbrowser
 import pygame
 
 import i18n
+import update_check
 from app_paths import project_root, load_json_relative
 from constants import SETUP_KEY_REPEAT_DELAY, SETUP_KEY_REPEAT_INTERVAL
 
@@ -36,6 +38,10 @@ class SetupScreen:
         self.scroll_offset = 0
         self.row_height = 50
         self._tutorial_btn_rect: pygame.Rect | None = None
+        # Update-available hint (top-left) — populated by _draw_update_hint when
+        # update_check found a newer release; read by run() for the click.
+        self._update_hint_rect: pygame.Rect | None = None
+        self._update_url: str | None = None
         # Reserve ~60px below the route list for the OCR Auto-PA band, plus the usual
         # title (50px) and instructions (50px). Route list shrinks from 6 to 5 visible
         # rows on the default 420px-tall window.
@@ -173,6 +179,9 @@ class SetupScreen:
         # "? Tutorial" button top-right (only after OOBE is complete).
         # Drawn before the route list so its hit-rect is set for the click loop.
         self._draw_tutorial_button()
+
+        # "Update available" hint top-left (only when a newer release was found).
+        self._draw_update_hint()
 
         # Calculate visible area
         start_idx = 0
@@ -416,6 +425,37 @@ class SetupScreen:
         )
         self._tutorial_btn_rect = rect
 
+    def _draw_update_hint(self) -> None:
+        """Render a small clickable "update available" hint in the top-left when
+        ``update_check`` found a newer GitHub release. Sets ``_update_hint_rect``
+        / ``_update_url`` for the click handler. No-op (clears them) when no
+        update is pending — including offline / failed checks (fail-silent)."""
+        info = update_check.get_update()
+        if info is None:
+            self._update_hint_rect = None
+            self._update_url = None
+            return
+        version, url = info
+        self._update_url = url
+        # ── tuneable params ──────────────────────────────────────
+        margin_left = 12
+        margin_top = 12
+        pill_h = 28
+        pad_x = 12
+        dot_r = 5
+        dot_gap = 7  # gap between status dot and label
+        # ─────────────────────────────────────────────────────────
+        label = i18n.t("setup.update_hint", version=version)
+        label_img = self.control_font.render(label, True, self.text_color)
+        pill_w = pad_x + dot_r * 2 + dot_gap + label_img.get_width() + pad_x
+        rect = pygame.Rect(margin_left, margin_top, pill_w, pill_h)
+        pygame.draw.rect(self.screen, self.control_bg, rect, border_radius=pill_h // 2)
+        cy = rect.centery
+        dot_cx = rect.x + pad_x + dot_r
+        pygame.draw.circle(self.screen, self.highlight_color, (dot_cx, cy), dot_r)
+        self.screen.blit(label_img, (dot_cx + dot_r + dot_gap, cy - label_img.get_height() // 2))
+        self._update_hint_rect = rect
+
     def _load_line_icon(self, line_code: str) -> pygame.Surface | None:
         """Load and cache a line icon PNG from data/line_icons/.
 
@@ -562,6 +602,15 @@ class SetupScreen:
                             # OCR auto-PA band, so check it first.
                             if self._tutorial_btn_rect is not None and self._tutorial_btn_rect.collidepoint(event.pos):
                                 return {"action": "run_tutorial"}
+
+                            # Update-available hint → open the release page in
+                            # the default browser. Fail-silent if it can't open.
+                            if self._update_hint_rect is not None and self._update_hint_rect.collidepoint(event.pos) and self._update_url:
+                                try:
+                                    webbrowser.open(self._update_url)
+                                except Exception:
+                                    pass
+                                continue
 
                             # Check if click is on route list
                             clicked_idx = self._get_route_index_at_pos(event.pos)
