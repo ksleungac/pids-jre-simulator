@@ -8,15 +8,49 @@ Usage:
 """
 
 import io
+import subprocess
 import sys
 from datetime import date, timedelta
 from pathlib import Path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-# Allow importing sibling modules and _dev_scripts/ helpers (e.g. sweep_todo)
+# Allow importing sibling modules
 sys.path.insert(0, str(Path(__file__).parent))
-sys.path.insert(0, str(Path(__file__).parent.parent / "_dev_scripts"))
+
+
+def git_sync():
+    """Fetch + fast-forward if possible; report divergence for manual resolution."""
+    subprocess.run(["git", "fetch", "origin"], capture_output=True)
+
+    rev = subprocess.run(
+        ["git", "rev-list", "--left-right", "--count", "HEAD...origin/master"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if rev.returncode != 0:
+        print("=== Git sync — could not compare with origin ===\n")
+        return
+
+    ahead, behind = (int(x) for x in rev.stdout.strip().split())
+
+    if ahead == 0 and behind == 0:
+        print("=== Git sync — already up to date ===\n")
+    elif ahead == 0:
+        result = subprocess.run(
+            ["git", "merge", "--ff-only", "origin/master"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        print(f"=== Git sync — pulled {behind} commit(s) ===\n{result.stdout.strip()}\n")
+    else:
+        print(
+            f"=== Git sync — NEEDS MANUAL RESOLUTION ===\n"
+            f"  Local is {ahead} ahead, {behind} behind origin/master.\n"
+            f"  Run: git pull --rebase  (or merge manually)\n"
+        )
 
 
 def read_if_exists(path, label):
@@ -33,6 +67,8 @@ def read_if_exists(path, label):
 
 
 def main():
+    git_sync()
+
     today = date.today()
     yesterday = today - timedelta(days=1)
 

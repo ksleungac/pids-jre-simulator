@@ -53,7 +53,7 @@ Classify each and propose canonical home. Every entry promotes or is omitted.
 If no corrections, state explicitly. All omits → "all N corrections omitted as passing remarks."
 
 ### TODO.md sweep
-Run `uv run _dev_scripts/sweep_todo.py` — pre-digested report of section counts, likely-closed items (cross-referenced against recent commits), and stale `[x]` items. Read the report instead of parsing TODO.md manually. Then:
+Run `uv run _harness/sweep_todo.py` — pre-digested report of section counts, likely-closed items (cross-referenced against recent commits), and stale `[x]` items. Read the report instead of parsing TODO.md manually. Then:
 - **Closed**: items shipped — propose `[x]` mark or removal.
 - **New**: deferred design Qs, dangling follow-ups surfaced this session.
 - **Rephrase**: items whose framing rotted. **No changes**: state explicitly.
@@ -61,6 +61,7 @@ Run `uv run _dev_scripts/sweep_todo.py` — pre-digested report of section count
 ### Documentation updates (will land after Step 2 approval)
 - List target files and sections.
 - memory/YYYY-MM-DD.md: not shown to user at recap time.
+- memory/MEMORY.md: always — one index entry per session block.
 ```
 
 ### Step 2 — User reviews and confirms
@@ -78,6 +79,8 @@ After approval, update only confirmed files. Each piece of information has ONE h
 **Cross-layer alignment:** When codifying a pattern, ask "does it have smell shape (post-hoc) and per-diff shape (review-time)?" If yes, write at all three layers (authoring-time principle/convention, `/vibe-check` smell, `/review-dirty` lens) with cross-citation.
 
 **Daily log writes silently** — narrative + decisions + why-context. See Daily log format below.
+
+**MEMORY.md always gets an entry** — one line per session block, written immediately after the daily log. Format at bottom of this file.
 
 ---
 

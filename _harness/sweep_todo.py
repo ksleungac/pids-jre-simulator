@@ -5,8 +5,8 @@ and reports: section counts, likely-closed items, stale [x] items
 that could be cleaned up.
 
 Usage:
-    uv run _dev_scripts/sweep_todo.py           # plain text report
-    uv run _dev_scripts/sweep_todo.py --days 7   # look back N days (default 14)
+    uv run _harness/sweep_todo.py           # plain text report
+    uv run _harness/sweep_todo.py --days 7   # look back N days (default 14)
 """
 
 import io

@@ -4,6 +4,7 @@ Long-term curated memories. One-line pointers — daily logs hold the detail.
 
 ---
 
+- [2026-05-29 root-tidy](2026-05-29.md) — sweep_todo moved _dev_scripts/→_harness/ (remote workaround reverted); session_init now auto-syncs git (ff-only + divergence report); _enum_3line.py + requirements.txt deleted
 - [2026-05-28 multi-res merge](2026-05-28.md) — 1080p OCR merge from other PC (stash/pull/pop); review+fix: stale resolution-gate comment + TODO [x] convention fixed; sweep_todo import path fixed after _harness/ move
 - [2026-05-28 root-tidy](2026-05-28.md) — AUTO_INPUT.md → auto_input/README.md (all refs updated); compare_fonts/grid → _dev_scripts/; session-recap placement table gained auto_input/README.md row
 - [2026-05-28 harness](2026-05-28.md) — route_json_hook PostToolUse sensor + validate_data.py --route; _harness/ folder (moved 7 scripts from _dev_scripts/); check_harness.py regex generalized; commit skill co-author tightened; conventions.md: sensor design principle (flag not inject) + hook UTF-8 stdout pattern
