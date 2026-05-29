@@ -2,6 +2,15 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run _harness/unread_readme_hook.py 2>/dev/null || exit 0"
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {
