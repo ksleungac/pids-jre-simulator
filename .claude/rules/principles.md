@@ -70,6 +70,7 @@ Before claiming "X is a bug" or "X works like Y", read the call sites and trace 
 **How to apply:**
 - When user pushes back, re-read the source — don't re-justify from memory.
 - When documenting per-line / per-instance facts, inspect data file content + run `validate_data.py` before authoring.
+- Before claiming a file/route/dataset doesn't exist, read the domain doc for that area first. Filesystem shape ≠ documented reality. (2026-05-29: claimed no yamanote data after glob missed flat layout; `audio/README.md § JY` documents it explicitly.)
 
 ### Verify runtime semantics from primary source
 For code whose behavior depends on deployment frame or external runtime (PyInstaller, threading, I/O timing, OS specifics), verify against primary source — not cached impression.
