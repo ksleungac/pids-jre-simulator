@@ -114,9 +114,11 @@ Surface this list to the user before drafting — gives them a chance to flag co
 
 ### Data
 
-- **<new route / new audio>.** Line / diagram.
+# Group by ROUTE, not by change-type. One bolded route name per bullet,
+# its changes after. (Not "Translations: …" / "Audio cleanup: …" across lines.)
+- **<Route name>.** What changed for this route (new translations, audio trim, …).
 
-- **<extended data>.** …
+- **<Another route>.** …
 
 ---
 
@@ -131,6 +133,8 @@ Each bullet starts with a bolded headline noun followed by `.` then the descript
 - Mention WIP docs, memory logs, daily-log entries, skill updates, or rule codifications.
 - List individual data tweaks (per-station JA fix, single-station populated) unless aggregate-newsworthy. Roll up: "27 new translations" / "12 stations populated."
 - Lead with implementation jargon. "GOLDEN-rule row-grouping" → "Per-station transfer-info display showing connecting lines."
+- Narrate prior behavior or the bug's backstory. Users don't care what it used to do — state only what they get now. "English lower LCD used to show Japanese; now renders English" → "English lower LCD." Drop the "previously / now-fixed" framing entirely.
+- Over-explain a user-facing change with internal mechanics. Once the headline conveys the capability, stop — trim supporting clauses that only describe how it works.
 
 **Distribution footer** — update if the bundled folder list changed since the prior release. v0.5.3 ships `ocr_templates/` for the first time → mention it in the footer.
 
