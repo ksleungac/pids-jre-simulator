@@ -4,6 +4,7 @@ Long-term curated memories. One-line pointers — daily logs hold the detail.
 
 ---
 
+- [2026-05-29 v0.5.4 + update-hint](2026-05-29.md) — released v0.5.4; update-hint feature (app_paths.app_version() reads exe PE metadata, fail-silent GitHub check, setup-screen pill); uv requires static version + dynamic breaks uv-run; commit co-author trailers unreliable pre-05-28 (sub-gap, non-Claude models); "Verify before claiming" gained git-history-from-proxy example
 - [2026-05-29 EN full-route](2026-05-29.md) — English full-route label: 45°→60°, line_sep 15px, max_w 105px, +6px right, +2px lower; 11 Sobu/Yokosuka translations added (Kinugasa→Nishi-Ōi)
 - [2026-05-29 EN8 tuning](2026-05-29.md) — English 8-station label: 45°→60°, 2-line gap 13→22px, +6px right, bar_y−3; clipping fixed on Narita Airport Terminal cells; smoke-tested 7 lines clean
 - [2026-05-29 hook](2026-05-29.md) — unread_readme_hook.py PreToolUse(Glob) sensor: flags module-dir glob if README unread; self-suppresses via transcript-path scan; assets/README.md co-located; conventions.md hook-mechanism pattern
