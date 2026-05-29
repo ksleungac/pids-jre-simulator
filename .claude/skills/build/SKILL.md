@@ -206,11 +206,16 @@ Get-ChildItem -Path "audio" -Directory | Where-Object { $_.Name -notmatch '^_' }
     Copy-Item -Path $_.FullName -Destination $audioJunction -Recurse -Force
 }
 
+# Remove smoke-test-generated runtime state (see note below) before zipping.
+Remove-Item -Path "dist-release\JRE-PA-Simulator\settings.json" -Force -ErrorAction SilentlyContinue
+
 # Zip
 Compress-Archive -Path "dist-release\JRE-PA-Simulator" -DestinationPath "dist-release\JRE-PA-Simulator-v<VERSION>-distribution.zip" -Force
 ```
 
 The `_*` exclusion is critical: `_archive/` (working backups, Sobu reference recordings, etc.) and `_mock/` (preview-only test catalog) must never reach end users — those are repo-internal scaffolding.
+
+**Smoke-test self-pollution — strip `settings.json` before zip.** `i18n.py` writes `settings.json` to `project_root()`, which in the exe resolves to `Path(sys.executable).parent` = the staged folder. The Step 2e smoke-test launch therefore *creates* `dist-release\JRE-PA-Simulator\settings.json` (e.g. `{"language": "en", "oobe_completed": true}`) carrying the tester's language choice + a completed-OOBE flag. If zipped, end users skip the first-run language picker and inherit the tester's locale. The `Remove-Item` above deletes it pre-zip. Any future runtime-written user-state file at project root (logs, caches, crash dumps from the smoke test) needs the same treatment — they only appear after Step 2e, so the include-everything staging in Step 2d can't pre-empt them.
 
 **Never** use `Remove-Item -Recurse -Force $audioJunction` — `Remove-Item` with `-Recurse` on a junction follows the reparse point and deletes the real audio directory. Use `[System.IO.Directory]::Delete(path, false)` instead, which removes only the junction entry.
 
