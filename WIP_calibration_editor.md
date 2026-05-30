@@ -162,31 +162,13 @@ When `_on_click` focuses an element with cycler config, it pins a `__candidate__
 
 ---
 
-## Polyline-with-per-point-stroke pattern (Phase 1b, lower-LCD)
+## ~~Polyline-with-per-point-stroke pattern~~ (RETIRED 2026-05-30)
 
-For curved bands whose shape isn't a clean math primitive (single arc / ellipse / known equation), model the band as a polyline through N waypoints, with per-waypoint stroke.
+The 7-waypoint Catmull-Rom approach was Phase 1b/2's attempt to encode the Yamanote arc shape parametrically. **Retired** — N waypoints cannot faithfully encode the precision of a hand-drawn curve regardless of count or smoothing passes. The fundamental problem: any fixed set of control points is a lossy compression of what the user actually drew.
 
-```python
-_TUNEABLES_ARC = {
-    "arc_p0_x": 540, "arc_p0_y": 441, "arc_p0_stroke": 160,   # current-stop end
-    "arc_p1_x": 461, "arc_p1_y": 310, "arc_p1_stroke": 120,
-    "arc_p2_x": 272, "arc_p2_y": 191, "arc_p2_stroke":  85,
-    "arc_p3_x":   9, "arc_p3_y":  92, "arc_p3_stroke":  55,   # furthest-stop end
-    "arc_color": (116, 193, 30),
-}
-```
+**Superseded by the mask PNG approach** (Tier 2, see above). Draw the shape in Photoshop at pixel precision → export white-on-transparent PNG → bake route color at `__init__` via `BLEND_RGBA_MULT`. Zero fidelity loss, color problem solved, no calibration loop.
 
-Renderer walks `_pN_x/_y/_stroke` triples in numeric order. Outer + inner band edges = waypoint ± local-normal × stroke/2 at each point. **Centerline densification = centripetal Catmull-Rom spline (alpha=0.5)** between adjacent waypoint pairs (Phase 2, 2026-05-15) — the spline passes through every waypoint with C1 continuity at junctions, and endpoints use reflected phantom neighbors so the curve doesn't fly off. Stroke linearly interpolates between adjacent waypoint strokes along the densified arc. For smoother shapes: add more waypoints OR bump `arc_smoothing` (3-tap [1,2,1]/4 averaging passes applied to interior centerline samples; endpoints fixed) — smoothing relaxes the band away from precise waypoint pull when "nodes have too strong of a power to the curve" feedback surfaces.
-
-**When to use vs single-primitive arc.** First instinct is the cleanest math (circle: center + radius + start/end angle = 5 numbers). Reach for polyline when:
-- IRL artifact isn't a true single-radius arc (Yamanote 5-station band: shape OK but stroke varies along length — uniform stroke can't match)
-- Variable thickness along the curve (per-segment width)
-- Multi-radius / piecewise shapes
-- Calibrating to a photo where the curve doesn't admit a clean parameterization
-
-**Model the artifact's actual DOFs, not the cleanest math primitive.** Trying to tune a single-radius arc to an IRL band that has variable thickness wastes hours and can't converge. Polyline + per-point stroke matches the DOFs directly. The math primitive is for *rendering speed*, not the *user's mental model*.
-
-**Phase 2 editor implication (delivered).** Multi-waypoint shapes are exactly where keyboard-nudge falls down (closed thread #4): drag handles for `_pN_x/_y` pairs land in 2026-05-15, plus `--overlay <path>` IRL-ref blit with Alt+drag pan / Alt+wheel zoom for direct visual alignment. The overlay's position/scale/visibility persist to `_overlay_state.json` (gitignored) so multi-session tuning resumes alignment.
+The `_TUNEABLES_ARC` dict, `_build_catmull_rom_centerline`, `_draw_arc`, and drag-handle machinery in `calibration_editor.py` are dead code once the arc element migrates to mask PNG. Remove when porting to master.
 
 ---
 
@@ -198,6 +180,49 @@ Renderer walks `_pN_x/_y/_stroke` triples in numeric order. Outer + inner band e
 
 ---
 
+## Two-tier tuning model (settled 2026-05-30)
+
+**Tier 1 — simple elements** (positions, font sizes, offsets, rect bounds): `_TUNEABLES_*` + calibration editor sidebar. Universal convention; every new train model wires elements from day one.
+
+**Tier 2 — complex geometry** (non-parametric curves, shaped bands): Photoshop → white-on-transparent mask PNG → `BLEND_RGBA_MULT` tint at runtime. Case-by-case. Route color applied at `__init__` via one bake pass — never per-frame copy.
+
+**Yamanote arc resolution.** Catmull-Rom drag handles couldn't encode the precision of a Photoshop-drawn curve. Drag handles retired for the arc; mask PNG is the approach. The `"arc"` registry entry and Catmull-Rom band renderer are superseded; lower-LCD positional elements (station circle positions, minute number positions) get standard `_TUNEABLES_*` entries instead.
+
+---
+
+## Path to master — 5 pillars needed
+
+Before the calibration editor concept merges to master as the new standard, all 5 must be in place:
+
+1. **Code standard** — `conventions.md § UI code style` extended: every tuneable block in `_TUNEABLES_*` dict at module top, suffix convention followed, hit-test rect declared, draw methods read from dict each frame. This is what makes a display module editor-compatible.
+
+2. **Skill** — `/calibration-editor` (or folded into a broader display-authoring skill): step-by-step for adding a new element (extract `# fmt: off` block → `_TUNEABLES_*` → register → smoke-test in `--edit`), and for wiring a brand-new train model from scratch.
+
+3. **Editor on master** — `_dev_scripts/calibration_editor.py` + `preview_display.py --edit` / `--overlay` ported to master. Arc drag-handle machinery removed or parked. Upper-LCD 4 elements stay wired.
+
+4. **Lint gate** — pre-commit or `lint_primitives.py` extension: flag magic numbers in draw methods that aren't in a `_TUNEABLES_*` dict. Without enforcement the convention decays silently on new model code.
+
+5. **New-model skeleton** — minimal `_TUNEABLES_*` template for `upper_lcd.py` + `lower_lcd.py` so E233-0 (or any next model) starts editor-compatible rather than retroactively converting.
+
+**Port strategy.** Branch is ~2 weeks behind master (harness reorg, EN display, update-check). Clean merge will conflict heavily — cherry-pick the calibration editor files individually onto master.
+
+---
+
+## Chosen route: E235-0 as graduation vehicle (Route A)
+
+E235-0 is the model that proves and finalizes the calibration editor standard before it merges to master.
+
+**Sequence:**
+1. Complete E235-0 5-station view — mask PNG arc (Tier 2), station circle positions + minute number positions as `_TUNEABLES_*` entries (Tier 1)
+2. Wire remaining E235-0 upper LCD elements (badge, route bar) to `_TUNEABLES_*` + register in `_REGISTRY`
+3. All 5 pillars built (code standard in `conventions.md`, skill, editor port, lint gate, new-model skeleton)
+4. Port editor to master — cherry-pick calibration editor files, remove dead arc Catmull-Rom machinery
+5. E233-0 inherits a fully proven, already-exercised framework from day one
+
+E235-0 remaining elements convert as they're touched (no eager sweep). E233-0 starts editor-native.
+
+---
+
 ## Trigger to graduate
 
-This doc deletes when (a) all upper_lcd elements are customizable through `_TUNEABLES_*` + suffix convention AND (b) the pattern is broadcast-able to lower LCD without architectural change. At that point the framework story lands in `conventions.md` / a dedicated skill, the `conventions.md § UI code style` pointer goes in, and this doc dissolves.
+This doc deletes when all 5 pillars above are on master AND all E235-0 upper/lower LCD elements are wired via `_TUNEABLES_*` + suffix convention. Framework story lands in `conventions.md` + dedicated skill; this doc dissolves.
