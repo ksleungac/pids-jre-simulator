@@ -217,6 +217,13 @@ class PASimulator:
         # PageDown presses. See auto_input/README.md.
         self.pending_next_pa: bool = False
 
+        # Set by _handle_lcd_click on a successful click-jump. A click-jump is
+        # Layer-1-authoritative (user intent): App jumps to STOPPING@curr_stop.
+        # The auto-input driver consumes this single-shot flag to re-anchor its
+        # Layer 2 belief to that position. Harmless when auto_input is off —
+        # nobody consumes it. See auto_input/README.md § "When layers diverge".
+        self.click_jump_pending: bool = False
+
         # Latest OCR readings + detector state, written by AutoDriver thread, read
         # by the debug panel on the main thread. Atomic dict assignment in CPython.
         # Empty dict means "no data yet" — the panel renders a placeholder.
@@ -426,6 +433,9 @@ class PASimulator:
         if sim_idx is None:
             return
         self.jump_to_stop(sim_idx)
+        # Click-jump is Layer-1-authoritative; signal the auto-driver to
+        # re-anchor its Layer 2 belief to the new STOPPING@curr_stop.
+        self.click_jump_pending = True
 
     def _update_hover_cursor(self) -> None:
         """Set pointer-hand cursor over clickable cells, default elsewhere."""

@@ -795,6 +795,19 @@ class AutoDriver:
                         self.sim.auto_input_status = {**self.sim.auto_input_status, "paused": True}
                         self._stop_event.wait(self.interval_s)
                         continue
+                    # Click-jump re-anchor (Layer 1 authoritative → Layer 2 belief).
+                    # The user clicked a station on the lower LCD; App jumped to
+                    # STOPPING@curr_stop (jump_to_stop). Mirror that into Layer 2 so
+                    # subsequent fires track from the new position. Consumed before the
+                    # fresh OCR read so the re-anchored prev_badge="STOPPED" is in place
+                    # when detector.update() runs this cycle. Re-anchor has no failing
+                    # preconditions, so consume immediately.
+                    # Scope: correct for the parked case (Layer 3 STOPPED/IDLE). A
+                    # click-jump mid-transit (Layer 3 driving) needs entry-point
+                    # alignment — deferred (see WIP_autodriver.md § "Entry-point flow").
+                    if self.sim.click_jump_pending:
+                        self.sim.click_jump_pending = False
+                        self._reanchor_to_app()
                     frame = None
                     for _ in range(5):
                         frame = camera.grab(region=profile.capture_region)
@@ -936,6 +949,41 @@ class AutoDriver:
         if event == "FIRE_AT_STATION":
             self._fire_at_station()
             return
+
+    def _reanchor_to_app(self) -> None:
+        """Re-anchor Layer 2 belief to Layer 1's authoritative state after a click-jump.
+
+        A click-jump (jump_to_stop) puts App in STOPPING@curr_stop. App is
+        authoritative — the user expressed intent by clicking — so Layer 2
+        mirrors App, not the other way round:
+
+          - _segment_start_stop  → curr_stop   (new segment originates here)
+          - arrival_observed=False             (the click WAS the arrival; no
+                                                 OCR trigger was observed)
+          - departure_observed=False
+          - at_station_observed=True           (suppresses FIRE_AT_STATION,
+                                                 whose gate is arrival_observed
+                                                 AND NOT at_station_observed)
+          - prev_badge="STOPPED"               (badge memory reflects platform)
+          - prev_speed=None                    (drop stale speed so the very
+                                                 next cycle can't satisfy the
+                                                 departure crossing test
+                                                 prev_speed<30<=speed on a
+                                                 transient parked-platform speed
+                                                 misread; self-heals next read)
+
+        Layer 3 then derives as IDLE (prev_badge=STOPPED + arrival_observed=False).
+        From here normal flow resumes: the next BADGE_STOPPED→MOVING read starts
+        a clean segment from curr_stop.
+        """
+        target = self.sim.state.curr_stop
+        print(f"          [AD] >>> CLICK-JUMP re-anchor: Layer 2 -> App STOPPING@{target} " f"(was segment_start={self._segment_start_stop})")
+        self._segment_start_stop = target
+        self._detector.departure_observed = False
+        self._detector.arrival_observed = False
+        self._detector.at_station_observed = True
+        self._detector.prev_badge = "STOPPED"
+        self._detector.prev_speed = None
 
     def _fire_departure(self) -> None:
         # Departure is "advance from segment_start_stop to next stop" — auto-fire

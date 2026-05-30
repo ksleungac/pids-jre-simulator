@@ -106,7 +106,7 @@ Layer 2 follows Layer 3. Layer 1 follows Layer 2. Reverse direction — Layer 1 
 | Cause | Effect | Reconciled by |
 |---|---|---|
 | Manual PageDown | Layer 1 advances by one press; Layer 2 unchanged | Dispatcher mismatch-skip on next event; full flag reset on next `STOPPED→(MOVING\|PASSING)` |
-| Click-jump on lower LCD | Layer 1 jumps to STOPPING@target; Layer 2 unchanged | Mismatch-skip for small drift; multi-stop drift waits for next `STOPPED→(MOVING\|PASSING)` reset (or explicit re-anchor flow if implemented) |
+| Click-jump on lower LCD | Layer 1 jumps to STOPPING@target; Layer 2 unchanged | Explicit re-anchor on next capture cycle — `_reanchor_to_app` mirrors Layer 2 onto Layer 1 (`_segment_start_stop=target`, flags → parked, `prev_badge=STOPPED`, Layer 3 derives `IDLE`). Signalled by single-shot `PASimulator.click_jump_pending` (set in `_handle_lcd_click`, consumed by the driver). Parked case only; mid-transit click-jump (Layer 3 driving) not yet aligned — see WIP_autodriver.md |
 | Auto-driver toggled ON mid-drive | Layer 1 = whatever user advanced to; Layer 2 has no belief yet | Entry-point flow probes Layer 3, anchors Layer 2 to match detected segment context |
 
 Layer 3 stays accurate at all times — observes the game, not the sim. Reconciling Layer 1 ↔ Layer 2 = what mismatch-skip and entry-point flow exist to do.

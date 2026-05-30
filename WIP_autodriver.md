@@ -7,7 +7,7 @@ Working notes for the auto-input subsystem. Current-state facts live in [auto_in
 - **Calibration insights** — rationale and "we tried X, settled on Y" guardrails.
 - **Future enhancements** — priority-ordered backlog.
 
-Click-jump on the lower LCD shipped 2026-04-29 (App-state side only, no autodriver re-anchor yet).
+Click-jump on the lower LCD shipped 2026-04-29 (App-state side). The autodriver re-anchor (Layer 2 → Layer 1) shipped 2026-05-30 for the **parked case** — see "Click-jump entry-point" below. Mid-transit click-jump (Layer 3 driving at re-anchor time) still pending.
 
 ---
 
@@ -26,6 +26,10 @@ The autodriver needs a single procedure for state reconciliation, used at:
 - Skip Layer 3 probe entirely.
 - Anchor Layer 2 to App: `_segment_start_stop = App.curr_stop`, `departure_observed = arrival_observed = False`, `at_station_observed = True` (suppresses immediate FIRE_AT_STATION).
 - No App alignment (App was just authoritatively set by `jump_to_stop`).
+
+✅ **Shipped 2026-05-30 (parked case).** `AutoDriver._reanchor_to_app` does exactly the anchor above, plus `prev_badge="STOPPED"` (Layer 3 → IDLE) and `prev_speed=None` (drop stale speed so a transient parked-platform speed misread can't satisfy the departure crossing test on the first post-jump cycle). Signalled by single-shot `PASimulator.click_jump_pending` (set in `_handle_lcd_click`, consumed at the top of the capture loop before the OCR grab so `prev_badge` is in place for the same cycle's `detector.update`).
+
+⚠️ **Deferred — mid-transit click-jump.** The parked anchor assumes the game train is at a platform when the user clicks (the realistic desync-correction case). If the user click-jumps while the game is driving (Layer 3 `DEPARTING`/`CRUISING`/`ARRIVING`), the parked anchor mis-advances — `prev_badge="STOPPED"` + the next MOVING read fires a phantom `STOPPED→MOVING` departure from `target`. Needs the alignment rule below (advance App silently by one), same machinery as the toggle-ON flow. Won't crash; just mis-fires.
 
 **Toggle-ON entry-point** (game-authoritative for App alignment):
 
@@ -80,6 +84,7 @@ AutoDriver tracks last-known `curr_stop`. If it differs from current and the cha
 - **2026-04-29**: Layer 2 cache rename `*_fired` → `*_observed`; `_Detector.inferred_state()` accessor extracted; `inferred_state` surfaced in status dict + JSONL drive log + debug panel.
 - **2026-05-08**: cross-attribute hardening (`7fa9242`) — black-screen guard (`prev_badge=STOPPED + speed=0|None` forces `badge=None`), cm stopping-offset reader, speed-limit reader (red-digit OCR). Silent `pa_at_station` drain at FIRE_DEPARTURE (`b95e7b1`).
 - **2026-05-09**: Layer 3 vocabulary renamed (`STOPPING_FRESH / STOPPING_AFTER_ARR / APPROACHING_BEFORE_DEP / APPROACHING_AFTER_DEP / MOVING_AFTER_ARR` → `IDLE / STOPPED / DEPARTING / CRUISING / ARRIVING`) per commit `0190983`; debug-panel redesign same commit. Single-shot signal-flag consumption fix in `app.py` — gate `pending_next_pa` reset on `not is_pa_playing()` so at-station auto-fire isn't dropped when arrival PA still playing (see [critical_lessons.md § "Single-shot signal flags"](.claude/rules/critical_lessons.md)).
+- **2026-05-30**: Click-jump re-anchor (parked case) shipped — `AutoDriver._reanchor_to_app` mirrors Layer 2 onto Layer 1's authoritative `STOPPING@target` after a lower-LCD click; signalled by single-shot `PASimulator.click_jump_pending`. Live-drive validated. Mid-transit click-jump deferred (see "Click-jump entry-point").
 
 ## Calibration insights (rationale / guardrails)
 
