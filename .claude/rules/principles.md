@@ -45,6 +45,7 @@ Present findings/learnings before making documentation updates or non-trivial ch
 **How to apply:**
 - Before any non-trivial doc edit, code change, or batch operation, summarize what you'd do and why. Default no-skip; user can waive ("just do it") for a specific task.
 - **A queue of trivial fixes still gets per-item gating.** When several small fixes are lined up, walk them one at a time (explain → apply → next), not a single batch-apply — the user tracks each change as it lands. (2026-05-28) Offered "do all 3"; user: *"we should discuss them one by one, so I know what is changed."*
+- **Co-designing a state machine / rule set: walk it one rule at a time.** Lay the shared vocabulary out first, then build a rule per turn and let the user confirm before the next — don't open with a full multi-axis case matrix + forks + questions. (2026-05-31) Front-loaded a triggers×states table for auto-driver re-entry; user: *"Kind of too complicated, overwhelmed my. Let's discuss rule by rule like yesterday."*
 - **Data work specifically** — present the parse + flag uncertainties before generating splitter scripts or touching `route.json`.
 - **Don't mix discussion and implementation questions.** Keep "was that the intent?" separate from "OK to apply?" — a bundled question makes Yes ambiguous. Ask discussion first; implementation as a separate explicit question.
 
