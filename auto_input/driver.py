@@ -34,6 +34,7 @@ import dxcam
 import numpy as np
 import pygame
 
+import i18n
 from .hud_layout import PROFILES
 from .ocr import (
     DEFAULT_TEMPLATES_DIR,
@@ -75,16 +76,32 @@ class Layer3State:
     UNKNOWN = "UNKNOWN"
 
 
-# Plain-English panel labels — wire and panel names line up 1:1 after the
-# 2026-05-09 rename, so this map is essentially title-case identity. Kept as
-# a discrete map so future divergence (i18n, customization) has a hook.
-_LAYER3_HUMAN = {
-    Layer3State.IDLE: "Idle",
-    Layer3State.STOPPED: "Stopped",
-    Layer3State.DEPARTING: "Departing",
-    Layer3State.CRUISING: "Cruising",
-    Layer3State.ARRIVING: "Arriving",
-    Layer3State.UNKNOWN: "—",
+# Layer 3 inferred-state → i18n key for the line-1 state word. UNKNOWN has no
+# key (renders the literal em-dash placeholder). These are the user-facing
+# "what the train is doing" words; the de-jargoned public phrasing + zh_HK
+# translations live in data/translations_app.json under panel.state.*.
+_STATE_KEY = {
+    Layer3State.IDLE: "panel.state.idle",
+    Layer3State.STOPPED: "panel.state.stopped",
+    Layer3State.DEPARTING: "panel.state.departing",
+    Layer3State.CRUISING: "panel.state.cruising",
+    Layer3State.ARRIVING: "panel.state.arriving",
+}
+
+# Layer 2 badge read → i18n key for the line-2 "state:" value (the game's own
+# on-screen motion indicator). Anything not in the map → panel.badge.unknown.
+_BADGE_KEY = {
+    "MOVING": "panel.badge.moving",
+    "STOPPED": "panel.badge.stopped",
+    "PASSING": "panel.badge.passing",
+}
+
+# Auto-fire type (driver-internal name) → i18n key for the auto-played chip.
+# Public phrasing maps departure→"Next stop", etc. (translations_app.json).
+_FIRE_KEY = {
+    "departure": "panel.fire.departure",
+    "arrival": "panel.fire.arrival",
+    "at-station": "panel.fire.atstation",
 }
 
 
@@ -252,15 +269,20 @@ _COLOR_GREEN = (110, 220, 110)
 _COLOR_YELLOW = (230, 220, 90)
 _COLOR_ORANGE = (240, 140, 60)
 
-# Cached font (Latin + CJK support so station names in the state line render correctly).
-_panel_font: Optional[pygame.font.Font] = None
+# Station-name font. Chrome labels render in the per-language chrome font via
+# i18n.font(); but station names come from route data as Japanese kanji, which
+# the en chrome face (HelveticaNeue, Latin-only) can't render. So names always
+# render in this CJK-capable face regardless of UI language — the two-font split
+# on line 1. ShinGoPr6N covers JP + Traditional Chinese; zh_CN names lean on the
+# chrome path only for chrome labels, not names.
+_name_font: Optional[pygame.font.Font] = None
 
 
-def _get_panel_font() -> pygame.font.Font:
-    global _panel_font
-    if _panel_font is None:
-        _panel_font = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 14)
-    return _panel_font
+def _get_name_font() -> pygame.font.Font:
+    global _name_font
+    if _name_font is None:
+        _name_font = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 14)
+    return _name_font
 
 
 def _conf_color(score: Optional[float]) -> tuple[int, int, int]:
@@ -300,22 +322,12 @@ _pause_button_rect: Optional[pygame.Rect] = None
 
 # Top-left button strip. Horizontal pill shape — icon left, label right, width
 # auto-fits the label so longer labels don't overflow. Pills are short enough
-# (32px) that only line 1 of the panel content sits beside them; lines 2-3
-# reclaim full panel width below.
+# (24px) that only line 1 of the panel content sits beside them; line 2
+# reclaims full panel width below.
 _BTN_X0 = 8
 _BTN_Y0 = 4
-_BTN_HEIGHT = 32
+_BTN_HEIGHT = 24
 _BTN_GAP = 6
-
-# Smaller font dedicated to button labels.
-_button_font: Optional[pygame.font.Font] = None
-
-
-def _get_button_font() -> pygame.font.Font:
-    global _button_font
-    if _button_font is None:
-        _button_font = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 12)
-    return _button_font
 
 
 def _draw_pill_button(
@@ -329,8 +341,9 @@ def _draw_pill_button(
 ) -> pygame.Rect:
     """Horizontal pill: rounded ends, icon on the left, label on the right.
     Width sized to fit the label. `icon_kind` ∈ {"pause", "report"}; for "pause",
-    `paused=True` swaps to a play triangle."""
-    label_font = _get_button_font()
+    `paused=True` swaps to a play triangle. Label uses the per-language chrome
+    font so translated button text renders in the right script."""
+    label_font = i18n.font(12)
     label_surf = label_font.render(label, True, _TEXT_WHITE)
     icon_w = 16
     pad_x = 12
@@ -364,7 +377,7 @@ def _draw_pause_button(surface: pygame.Surface, paused: bool) -> pygame.Rect:
     """Top-left pill with icon + label. Orange when paused, slate when running."""
     global _pause_button_rect
     color = (180, 100, 50) if paused else (80, 100, 120)
-    label = "Resume" if paused else "Pause"
+    label = i18n.t("panel.btn.resume") if paused else i18n.t("panel.btn.pause")
     _pause_button_rect = _draw_pill_button(surface, _BTN_X0, _BTN_Y0, color, "pause", label, paused=paused)
     return _pause_button_rect
 
@@ -372,7 +385,7 @@ def _draw_pause_button(surface: pygame.Surface, paused: bool) -> pygame.Rect:
 def _draw_report_button(surface: pygame.Surface, x: int) -> pygame.Rect:
     """Pill button drawn to the right of Pause. Renders the drive's speed-curve HTML report."""
     global _report_button_rect
-    _report_button_rect = _draw_pill_button(surface, x, _BTN_Y0, (52, 116, 145), "report", "Save Speed Curve")
+    _report_button_rect = _draw_pill_button(surface, x, _BTN_Y0, (52, 116, 145), "report", i18n.t("panel.btn.save_curve"))
     return _report_button_rect
 
 
@@ -430,7 +443,13 @@ def draw_debug_panel(surface: pygame.Surface, status: dict, sim_state, stops: li
         sim_state: simulator's AppState (for live curr_stop, cnt_pa)
         stops: simulator's stops list (for station-name lookup)
     """
-    font = _get_panel_font()
+    # Two fonts. CONTRACT: chrome labels render in the per-language chrome font
+    # (i18n.font — HelveticaNeue/ShinGo/Noto by locale); station names render in
+    # the CJK name font because the en chrome face is Latin-only and would tofu
+    # the kanji. Never SysFont, never bare Path() — both route through
+    # app_paths.project_root() (i18n.font internally, _get_name_font here).
+    chrome = i18n.font(14)
+    name_font = _get_name_font()
     surface.fill(_PANEL_BG)
     paused = bool(status.get("paused", False))
 
@@ -441,42 +460,93 @@ def draw_debug_panel(surface: pygame.Surface, status: dict, sim_state, stops: li
     report_rect = _draw_report_button(surface, pause_rect.right + _BTN_GAP)
     line1_x = report_rect.right + 14
 
-    # 3-row layout. Line 1 sits beside the buttons (matching their vertical
-    # center); lines 2-3 reclaim full panel width below the 32px button strip.
-    y1, y2, y3 = 12, 40, 60
+    # 2-row layout, grouped by meaning. Line 1 (beside the buttons) = the
+    # driver's interpretation + action; line 2 (full panel width below the 24px
+    # button strip) = the raw OCR reads. The panel is 730px wide, so width is
+    # cheap and vertical height is the constraint we're optimizing.
+    y1, y2 = 8, 32
 
     if not status or all(k == "paused" for k in status):
-        _blit_text(surface, font, "Game Sync  ·  waiting for first capture...", (line1_x, y1), _TEXT_GRAY)
+        _blit_text(surface, chrome, i18n.t("panel.waiting"), (line1_x, y1), _TEXT_GRAY)
         return
 
     gap = 10  # px gap between chunks on the same line
 
-    # Line 1: header + raw badge state + match-diff. Header tints orange when
-    # paused so the frozen-OCR state is unmistakable at a glance.
-    header_color = _COLOR_ORANGE if paused else _TEXT_WHITE
-    header_label = "Game Sync — PAUSED" if paused else "Game Sync"
+    # Badge is read up front: it's a raw read (rendered on line 2), but line 1's
+    # segment phrasing also keys off it (STOPPED → station name, PASSING → "(Passing)"),
+    # so both groups need it.
     badge = status.get("badge")
     badge_diff = status.get("badge_diff")
-    badge_str = badge if badge else "?"
-    x = line1_x
-    x = _blit_text(surface, font, header_label, (x, y1), header_color) + gap + 4
-    x = _blit_text(surface, font, badge_str, (x, y1), _badge_color(badge_diff)) + gap
-    if badge_diff is not None:
-        x = _blit_text(surface, font, f"(d={badge_diff:.1f})", (x, y1), _TEXT_GRAY) + gap
 
-    # Auto-fire chip — visible for 3s after a successful fire so the user can
-    # confirm the auto-driver is acting. Skipped fires don't surface here (they
-    # only print to console); only successful pending_next_pa sets land here.
+    # ── Line 1 (beside buttons): the driver's INTERPRETATION + action — what the
+    # OCR *thinks* the game is doing (inferred state + segment), how many PAs have
+    # played, and the auto-played chip. Deliberately split from the raw reads on
+    # line 2 so "what we believe" and "what we measured" don't blur together.
+    # Header tints orange when paused so the frozen-OCR state is unmistakable.
+    header_color = _COLOR_ORANGE if paused else _TEXT_WHITE
+    header_label = i18n.t("panel.header_paused") if paused else i18n.t("panel.header")
+    inferred = status.get("inferred_state", Layer3State.UNKNOWN)
+    state_key = _STATE_KEY.get(inferred)
+    state_word = i18n.t(state_key) if state_key else "—"
+    seg_start = status.get("segment_start_stop")
+    # Played count: cnt_pa is 0-indexed and post-play (cnt_pa=0 means pa[0] has
+    # been played). Displayed value is `cnt_pa+1` of total available PAs at this
+    # stop. Start station (no pa) shows "—".
+    pa_total = len(stops[sim_state.curr_stop].get("pa", [])) if 0 <= sim_state.curr_stop < len(stops) else 0
+    played_str = f"{sim_state.cnt_pa + 1}/{pa_total}" if pa_total > 0 else "—"
+
+    # Baseline-align line 1: it mixes the chrome font and the CJK name font,
+    # whose ascents differ (most visibly zh_CN Noto vs ShinGo). Top-aligning both
+    # at y1 makes the station names sit off from the chrome chunks. Place each
+    # chunk by its own ascent against a shared baseline so the text lines up.
+    # (zh_HK happens to look fine either way — its chrome font *is* ShinGo.)
+    base1 = y1 + max(chrome.get_ascent(), name_font.get_ascent())
+    yc = base1 - chrome.get_ascent()  # top-y for chrome-font chunks
+    yn = base1 - name_font.get_ascent()  # top-y for name-font chunks
+
+    x = line1_x
+    x = _blit_text(surface, chrome, header_label, (x, yc), header_color) + gap + 4
+    # Segment: station names in the CJK name font, connectors + state word in the
+    # chrome font (two-font split). `·` / `→` come from the name font too — the en
+    # chrome face lacks the arrow glyph.
+    if badge == "STOPPED" and 0 <= sim_state.curr_stop < len(stops):
+        location = stops[sim_state.curr_stop].get("name", "?")
+        x = _blit_text(surface, name_font, f"{location}  ·  ", (x, yn), _TEXT_WHITE)
+        x = _blit_text(surface, chrome, state_word, (x, yc), _TEXT_WHITE) + gap
+    elif seg_start is not None and 0 <= seg_start < len(stops) and 0 <= sim_state.curr_stop < len(stops):
+        from_name = stops[seg_start].get("name", "?")
+        to_name = stops[sim_state.curr_stop].get("name", "?")
+        x = _blit_text(surface, name_font, f"{from_name} → {to_name}  ·  ", (x, yn), _TEXT_WHITE)
+        x = _blit_text(surface, chrome, state_word, (x, yc), _TEXT_WHITE) + gap
+    else:
+        x = _blit_text(surface, chrome, state_word, (x, yc), _TEXT_WHITE) + gap
+
+    # Line-1 tail: the auto-played chip OR the steady-state "Played: N/M" — never
+    # both. The chip is visible for 3s after a successful fire (skipped fires only
+    # print to console; only pending_next_pa sets land here) and supersedes the
+    # Played count for that window, because the line is width-bound and they'd
+    # otherwise collide past the panel edge. ("(Passing)" was dropped from this
+    # line — line 2 already shows `state: Passing`.)
+    chip_label = None
     last_fire = status.get("last_fire")
     if last_fire is not None and isinstance(last_fire, dict):
-        fire_age = time.time() - last_fire.get("ts", 0)
-        if fire_age < 3.0:
-            chip_label = f"  ●  Auto-fired: {last_fire.get('type', '?')}"
-            _blit_text(surface, font, chip_label, (x, y1), _COLOR_GREEN)
+        if time.time() - last_fire.get("ts", 0) < 3.0:
+            fire_key = _FIRE_KEY.get(last_fire.get("type") or "")
+            fire_label = i18n.t(fire_key) if fire_key else last_fire.get("type", "?")
+            chip_label = f"  ●  {i18n.t('panel.autoplayed')} {fire_label}"
 
-    # Line 2: OCR readings — speed, limit, distance, stopping position (split
-    # into independent fields so the user can see both the in-transit distance
-    # and the platform-arrival offset, even when only one is currently populated).
+    if chip_label is not None:
+        _blit_text(surface, chrome, chip_label, (x, yc), _COLOR_GREEN)
+    else:
+        _blit_text(surface, chrome, f"·  {i18n.t('panel.played')} {played_str}", (x, yc), _TEXT_GRAY)
+
+    # ── Line 2 (full width below buttons): the raw OCR READS — the game's own
+    # motion state ("state:") + match-diff first, then the numeric cells (speed /
+    # limit / distance / stopping position). These are what the templates actually
+    # matched this frame; line 1 is the interpretation derived from them. All
+    # chrome font — no station names on this line. Distance and stopping position
+    # are independent fields so the user can see the in-transit distance and the
+    # platform-arrival offset even when only one is populated.
     s_val = status.get("speed")
     s_score = status.get("speed_score")
     d_val = status.get("distance")
@@ -485,54 +555,37 @@ def draw_debug_panel(surface: pygame.Surface, status: dict, sim_state, stops: li
     offset_score = status.get("stopping_offset_score")
     sl_val = status.get("speed_limit")
     sl_score = status.get("speed_limit_score")
-    # Line 2 sits below the button strip — full panel width available.
+    badge_key = _BADGE_KEY.get(badge or "")
+    badge_label = i18n.t(badge_key) if badge_key else i18n.t("panel.badge.unknown")
     x = 8
-    x = _blit_text(surface, font, "speed:", (x, y2), _TEXT_GRAY) + 6
+    # "OCR" stays unlocalized on purpose — it's the technical term the user has
+    # already seeded with end users (kept identical across en/zh_HK/zh_CN), so it
+    # leads line 2 as a literal rather than an i18n key.
+    x = _blit_text(surface, chrome, "OCR", (x, y2), _TEXT_WHITE) + gap + 4
+    x = _blit_text(surface, chrome, i18n.t("panel.badge"), (x, y2), _TEXT_GRAY) + 6
+    x = _blit_text(surface, chrome, badge_label, (x, y2), _badge_color(badge_diff)) + gap
+    if badge_diff is not None:
+        x = _blit_text(surface, chrome, f"(d={badge_diff:.1f})", (x, y2), _TEXT_GRAY) + gap
+    x = _blit_text(surface, chrome, i18n.t("panel.speed"), (x, y2), _TEXT_GRAY) + 6
     spd_str = f"{s_val:>3} km/h" if s_val is not None else " -- km/h"
-    x = _blit_text(surface, font, spd_str, (x, y2), _conf_color(s_score if s_val is not None else None)) + gap
+    x = _blit_text(surface, chrome, spd_str, (x, y2), _conf_color(s_score if s_val is not None else None)) + gap
     if sl_val is not None:
-        x = _blit_text(surface, font, "limit:", (x, y2), _TEXT_GRAY) + 6
-        x = _blit_text(surface, font, f"{sl_val} km/h", (x, y2), _conf_color(sl_score)) + gap
-    x = _blit_text(surface, font, "distance:", (x, y2), _TEXT_GRAY) + 6
+        x = _blit_text(surface, chrome, i18n.t("panel.limit"), (x, y2), _TEXT_GRAY) + 6
+        x = _blit_text(surface, chrome, f"{sl_val} km/h", (x, y2), _conf_color(sl_score)) + gap
+    x = _blit_text(surface, chrome, i18n.t("panel.distance"), (x, y2), _TEXT_GRAY) + 6
     if d_val is not None:
-        x = _blit_text(surface, font, f"{d_val:>5}m", (x, y2), _conf_color(d_score)) + gap
+        x = _blit_text(surface, chrome, f"{d_val:>5}m", (x, y2), _conf_color(d_score)) + gap
     else:
-        x = _blit_text(surface, font, "  -- m", (x, y2), _TEXT_GRAY) + gap
+        x = _blit_text(surface, chrome, "  -- m", (x, y2), _TEXT_GRAY) + gap
     # Stopping position only renders when a reading is present (the cell
     # briefly populates after arrival). Brightness-pulse flash when shown so it
     # pops against the steady-state fields; nothing rendered otherwise.
     if offset_val is not None:
-        x = _blit_text(surface, font, "stopping position:", (x, y2), _TEXT_GRAY) + 6
+        x = _blit_text(surface, chrome, i18n.t("panel.stop_offset"), (x, y2), _TEXT_GRAY) + 6
         flash_on = (pygame.time.get_ticks() // 350) % 2 == 0
         r, g, b = _conf_color(offset_score)
         offset_color: tuple[int, int, int] = (r, g, b) if flash_on else (int(r * 0.4), int(g * 0.4), int(b * 0.4))
-        _blit_text(surface, font, f"{offset_val:+d} cm", (x, y2), offset_color)
-
-    # Line 3: train state phrase + announcements played. State word leads (plain
-    # English from _LAYER3_HUMAN); station name or segment is the detail.
-    # Detector observation flags are intentionally NOT shown — the state word
-    # already implies them (e.g. "Approaching" means departure was observed),
-    # and they're available in the JSONL log for debugging.
-    inferred = status.get("inferred_state", Layer3State.UNKNOWN)
-    state_word = _LAYER3_HUMAN.get(inferred, "—")
-    seg_start = status.get("segment_start_stop")
-    if badge == "STOPPED" and 0 <= sim_state.curr_stop < len(stops):
-        location = stops[sim_state.curr_stop].get("name", "?")
-        line3 = f"{location}  ·  {state_word}"
-    elif seg_start is not None and 0 <= seg_start < len(stops) and 0 <= sim_state.curr_stop < len(stops):
-        from_name = stops[seg_start].get("name", "?")
-        to_name = stops[sim_state.curr_stop].get("name", "?")
-        passing = "  (passing through)" if badge == "PASSING" else ""
-        line3 = f"{from_name} → {to_name}  ·  {state_word}{passing}"
-    else:
-        line3 = state_word
-    # Played count: cnt_pa is 0-indexed and post-play (cnt_pa=0 means pa[0] has
-    # been played). Displayed value is `cnt_pa+1` of total available PAs at this
-    # stop. Start station (no pa) shows "—".
-    pa_total = len(stops[sim_state.curr_stop].get("pa", [])) if 0 <= sim_state.curr_stop < len(stops) else 0
-    played_str = f"{sim_state.cnt_pa + 1}/{pa_total}" if pa_total > 0 else "—"
-    line3 += f"  ·  Played: {played_str}"
-    _blit_text(surface, font, line3, (8, y3), _TEXT_WHITE)
+        _blit_text(surface, chrome, f"{offset_val:+d} cm", (x, y2), offset_color)
 
 
 # ─────────────────────────── auto-input driver ────────────────────────────

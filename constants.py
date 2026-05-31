@@ -50,4 +50,4 @@ SMALL_HEIGHT = 200
 SMALL_Y = 100
 
 # Auto-input debug panel — shown above the LCD when --auto-input is enabled
-DEBUG_PANEL_HEIGHT = 80
+DEBUG_PANEL_HEIGHT = 54

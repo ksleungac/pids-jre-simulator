@@ -45,8 +45,8 @@
 
   "setup.ocr_state": {
     "en": "OCR Auto-PA: {state}",
-    "zh_HK": "OCR 自動廣播:{state}",
-    "zh_CN": "OCR 自动广播:{state}"
+    "zh_HK": "OCR 自動報站:{state}",
+    "zh_CN": "OCR 自动报站:{state}"
   },
   "setup.on": {
     "en": "ON",
@@ -235,5 +235,37 @@
     "en": "Press [[btn:Done]] to finish.",
     "zh_HK": "按 [[btn:完成]] 完成教學。",
     "zh_CN": "按 [[btn:完成]] 完成教程。"
-  }
+  },
+
+  "_comment_panel": "Auto-input debug panel (auto_input/driver.py). Station names render from route data in a CJK font, not from here. Per-language registers are independent (zh_HK/zh_CN diverge in wording, not just script — e.g. save_curve).",
+
+  "panel.btn.pause": { "en": "Pause", "zh_HK": "暫停", "zh_CN": "暂停" },
+  "panel.btn.resume": { "en": "Resume", "zh_HK": "繼續", "zh_CN": "继续" },
+  "panel.btn.save_curve": { "en": "Save Speed Curve", "zh_HK": "儲存駕駛記錄", "zh_CN": "保存速度曲线" },
+
+  "panel.header": { "en": "Auto-PA", "zh_HK": "自動報站", "zh_CN": "自动报站" },
+  "panel.header_paused": { "en": "Auto-PA — PAUSED", "zh_HK": "自動報站 — 已暫停", "zh_CN": "自动报站 — 已暂停" },
+  "panel.waiting": { "en": "Auto-PA  ·  waiting for first capture...", "zh_HK": "自動報站 · 等待首次擷取…", "zh_CN": "自动报站 · 等待首次截图…" },
+  "panel.played": { "en": "Played:", "zh_HK": "已播放：", "zh_CN": "已播放：" },
+  "panel.autoplayed": { "en": "Auto-played:", "zh_HK": "自動播放：", "zh_CN": "自动播放：" },
+
+  "panel.state.idle": { "en": "Idle", "zh_HK": "閒置", "zh_CN": "闲置" },
+  "panel.state.stopped": { "en": "Stopped", "zh_HK": "停止", "zh_CN": "停止" },
+  "panel.state.departing": { "en": "Departing", "zh_HK": "出發中", "zh_CN": "出发中" },
+  "panel.state.cruising": { "en": "Cruising", "zh_HK": "行駛中", "zh_CN": "行驶中" },
+  "panel.state.arriving": { "en": "Arriving", "zh_HK": "即將抵達", "zh_CN": "即将抵达" },
+
+  "panel.fire.departure": { "en": "Next stop", "zh_HK": "下一站", "zh_CN": "下一站" },
+  "panel.fire.arrival": { "en": "Arrival", "zh_HK": "到站", "zh_CN": "到站" },
+  "panel.fire.atstation": { "en": "At station", "zh_HK": "停站", "zh_CN": "停站" },
+
+  "panel.badge": { "en": "state:", "zh_HK": "狀態：", "zh_CN": "状态：" },
+  "panel.badge.moving": { "en": "Moving", "zh_HK": "行駛", "zh_CN": "行驶" },
+  "panel.badge.stopped": { "en": "Stopped", "zh_HK": "停止", "zh_CN": "停止" },
+  "panel.badge.passing": { "en": "Passing", "zh_HK": "通過", "zh_CN": "通过" },
+  "panel.badge.unknown": { "en": "?", "zh_HK": "未知", "zh_CN": "未知" },
+  "panel.speed": { "en": "speed:", "zh_HK": "時速：", "zh_CN": "时速：" },
+  "panel.limit": { "en": "limit:", "zh_HK": "限速：", "zh_CN": "限速：" },
+  "panel.distance": { "en": "distance:", "zh_HK": "距離：", "zh_CN": "距离：" },
+  "panel.stop_offset": { "en": "stop offset:", "zh_HK": "停車位置：", "zh_CN": "停车位置：" }
 }
