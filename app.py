@@ -224,6 +224,14 @@ class PASimulator:
         # nobody consumes it. See auto_input/README.md § "When layers diverge".
         self.click_jump_pending: bool = False
 
+        # Set by the AutoDriver (_maybe_reentry) when the game has moved on but
+        # the app is still parked (Layer 3 → Layer 1 re-entry catch-up). Single-
+        # shot: "1A" or "1B" — the APPROACHING sub-state to silently advance into.
+        # Consumed on the main thread in _handle_input_main (AppState is mutated
+        # only there, never from the OCR thread). Harmless when auto_input is off.
+        # See auto_input/README.md § "When layers diverge".
+        self.pending_silent_advance: Optional[str] = None
+
         # Latest OCR readings + detector state, written by AutoDriver thread, read
         # by the debug panel on the main thread. Atomic dict assignment in CPython.
         # Empty dict means "no data yet" — the panel renders a placeholder.
@@ -469,6 +477,14 @@ class PASimulator:
         through the same code path. See auto_input/README.md.
         """
         try:
+            # Re-entry silent advance (AutoDriver Layer 3 → Layer 1 catch-up).
+            # Single-shot signal from the OCR thread; consumed here so AppState
+            # mutation stays on the main thread. No audio, no failing precondition
+            # — consume immediately (same pattern as the click-jump re-anchor).
+            if self.pending_silent_advance is not None:
+                target = self.pending_silent_advance
+                self.pending_silent_advance = None
+                self._silent_advance_to(target)
             # Gate consumption on audio: `_next_pa` no-ops while a PA is mid-play
             # (PA-blocks-PA, line 599). Without this gate, an auto-fire's
             # single-shot `pending_next_pa` would be reset before _next_pa got a
@@ -666,13 +682,18 @@ class PASimulator:
         self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=True, cnt_pa_at_station=self.state.cnt_pa_at_station)
         self.upper.draw()
 
-    def _advance_to_next_stop(self) -> None:
+    def _advance_to_next_stop(self, silent: bool = False) -> None:
         """Exit STOPPING@curr_stop and advance to the next stopping station.
 
         Plays pa[0] of the new stop and lands in APPROACHING. Sets up skip
         animation if passing stations were crossed. Circular routes loop from
         idx N (= last duplicate of start) directly to idx 1 — the duplicate
         idx 0 is just a structural marker for circularity, not a state to visit.
+
+        ``silent=True`` (AutoDriver re-entry catch-up via _silent_advance_to)
+        runs all the state-setting logic — passing-station scan, terminus /
+        circular guards, skip animation, departure_time — but suppresses the
+        pa[0] audio, because on a re-entry the announcement is already stale.
         """
         terminus_idx = (len(self.stops) - 1) if self.state.circular == 1 else self.dest_stop_idx
 
@@ -711,9 +732,34 @@ class PASimulator:
         self.state.is_last_pa = False
         self.state.departure_time = time.time()
         self.state.cnt_sta = 0
-        self.audio.play_pa(self.state.curr_stop, 0)
+        if not silent:
+            self.audio.play_pa(self.state.curr_stop, 0)
         self.upper.set_state(self.state.curr_stop, 0, at_station=False, cnt_pa_at_station=self.state.cnt_pa_at_station)
         self.upper.draw()
+
+    def _silent_advance_to(self, target_state: str) -> None:
+        """Re-entry silent advance (no audio): land APPROACHING at the next stop.
+
+        Consumes the AutoDriver's ``pending_silent_advance`` signal — called on
+        the MAIN thread (AppState is only ever mutated here, never from the OCR
+        thread). ``target_state``:
+
+          - ``"1A"`` (APPROACHING_EARLY) — game CRUISING / PASSING.
+          - ``"1B"`` (APPROACHING_FINAL) — game ARRIVING; bumps cnt_pa to the
+            last approach PA so the next at-station fire is correctly gated.
+
+        No audio: the departure / approach announcements are stale on a re-entry
+        (train already left / is already arriving). See auto_input/README.md
+        § "Re-entry (Layer 3 → Layer 2 reconciliation)". Lockstep ±1: advances
+        one stop; a cold boot multiple stops behind needs a click-jump first.
+        """
+        self._advance_to_next_stop(silent=True)
+        if target_state == "1B":
+            pa = self.stops[self.state.curr_stop].get("pa", [])
+            self.state.cnt_pa = max(0, len(pa) - 1)
+            self.state.is_last_pa = self.state.cnt_pa >= len(pa) - 1
+            self.upper.set_state(self.state.curr_stop, self.state.cnt_pa, at_station=False, cnt_pa_at_station=self.state.cnt_pa_at_station)
+            self.upper.draw()
 
     def _next_sta(self) -> None:
         """Play next station melody.

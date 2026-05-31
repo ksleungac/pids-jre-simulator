@@ -557,12 +557,16 @@ def _crop_cell(frame_bgra: np.ndarray, hud_bbox: tuple[int, int, int, int], cell
 class _Detector:
     """State machine over distance + speed + badge samples.
 
-    Layer 2 cache (per-segment): three `*_observed` flags record whether the
-    trigger condition for that event has been observed in the current segment.
-    Reset on BADGE_STOPPED→(MOVING|PASSING). The flags semantically record "we
-    observed the trigger condition" — whether the dispatcher acts on the
-    resulting FIRE_* event is a separate concern (mismatch-skip in
-    `_fire_departure` / `_fire_arrival`).
+    Per-segment observed-flags (`departure_observed` / `arrival_observed` /
+    `at_station_observed`): record whether each trigger condition has been
+    observed in the current segment, reset on BADGE_STOPPED→(MOVING|PASSING).
+    These are **Layer 3 observation memory** — they feed `inferred_state()` so the
+    panel reflects what the *game* is doing. They do NOT gate PA fires: fire gating
+    reads Layer 1's app sub-state directly in `AutoDriver._fire_*` (the Layer 1 ↔
+    Layer 2 coupling). The two roles share one flag-set but stay conceptually
+    distinct — see auto_input/README.md § "State machine layering". Within
+    `update()` the flags still short-circuit duplicate FIRE_* emissions per segment
+    (OCR-misread debounce); the app-sub-state guard is the authoritative gate.
 
     `inferred_state()` returns the canonical Layer 3 state — what AutoDriver
     thinks the IRL game train is doing. See auto_input/README.md § "Layer 3" for the
@@ -783,8 +787,9 @@ class AutoDriver:
         # logic; this one drives the blackbox event stream.
         prev_log_badge: Optional[str] = None
 
-        # Snapshot initial state to recognize the first segment
-        self._segment_start_stop = self.sim.state.curr_stop
+        # Initial segment label (display/log only); reconciled from app state
+        # every cycle below — see the coupling note in the capture loop.
+        self._segment_start_stop = self._segment_from()
 
         try:
             while not self._stop_event.is_set():
@@ -802,12 +807,24 @@ class AutoDriver:
                     # fresh OCR read so the re-anchored prev_badge="STOPPED" is in place
                     # when detector.update() runs this cycle. Re-anchor has no failing
                     # preconditions, so consume immediately.
-                    # Scope: correct for the parked case (Layer 3 STOPPED/IDLE). A
-                    # click-jump mid-transit (Layer 3 driving) needs entry-point
-                    # alignment — deferred (see WIP_autodriver.md § "Entry-point flow").
+                    # Scope: resets OCR memory for the parked case (Layer 3
+                    # STOPPED/IDLE). A click-jump mid-transit (Layer 3 driving) is
+                    # then caught by _maybe_reentry below — the re-anchor zeroes the
+                    # memory, re-entry silent-advances Layer 1 up to the game.
                     if self.sim.click_jump_pending:
                         self.sim.click_jump_pending = False
                         self._reanchor_to_app()
+                    # Coupling (Layer 1 → Layer 2): Layer 2 is a pure function of
+                    # Layer 1, computed not stored. Here we keep the displayed
+                    # segment label in sync with the app's authoritative curr_stop
+                    # every cycle, so the panel's "A → B" tracks any advance — auto
+                    # fire, manual PageDown, or click-jump. Fire gating reads app
+                    # sub-state directly in _fire_* (the other half of the coupling).
+                    # The detector's per-segment observed-flags are deliberately
+                    # NOT touched here: they stay OCR-driven so Layer 3 keeps
+                    # observing the game, not the app. See auto_input/README.md
+                    # § "State machine layering".
+                    self._segment_start_stop = self._segment_from()
                     frame = None
                     for _ in range(5):
                         frame = camera.grab(region=profile.capture_region)
@@ -918,6 +935,10 @@ class AutoDriver:
 
                     for ev in self._detector.update(d_val, s_val, badge):
                         self._handle_event(ev)
+                    # Re-entry (Layer 3 → Layer 2/1 catch-up) runs AFTER the
+                    # event loop so it reads the cross-reject-guarded badge and
+                    # stands down if a normal fire already succeeded this cycle.
+                    self._maybe_reentry(s_val, d_val)
 
                     self._stop_event.wait(self.interval_s)
                 except Exception as e:
@@ -934,8 +955,7 @@ class AutoDriver:
 
     def _handle_event(self, event: str) -> None:
         if event == "STOPPED->MOVING":
-            self._segment_start_stop = self.sim.state.curr_stop
-            print(f"          [AD] >>> BADGE STOPPED->MOVING (segment_start_stop={self._segment_start_stop}, flags reset)")
+            print("          [AD] >>> BADGE STOPPED->MOVING (Layer 3 observed-flags reset)")
             return
         if event == "MOVING->STOPPED":
             print("          [AD] >>> BADGE MOVING->STOPPED (arrived)")
@@ -950,35 +970,83 @@ class AutoDriver:
             self._fire_at_station()
             return
 
+    def _maybe_reentry(self, speed: Optional[int], distance: Optional[int]) -> None:
+        """Re-entry: Layer 3 → Layer 2/1 reconciliation (the catch-up path).
+
+        Called once per cycle AFTER detector.update() + the _handle_event loop.
+        Fires only when the app is parked (at_station=True ⇔ Layer 1 at 1C) but
+        the game is in transit — the genuine desync (cold boot mid-drive,
+        mid-transit click-jump, or OCR that missed the real events). When the app
+        is already moving (1A/1B) the normal streaming flow owns it, so no-op.
+
+        Writes ONLY a single-shot signal (`sim.pending_silent_advance`) + the
+        detector's observed-flags — never AppState directly (that mutation stays
+        on the main thread). The Layer 1 advance + the flag seed are one
+        consistent snapshot; the coupling is read-only on Layer 1, so this does
+        not cascade. See auto_input/README.md § "Re-entry (Layer 3 → Layer 2
+        reconciliation)".
+
+        Lockstep ±1: advances by one stop. There is no station-name OCR, so a
+        cold boot multiple stops behind the game is NOT recoverable here — the
+        user must click-jump to their platform first.
+        """
+        # A normal fire already succeeded this cycle (e.g. the live 3B→3C
+        # departure crossing, which plays audio) — let it land; re-entry stands
+        # down. This is the discriminator between the live departure (audio) and
+        # a re-entry (silent): the arriving-while-parked case is NOT suppressed
+        # because there _fire_arrival skips and pending_next_pa stays False.
+        if self.sim.pending_next_pa:
+            return
+        if not self.sim.state.at_station:
+            return  # app already moving (1A/1B) — normal flow owns it
+        inferred = self._detector.inferred_state()
+        if inferred in (Layer3State.UNKNOWN, Layer3State.IDLE, Layer3State.STOPPED):
+            return  # OCR fail / first cycle / game parked — no desync
+        # Game in transit while app parked at 1C. Disambiguate via the guarded
+        # badge (prev_badge, post cross-reject) + raw speed/distance —
+        # inferred_state can't tell 3B from 3C (both read DEPARTING cold), so the
+        # speed>=30 gate is what separates "still in the departure window" (3B,
+        # let the normal crossing play it with audio) from "already cruising" (3C).
+        badge = self._detector.prev_badge
+        if badge == "MOVING" and distance is not None and distance <= self._detector.arrival_lead_m:
+            # 3D ARRIVING → land 1B (まもなく); seed dep + arr.
+            self._detector.departure_observed = True
+            self._detector.arrival_observed = True
+            self.sim.pending_silent_advance = "1B"
+            print(f"          [AD] >>> RE-ENTRY: silent advance to 1B (game ARRIVING, dist={distance})")
+        elif (speed is not None and speed >= SPEED_DEPARTURE_KMH) or badge == "PASSING":
+            # 3C CRUISING (or PASSING, dist unreliable) → land 1A; seed dep.
+            self._detector.departure_observed = True
+            self.sim.pending_silent_advance = "1A"
+            print(f"          [AD] >>> RE-ENTRY: silent advance to 1A (game CRUISING/PASSING, speed={speed})")
+        # else: MOVING, speed<30, dist>lead → 3B → no-op (normal SPEED_UP_30 path
+        # plays the departure with audio when speed crosses 30).
+
     def _reanchor_to_app(self) -> None:
-        """Re-anchor Layer 2 belief to Layer 1's authoritative state after a click-jump.
+        """Reset OCR memory after a click-jump (parked case).
 
-        A click-jump (jump_to_stop) puts App in STOPPING@curr_stop. App is
-        authoritative — the user expressed intent by clicking — so Layer 2
-        mirrors App, not the other way round:
+        A click-jump (jump_to_stop) puts App in STOPPING@curr_stop. The segment
+        label and fire gating both derive from app state every cycle now, so the
+        *only* thing left for click-jump to do is reset the detector's OCR memory
+        so a stale pre-jump read can't fire a spurious event on the next cycle:
 
-          - _segment_start_stop  → curr_stop   (new segment originates here)
-          - arrival_observed=False             (the click WAS the arrival; no
-                                                 OCR trigger was observed)
-          - departure_observed=False
-          - at_station_observed=True           (suppresses FIRE_AT_STATION,
-                                                 whose gate is arrival_observed
-                                                 AND NOT at_station_observed)
           - prev_badge="STOPPED"               (badge memory reflects platform)
-          - prev_speed=None                    (drop stale speed so the very
-                                                 next cycle can't satisfy the
-                                                 departure crossing test
-                                                 prev_speed<30<=speed on a
-                                                 transient parked-platform speed
-                                                 misread; self-heals next read)
+          - prev_speed=None                    (drop stale speed so the very next
+                                                 cycle can't satisfy the departure
+                                                 crossing test prev_speed<30<=speed
+                                                 on a transient parked-platform
+                                                 speed misread; self-heals next read)
 
-        Layer 3 then derives as IDLE (prev_badge=STOPPED + arrival_observed=False).
-        From here normal flow resumes: the next BADGE_STOPPED→MOVING read starts
-        a clean segment from curr_stop.
+        The three observed-flags are also reset to a parked reading so Layer 3
+        shows IDLE (`prev_badge=STOPPED` + `arrival_observed=False`) instead of a
+        stale prior-segment state — cosmetic only; fire gating no longer reads them.
+
+        Scope: parked case (the realistic desync correction). Mid-transit
+        click-jump (game still driving) is a Layer-1↔Layer-3 desync handled by
+        re-entry (_maybe_reentry) — see auto_input/README.md § "Re-entry".
         """
         target = self.sim.state.curr_stop
-        print(f"          [AD] >>> CLICK-JUMP re-anchor: Layer 2 -> App STOPPING@{target} " f"(was segment_start={self._segment_start_stop})")
-        self._segment_start_stop = target
+        print(f"          [AD] >>> CLICK-JUMP re-anchor: OCR memory reset for App STOPPING@{target}")
         self._detector.departure_observed = False
         self._detector.arrival_observed = False
         self._detector.at_station_observed = True
@@ -986,10 +1054,12 @@ class AutoDriver:
         self._detector.prev_speed = None
 
     def _fire_departure(self) -> None:
-        # Departure is "advance from segment_start_stop to next stop" — auto-fire
-        # only if curr_stop is still segment_start_stop. Otherwise user already advanced.
-        if self.sim.state.curr_stop != self._segment_start_stop:
-            print(f"          [AD] >>> SKIPPED departure fire (sim already at stop {self.sim.state.curr_stop}; user advanced manually)")
+        # Coupling: departure is valid only at 1C (app parked, at_station=True) —
+        # firing it advances the app off the platform into 1A. If the app already
+        # left (at_station=False, by auto-fire or a manual PageDown), departure has
+        # effectively happened — skip. The app sub-state IS the debounce.
+        if not self.sim.state.at_station:
+            print(f"          [AD] >>> SKIPPED departure fire (app not parked; curr_stop={self.sim.state.curr_stop}, already departed)")
             return
         # Silent pa_at_station drain — if user lagged on at-station announcements,
         # the synthesized press below would consume one queue entry instead of
@@ -1005,42 +1075,40 @@ class AutoDriver:
         self._last_fire = {"ts": time.time(), "type": "departure"}
         print("          [AD] >>> FIRED departure (set pending_next_pa)")
 
-    def _expected_next_stop(self) -> int:
-        """First stopping-station index after segment_start_stop, or -1 if none.
+    def _segment_from(self) -> int:
+        """The stop the current leg departed from — display/log label only.
+
+        Derived live from authoritative app state, per the coupling:
+          - parked (1C, `at_station=True`)  → `curr_stop`
+          - in transit (1A/1B)              → the previous stopping station
 
         "Stopping station" detected via `stop.get("time") is not None` — the
         canonical DATA_FORMAT.md discriminator (passing stations have NO `time`
-        field). This matches `_build_stops_meta`'s `stops_here` test in this
-        same module. **Note:** the simulator's `_advance_to_next_stop` uses a
-        different test (`bool(pa) or bool(pa_at_station)`) that filters by
-        audio content rather than schedule presence — they agree for normal
-        routes but diverge on stopping stations with empty audio (e.g. start
-        station). Use `time` here because we want "where the train physically
-        stops," not "where audio plays."
+        field), matching `_build_stops_meta`'s `stops_here` test in this module.
+        Routes with passing-through stops mean the previous stopping station may
+        be several indices back (e.g. chuo Shinjuku → previous stop skips 大久保 /
+        東中野), so we scan backward rather than assuming `curr_stop - 1`.
 
-        Routes with passing-through stops between two stopping stops mean
-        curr_stop legitimately jumps past +1 (e.g. chuo Nakano(18) → Shinjuku(21)
-        skips 東中野(19) + 大久保(20)). The expected post-departure curr_stop
-        is the next stopping-station index, not segment_start_stop + 1.
+        NOT used by fire gating — those read app sub-state directly. This exists
+        only so the panel's "A → B" label and the JSONL stay aligned with
+        `curr_stop` no matter how it changed (auto-fire, manual PageDown, click-jump).
         """
-        for k in range(self._segment_start_stop + 1, len(self.sim.stops)):
+        st = self.sim.state
+        if st.at_station:
+            return st.curr_stop
+        for k in range(st.curr_stop - 1, -1, -1):
             if self.sim.stops[k].get("time") is not None:
                 return k
-        return -1
+        return st.curr_stop
 
     def _fire_arrival(self) -> None:
+        # Coupling: arrival is valid only while the app is approaching its target
+        # (at_station=False) — that target IS curr_stop, so no segment anchor is
+        # needed. If still parked (1C), departure hasn't fired — premature.
+        if self.sim.state.at_station:
+            print(f"          [AD] >>> SKIPPED arrival fire (app parked at stop {self.sim.state.curr_stop}; departure not fired)")
+            return
         curr = self.sim.state.curr_stop
-        expected = self._expected_next_stop()
-        # After departure fired, curr_stop should be `expected`.
-        # If it's still segment_start_stop, departure didn't fire — would be premature.
-        # If it differs from expected, user manually advanced to the wrong stop.
-        if curr <= self._segment_start_stop:
-            print(f"          [AD] >>> SKIPPED arrival fire (departure not yet fired; sim at stop {curr})")
-            return
-        if curr != expected:
-            print(f"          [AD] >>> SKIPPED arrival fire (sim at stop {curr}, expected {expected})")
-            return
-
         target = self.sim.stops[curr] if curr < len(self.sim.stops) else None
         if target is None:
             print(f"          [AD] >>> SKIPPED arrival fire (curr_stop {curr} out of range)")
@@ -1065,19 +1133,15 @@ class AutoDriver:
         # No audio — the unified state machine's APPROACHING→STOPPING transition
         # is silent; this press just sets `state.at_station=True`. Subsequent
         # presses cycle pa_at_station (if any) then advance.
+        #
+        # Coupling: valid only at 1B (app in final approach — at_station=False AND
+        # cnt_pa at the last approach PA). The two guards below enforce exactly
+        # that: at_station rules out 1C (already stopping); the cnt_pa check rules
+        # out 1A (still on an earlier approach PA).
         if self.sim.state.at_station:
             print("          [AD] >>> SKIPPED at-station fire (sim already STOPPING)")
             return
         curr = self.sim.state.curr_stop
-        expected = self._expected_next_stop()
-        # Mirrors _fire_arrival's anchor — curr should be `expected` by now
-        # (arrival fire moved sim there, or it was already there).
-        if curr <= self._segment_start_stop:
-            print(f"          [AD] >>> SKIPPED at-station fire (sim still at segment_start={self._segment_start_stop}; arrival not advanced)")
-            return
-        if curr != expected:
-            print(f"          [AD] >>> SKIPPED at-station fire (sim at stop {curr}, expected {expected})")
-            return
         target = self.sim.stops[curr] if curr < len(self.sim.stops) else None
         if target is None:
             return

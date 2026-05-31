@@ -29,12 +29,24 @@ This split keeps fidelity work (LCD rendering, route data, audio cuts) decoupled
 
 **Two integrations.** Both live in this repo and share OCR + state-machine implementation:
 
-- **In-process** (`auto_input/driver.py` `AutoDriver`) — spawned from `main.py` when **OCR Auto-PA** toggle enabled on setup screen. Runs in daemon thread, sets `PASimulator.pending_next_pa = True` at fire-time, same code path as manual PageDown. Manual-press precedence implicit: driver inspects `sim.state.curr_stop` / `sim.state.cnt_pa` each cycle, skips its fire on mismatch. Includes in-window debug panel.
+- **In-process** (`auto_input/driver.py` `AutoDriver`) — spawned from `main.py` when **OCR Auto-PA** toggle enabled on setup screen. Runs in daemon thread, sets `PASimulator.pending_next_pa = True` at fire-time, same code path as manual PageDown. Manual-press precedence implicit: the driver gates each fire on the app's sub-state (departure only when parked, etc.), so a manual PageDown that already advanced the app makes the driver skip its own fire. Includes in-window debug panel.
 - **Separate-process** (`_dev_scripts/capture_game.py`) — standalone diagnostic script. Synthesizes PageDown via `keyboard` library, uses self-press timestamp guard for manual-press precedence. No debug panel.
 
 ## State machine layering
 
 Auto-driver subsystem involves three distinct state machines. They align in normal flow but diverge after manual user action — keeping them separate in vocabulary prevents wrong fix landing in wrong layer.
+
+**Shorthand codes** — a quick-reference for discussion; the full state names below stay the canonical vocabulary in code + prose.
+
+| Layer 1 — app sub-state | Layer 2 — driver belief | Layer 3 — inferred game |
+|---|---|---|
+| **1A** = `APPROACHING_EARLY` (次は) | **2A** = fresh segment, no fire | **3A** = `IDLE` |
+| **1B** = `APPROACHING_FINAL` (まもなく) | **2B** = departed | **3B** = `DEPARTING` |
+| **1C** = `STOPPING` (ただいま) | **2C** = arriving | **3C** = `CRUISING` |
+| | **2D** = at-station | **3D** = `ARRIVING` |
+| | | **3E** = `STOPPED` |
+
+The Layer 1 ↔ Layer 2 coupling (1A⇒2B, 1B⇒2C, 1C⇒2A — Layer 2 derived from Layer 1) is implemented in `driver.py`: fire-gating reads the app sub-state directly (departure only at 1C, arrival only at 1A, at-station only at 1B), and the segment label derives from `curr_stop` each cycle. The observed-flags below stay OCR-driven for Layer 3. The separate Layer-1↔Layer-3 catch-up is handled by re-entry — see "Re-entry (Layer 3 → Layer 2 reconciliation)" below. Design-discussion rationale: `memory/2026-05-30.md` (coupling) + `memory/2026-05-31.md` (re-entry).
 
 ### Layer 1 — App (sim's own state machine)
 
@@ -42,7 +54,7 @@ State on `AppState` (`curr_stop`, `cnt_pa`, `cnt_pa_at_station`, `at_station`). 
 
 ### Layer 2 — AutoDriver belief
 
-Per-segment flag set on `_Detector` instance: `_segment_start_stop`, `departure_observed`, `arrival_observed`, `at_station_observed`. Auto-driver's belief about which segment App layer is mid-way through and which fires it has already dispatched. Lives across samples; all flags reset on `BADGE_STOPPED→(MOVING|PASSING)` (segment boundary).
+Auto-driver's belief about where the train is in its segment — **derived from Layer 1, not stored.** Fire-gating reads the app sub-state directly (departure only at 1C, arrival only at 1A, at-station only at 1B), so the app advance is the debounce; `_segment_start_stop` is a display/log label recomputed from `curr_stop` each cycle (`_segment_from`). The `_Detector`'s `departure_observed` / `arrival_observed` / `at_station_observed` flags still live on this instance but now serve **Layer 3** (they feed `inferred_state()`); they are OCR-driven and reset on `BADGE_STOPPED→(MOVING|PASSING)`, NOT reconciled from Layer 1 — except seeded directly on re-entry (see "Re-entry" below).
 
 ### Layer 3 — AutoDriver's inferred game state
 
@@ -59,12 +71,12 @@ What auto-driver thinks IRL game train is doing — expressed as one of five can
 
 **2026-05-09 rename.** Old wire names embedded the detector's trigger-fire shape (`STOPPING_FRESH`, `APPROACHING_BEFORE_DEP`, `APPROACHING_AFTER_DEP`, `MOVING_AFTER_ARR`, `STOPPING_AFTER_ARR`) which leaked internal logic into the state name. New names describe what the train is *doing* in plain transit verbs and line up 1:1 with the user-facing panel labels.
 
-**Cross-layer token sharing.** Layer 1's vocabulary (`STOPPING` / `APPROACHING_EARLY` / `APPROACHING_FINAL`) is now disjoint from Layer 3 — old suffix discipline isn't needed there. **Layer 2 ↔ Layer 3 share one token by design:** `STOPPED` is both a Layer 2 badge value (raw OCR input) and a Layer 3 inferred-state value (output). `MOVING` and `PASSING` appear only in Layer 2; `IDLE` / `DEPARTING` / `CRUISING` / `ARRIVING` / `UNKNOWN` appear only in Layer 3. The collision on `STOPPED` is intentional — the badge is one input to the inference, and at the platform with `arrival_observed=True` they collapse to the same semantic. **In code and discussion, always disambiguate by field name** (`status['badge']` vs `status['inferred_state']`) rather than by raw string match. The panel disambiguates visually too: badges render in UPPERCASE, Layer 3 states in Title Case ("Stopped").
+**Cross-layer token sharing.** Layer 1's vocabulary (`STOPPING` / `APPROACHING_EARLY` / `APPROACHING_FINAL`) is now disjoint from Layer 3 — old suffix discipline isn't needed there. **The badge read ↔ Layer 3 share one token by design:** `STOPPED` is both a **badge read** (raw OCR input — *not* Layer 2; Layer 2 is the belief flag-set) and a Layer 3 inferred-state value (output). `MOVING` and `PASSING` are badge reads only; `IDLE` / `DEPARTING` / `CRUISING` / `ARRIVING` / `UNKNOWN` appear only in Layer 3. The collision on `STOPPED` is intentional — the badge read is one input to the inference, and at the platform with `arrival_observed=True` they collapse to the same semantic. **In code and discussion, always disambiguate by field name** (`status['badge']` vs `status['inferred_state']`) rather than by raw string match. The panel disambiguates visually too: badges render in UPPERCASE, Layer 3 states in Title Case ("Stopped").
 
 These = **inference outputs**, not direct OCR reads. Inputs:
 
 - **Raw OCR observations**: `badge_read ∈ {STOPPED, MOVING, PASSING}`, `speed_read`, `distance_read` — single-sample reads of game HUD.
-- **Layer 2 cache** (per-segment): `departure_observed`, `arrival_observed`, `at_station_observed`. Necessary because OCR alone doesn't distinguish `DEPARTING` from `CRUISING` — both show `badge∈{MOVING,PASSING}`; cache disambiguates. Flags semantically record "we observed the trigger condition this segment," not "we dispatched a fire" — dispatcher's mismatch-skip = separate concern.
+- **Layer 2 cache** (per-segment): `departure_observed`, `arrival_observed`, `at_station_observed`. Necessary because OCR alone doesn't distinguish `DEPARTING` from `CRUISING` — both show `badge∈{MOVING,PASSING}`; cache disambiguates. Flags semantically record "we observed the trigger condition this segment," not "we dispatched a fire" — fire gating reads Layer 1's app sub-state, a separate concern.
 
 **Streaming inference truth table** (per-sample, with cache):
 
@@ -94,22 +106,44 @@ Inference function pluggable; future cross-attribute hardening enriches it witho
 Normal flow:
 
 ```
-Layer 3 observation → event → Layer 2 dispatch (mismatch-skip) → pending_next_pa
-                                                                    ↓
-                                                         Layer 1 advance via _next_pa
+Layer 3 observation → event → fire gate (Layer 1 sub-state) → pending_next_pa
+                                                                  ↓
+                                                       Layer 1 advance via _next_pa
+                                                                  ↓
+                                              Layer 2 (re-)derived from Layer 1 next cycle
 ```
 
-Layer 2 follows Layer 3. Layer 1 follows Layer 2. Reverse direction — Layer 1 drifting from Layer 2 due to user action — reconciled via dispatcher mismatch-skip + flag reset on next `BADGE_STOPPED→(MOVING|PASSING)`.
+Layer 3 (game observation) proposes a fire; the gate checks Layer 1's sub-state (departure only at 1C, arrival only at 1A, at-station only at 1B) and, if valid, advances Layer 1. **Layer 2 is derived from Layer 1, so it always follows Layer 1 and never drifts** — a manual PageDown that already advanced Layer 1 simply makes the gate skip the driver's own fire on the next cycle. The OCR observed-flags reset on the next `BADGE_STOPPED→(MOVING|PASSING)`, for Layer 3 only.
 
 ### When layers diverge
 
 | Cause | Effect | Reconciled by |
 |---|---|---|
-| Manual PageDown | Layer 1 advances by one press; Layer 2 unchanged | Dispatcher mismatch-skip on next event; full flag reset on next `STOPPED→(MOVING\|PASSING)` |
-| Click-jump on lower LCD | Layer 1 jumps to STOPPING@target; Layer 2 unchanged | Explicit re-anchor on next capture cycle — `_reanchor_to_app` mirrors Layer 2 onto Layer 1 (`_segment_start_stop=target`, flags → parked, `prev_badge=STOPPED`, Layer 3 derives `IDLE`). Signalled by single-shot `PASimulator.click_jump_pending` (set in `_handle_lcd_click`, consumed by the driver). Parked case only; mid-transit click-jump (Layer 3 driving) not yet aligned — see WIP_autodriver.md |
-| Auto-driver toggled ON mid-drive | Layer 1 = whatever user advanced to; Layer 2 has no belief yet | Entry-point flow probes Layer 3, anchors Layer 2 to match detected segment context |
+| Manual PageDown / auto-fire | Layer 1 advances | **Nothing to reconcile** — Layer 2 is derived from Layer 1 each cycle. Fire-gating reads the app sub-state, so a manual advance into 1A makes the driver skip its own departure; the segment label tracks `curr_stop` next cycle. |
+| Click-jump on lower LCD | Layer 1 jumps to STOPPING@target | Segment label + fire-gating derive from `curr_stop` automatically. `_reanchor_to_app` additionally resets OCR memory (`prev_badge=STOPPED`, `prev_speed=None`, cosmetic Layer-3 reset to `IDLE`) so a stale moving read can't fire post-jump; signalled by single-shot `PASimulator.click_jump_pending`. Parked case; mid-transit click-jump (game driving) is a Layer-1↔Layer-3 desync — see entry-point flow. |
+| Toggle-ON mid-drive, mid-transit click-jump, or Layer 1 static while the game moved on | Layer 1 lags the game; the coupling has no Layer-1 change to ride | **Re-entry** — `_maybe_reentry` silent-advances Layer 1 up to the game AND seeds the observed-flags (one consistent snapshot). See "Re-entry (Layer 3 → Layer 2 reconciliation)" below. |
 
-Layer 3 stays accurate at all times — observes the game, not the sim. Reconciling Layer 1 ↔ Layer 2 = what mismatch-skip and entry-point flow exist to do.
+Layer 3 stays accurate at all times — observes the game, not the sim. Layer 1 ↔ Layer 2 reconciliation is automatic (Layer 2 derived from Layer 1); Layer 1 ↔ Layer 3 reconciliation is handled by re-entry (`_maybe_reentry`) — see below.
+
+### Re-entry (Layer 3 → Layer 2 reconciliation)
+
+`AutoDriver._maybe_reentry` (runs after the event loop each cycle) catches Layer 1 up when belief lags the game — cold boot mid-drive, mid-transit click-jump, missed OCR. Pulls Layer 1 + Layer 2 up to the game as **one consistent snapshot**: silent-advances the app sub-state AND seeds the observed-flags together.
+
+Gated on **app parked** (`at_station=True` ⇔ 1C) — when the app is already moving (1A/1B) normal flow owns it. Also stands down when `pending_next_pa` is already set: a live fire succeeded this cycle (it plays with audio), so re-entry would be a silent dup. That gate is the discriminator between the live 3B→3C departure (audio) and a re-entry 3C (silent) — the arriving-while-parked case is NOT suppressed, because there `_fire_arrival` skips and `pending_next_pa` stays False.
+
+Rules, keyed on Layer 3:
+
+| Layer 3 (game) | Action |
+|---|---|
+| 3A/3E parked, or 3B (`speed<30`), or speed unknown | no-op — 3B's departure fires later via the normal `SPEED_UP_30` crossing (with audio) |
+| 3C CRUISING (`speed≥30`) or PASSING | silent-advance to 1A; seed `departure_observed=True` |
+| 3D ARRIVING (`badge==MOVING` AND `dist≤lead`) | silent-advance to 1B; seed `departure_observed=arrival_observed=True` |
+
+Silent because the missed announcement is stale (dep PA unrecoverable mid-segment; まもなく already partway). Mechanism: single-shot `PASimulator.pending_silent_advance` (`"1A"|"1B"`) written by the OCR thread, consumed on the **main thread** via `_silent_advance_to` → `_advance_to_next_stop(silent=True)`. AppState is mutated only on the main thread — the bg thread writes only the signal + the detector flags (multi-field AppState writes from the bg thread would tear against the render loop).
+
+**No feedback loop:** the Layer 1 ↔ Layer 2 coupling is read-only on Layer 1 (reads it for the segment label + fire-gate; never writes the observed-flags). Re-entry writes Layer 1 + flags as one snapshot; next cycle the coupling just re-reads (idempotent) and the seeded flags gate any re-fire.
+
+**Lockstep ±1:** advances one stop. No station-name OCR, so a cold boot multiple stops behind the game is NOT recoverable here — click-jump to the platform first.
 
 ## Architecture
 
@@ -152,7 +186,7 @@ Layer 3 stays accurate at all times — observes the game, not the sim. Reconcil
               │
               ▼ for each "fire ... PA" event:
    [AutoDriver._handle_event — inspects sim.state directly]
-   sim.state.curr_stop changed unexpectedly?  → skip (manual advance)
+   app not in this fire's valid sub-state?    → skip (e.g. not parked for departure / manual advance)
    target stop has only 1 PA?                 → skip (no arrival announcement)
    sim.state.cnt_pa already at last PA?       → skip (user fired manually)
    otherwise                                  → sim.pending_next_pa = True
@@ -534,4 +568,4 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 - **No station-name OCR**: auto-driver doesn't validate which station the user is at; trusts simulator's `state.curr_stop`. If they desync, manual PageDown is the recovery.
 - **Game DRM**: irrelevant to the OCR pipeline (works on legit + cracked installs identically since dxcam reads GPU output regardless of game's startup path).
 
-Pending design (entry-point flow), validation history, calibration insights / guardrails, and priority-ordered backlog all live in [WIP_autodriver.md](WIP_autodriver.md).
+Priority-ordered backlog lives in [TODO.md § Auto-input / OCR](../TODO.md). Validation history + design rationale: `git log` + the `memory/` dailies (2026-04-26 → 2026-05-31).
