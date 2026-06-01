@@ -69,6 +69,87 @@
     "zh_CN": "间隔:"
   },
 
+  "setup.ocr_disclaimer.title": {
+    "en": "OCR Auto-PA — Notice",
+    "zh_HK": "OCR 自動報站 — 使用注意",
+    "zh_CN": "OCR 自动报站 — 使用注意"
+  },
+  "setup.ocr_disclaimer.how_it_works_heading": {
+    "en": "How it works",
+    "zh_HK": "功能說明",
+    "zh_CN": "功能说明"
+  },
+  "setup.ocr_disclaimer.resolution": {
+    "en": "Preview feature · Resolution: 1080P / 1440P (16:9) only",
+    "zh_HK": "預覽功能 · 解像度：1080P / 1440P（16:9）",
+    "zh_CN": "预览功能 · 分辨率：1080P / 1440P（16:9）"
+  },
+  "setup.ocr_disclaimer.intro": {
+    "en": "OCR Auto-PA compares the game HUD (upper-right) against local OCR templates to determine train position, then fires announcements automatically.",
+    "zh_HK": "OCR自動報站功能利用OCR（畫面識別技術）將遊戲畫面右上角資訊與本地OCR範本比對，推斷列車行駛位置，再自動播放廣播。",
+    "zh_CN": "OCR自动报站功能利用OCR（画面识别技术）将游戏画面右上角信息与本地OCR模板比对，推断列车行驶位置，再自动播放广播。"
+  },
+  "setup.ocr_disclaimer.flow.capture": {
+    "en": "① Capture",
+    "zh_HK": "① 截圖",
+    "zh_CN": "① 截图"
+  },
+  "setup.ocr_disclaimer.flow.match": {
+    "en": "② Match glyphs",
+    "zh_HK": "② 比對範本",
+    "zh_CN": "② 比对模板"
+  },
+  "setup.ocr_disclaimer.flow.deduce": {
+    "en": "③ Deduce position",
+    "zh_HK": "③ 推斷位置",
+    "zh_CN": "③ 推断位置"
+  },
+  "setup.ocr_disclaimer.flow.fire": {
+    "en": "④ Auto-fire PA",
+    "zh_HK": "④ 自動廣播",
+    "zh_CN": "④ 自动广播"
+  },
+  "setup.ocr_disclaimer.terms_heading": {
+    "en": "Notice",
+    "zh_HK": "使用注意",
+    "zh_CN": "使用注意"
+  },
+  "setup.ocr_disclaimer.consent": {
+    "en": "By enabling this feature, you agree that this application will periodically capture your computer screen for OCR processing.",
+    "zh_HK": "使用此功能，即表示您同意本程式將定期擷取您的電腦螢幕畫面，以進行 OCR 識別。",
+    "zh_CN": "使用此功能，即表示您同意本程序将定期截取您的电脑屏幕画面，以进行 OCR 识别。"
+  },
+  "setup.ocr_disclaimer.privacy": {
+    "en": "All captures are processed locally. No data is stored or transmitted to any third party.",
+    "zh_HK": "所有截圖資料僅在本程式內處理，不會被儲存或傳送至任何第三方。",
+    "zh_CN": "所有截图数据仅在本程序内处理，不会被储存或传输至任何第三方。"
+  },
+  "setup.ocr_disclaimer.beta": {
+    "en": "Misfires may occur.",
+    "zh_HK": "偶有誤觸發屬正常。",
+    "zh_CN": "偶有误触发属正常。"
+  },
+  "setup.ocr_disclaimer.capture_interval": {
+    "en": "captures every {n}s",
+    "zh_HK": "每 {n}s 擷取一次",
+    "zh_CN": "每 {n}s 截取一次"
+  },
+  "setup.ocr_disclaimer.scroll_hint": {
+    "en": "Scroll down to read and accept",
+    "zh_HK": "請向下捲動以閱讀並接受條款",
+    "zh_CN": "请向下滚动以阅读并接受条款"
+  },
+  "setup.ocr_disclaimer.ok": {
+    "en": "I understand",
+    "zh_HK": "明白，繼續",
+    "zh_CN": "明白，继续"
+  },
+  "setup.ocr_disclaimer.cancel": {
+    "en": "Cancel",
+    "zh_HK": "取消",
+    "zh_CN": "取消"
+  },
+
   "setup.tutorial_button": {
     "en": "? Tutorial",
     "zh_HK": "? 教學",

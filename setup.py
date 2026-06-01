@@ -1,5 +1,6 @@
 """Setup screen for route and train selection."""
 
+import math
 import os
 import json
 import webbrowser
@@ -81,9 +82,9 @@ class SetupScreen:
         self.control_bg = (88, 96, 112)
         self.control_dim = (118, 126, 142)
 
-        # OCR Auto-PA controls — defaults match the prior CLI defaults; user toggles
-        # per-launch (no persistence). Lead/interval clamped to the ranges below.
-        self.auto_input_enabled = False
+        # OCR Auto-PA controls — persisted in settings.json under "auto_input".
+        # Lead/interval clamped to the ranges below.
+        self.auto_input_enabled = bool(i18n.load_settings().get("auto_input", False))
         self.lead_m = 900
         self.interval_s = 5
         self.lead_min, self.lead_max, self.lead_step = 500, 1500, 100
@@ -96,6 +97,15 @@ class SetupScreen:
         self._interval_minus_rect: pygame.Rect | None = None
         self._interval_plus_rect: pygame.Rect | None = None
         self._last_mouse_pos = (0, 0)
+
+        # Cached raw screenshot surface for the OCR disclaimer popup.
+        # Loaded once on first draw; False = tried and failed (no file / load error).
+        self._disclaimer_screenshot: pygame.Surface | bool | None = None
+        # Pre-cropped HUD panel image (hud_sample.png) for box 2.
+        self._disclaimer_hud: pygame.Surface | bool | None = None
+        # Cached OCR template surfaces for the pipeline visual strip (lazy-loaded).
+        # List of (surface, label) pairs; empty list = already attempted (no templates found).
+        self._disclaimer_templates: list[tuple[pygame.Surface, str]] | None = None
 
     def scan_routes(self, base_dir: str | None = None) -> list:
         """Scan for available routes by finding route.json files.
@@ -376,13 +386,421 @@ class SetupScreen:
         x += gap
         _, self._interval_minus_rect, self._interval_plus_rect = draw_stepper(i18n.t("setup.interval_label"), f"{self.interval_s}s", x)
 
+    def _draw_ocr_disclaimer_panel(self, screen: pygame.Surface, scroll_y: int = 0) -> tuple[pygame.Rect, pygame.Rect, int]:
+        """Draw the scrollable OCR disclaimer/consent panel.
+
+        Returns (ok_rect, cancel_rect, max_scroll).
+        ok_rect is grayed when scroll_y < max_scroll — caller enforces the lock."""
+        # ── tuneable params ────────────────────────────────────────────────
+        sw, sh = screen.get_width(), screen.get_height()
+        pad = 24
+        diag_h = 230  # max screenshot height
+        btn_h = 36
+        btn_w = 150
+        btn_gap = 10
+        header_h = 54  # title + divider
+        footer_h = 64  # buttons row
+        clip_top = header_h
+        clip_h = sh - header_h - footer_h
+        # ───────────────────────────────────────────────────────────────────
+
+        panel_color = (52, 57, 72)
+        border_color = (90, 98, 118)
+        heading_color = (200, 210, 230)
+
+        pygame.draw.rect(screen, panel_color, pygame.Rect(0, 0, sw, sh), border_radius=10)
+        pygame.draw.rect(screen, border_color, pygame.Rect(0, 0, sw, sh), width=1, border_radius=10)
+
+        # ── Fixed header ───────────────────────────────────────────────────
+        title_font = i18n.font(16, bold=True)
+        title_img = title_font.render(i18n.t("setup.ocr_disclaimer.title"), True, self.text_color)
+        screen.blit(title_img, (pad, (header_h - title_img.get_height()) // 2))
+        pygame.draw.line(screen, border_color, (pad, header_h - 1), (sw - pad, header_h - 1))
+
+        # ── Scrollable content ─────────────────────────────────────────────
+        screen.set_clip(pygame.Rect(0, clip_top, sw - 12, clip_h))
+
+        body_font = i18n.font(13)
+        subhead_font = i18n.font(13, bold=True)
+        cap_font = i18n.font(11)
+
+        # Lazy-load screenshot (once per SetupScreen instance)
+        if self._disclaimer_screenshot is None:
+            try:
+                _p = project_root() / "game_screenshot.png"
+                self._disclaimer_screenshot = pygame.image.load(str(_p)).convert() if _p.exists() else False
+            except Exception:
+                self._disclaimer_screenshot = False
+        if self._disclaimer_hud is None:
+            try:
+                _p = project_root() / "hud_sample.png"
+                self._disclaimer_hud = pygame.image.load(str(_p)).convert() if _p.exists() else False
+            except Exception:
+                self._disclaimer_hud = False
+
+        # Draw cursor starts at virtual top offset by scroll
+        y = clip_top + 16 - scroll_y
+
+        # ── 功能說明 section heading ───────────────────────────────────────
+        hw_img = subhead_font.render(i18n.t("setup.ocr_disclaimer.how_it_works_heading"), True, heading_color)
+        screen.blit(hw_img, (pad, y))
+        y += hw_img.get_height() + 10
+
+        # ── Two-column top: intro text (left) + screenshot (right) ────────
+        left_col_w = 210
+        col_gap = 16
+        right_col_x = pad + left_col_w + col_gap
+        right_col_w = sw - pad - right_col_x
+        row_top = y
+
+        # Left: intro text — pixel-width word wrap (CJK char-by-char, Latin word-boundary)
+        def wrap_text(font, text, max_w):
+            """Pixel-width wrap. CJK: cut at column edge. Latin: backtrack to word boundary.
+            Mixed Latin+CJK: don't backtrack across a Latin→CJK boundary."""
+            lines, current = [], ""
+            for ch in text:
+                test = current + ch
+                if font.size(test)[0] <= max_w:
+                    current = test
+                    continue
+                if not current:
+                    lines.append(ch)
+                    continue
+                if ch == " ":
+                    lines.append(current)
+                    current = ""
+                else:
+                    sp = current.rfind(" ")
+                    after = current[sp + 1 :] if sp >= 0 else ""
+                    # Backtrack to space only when continuation stays Latin
+                    if sp > 0 and after and ord(after[0]) < 0x3000:
+                        lines.append(current[:sp])
+                        current = after + ch
+                    else:
+                        lines.append(current)
+                        current = ch
+            if current:
+                lines.append(current)
+            return lines
+
+        intro_y = row_top
+        for para in i18n.t("setup.ocr_disclaimer.intro").split("\n"):
+            if not para:
+                intro_y += body_font.get_height() // 2
+                continue
+            for line in wrap_text(body_font, para, left_col_w):
+                img = body_font.render(line, True, self.text_color)
+                screen.blit(img, (pad, intro_y))
+                intro_y += img.get_height() + 2
+
+        # Notes: right below intro paragraph, same font + column width
+        intro_y += 8
+        for line in wrap_text(body_font, i18n.t("setup.ocr_disclaimer.resolution"), left_col_w):
+            img = body_font.render(line, True, (230, 180, 60))
+            screen.blit(img, (pad, intro_y))
+            intro_y += img.get_height() + 2
+        intro_y += 2
+        beta_img_lc = body_font.render(i18n.t("setup.ocr_disclaimer.beta"), True, self.dim_color)
+        screen.blit(beta_img_lc, (pad, intro_y))
+        intro_y += beta_img_lc.get_height()
+
+        # Right: screenshot + HUD pulse
+        if self._disclaimer_screenshot is not False:
+            raw = self._disclaimer_screenshot
+            rw, rh = raw.get_size()
+            scale = min(right_col_w / rw, diag_h / rh)
+            ss = pygame.transform.smoothscale(raw, (int(rw * scale), int(rh * scale)))
+            img_x = right_col_x + (right_col_w - ss.get_width()) // 2
+            screen.blit(ss, (img_x, row_top))
+            pygame.draw.rect(screen, (70, 78, 96), pygame.Rect(img_x, row_top, ss.get_width(), ss.get_height()), width=1)
+            sc_w, sc_h = ss.get_size()
+            hud_abs_x = img_x + int(sc_w * 0.78)
+            hud_abs_w = sc_w - int(sc_w * 0.78)
+            hud_abs_h = int(sc_h * 0.48)
+            phase = (pygame.time.get_ticks() % 1500) / 1500
+            brightness = math.sin(phase * math.pi)
+            hud_alpha = int(brightness * 210)
+            hud_surf = pygame.Surface((hud_abs_w, hud_abs_h), pygame.SRCALPHA)
+            hud_surf.fill((255, 200, 60, hud_alpha))
+            pygame.draw.rect(hud_surf, (255, 210, 80, min(255, hud_alpha + 50)), pygame.Rect(0, 0, hud_abs_w, hud_abs_h), width=2)
+            screen.blit(hud_surf, (hud_abs_x, row_top))
+            row_h = ss.get_height()
+        else:
+            # Fallback hand-drawn diagram in right column
+            fb = pygame.Rect(right_col_x, row_top, right_col_w, diag_h)
+            pygame.draw.rect(screen, (22, 26, 38), fb, border_radius=4)
+            pygame.draw.rect(screen, (70, 78, 96), fb, width=1, border_radius=4)
+            hud_x_fb = fb.right - 4 - 46
+            hud_surf_fb = pygame.Surface((46, 26), pygame.SRCALPHA)
+            hud_surf_fb.fill((255, 200, 60, 55))
+            screen.blit(hud_surf_fb, (hud_x_fb, fb.top + 4))
+            pygame.draw.rect(screen, (255, 200, 60), pygame.Rect(hud_x_fb, fb.top + 4, 46, 26), width=1, border_radius=2)
+            row_h = diag_h
+
+        y = row_top + max(intro_y - row_top, row_h) + 6
+        cap_img = cap_font.render(i18n.t("setup.ocr_disclaimer.capture_interval", n=self.interval_s), True, self.dim_color)
+        screen.blit(cap_img, (right_col_x + (right_col_w - cap_img.get_width()) // 2, y))
+        y += cap_img.get_height() + 16
+
+        # ── 4-step pipeline flowchart ──────────────────────────────────────
+        chart_w = sw - 2 * pad
+        arrow_w = 18
+        step_w = (chart_w - 3 * arrow_w) // 4
+        flow_h = 68
+        inner = 5
+
+        flow_labels = [
+            i18n.t("setup.ocr_disclaimer.flow.capture"),
+            i18n.t("setup.ocr_disclaimer.flow.match"),
+            i18n.t("setup.ocr_disclaimer.flow.deduce"),
+            i18n.t("setup.ocr_disclaimer.flow.fire"),
+        ]
+
+        # Lazy-load templates for step 1 box
+        if self._disclaimer_templates is None:
+            self._disclaimer_templates = []
+            tpl_root = project_root() / "ocr_templates"
+            for bn in ["stopping_ja", "running_ja", "passing_en"]:
+                p = tpl_root / "badges" / f"{bn}.png"
+                if p.exists():
+                    try:
+                        self._disclaimer_templates.append((pygame.image.load(str(p)).convert_alpha(), ""))
+                    except Exception:
+                        pass
+            for d in ["0", "1", "2", "8", "9"]:
+                p = tpl_root / "digits" / f"{d}.png"
+                if p.exists():
+                    try:
+                        self._disclaimer_templates.append((pygame.image.load(str(p)).convert_alpha(), d))
+                    except Exception:
+                        pass
+
+        for i in range(4):
+            sx = pad + i * (step_w + arrow_w)
+            box = pygame.Rect(sx, y, step_w, flow_h)
+            pygame.draw.rect(screen, (62, 68, 82), box, border_radius=5)
+            pygame.draw.rect(screen, border_color, box, width=1, border_radius=5)
+            cw, ch = step_w - 2 * inner, flow_h - 2 * inner
+
+            if i == 0 and self._disclaimer_screenshot is not False:
+                raw = self._disclaimer_screenshot
+                rw, rh = raw.get_size()
+                hud_rect = pygame.Rect(int(rw * 0.78), 0, rw - int(rw * 0.78), int(rh * 0.48))
+                hud = raw.subsurface(hud_rect)
+                hw, hh = hud.get_size()
+                sc = min(cw / hw, ch / hh)
+                scaled = pygame.transform.smoothscale(hud, (int(hw * sc), int(hh * sc)))
+                screen.blit(scaled, (sx + inner + (cw - scaled.get_width()) // 2, y + inner + (ch - scaled.get_height()) // 2))
+
+            elif i == 1 and self._disclaimer_templates:
+                # Left: real distance-cell crop from bundled screenshot.
+                # Right: digit templates cycle to show the scanning process.
+                dist_img = None
+                if self._disclaimer_hud is not False:
+                    ow_d, oh_d = self._disclaimer_hud.get_size()
+                    ds = min((cw * 0.55) / ow_d, (ch - 8) / oh_d)
+                    dist_img = pygame.transform.smoothscale(self._disclaimer_hud, (max(1, int(ow_d * ds)), max(1, int(oh_d * ds))))
+
+                vx = sx + inner + 4
+                if dist_img is not None:
+                    vy = y + inner + (ch - dist_img.get_height()) // 2
+                    screen.blit(dist_img, (vx, vy))
+                    vw_used = dist_img.get_width()
+                    target_th = dist_img.get_height()
+                else:
+                    vw_used = 0
+                    target_th = ch - 8
+
+                digit_entries = [(s, lbl) for s, lbl in self._disclaimer_templates if lbl.isdigit()]
+                if digit_entries:
+                    tpl_idx = (pygame.time.get_ticks() // 350) % len(digit_entries)
+                    tpl_surf, tpl_lbl = digit_entries[tpl_idx]
+                    # "855" = digits visible in bundled screenshot's distance cell
+                    is_match = tpl_lbl in "855"
+
+                    ow, oh = tpl_surf.get_size()
+                    tw = max(1, int(ow * target_th / oh))
+                    scaled_d = pygame.transform.scale(tpl_surf, (tw, target_th))
+
+                    rx_start = vx + vw_used + 10
+                    remaining = (sx + step_w - inner) - rx_start
+                    tx = rx_start + max(0, (remaining - tw) // 2)
+                    ty = y + inner + (ch - target_th) // 2
+
+                    if is_match:
+                        pygame.draw.rect(screen, (230, 180, 60), pygame.Rect(tx - 3, ty - 3, tw + 6, target_th + 6), width=2, border_radius=3)
+                    screen.blit(scaled_d, (tx, ty))
+
+            elif i == 2:
+                line1 = cap_font.render("v × t → d", True, self.text_color)
+                screen.blit(line1, (box.centerx - line1.get_width() // 2, box.centery - line1.get_height() // 2))
+
+            elif i == 3:
+                # Animated PgDn key: cap slides down over shadow face on press
+                key_w, cap_h = 56, 28
+                shadow_h = 5  # fixed dark bottom face
+                t_norm = (pygame.time.get_ticks() % 2000) / 2000
+                if t_norm < 0.10:
+                    press = t_norm / 0.10
+                elif t_norm < 0.50:
+                    press = 1.0
+                elif t_norm < 0.65:
+                    press = 1.0 - (t_norm - 0.50) / 0.15
+                else:
+                    press = 0.0
+                press_off = int(press * shadow_h)
+                kx = box.centerx - key_w // 2
+                ky = box.centery - (cap_h + shadow_h) // 2
+
+                # Shadow face (stays fixed — cap slides over it when pressed)
+                pygame.draw.rect(screen, (32, 36, 48), pygame.Rect(kx, ky + cap_h, key_w, shadow_h), border_radius=4)
+                # Cap (moves down)
+                cap_y = ky + press_off
+                pygame.draw.rect(screen, (75, 82, 100), pygame.Rect(kx, cap_y, key_w, cap_h), border_radius=5)
+                # Highlight strip on top of cap for 3D bevel
+                pygame.draw.rect(screen, (95, 103, 124), pygame.Rect(kx + 2, cap_y + 2, key_w - 4, 3), border_radius=2)
+                pygame.draw.rect(screen, border_color, pygame.Rect(kx, cap_y, key_w, cap_h), width=1, border_radius=5)
+                klbl = subhead_font.render("PgDn", True, self.text_color)
+                screen.blit(klbl, (kx + (key_w - klbl.get_width()) // 2, cap_y + (cap_h - klbl.get_height()) // 2))
+
+            # Label below box
+            lbl = cap_font.render(flow_labels[i], True, self.dim_color)
+            screen.blit(lbl, (box.centerx - lbl.get_width() // 2, y + flow_h + 4))
+
+            # Arrow between boxes
+            if i < 3:
+                arr = cap_font.render("→", True, self.dim_color)
+                screen.blit(arr, (sx + step_w + (arrow_w - arr.get_width()) // 2, y + (flow_h - arr.get_height()) // 2))
+
+        y += flow_h + 4 + cap_font.get_height() + 12
+
+        # Divider + Notice section
+        pygame.draw.line(screen, border_color, (pad, y), (sw - pad, y))
+        y += 16
+        t_img = subhead_font.render(i18n.t("setup.ocr_disclaimer.terms_heading"), True, heading_color)
+        screen.blit(t_img, (pad, y))
+        y += t_img.get_height() + 10
+
+        full_w = sw - 2 * pad
+        bullet_px = body_font.size("· ")[0]
+        bullet_w = full_w - bullet_px
+
+        def render_bullet(text, color):
+            nonlocal y
+            lines = wrap_text(body_font, text, bullet_w)
+            for j, line in enumerate(lines):
+                img = body_font.render(("· " if j == 0 else "  ") + line, True, color)
+                screen.blit(img, (pad, y))
+                y += img.get_height() + 2
+
+        for para in i18n.t("setup.ocr_disclaimer.consent").split("\n"):
+            if para:
+                render_bullet(para, self.text_color)
+        y += 6
+
+        for para in i18n.t("setup.ocr_disclaimer.privacy").split("\n"):
+            if para:
+                render_bullet(para, self.text_color)
+        y += 24  # bottom padding in content
+
+        content_height = (y + scroll_y) - (clip_top + 16)
+        max_scroll = max(0, content_height - clip_h)
+
+        screen.set_clip(None)
+
+        # ── Scroll indicator ───────────────────────────────────────────────
+        if max_scroll > 0:
+            sb_x, sb_w = sw - 10, 5
+            track_top, track_h = clip_top + 4, clip_h - 8
+            thumb_h = max(20, int((clip_h / content_height) * track_h))
+            ratio = scroll_y / max_scroll
+            thumb_y = track_top + int(ratio * (track_h - thumb_h))
+            pygame.draw.rect(screen, (60, 66, 80), pygame.Rect(sb_x, track_top, sb_w, track_h), border_radius=3)
+            pygame.draw.rect(screen, (130, 140, 160), pygame.Rect(sb_x, thumb_y, sb_w, thumb_h), border_radius=3)
+
+        # ── Fixed footer ───────────────────────────────────────────────────
+        footer_top = sh - footer_h
+        pygame.draw.line(screen, border_color, (pad, footer_top + 1), (sw - pad, footer_top + 1))
+
+        ok_unlocked = scroll_y >= max_scroll - 2
+        ok_color = self.highlight_color if ok_unlocked else self.control_dim
+        ok_rect = pygame.Rect(sw - pad - btn_w, footer_top + (footer_h - btn_h) // 2, btn_w, btn_h)
+        cancel_rect = pygame.Rect(ok_rect.x - btn_gap - btn_w, ok_rect.y, btn_w, btn_h)
+
+        btn_font = i18n.font(13, bold=True)
+        pygame.draw.rect(screen, self.control_bg, cancel_rect, border_radius=btn_h // 2)
+        c_img = btn_font.render(i18n.t("setup.ocr_disclaimer.cancel"), True, self.text_color)
+        screen.blit(c_img, (cancel_rect.centerx - c_img.get_width() // 2, cancel_rect.centery - c_img.get_height() // 2))
+
+        pygame.draw.rect(screen, ok_color, ok_rect, border_radius=btn_h // 2)
+        ok_img = btn_font.render(i18n.t("setup.ocr_disclaimer.ok"), True, self.text_color)
+        screen.blit(ok_img, (ok_rect.centerx - ok_img.get_width() // 2, ok_rect.centery - ok_img.get_height() // 2))
+
+        if not ok_unlocked:
+            hint_img = cap_font.render(i18n.t("setup.ocr_disclaimer.scroll_hint"), True, self.dim_color)
+            screen.blit(hint_img, (pad, ok_rect.centery - hint_img.get_height() // 2))
+
+        return ok_rect, cancel_rect, max_scroll
+
+    def _show_ocr_disclaimer(self) -> bool:
+        """Show OCR disclaimer/consent modal on toggle OFF→ON.
+        Resizes the pygame window to the popup dimensions, then restores.
+        OK is locked until the user scrolls to the bottom of the consent text.
+        Returns True (accepted) or False (cancelled / ESC / window close)."""
+        old_size = self.screen.get_size()
+        popup_surf = pygame.display.set_mode((720, 560))
+
+        clock = pygame.time.Clock()
+        scroll_y = 0
+        running = True
+        accepted = False
+        while running:
+            clock.tick(60)
+            popup_surf.fill((42, 46, 58))
+            ok_rect, cancel_rect, max_scroll = self._draw_ocr_disclaimer_panel(popup_surf, scroll_y)
+            ok_unlocked = scroll_y >= max_scroll - 2
+            pygame.display.flip()
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.event.post(event)
+                    running = False
+                elif event.type == pygame.MOUSEWHEEL:
+                    scroll_y = max(0, min(max_scroll, scroll_y - event.y * 20))
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        running = False
+                    elif event.key == pygame.K_RETURN and ok_unlocked:
+                        accepted = True
+                        running = False
+                    elif event.key in (pygame.K_DOWN, pygame.K_PAGEDOWN):
+                        scroll_y = min(max_scroll, scroll_y + 40)
+                    elif event.key in (pygame.K_UP, pygame.K_PAGEUP):
+                        scroll_y = max(0, scroll_y - 40)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if ok_rect.collidepoint(event.pos) and ok_unlocked:
+                        accepted = True
+                        running = False
+                    elif cancel_rect.collidepoint(event.pos):
+                        running = False
+
+        self.screen = pygame.display.set_mode(old_size)
+        return accepted
+
     def _handle_band_click(self, pos: tuple[int, int]) -> bool:
         """Dispatch a mouse click to the OCR Auto-PA band. Returns True if any
         control was hit (caller can stop propagation / suppress sound)."""
         if not self.show_ocr_ui:
             return False
         if self._toggle_rect and self._toggle_rect.collidepoint(pos):
-            self.auto_input_enabled = not self.auto_input_enabled
+            if not self.auto_input_enabled:
+                if self._show_ocr_disclaimer():
+                    self.auto_input_enabled = True
+            else:
+                self.auto_input_enabled = False
+            s = i18n.load_settings()
+            s["auto_input"] = self.auto_input_enabled
+            i18n.save_settings(s)
             return True
         if self._lead_minus_rect and self._lead_minus_rect.collidepoint(pos):
             self.lead_m = max(self.lead_min, self.lead_m - self.lead_step)
