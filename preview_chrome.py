@@ -51,24 +51,51 @@ def render_setup(
     setup.draw(setup.selected_idx)
 
 
+def render_ocr_disclaimer(screen: pygame.Surface, lang: str, scroll_pct: int = 0) -> None:
+    """Render the OCR disclaimer at a given scroll position (0–100%).
+
+    Two-pass: first pass derives max_scroll, second pass renders at target."""
+    i18n.init(lang)
+    setup = SetupScreen(screen)
+    screen.fill((42, 46, 58))
+    _, _, max_scroll = setup._draw_ocr_disclaimer_panel(screen, scroll_y=0)
+    scroll_y = int(max_scroll * max(0, min(100, scroll_pct)) / 100)
+    screen.fill((42, 46, 58))
+    setup._draw_ocr_disclaimer_panel(screen, scroll_y=scroll_y)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Preview chrome (picker / setup) → PNG.")
-    parser.add_argument("screen", choices=["picker", "setup"])
+    parser.add_argument("screen", choices=["picker", "setup", "disclaimer"])
     parser.add_argument("--lang", choices=i18n.SUPPORTED_LANGS, default="en")
     parser.add_argument("--selected", type=int, default=0, help="Selected row idx (setup only)")
     parser.add_argument("--hover", type=int, default=None, help="Hovered row idx (picker only; 0=en, 1=zh_HK, 2=zh_CN)")
     parser.add_argument("--audio-dir", default="audio")
     parser.add_argument("--auto-input", choices=["on", "off"], default="off", help="OCR Auto-PA pill state (setup only)")
+    parser.add_argument("--scroll", type=int, default=0, metavar="PCT", help="Scroll position 0-100%% (disclaimer only)")
+    parser.add_argument(
+        "--ticks",
+        type=int,
+        default=None,
+        metavar="MS",
+        help="Lock pygame.time.get_ticks() to this value (disclaimer only, for animation frame capture)",
+    )
     parser.add_argument("--out", default="screenshot_chrome.png")
     args = parser.parse_args()
 
     pygame.init()
     pygame.mixer.init()
-    surf = pygame.display.set_mode((730, 420))
+    win_w, win_h = (720, 560) if args.screen == "disclaimer" else (730, 420)
+    surf = pygame.display.set_mode((win_w, win_h))
     pygame.display.set_caption(f"Preview: {args.screen} · {args.lang}")
 
     if args.screen == "picker":
         render_picker(surf, args.lang, args.hover)
+    elif args.screen == "disclaimer":
+        if args.ticks is not None:
+            _fixed = args.ticks
+            pygame.time.get_ticks = lambda: _fixed
+        render_ocr_disclaimer(surf, args.lang, args.scroll)
     else:
         render_setup(surf, args.lang, args.selected, args.audio_dir, args.auto_input == "on")
 

@@ -80,14 +80,14 @@
     "zh_CN": "功能说明"
   },
   "setup.ocr_disclaimer.resolution": {
-    "en": "Preview feature · Resolution: 1080P / 1440P (16:9) only",
-    "zh_HK": "預覽功能 · 解像度：1080P / 1440P（16:9）",
-    "zh_CN": "预览功能 · 分辨率：1080P / 1440P（16:9）"
+    "en": "Preview · 1080P / 1440P (16:9) only",
+    "zh_HK": "此功能仍在預覽階段，目前只支援 1080P / 1440P（16:9）",
+    "zh_CN": "此功能仍在预览阶段，目前仅支持 1080P / 1440P（16:9）"
   },
   "setup.ocr_disclaimer.intro": {
     "en": "OCR Auto-PA compares the game HUD (upper-right) against local OCR templates to determine train position, then fires announcements automatically.",
-    "zh_HK": "OCR自動報站功能利用OCR（畫面識別技術）將遊戲畫面右上角資訊與本地OCR範本比對，推斷列車行駛位置，再自動播放廣播。",
-    "zh_CN": "OCR自动报站功能利用OCR（画面识别技术）将游戏画面右上角信息与本地OCR模板比对，推断列车行驶位置，再自动播放广播。"
+    "zh_HK": "OCR自動報站功能利用OCR（畫面識別技術）將遊戲畫面右上角資訊與本地OCR範本比對，推斷列車行駛位置，再自動報站。",
+    "zh_CN": "OCR自动报站功能利用OCR（画面识别技术）将游戏画面右上角信息与本地OCR模板比对，推断列车行驶位置，再自动报站。"
   },
   "setup.ocr_disclaimer.flow.capture": {
     "en": "① Capture",
@@ -106,8 +106,8 @@
   },
   "setup.ocr_disclaimer.flow.fire": {
     "en": "④ Auto-fire PA",
-    "zh_HK": "④ 自動廣播",
-    "zh_CN": "④ 自动广播"
+    "zh_HK": "④ 自動報站",
+    "zh_CN": "④ 自动报站"
   },
   "setup.ocr_disclaimer.terms_heading": {
     "en": "Notice",
@@ -125,14 +125,49 @@
     "zh_CN": "所有截图数据仅在本程序内处理，不会被储存或传输至任何第三方。"
   },
   "setup.ocr_disclaimer.beta": {
-    "en": "Misfires may occur.",
-    "zh_HK": "偶有誤觸發屬正常。",
-    "zh_CN": "偶有误触发属正常。"
+    "en": "Auto-PA may misfire.",
+    "zh_HK": "自動報站有時未能正常運作。",
+    "zh_CN": "自动报站有时未能正常运作。"
   },
   "setup.ocr_disclaimer.capture_interval": {
     "en": "captures every {n}s",
     "zh_HK": "每 {n}s 擷取一次",
     "zh_CN": "每 {n}s 截取一次"
+  },
+  "setup.ocr_disclaimer.mechanism_heading": {
+    "en": "Working Principle",
+    "zh_HK": "工作原理",
+    "zh_CN": "工作原理"
+  },
+  "setup.ocr_disclaimer.journey_heading": {
+    "en": "When Auto-PA fires",
+    "zh_HK": "報站觸發時機",
+    "zh_CN": "报站触发时机"
+  },
+  "setup.ocr_disclaimer.journey.departure": {
+    "en": "① Next stop",
+    "zh_HK": "①「下一站」報站",
+    "zh_CN": "①「下一站」报站"
+  },
+  "setup.ocr_disclaimer.journey.approach": {
+    "en": "② Arriving",
+    "zh_HK": "②「即將到達」報站",
+    "zh_CN": "②「即将到达」报站"
+  },
+  "setup.ocr_disclaimer.journey.arrival": {
+    "en": "③ Arrival",
+    "zh_HK": "③ 到達",
+    "zh_CN": "③ 到达"
+  },
+  "setup.ocr_disclaimer.journey.station_a": {
+    "en": "Station A",
+    "zh_HK": "車站A",
+    "zh_CN": "车站A"
+  },
+  "setup.ocr_disclaimer.journey.station_b": {
+    "en": "Station B",
+    "zh_HK": "車站B",
+    "zh_CN": "车站B"
   },
   "setup.ocr_disclaimer.scroll_hint": {
     "en": "Scroll down to read and accept",

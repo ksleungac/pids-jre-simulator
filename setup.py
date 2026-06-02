@@ -3,6 +3,7 @@
 import math
 import os
 import json
+import random
 import webbrowser
 import pygame
 
@@ -106,6 +107,8 @@ class SetupScreen:
         # Cached OCR template surfaces for the pipeline visual strip (lazy-loaded).
         # List of (surface, label) pairs; empty list = already attempted (no templates found).
         self._disclaimer_templates: list[tuple[pygame.Surface, str]] | None = None
+        # Suica-penguin train icon for the trigger-timing diagram (lazy-loaded).
+        self._disclaimer_train: pygame.Surface | bool | None = None
 
     def scan_routes(self, base_dir: str | None = None) -> list:
         """Scan for available routes by finding route.json files.
@@ -427,13 +430,13 @@ class SetupScreen:
         # Lazy-load screenshot (once per SetupScreen instance)
         if self._disclaimer_screenshot is None:
             try:
-                _p = project_root() / "game_screenshot.png"
+                _p = project_root() / "data" / "disclaimer" / "game_screenshot.png"
                 self._disclaimer_screenshot = pygame.image.load(str(_p)).convert() if _p.exists() else False
             except Exception:
                 self._disclaimer_screenshot = False
         if self._disclaimer_hud is None:
             try:
-                _p = project_root() / "hud_sample.png"
+                _p = project_root() / "data" / "disclaimer" / "hud_sample.png"
                 self._disclaimer_hud = pygame.image.load(str(_p)).convert() if _p.exists() else False
             except Exception:
                 self._disclaimer_hud = False
@@ -542,6 +545,11 @@ class SetupScreen:
         screen.blit(cap_img, (right_col_x + (right_col_w - cap_img.get_width()) // 2, y))
         y += cap_img.get_height() + 16
 
+        # ── Working Principle: 4-step pipeline flowchart ──────────────────
+        wp_head = subhead_font.render(i18n.t("setup.ocr_disclaimer.mechanism_heading"), True, heading_color)
+        screen.blit(wp_head, (pad, y))
+        y += wp_head.get_height() + 10
+
         # ── 4-step pipeline flowchart ──────────────────────────────────────
         chart_w = sw - 2 * pad
         arrow_w = 18
@@ -632,7 +640,7 @@ class SetupScreen:
                     screen.blit(scaled_d, (tx, ty))
 
             elif i == 2:
-                line1 = cap_font.render("v × t → d", True, self.text_color)
+                line1 = subhead_font.render("v × t → d", True, self.text_color)
                 screen.blit(line1, (box.centerx - line1.get_width() // 2, box.centery - line1.get_height() // 2))
 
             elif i == 3:
@@ -672,7 +680,340 @@ class SetupScreen:
                 arr = cap_font.render("→", True, self.dim_color)
                 screen.blit(arr, (sx + step_w + (arrow_w - arr.get_width()) // 2, y + (flow_h - arr.get_height()) // 2))
 
-        y += flow_h + 4 + cap_font.get_height() + 12
+        y += flow_h + 4 + cap_font.get_height() + 16
+
+        # ── Trigger timings: journey diagram ──────────────────────────────
+        jhead = subhead_font.render(i18n.t("setup.ocr_disclaimer.journey_heading"), True, heading_color)
+        screen.blit(jhead, (pad, y))
+        y += jhead.get_height() + 10
+
+        # Geometry — stations sit inboard (room for detail); markers pulled centreward
+        j_x0 = pad + 44
+        j_x1 = sw - pad - 44
+        jw = j_x1 - j_x0
+        track_y = y + 84  # rail line = horizon; backdrop rises above it
+        rail_gap = 6
+
+        dep_frac, appr_frac = 0.30, 0.70
+        dep_x = int(j_x0 + jw * dep_frac)
+        appr_x = int(j_x0 + jw * appr_frac)
+        arr_x = j_x1
+
+        _RAIL_HI = (238, 242, 250)  # bright rail-head highlight
+        _RAIL = (196, 202, 214)  # rail body (bright steel)
+        _RAIL_DK = (128, 134, 148)  # rail foot / web shadow
+        _SLP = (150, 112, 78)  # warm wooden sleeper (tie) — daytime
+        _SLP_HI = (176, 136, 96)  # sunlit top of the tie
+        _BALLAST = (120, 120, 126)  # gravel bed — light gray, contrasts
+        _DEP = (82, 196, 118)
+        _APPR = (230, 178, 58)
+        _ARR = (98, 164, 228)
+        rail_top = track_y
+        rail_bot = track_y
+        horizon = track_y
+
+        def _ipts(pts):
+            return [(int(px), int(py)) for px, py in pts]
+
+        # ── Backdrop, far → near (flat daytime sticker silhouettes, bright on dark bg) ──
+        # Mt. Fuji — broad snow-capped cone, clear-day blue, farthest back
+        def draw_fuji(cx, base, h=40, hw=72):
+            pygame.draw.polygon(
+                screen,
+                (124, 148, 196),
+                _ipts(
+                    [
+                        (cx - hw, base),
+                        (cx - hw * 0.2, base - h * 0.9),
+                        (cx - 7, base - h),
+                        (cx + 7, base - h),
+                        (cx + hw * 0.2, base - h * 0.9),
+                        (cx + hw, base),
+                    ]
+                ),
+            )
+            pygame.draw.polygon(
+                screen,
+                (240, 244, 252),
+                _ipts(
+                    [
+                        (cx - 7, base - h),
+                        (cx + 7, base - h),
+                        (cx + 13, base - h * 0.74),
+                        (cx + 6, base - h * 0.78),
+                        (cx + 1, base - h * 0.73),
+                        (cx - 4, base - h * 0.79),
+                        (cx - 9, base - h * 0.74),
+                        (cx - 13, base - h * 0.74),
+                    ]
+                ),
+            )
+
+        # Daytime skyline — bright colorful building blocks + subtle glass windows
+        _BLD_TONES = [(150, 162, 188), (188, 158, 168), (146, 188, 190), (192, 180, 150), (164, 172, 200), (200, 168, 150)]
+
+        def draw_skyline(x0, x1, seed):
+            rng = random.Random(seed)  # deterministic per span (no flicker)
+            bx = x0
+            while bx < x1:
+                bw = rng.randint(8, 16)
+                bh = rng.randint(10, 24)
+                top = horizon - bh
+                tone = rng.choice(_BLD_TONES)
+                pygame.draw.rect(screen, tone, pygame.Rect(bx, top, bw, bh))
+                # Sunlit left edge + recessed glass windows for daytime depth
+                pygame.draw.rect(screen, tuple(min(255, c + 26) for c in tone), pygame.Rect(bx, top, 2, bh))
+                glass = tuple(max(0, c - 48) for c in tone)
+                for wy in range(top + 3, horizon - 2, 5):
+                    for wx in range(bx + 3, bx + bw - 2, 4):
+                        pygame.draw.rect(screen, glass, pygame.Rect(wx, wy, 1, 2))
+                bx += bw + rng.randint(1, 4)
+
+        # Tokyo Skytree — tall tapering lattice needle, bright daytime white-blue
+        def draw_skytree(cx, base, h=52):
+            col = (196, 214, 234)
+            pygame.draw.polygon(
+                screen,
+                col,
+                _ipts(
+                    [
+                        (cx - 4, base),
+                        (cx - 1.5, base - h * 0.5),
+                        (cx - 1.2, base - h * 0.84),
+                        (cx + 1.2, base - h * 0.84),
+                        (cx + 1.5, base - h * 0.5),
+                        (cx + 4, base),
+                    ]
+                ),
+            )
+            pygame.draw.ellipse(screen, col, pygame.Rect(int(cx - 5), int(base - h * 0.60), 10, 5))
+            pygame.draw.ellipse(screen, col, pygame.Rect(int(cx - 3), int(base - h * 0.74), 6, 4))
+            pygame.draw.line(screen, col, (cx, int(base - h * 0.84)), (cx, int(base - h)), 1)
+
+        # Tokyo Tower — international-orange + white bands, lattice bracing, two decks
+        def draw_tower(cx, base, h=46):
+            col, white, dk, ant = (228, 118, 80), (244, 234, 224), (180, 86, 58), (210, 212, 218)
+            yb = lambda f: int(base - h * f)
+            # Splayed lattice base (orange) with X cross-bracing + horizontal struts
+            pygame.draw.polygon(screen, col, _ipts([(cx - 11, base), (cx - 4, base - h * 0.34), (cx + 4, base - h * 0.34), (cx + 11, base)]))
+            pygame.draw.line(screen, dk, (cx - 11, base), (cx + 4, yb(0.34)), 1)
+            pygame.draw.line(screen, dk, (cx + 11, base), (cx - 4, yb(0.34)), 1)
+            pygame.draw.line(screen, white, (cx - 8, yb(0.12)), (cx + 8, yb(0.12)), 1)
+            pygame.draw.line(screen, white, (cx - 5, yb(0.25)), (cx + 5, yb(0.25)), 1)
+            # Main observation deck (大展望台) — wider, white-banded, lit windows
+            pygame.draw.rect(screen, col, pygame.Rect(int(cx - 7), yb(0.45), 14, 4))
+            pygame.draw.rect(screen, white, pygame.Rect(int(cx - 7), yb(0.45), 14, 1))
+            for wx in range(int(cx - 5), int(cx + 5), 3):
+                pygame.draw.rect(screen, dk, pygame.Rect(wx, yb(0.45) + 2, 1, 2))
+            # Upper shaft (orange) with white bands + central lattice line
+            pygame.draw.polygon(
+                screen, col, _ipts([(cx - 4, base - h * 0.45), (cx - 2, base - h * 0.72), (cx + 2, base - h * 0.72), (cx + 4, base - h * 0.45)])
+            )
+            pygame.draw.line(screen, dk, (cx, yb(0.45)), (cx, yb(0.72)), 1)
+            pygame.draw.line(screen, white, (cx - 3, yb(0.56)), (cx + 3, yb(0.56)), 1)
+            # Special deck (特別展望台) + antenna spire
+            pygame.draw.rect(screen, col, pygame.Rect(int(cx - 3), yb(0.74), 6, 2))
+            pygame.draw.rect(screen, white, pygame.Rect(int(cx - 3), yb(0.74), 6, 1))
+            pygame.draw.line(screen, ant, (cx, yb(0.76)), (cx, base - h), 1)
+
+        # Station A — Tokyo Station Marunouchi: tripartite red-brick facade, white
+        # stone bands, LOW octagonal slate hip-cap domes (no spire), central gable+clock.
+        def draw_station_classic(sx):
+            brick, band, slate = (176, 100, 82), (240, 236, 226), (80, 102, 134)
+            slate_hi, clockc, arch, glassw = (120, 142, 174), (38, 42, 52), (56, 44, 42), (150, 172, 196)
+            bw, bh = 72, 26
+            body = pygame.Rect(sx - bw // 2, horizon - bh, bw, bh)
+            pygame.draw.rect(screen, brick, body)
+            # White stone courses (signature striping)
+            for by in range(body.y + 4, horizon - 2, 5):
+                pygame.draw.rect(screen, band, pygame.Rect(body.x, by, bw, 2))
+            # White corner quoins
+            pygame.draw.rect(screen, band, pygame.Rect(body.x, body.y, 3, bh))
+            pygame.draw.rect(screen, band, pygame.Rect(body.right - 3, body.y, 3, bh))
+            # Window rows (light) between the bands
+            for ry in range(body.y + 6, horizon - 7, 5):
+                for wx in range(body.x + 6, body.right - 5, 7):
+                    pygame.draw.rect(screen, glassw, pygame.Rect(wx, ry, 2, 2))
+            # Arched ground-floor openings
+            for ax in range(body.x + 5, body.right - 5, 9):
+                pygame.draw.rect(screen, arch, pygame.Rect(ax, horizon - 6, 5, 6), border_top_left_radius=2, border_top_right_radius=2)
+            # Central pavilion: raised block + slate gable + clock (no spire)
+            pygame.draw.rect(screen, brick, pygame.Rect(sx - 11, horizon - bh - 6, 22, 6))
+            pygame.draw.rect(screen, band, pygame.Rect(sx - 11, horizon - bh - 6, 22, 1))
+            pygame.draw.polygon(screen, slate, _ipts([(sx - 12, horizon - bh - 6), (sx, horizon - bh - 14), (sx + 12, horizon - bh - 6)]))
+            pygame.draw.circle(screen, band, (sx, horizon - bh - 7), 3)
+            pygame.draw.circle(screen, clockc, (sx, horizon - bh - 7), 3, 1)
+            # End dome pavilions: raised block + LOW octagonal hip cap + small lantern
+            for dx in (-bw // 2 + 11, bw // 2 - 11):
+                dcx = sx + dx
+                pygame.draw.rect(screen, brick, pygame.Rect(dcx - 9, horizon - bh - 4, 18, 5))
+                pygame.draw.rect(screen, band, pygame.Rect(dcx - 9, horizon - bh - 2, 18, 1))
+                pygame.draw.polygon(
+                    screen,
+                    slate,
+                    _ipts([(dcx - 9, horizon - bh - 4), (dcx - 5, horizon - bh - 10), (dcx + 5, horizon - bh - 10), (dcx + 9, horizon - bh - 4)]),
+                )
+                pygame.draw.line(screen, slate_hi, (dcx - 5, horizon - bh - 10), (dcx + 5, horizon - bh - 10), 1)
+                pygame.draw.rect(screen, slate, pygame.Rect(dcx - 2, horizon - bh - 12, 4, 2))
+
+        # Station B — Japanese JR station: viaduct-arch base, light concourse + glass,
+        # big curved butterfly platform canopy, 駅名標 signboard, facade clock.
+        def draw_station_modern(sx):
+            wall, wall_hi, glass = (206, 210, 218), (230, 233, 239), (120, 166, 206)
+            arch_d, deck = (52, 56, 70), (178, 184, 194)
+            canopy, canopy_hi, post = (160, 202, 216), (222, 238, 244), (116, 124, 136)
+            sign_w, sign_jr, clockc = (242, 244, 250), (40, 132, 92), (38, 42, 52)
+            bw, bh = 66, 24
+            body = pygame.Rect(sx - bw // 2, horizon - bh, bw, bh)
+            pygame.draw.rect(screen, wall, body)
+            pygame.draw.rect(screen, wall_hi, pygame.Rect(body.x, body.y, bw, 2))
+            # Upper-floor glass band
+            pygame.draw.rect(screen, glass, pygame.Rect(body.x + 3, body.y + 4, bw - 6, 6))
+            for gx in range(body.x + 5, body.right - 4, 6):
+                pygame.draw.line(screen, wall_hi, (gx, body.y + 4), (gx, body.y + 10), 1)
+            # Viaduct-style arched openings at the base
+            for ax in range(body.x + 4, body.right - 6, 10):
+                pygame.draw.rect(screen, arch_d, pygame.Rect(ax, horizon - 10, 7, 10), border_top_left_radius=3, border_top_right_radius=3)
+            # Facade clock
+            pygame.draw.circle(screen, sign_w, (sx, body.y + 6), 2)
+            pygame.draw.circle(screen, clockc, (sx, body.y + 6), 2, 1)
+            # Big curved butterfly platform canopy on slim posts (the iconic JR roof)
+            cap_y = horizon - bh - 10
+            for px in (sx - 22, sx, sx + 22):
+                pygame.draw.line(screen, post, (px, cap_y + 3), (px, horizon - bh), 1)
+            pygame.draw.polygon(
+                screen,
+                canopy,
+                _ipts(
+                    [
+                        (sx - 32, horizon - bh - 2),
+                        (sx - 14, cap_y),
+                        (sx + 14, cap_y),
+                        (sx + 32, horizon - bh - 2),
+                        (sx + 32, horizon - bh - 4),
+                        (sx + 14, cap_y - 2),
+                        (sx - 14, cap_y - 2),
+                        (sx - 32, horizon - bh - 4),
+                    ]
+                ),
+            )
+            pygame.draw.line(screen, canopy_hi, (sx - 14, cap_y - 1), (sx + 14, cap_y - 1), 1)
+            # 駅名標 — station name signboard on a post (platform side, faces the train)
+            sgx = sx - bw // 2 - 7
+            pygame.draw.line(screen, post, (sgx, horizon), (sgx, horizon - 10), 1)
+            sign = pygame.Rect(sgx - 7, horizon - 15, 16, 6)
+            pygame.draw.rect(screen, sign_w, sign)
+            pygame.draw.rect(screen, sign_jr, pygame.Rect(sign.x, sign.bottom - 2, 16, 2))
+
+        # Paint the backdrop (far → near)
+        draw_fuji(j_x0 + int(jw * 0.30), horizon)
+        draw_skyline(j_x0 + int(jw * 0.10), j_x0 + int(jw * 0.42), 1207)
+        draw_skyline(j_x0 + int(jw * 0.58), j_x0 + int(jw * 0.88), 5530)
+        draw_skytree(j_x0 + int(jw * 0.48), horizon)
+        draw_tower(j_x0 + int(jw * 0.66), horizon)
+        draw_station_classic(j_x0)
+        draw_station_modern(j_x1)
+
+        # ── Railway (in front of the backdrop) — slim line, runs edge-to-edge ──
+        rail_x0, rail_x1 = pad, sw - pad
+        pygame.draw.rect(screen, _BALLAST, pygame.Rect(rail_x0, track_y + 1, rail_x1 - rail_x0, 5), border_radius=1)
+        for slx in range(rail_x0 + 6, rail_x1, 13):
+            pygame.draw.rect(screen, _SLP, pygame.Rect(slx - 1, track_y + 1, 4, 5))
+            pygame.draw.rect(screen, _SLP_HI, pygame.Rect(slx - 1, track_y + 1, 4, 1))
+        pygame.draw.line(screen, _RAIL_DK, (rail_x0, track_y + 1), (rail_x1, track_y + 1), 1)
+        pygame.draw.line(screen, _RAIL, (rail_x0, track_y), (rail_x1, track_y), 2)
+        pygame.draw.line(screen, _RAIL_HI, (rail_x0, track_y - 1), (rail_x1, track_y - 1), 1)
+
+        # ── Train motion: forward-only A → B, fade out, fade back in at A ──
+        # (a train doesn't reverse down the line — each run is one journey)
+        period = 7000
+        tt = (pygame.time.get_ticks() % period) / period
+        travel_end, fadeout_end, fadein_start = 0.70, 0.80, 0.90
+        if tt < travel_end:  # A → B
+            train_frac, train_alpha = tt / travel_end, 255
+        elif tt < fadeout_end:  # fade out at B
+            train_frac, train_alpha = 1.0, int(255 * (1 - (tt - travel_end) / (fadeout_end - travel_end)))
+        elif tt < fadein_start:  # gone — repositioned at A
+            train_frac, train_alpha = 0.0, 0
+        else:  # fade in at A
+            train_frac, train_alpha = 0.0, int(255 * (tt - fadein_start) / (1 - fadein_start))
+        train_x = int(j_x0 + train_frac * jw)
+
+        # ── Station name badges (A/B) below the rail ──────────────────────
+        def draw_station_badge(sx, accent, letter):
+            bfont = i18n.font(10, bold=True)
+            bi = bfont.render(letter, True, (236, 242, 250))
+            bw = bi.get_width() + 12
+            badge = pygame.Rect(sx - bw // 2, track_y + 13, bw, 16)
+            pygame.draw.rect(screen, (54, 60, 74), badge, border_radius=4)
+            pygame.draw.rect(screen, accent, badge, width=1, border_radius=4)
+            screen.blit(bi, (sx - bi.get_width() // 2, badge.centery - bi.get_height() // 2))
+            return badge.bottom
+
+        stn_bottom = draw_station_badge(j_x0, (140, 148, 162), i18n.t("setup.ocr_disclaimer.journey.station_a"))
+        draw_station_badge(j_x1, _ARR, i18n.t("setup.ocr_disclaimer.journey.station_b"))
+
+        # ── Trigger markers + labels + pass-glow ─────────────────────────
+        label_top_y = y + 2
+        _trigger_defs = [
+            (dep_x, _DEP, "setup.ocr_disclaimer.journey.departure", ">30 km/h"),
+            (appr_x, _APPR, "setup.ocr_disclaimer.journey.approach", f"~{self.lead_m} m"),
+            (arr_x, _ARR, "setup.ocr_disclaimer.journey.arrival", None),
+        ]
+        for tx, col, key, cond in _trigger_defs:
+            # Glow = train proximity to this trigger, scaled by train visibility
+            glow = max(0.0, 1.0 - abs(train_x - tx) / 44.0) * (train_alpha / 255.0)
+            mark_y = rail_top
+            if glow > 0:
+                ring_r = int(7 + (1 - glow) * 12)
+                halo = pygame.Surface((ring_r * 2 + 4, ring_r * 2 + 4), pygame.SRCALPHA)
+                pygame.draw.circle(halo, (*col, int(glow * 150)), (ring_r + 2, ring_r + 2), ring_r, 2)
+                pygame.draw.circle(halo, (*col, int(glow * 90)), (ring_r + 2, ring_r + 2), max(1, ring_r - 5))
+                screen.blit(halo, (tx - ring_r - 2, mark_y - ring_r - 2))
+            # Trigger annotation — name + condition stacked together at the TOP
+            lbl_col = tuple(min(255, int(c + glow * (255 - c))) for c in col)
+            lbl_img = cap_font.render(i18n.t(key), True, lbl_col)
+            lbl_x = min(tx - lbl_img.get_width() // 2, sw - pad - lbl_img.get_width())
+            screen.blit(lbl_img, (lbl_x, label_top_y))
+            ann_btm = label_top_y + lbl_img.get_height()
+            if cond:
+                ci = cap_font.render(cond, True, self.dim_color)
+                ci_x = min(tx - ci.get_width() // 2, sw - pad - ci.get_width())
+                screen.blit(ci, (ci_x, ann_btm + 1))
+                ann_btm += 1 + ci.get_height()
+            # Connector + dot (dep/appr only — B's station is its own marker)
+            if tx != arr_x:
+                tgt_y = mark_y - 8
+                if tgt_y > ann_btm + 2:
+                    pygame.draw.line(screen, col, (tx, ann_btm + 1), (tx, tgt_y), 1)
+                dot_r = 5 + int(glow * 2)
+                pygame.draw.circle(screen, col, (tx, mark_y), dot_r)
+                pygame.draw.circle(screen, (42, 46, 58), (tx, mark_y), dot_r - 2)
+
+        # ── Animated train (drawn last so it rides over markers) ──────────
+        if self._disclaimer_train is None:
+            try:
+                _p = project_root() / "data" / "disclaimer" / "suica_train.png"
+                self._disclaimer_train = pygame.image.load(str(_p)).convert_alpha() if _p.exists() else False
+            except Exception:
+                self._disclaimer_train = False
+
+        if self._disclaimer_train is not False and train_alpha > 0:
+            raw = self._disclaimer_train
+            rw, rh = raw.get_size()
+            target_h = 48
+            sc = target_h / rh
+            tr = pygame.transform.smoothscale(raw, (max(1, int(rw * sc)), target_h))
+            if train_alpha < 255:
+                tr = tr.copy()
+                tr.set_alpha(train_alpha)
+            # Wheels on the rail; penguin (frontmost) rides over the markers
+            screen.blit(tr, (train_x - tr.get_width() // 2, rail_bot - tr.get_height()))
+        elif self._disclaimer_train is False:
+            tw, th = 48, 18
+            pygame.draw.rect(screen, (205, 210, 215), pygame.Rect(train_x - tw // 2, rail_bot - th, tw, th), border_radius=2)
+
+        y = stn_bottom + 18
 
         # Divider + Notice section
         pygame.draw.line(screen, border_color, (pad, y), (sw - pad, y))
