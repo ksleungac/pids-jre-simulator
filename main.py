@@ -5,7 +5,6 @@ visual display and audio playback with loudness normalization.
 """
 
 import os
-import sys
 import pygame
 
 # Suppress pygame welcome message
@@ -88,14 +87,13 @@ def main():
     # Run setup screen to select route. The "? Tutorial" replay button shows
     # only when oobe_completed=True (it's a re-run affordance, not a first-run
     # gate). Loop in case the user clicks it: run tutorial, return to setup.
-    # OCR Auto-PA UI hidden by default; opt in via `--auto-input` for dev /
-    # power-user runs. Code path + dxcam dep ship in every build; the flag
-    # only controls whether the setup-screen toggle/steppers render.
-    show_ocr_ui = "--auto-input" in sys.argv
+    # OCR Auto-PA toggle is always available on the setup screen. It stays
+    # opt-in: enabling goes through the pill, which fires the consent
+    # disclaimer and persists to settings["auto_input"]. Default OFF — OCR
+    # never starts without the user's explicit consent.
     setup = SetupScreen(
         screen,
         show_tutorial_button=settings.get("oobe_completed", False),
-        show_ocr_ui=show_ocr_ui,
     )
     audio_dir = os.path.join(BASE_DIR, "audio")
     setup.scan_routes(audio_dir)

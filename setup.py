@@ -16,7 +16,7 @@ from constants import SETUP_KEY_REPEAT_DELAY, SETUP_KEY_REPEAT_INTERVAL
 class SetupScreen:
     """Handles route and train selection before starting the simulator."""
 
-    def __init__(self, screen: pygame.Surface, show_tutorial_button: bool = False, show_ocr_ui: bool = False):
+    def __init__(self, screen: pygame.Surface, show_tutorial_button: bool = False):
         """Initialize the setup screen.
 
         Args:
@@ -26,15 +26,12 @@ class SetupScreen:
                 ``run()``. Caller (main.py) gates this on ``oobe_completed``
                 — first-launch users haven't seen the tutorial yet, so the
                 button is hidden until they finish (or skip) it.
-            show_ocr_ui: If True, render the OCR Auto-PA toggle pill +
-                lead/interval steppers. Off by default — release builds hide
-                the UI until OCR matures (1080p calibration, re-entry logic,
-                stability hardening, in-app tutorial). Code path + dxcam dep
-                stay intact regardless; main.py opts in via ``--auto-input``.
+
+        The OCR Auto-PA band (toggle pill + lead/interval steppers) always
+        renders; it stays opt-in via the pill's consent disclaimer.
         """
         self.screen = screen
         self.show_tutorial_button = show_tutorial_button
-        self.show_ocr_ui = show_ocr_ui
         self.routes = []
         self.selected_idx = 0
         self.scroll_offset = 0
@@ -325,11 +322,6 @@ class SetupScreen:
         between the route list and the bottom instruction row. All layout
         magic numbers live in the tuneable-params block at the top of the body.
         """
-        if not self.show_ocr_ui:
-            self._toggle_rect = None
-            self._lead_minus_rect = self._lead_plus_rect = None
-            self._interval_minus_rect = self._interval_plus_rect = None
-            return
         # ── tuneable params ────────────────────────────────────────────────────
         band_y = self.screen.get_height() - 90  # band top
         band_h = 40
@@ -496,16 +488,13 @@ class SetupScreen:
                 screen.blit(img, (pad, intro_y))
                 intro_y += img.get_height() + 2
 
-        # Notes: right below intro paragraph, same font + column width
+        # Resolution note: right below intro paragraph, same font + column width.
+        # (The misfire caveat moved to the "When Auto-PA fires" section below.)
         intro_y += 8
         for line in wrap_text(body_font, i18n.t("setup.ocr_disclaimer.resolution"), left_col_w):
             img = body_font.render(line, True, (230, 180, 60))
             screen.blit(img, (pad, intro_y))
             intro_y += img.get_height() + 2
-        intro_y += 2
-        beta_img_lc = body_font.render(i18n.t("setup.ocr_disclaimer.beta"), True, self.dim_color)
-        screen.blit(beta_img_lc, (pad, intro_y))
-        intro_y += beta_img_lc.get_height()
 
         # Right: screenshot + HUD pulse
         if self._disclaimer_screenshot is not False:
@@ -640,8 +629,22 @@ class SetupScreen:
                     screen.blit(scaled_d, (tx, ty))
 
             elif i == 2:
-                line1 = subhead_font.render("v × t → d", True, self.text_color)
-                screen.blit(line1, (box.centerx - line1.get_width() // 2, box.centery - line1.get_height() // 2))
+                # "v × t → d" — larger font to fill the box like the other steps;
+                # the → is drawn as a vector arrow (the chrome font is Latin-only
+                # and tofus U+2192; × is Latin-1 and renders fine).
+                f3 = i18n.font(20, bold=True)
+                left = f3.render("v × t", True, self.text_color)
+                right = f3.render("d", True, self.text_color)
+                arr_gap = 24
+                total = left.get_width() + arr_gap + right.get_width()
+                lx = box.centerx - total // 2
+                cy = box.centery
+                screen.blit(left, (lx, cy - left.get_height() // 2))
+                ax0 = lx + left.get_width() + 5
+                ax1 = lx + left.get_width() + arr_gap - 4
+                pygame.draw.line(screen, self.text_color, (ax0, cy), (ax1 - 2, cy), 3)
+                pygame.draw.polygon(screen, self.text_color, [(ax1 - 5, cy - 5), (ax1 + 1, cy), (ax1 - 5, cy + 5)])
+                screen.blit(right, (lx + left.get_width() + arr_gap, cy - right.get_height() // 2))
 
             elif i == 3:
                 # Animated PgDn key: cap slides down over shadow face on press
@@ -675,10 +678,14 @@ class SetupScreen:
             lbl = cap_font.render(flow_labels[i], True, self.dim_color)
             screen.blit(lbl, (box.centerx - lbl.get_width() // 2, y + flow_h + 4))
 
-            # Arrow between boxes
+            # Connector arrow between boxes — drawn as a vector shaft + head (the
+            # chrome font tofus the → glyph in en; a primitive is deployment-safe).
             if i < 3:
-                arr = cap_font.render("→", True, self.dim_color)
-                screen.blit(arr, (sx + step_w + (arrow_w - arr.get_width()) // 2, y + (flow_h - arr.get_height()) // 2))
+                cy = y + flow_h // 2
+                ax = sx + step_w + 3
+                ahead = sx + step_w + arrow_w - 3
+                pygame.draw.line(screen, self.dim_color, (ax, cy), (ahead - 2, cy), 2)
+                pygame.draw.polygon(screen, self.dim_color, [(ahead - 4, cy - 3), (ahead, cy), (ahead - 4, cy + 3)])
 
         y += flow_h + 4 + cap_font.get_height() + 16
 
@@ -816,45 +823,103 @@ class SetupScreen:
             pygame.draw.rect(screen, white, pygame.Rect(int(cx - 3), yb(0.74), 6, 1))
             pygame.draw.line(screen, ant, (cx, yb(0.76)), (cx, base - h), 1)
 
-        # Station A — Tokyo Station Marunouchi: tripartite red-brick facade, white
-        # stone bands, LOW octagonal slate hip-cap domes (no spire), central gable+clock.
+        # Station A — Tokyo Station Marunouchi: tripartite red-brick facade with
+        # projecting/recessed depth shading, white stone string-courses + quoins,
+        # blue slate mansard roof w/ dormers, twin plum SPIRED octagonal turrets
+        # (not domes), central gabled clock pavilion + cupola.
         def draw_station_classic(sx):
-            brick, band, slate = (176, 100, 82), (240, 236, 226), (80, 102, 134)
-            slate_hi, clockc, arch, glassw = (120, 142, 174), (38, 42, 52), (56, 44, 42), (150, 172, 196)
-            bw, bh = 72, 26
+            # Depth via projecting vs recessed masses under upper-left light: the
+            # end towers + central pavilion sit forward (lit brick), the connecting
+            # wings sit back (dark brick), with cast-shadow strips at each step.
+            brick, brick_dk, brick_sh = (182, 96, 80), (150, 74, 62), (130, 62, 52)
+            brick_hi, band, band_sh = (202, 112, 94), (240, 236, 226), (206, 200, 188)
+            slate, slate_hi, slate_dk = (84, 106, 138), (132, 156, 188), (52, 70, 98)
+            clockc, arch, glassw, finial = (38, 42, 52), (44, 36, 36), (150, 172, 196), (238, 234, 224)
+            bw, bh = 80, 26
             body = pygame.Rect(sx - bw // 2, horizon - bh, bw, bh)
-            pygame.draw.rect(screen, brick, body)
-            # White stone courses (signature striping)
-            for by in range(body.y + 4, horizon - 2, 5):
-                pygame.draw.rect(screen, band, pygame.Rect(body.x, by, bw, 2))
-            # White corner quoins
-            pygame.draw.rect(screen, band, pygame.Rect(body.x, body.y, 3, bh))
-            pygame.draw.rect(screen, band, pygame.Rect(body.right - 3, body.y, 3, bh))
-            # Window rows (light) between the bands
-            for ry in range(body.y + 6, horizon - 7, 5):
-                for wx in range(body.x + 6, body.right - 5, 7):
-                    pygame.draw.rect(screen, glassw, pygame.Rect(wx, ry, 2, 2))
-            # Arched ground-floor openings
-            for ax in range(body.x + 5, body.right - 5, 9):
+
+            # Recessed wings (set-back wall) fill the whole body; forward masses
+            # repaint over it brighter.
+            pygame.draw.rect(screen, brick_dk, body)
+            lt = pygame.Rect(body.x, body.y, 16, bh)  # left tower column (forward)
+            rt = pygame.Rect(body.right - 16, body.y, 16, bh)  # right tower column
+            cp = pygame.Rect(sx - 12, body.y, 24, bh)  # central pavilion column
+            for col in (lt, cp, rt):
+                pygame.draw.rect(screen, brick, col)
+                pygame.draw.line(screen, brick_hi, (col.x, col.y), (col.x, horizon - 1), 1)  # lit left edge
+            # Cast shadows: each forward mass darkens the recessed wing to its right
+            pygame.draw.rect(screen, brick_sh, pygame.Rect(lt.right, body.y, 2, bh))
+            pygame.draw.rect(screen, brick_sh, pygame.Rect(cp.right, body.y, 2, bh))
+
+            # White stone string-courses across the facade; shadow-tinted over wings
+            for by in range(body.y + 5, horizon - 2, 5):
+                pygame.draw.rect(screen, band_sh, pygame.Rect(body.x, by, bw, 2))
+                for col in (lt, cp, rt):
+                    pygame.draw.rect(screen, band, pygame.Rect(col.x, by, col.width, 2))
+            # Window rows between the bands
+            for ry in range(body.y + 6, horizon - 8, 5):
+                for wx in range(body.x + 7, body.right - 6, 7):
+                    pygame.draw.rect(screen, glassw, pygame.Rect(wx, ry, 2, 3))
+            # Arched ground-floor openings (dark), capped by a pale stone sill
+            pygame.draw.rect(screen, band_sh, pygame.Rect(body.x, horizon - 7, bw, 1))
+            for ax in range(body.x + 6, body.right - 6, 9):
                 pygame.draw.rect(screen, arch, pygame.Rect(ax, horizon - 6, 5, 6), border_top_left_radius=2, border_top_right_radius=2)
-            # Central pavilion: raised block + slate gable + clock (no spire)
-            pygame.draw.rect(screen, brick, pygame.Rect(sx - 11, horizon - bh - 6, 22, 6))
-            pygame.draw.rect(screen, band, pygame.Rect(sx - 11, horizon - bh - 6, 22, 1))
-            pygame.draw.polygon(screen, slate, _ipts([(sx - 12, horizon - bh - 6), (sx, horizon - bh - 14), (sx + 12, horizon - bh - 6)]))
-            pygame.draw.circle(screen, band, (sx, horizon - bh - 7), 3)
-            pygame.draw.circle(screen, clockc, (sx, horizon - bh - 7), 3, 1)
-            # End dome pavilions: raised block + LOW octagonal hip cap + small lantern
-            for dx in (-bw // 2 + 11, bw // 2 - 11):
-                dcx = sx + dx
-                pygame.draw.rect(screen, brick, pygame.Rect(dcx - 9, horizon - bh - 4, 18, 5))
-                pygame.draw.rect(screen, band, pygame.Rect(dcx - 9, horizon - bh - 2, 18, 1))
+
+            # Blue slate mansard roof: front band + a darker receding top plane + dormers
+            roof = pygame.Rect(body.x + 10, body.y - 4, bw - 20, 4)
+            pygame.draw.polygon(  # top plane recedes (narrower at back) = depth
+                screen, slate_dk, _ipts([(roof.x, roof.y), (roof.right, roof.y), (roof.right - 4, roof.y - 3), (roof.x + 4, roof.y - 3)])
+            )
+            pygame.draw.rect(screen, slate, roof)
+            pygame.draw.line(screen, slate_hi, (roof.x, roof.y), (roof.right, roof.y), 1)
+            for dxm in range(roof.x + 5, roof.right - 4, 9):
+                pygame.draw.rect(screen, slate, pygame.Rect(dxm, roof.y - 2, 3, 2))
+                pygame.draw.rect(screen, glassw, pygame.Rect(dxm, roof.y - 1, 3, 1))
+            # White corner quoins (cap the facade edges, run up past the roof band)
+            pygame.draw.rect(screen, band, pygame.Rect(body.x, body.y - 4, 3, bh + 4))
+            pygame.draw.rect(screen, band_sh, pygame.Rect(body.right - 3, body.y - 4, 3, bh + 4))
+
+            # Twin octagonal SPIRED turrets (the corner pavilions — tiered pointed
+            # hip roof → small cap → tall needle spire + finial ball, NOT domes),
+            # dark plum slate so they read distinct from the blue central/mansard roofs.
+            plum, plum_hi, plum_dk = (120, 86, 106), (152, 118, 138), (84, 58, 76)
+
+            def _turret(dcx):
+                base_y = horizon - bh - 6  # pavilion top = roof springing line
+                pygame.draw.rect(screen, brick, pygame.Rect(dcx - 8, base_y, 16, 6))
+                pygame.draw.line(screen, brick_hi, (dcx - 8, base_y), (dcx - 8, base_y + 6), 1)
+                pygame.draw.rect(screen, band, pygame.Rect(dcx - 8, base_y, 16, 1))
+                pygame.draw.rect(screen, plum_dk, pygame.Rect(dcx - 9, base_y - 1, 18, 1))  # eave overhang
+                # tier 1 — wide flared hip roof
+                pygame.draw.polygon(screen, plum, _ipts([(dcx - 8, base_y - 1), (dcx - 3, base_y - 6), (dcx + 3, base_y - 6), (dcx + 8, base_y - 1)]))
                 pygame.draw.polygon(
-                    screen,
-                    slate,
-                    _ipts([(dcx - 9, horizon - bh - 4), (dcx - 5, horizon - bh - 10), (dcx + 5, horizon - bh - 10), (dcx + 9, horizon - bh - 4)]),
-                )
-                pygame.draw.line(screen, slate_hi, (dcx - 5, horizon - bh - 10), (dcx + 5, horizon - bh - 10), 1)
-                pygame.draw.rect(screen, slate, pygame.Rect(dcx - 2, horizon - bh - 12, 4, 2))
+                    screen, plum_dk, _ipts([(dcx + 3, base_y - 6), (dcx + 8, base_y - 1), (dcx, base_y - 1), (dcx, base_y - 6)])
+                )  # shadow right
+                # tier 2 — narrow pointed cap
+                pygame.draw.polygon(screen, plum, _ipts([(dcx - 3, base_y - 6), (dcx, base_y - 11), (dcx + 3, base_y - 6)]))
+                pygame.draw.polygon(screen, plum_dk, _ipts([(dcx, base_y - 11), (dcx + 3, base_y - 6), (dcx, base_y - 6)]))  # shadow right
+                pygame.draw.line(screen, plum_hi, (dcx, base_y - 10), (dcx, base_y - 6), 1)  # near-ridge highlight
+                # needle spire + finial ball
+                pygame.draw.line(screen, finial, (dcx, base_y - 11), (dcx, base_y - 17), 1)
+                pygame.draw.circle(screen, finial, (dcx, base_y - 18), 1)
+
+            _turret(sx - bw // 2 + 8)
+            _turret(sx + bw // 2 - 8)
+
+            # Central pavilion: raised brick block + slate gable (lit/shadow) + clock + cupola
+            cp_y = horizon - bh - 5
+            pygame.draw.rect(screen, brick, pygame.Rect(sx - 11, cp_y, 22, 5))
+            pygame.draw.rect(screen, band, pygame.Rect(sx - 11, cp_y, 22, 1))
+            pygame.draw.polygon(screen, slate, _ipts([(sx - 12, cp_y), (sx, cp_y - 9), (sx + 12, cp_y)]))
+            pygame.draw.polygon(screen, slate_dk, _ipts([(sx, cp_y - 9), (sx + 12, cp_y), (sx, cp_y)]))  # shadow half
+            pygame.draw.circle(screen, band, (sx, cp_y - 3), 3)
+            pygame.draw.circle(screen, clockc, (sx, cp_y - 3), 3, 1)
+            # cupola (small lantern) seated on the gable apex
+            pygame.draw.rect(screen, slate, pygame.Rect(sx - 3, cp_y - 13, 6, 4))
+            pygame.draw.rect(screen, slate_dk, pygame.Rect(sx, cp_y - 13, 3, 4))
+            pygame.draw.rect(screen, band, pygame.Rect(sx - 3, cp_y - 13, 6, 1))
+            pygame.draw.line(screen, finial, (sx, cp_y - 13), (sx, cp_y - 17), 1)
+            pygame.draw.circle(screen, finial, (sx, cp_y - 18), 1)
 
         # Station B — Japanese JR station: viaduct-arch base, light concourse + glass,
         # big curved butterfly platform canopy, 駅名標 signboard, facade clock.
@@ -1013,9 +1078,13 @@ class SetupScreen:
             tw, th = 48, 18
             pygame.draw.rect(screen, (205, 210, 215), pygame.Rect(train_x - tw // 2, rail_bot - th, tw, th), border_radius=2)
 
-        y = stn_bottom + 18
+        y = stn_bottom + 14
+        # Misfire caveat — belongs with the firing behavior the diagram shows.
+        beta_img = body_font.render(i18n.t("setup.ocr_disclaimer.beta"), True, self.dim_color)
+        screen.blit(beta_img, (pad, y))
+        y += beta_img.get_height() + 18
 
-        # Divider + Notice section
+        # Divider + Privacy & consent section
         pygame.draw.line(screen, border_color, (pad, y), (sw - pad, y))
         y += 16
         t_img = subhead_font.render(i18n.t("setup.ocr_disclaimer.terms_heading"), True, heading_color)
@@ -1131,8 +1200,6 @@ class SetupScreen:
     def _handle_band_click(self, pos: tuple[int, int]) -> bool:
         """Dispatch a mouse click to the OCR Auto-PA band. Returns True if any
         control was hit (caller can stop propagation / suppress sound)."""
-        if not self.show_ocr_ui:
-            return False
         if self._toggle_rect and self._toggle_rect.collidepoint(pos):
             if not self.auto_input_enabled:
                 if self._show_ocr_disclaimer():
