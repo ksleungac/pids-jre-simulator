@@ -364,6 +364,7 @@
   "panel.waiting": { "en": "Auto-PA  ·  waiting for first capture...", "zh_HK": "自動報站 · 等待首次擷取…", "zh_CN": "自动报站 · 等待首次截图…" },
   "panel.played": { "en": "Played:", "zh_HK": "已播放：", "zh_CN": "已播放：" },
   "panel.autoplayed": { "en": "Auto-played:", "zh_HK": "自動播放：", "zh_CN": "自动播放：" },
+  "panel.realigning": { "en": "Re-aligning…", "zh_HK": "重新對齊中…", "zh_CN": "重新对齐中…" },
 
   "panel.state.idle": { "en": "Idle", "zh_HK": "閒置", "zh_CN": "闲置" },
   "panel.state.stopped": { "en": "Stopped", "zh_HK": "停止", "zh_CN": "停止" },

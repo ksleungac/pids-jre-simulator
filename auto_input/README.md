@@ -131,13 +131,15 @@ Layer 3 stays accurate at all times — observes the game, not the sim. Layer 1 
 
 Gated on **app parked** (`at_station=True` ⇔ 1C) — when the app is already moving (1A/1B) normal flow owns it. Also stands down when `pending_next_pa` is already set: a live fire succeeded this cycle (it plays with audio), so re-entry would be a silent dup. That gate is the discriminator between the live 3B→3C departure (audio) and a re-entry 3C (silent) — the arriving-while-parked case is NOT suppressed, because there `_fire_arrival` skips and `pending_next_pa` stays False.
 
-Rules, keyed on Layer 3:
+Each cycle `_resolve_reentry_target` resolves a re-entry **target** (a pure read — no mutation), keyed on Layer 3:
 
-| Layer 3 (game) | Action |
+| Layer 3 (game) | Target |
 |---|---|
-| 3A/3E parked, or 3B (`speed<30`), or speed unknown | no-op — 3B's departure fires later via the normal `SPEED_UP_30` crossing (with audio) |
-| 3C CRUISING (`speed≥30`) or PASSING | silent-advance to 1A; seed `departure_observed=True` |
-| 3D ARRIVING (`badge==MOVING` AND `dist≤lead`) | silent-advance to 1B; seed `departure_observed=arrival_observed=True` |
+| 3A/3E parked, or 3B (`speed<30`), or speed unknown | none — 3B's departure fires later via the normal `SPEED_UP_30` crossing (with audio) |
+| 3C CRUISING (`speed≥30`) or PASSING | 1A; commit seeds `departure_observed=True` |
+| 3D ARRIVING (`badge==MOVING` AND `dist≤lead`) | 1B; commit seeds `departure_observed=arrival_observed=True` |
+
+**Two-probe consensus.** A target commits only after **two consecutive cycles resolve to the same target** — the `_Detector.reentry_latch` holds the prior cycle's target; a matching read commits, any *different* target (incl. 1A→1B mid-wait) or a no-op re-bases the latch. Rationale: re-entry is forward-only and irreversible (it never retreats Layer 1), so a lone transient misread while parked would stick the LCD +1 ahead of reality until the user click-jumps back. The genuine cases (cold boot, click-jump) pay one interval (~5s) of latency — cheap, and the wait is shown as the amber **"Re-aligning…"** panel indicator (`reentry_pending` in the status dict) instead of an abrupt snap.
 
 Silent because the missed announcement is stale (dep PA unrecoverable mid-segment; まもなく already partway). Mechanism: single-shot `PASimulator.pending_silent_advance` (`"1A"|"1B"`) written by the OCR thread, consumed on the **main thread** via `_silent_advance_to` → `_advance_to_next_stop(silent=True)`. AppState is mutated only on the main thread — the bg thread writes only the signal + the detector flags (multi-field AppState writes from the bg thread would tear against the render loop).
 

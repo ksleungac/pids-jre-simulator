@@ -516,7 +516,12 @@ def draw_debug_panel(surface: pygame.Surface, status: dict, sim_state, stops: li
     elif seg_start is not None and 0 <= seg_start < len(stops) and 0 <= sim_state.curr_stop < len(stops):
         from_name = stops[seg_start].get("name", "?")
         to_name = stops[sim_state.curr_stop].get("name", "?")
-        x = _blit_text(surface, name_font, f"{from_name} → {to_name}  ·  ", (x, yn), _TEXT_WHITE)
+        if seg_start == sim_state.curr_stop:
+            # Parked while OCR sees the game in transit (re-entry / re-aligning):
+            # segment collapses to the single station — no "A → A".
+            x = _blit_text(surface, name_font, f"{from_name}  ·  ", (x, yn), _TEXT_WHITE)
+        else:
+            x = _blit_text(surface, name_font, f"{from_name} → {to_name}  ·  ", (x, yn), _TEXT_WHITE)
         x = _blit_text(surface, chrome, state_word, (x, yc), _TEXT_WHITE) + gap
     else:
         x = _blit_text(surface, chrome, state_word, (x, yc), _TEXT_WHITE) + gap
@@ -527,16 +532,33 @@ def draw_debug_panel(surface: pygame.Surface, status: dict, sim_state, stops: li
     # Played count for that window, because the line is width-bound and they'd
     # otherwise collide past the panel edge. ("(Passing)" was dropped from this
     # line — line 2 already shows `state: Passing`.)
-    chip_label = None
+    # Auto-played chip text, WITHOUT the leading dot — the ● is rendered
+    # separately via the name font (see below).
+    chip_text = None
     last_fire = status.get("last_fire")
     if last_fire is not None and isinstance(last_fire, dict):
         if time.time() - last_fire.get("ts", 0) < 3.0:
             fire_key = _FIRE_KEY.get(last_fire.get("type") or "")
             fire_label = i18n.t(fire_key) if fire_key else last_fire.get("type", "?")
-            chip_label = f"  ●  {i18n.t('panel.autoplayed')} {fire_label}"
+            chip_text = f"{i18n.t('panel.autoplayed')} {fire_label}"
 
-    if chip_label is not None:
-        _blit_text(surface, chrome, chip_label, (x, yc), _COLOR_GREEN)
+    # Tail precedence: re-aligning (amber) > auto-played chip (green) > Played
+    # count (gray). Re-aligning means the app is parked but OCR sees the game in
+    # transit and is waiting for a second agreeing probe before silent-advancing
+    # — it supersedes both because it's the live transitional signal and the line
+    # is width-bound. (Re-aligning and the green chip never co-occur: re-entry
+    # stands down once a live fire sets pending_next_pa.)
+    #
+    # The ● transient-chip bullet renders via the NAME font, not chrome: the en
+    # chrome face (HelveticaNeue) is Latin-only and lacks U+25CF, so a chrome ●
+    # blanks in en — same reason the segment → arrow routes through the name
+    # font. Baseline-align the name-font dot (yn) with the chrome label (yc).
+    if status.get("reentry_pending") is not None:
+        xx = _blit_text(surface, name_font, "  ●  ", (x, yn), _COLOR_ORANGE)
+        _blit_text(surface, chrome, i18n.t("panel.realigning"), (xx, yc), _COLOR_ORANGE)
+    elif chip_text is not None:
+        xx = _blit_text(surface, name_font, "  ●  ", (x, yn), _COLOR_GREEN)
+        _blit_text(surface, chrome, chip_text, (xx, yc), _COLOR_GREEN)
     else:
         _blit_text(surface, chrome, f"·  {i18n.t('panel.played')} {played_str}", (x, yc), _TEXT_GRAY)
 
@@ -638,6 +660,11 @@ class _Detector:
     departure_observed: bool = False
     arrival_observed: bool = False
     at_station_observed: bool = False
+    # Re-entry consensus latch: the target ("1A"/"1B") resolved on the PREVIOUS
+    # cycle, awaiting a second agreeing probe before _maybe_reentry commits the
+    # silent-advance. None = no pending re-entry. Surfaced to the panel as the
+    # "re-aligning…" indicator. See auto_input/README.md § "Re-entry".
+    reentry_latch: Optional[str] = None
 
     def inferred_state(self) -> str:
         """Return the canonical Layer 3 state for the current sample.
@@ -926,6 +953,7 @@ class AutoDriver:
                         "departure_observed": self._detector.departure_observed,
                         "arrival_observed": self._detector.arrival_observed,
                         "at_station_observed": self._detector.at_station_observed,
+                        "reentry_pending": self._detector.reentry_latch,
                         "inferred_state": self._detector.inferred_state(),
                         "ts": sample_ts,
                         "paused": False,
@@ -1042,6 +1070,48 @@ class AutoDriver:
         Lockstep ±1: advances by one stop. There is no station-name OCR, so a
         cold boot multiple stops behind the game is NOT recoverable here — the
         user must click-jump to their platform first.
+
+        Consensus gate: a re-entry commits only after TWO consecutive cycles
+        resolve to the *same* target. Re-entry is forward-only and irreversible
+        (it never retreats Layer 1), so a lone transient misread while parked
+        would stick the LCD +1 ahead of reality until the user click-jumps back.
+        The cost of waiting is one interval (~5s) on the genuine cases (cold
+        boot, click-jump) — cheap, and the "re-aligning…" panel indicator turns
+        the wait into a legible transition instead of an abrupt snap.
+        """
+        target = self._resolve_reentry_target(speed, distance)
+        if target is None:
+            # No desync this cycle (live fire landed, app moving, OCR fail, or
+            # game parked) — drop any pending latch.
+            self._detector.reentry_latch = None
+            return
+        if target != self._detector.reentry_latch:
+            # First sighting, or the target changed during the wait (e.g. 1A→1B
+            # as the game crossed the arrival lead) — a changed read is NOT a
+            # confirmation. Latch the new target and wait one more cycle.
+            self._detector.reentry_latch = target
+            print(f"          [AD] >>> RE-ENTRY: re-aligning… (probe 1, target={target})")
+            return
+        # Two consecutive identical targets — commit the silent-advance.
+        self._detector.reentry_latch = None
+        if target == "1B":
+            # 3D ARRIVING → land 1B (まもなく); seed dep + arr.
+            self._detector.departure_observed = True
+            self._detector.arrival_observed = True
+            self.sim.pending_silent_advance = "1B"
+            print(f"          [AD] >>> RE-ENTRY: silent advance to 1B (game ARRIVING, dist={distance})")
+        else:  # "1A"
+            # 3C CRUISING (or PASSING, dist unreliable) → land 1A; seed dep.
+            self._detector.departure_observed = True
+            self.sim.pending_silent_advance = "1A"
+            print(f"          [AD] >>> RE-ENTRY: silent advance to 1A (game CRUISING/PASSING, speed={speed})")
+
+    def _resolve_reentry_target(self, speed: Optional[int], distance: Optional[int]) -> Optional[str]:
+        """Resolve THIS cycle's re-entry target — ``"1A"`` / ``"1B"`` / ``None``.
+
+        Pure read: no flag mutation, no signal write. The consensus latch in
+        `_maybe_reentry` owns the commit decision. Returns None whenever there is
+        no genuine parked-while-game-in-transit desync to correct.
         """
         # A normal fire already succeeded this cycle (e.g. the live 3B→3C
         # departure crossing, which plays audio) — let it land; re-entry stands
@@ -1049,12 +1119,12 @@ class AutoDriver:
         # a re-entry (silent): the arriving-while-parked case is NOT suppressed
         # because there _fire_arrival skips and pending_next_pa stays False.
         if self.sim.pending_next_pa:
-            return
+            return None
         if not self.sim.state.at_station:
-            return  # app already moving (1A/1B) — normal flow owns it
+            return None  # app already moving (1A/1B) — normal flow owns it
         inferred = self._detector.inferred_state()
         if inferred in (Layer3State.UNKNOWN, Layer3State.IDLE, Layer3State.STOPPED):
-            return  # OCR fail / first cycle / game parked — no desync
+            return None  # OCR fail / first cycle / game parked — no desync
         # Game in transit while app parked at 1C. Disambiguate via the guarded
         # badge (prev_badge, post cross-reject) + raw speed/distance —
         # inferred_state can't tell 3B from 3C (both read DEPARTING cold), so the
@@ -1062,18 +1132,12 @@ class AutoDriver:
         # let the normal crossing play it with audio) from "already cruising" (3C).
         badge = self._detector.prev_badge
         if badge == "MOVING" and distance is not None and distance <= self._detector.arrival_lead_m:
-            # 3D ARRIVING → land 1B (まもなく); seed dep + arr.
-            self._detector.departure_observed = True
-            self._detector.arrival_observed = True
-            self.sim.pending_silent_advance = "1B"
-            print(f"          [AD] >>> RE-ENTRY: silent advance to 1B (game ARRIVING, dist={distance})")
-        elif (speed is not None and speed >= SPEED_DEPARTURE_KMH) or badge == "PASSING":
-            # 3C CRUISING (or PASSING, dist unreliable) → land 1A; seed dep.
-            self._detector.departure_observed = True
-            self.sim.pending_silent_advance = "1A"
-            print(f"          [AD] >>> RE-ENTRY: silent advance to 1A (game CRUISING/PASSING, speed={speed})")
-        # else: MOVING, speed<30, dist>lead → 3B → no-op (normal SPEED_UP_30 path
-        # plays the departure with audio when speed crosses 30).
+            return "1B"
+        if (speed is not None and speed >= SPEED_DEPARTURE_KMH) or badge == "PASSING":
+            return "1A"
+        # MOVING, speed<30, dist>lead → 3B → no-op (normal SPEED_UP_30 path plays
+        # the departure with audio when speed crosses 30).
+        return None
 
     def _reanchor_to_app(self) -> None:
         """Reset OCR memory after a click-jump (parked case).
