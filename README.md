@@ -10,11 +10,11 @@ Japanese Train PA (Public Address) Simulator — JR East style train announcemen
 
 | Compact view | Skip animation | Full-route view |
 |---|---|---|
-| ![](docs/screenshots/01-keihin-tohoku-compact.png) | ![](docs/screenshots/02-sobu-skip-animation.png) | ![](docs/screenshots/03-sobu-full-route.png) |
+| ![](assets/01-keihin-tohoku-compact.png) | ![](assets/02-sobu-skip-animation.png) | ![](assets/03-sobu-full-route.png) |
 
-| Transfer-info display | Setup screen |
-|---|---|
-| ![](docs/screenshots/04-tokyo-transfer-info.png) | ![](docs/screenshots/05-setup-screen.png) |
+| Transfer info (Tokyo) | Transfer info (Shinjuku) | Setup screen |
+|---|---|---|
+| ![](assets/04-tokyo-transfer-info.png) | ![](assets/05-shinjuku-transfer-info.png) | ![](assets/06-setup-screen.png) |
 
 ---
 

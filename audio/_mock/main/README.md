@@ -6,7 +6,7 @@ Real `route.json`, not in-code constants. Loads via the same path as real routes
 
 ## Why each stop is here
 
-Every reference station is integrated as a test station — each one does double duty (logic test + visual font reference for `compare_fonts.py` / `compare_grid.py`).
+Every reference station is integrated as a test station — each one does double duty (logic test + visual font reference for `_dev_scripts/compare_fonts.py` / `_dev_scripts/compare_grid.py`).
 
 | Idx | Station | Role |
 |-----|---------|------|

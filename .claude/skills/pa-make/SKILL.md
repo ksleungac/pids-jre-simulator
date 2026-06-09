@@ -225,19 +225,52 @@ print(f'pa: refs={len(refs)} disk={len(on_disk)} missing={sorted(refs-on_disk)} 
 "
 ```
 
-### Step 7 — Validate silence brackets
+### Step 7 — Trim silence to voice onset
+
+```bash
+uv run python _dev_scripts/trim_pa_silence.py audio/<line>/<diagram>/pa
+```
+
+**Voice-onset detection replaces the simple -40 dB gate.** The old `validate_pa.py` check was too crude — it couldn't distinguish recording hiss (-45 to -40 dB) from actual voice, so files with noisy sources kept multi-second noise leads while the validator reported them as "clean."
+
+`trim_pa_silence.py` uses the same onset principle as the STA pipeline: detect where voice actually starts (first frame above noise_floor + 12 dB with a +6 dB/30ms attack slope), then stream-copy trim to leave **~80 ms of silence before voice onset**. Trail trimming is left to `validate_pa.py`'s simple threshold (trail is less critical).
+
+- **Idempotent** on already-trimmed files — onset is detected, gap ≤ TARGET → skip.
+- **Noisy-source recordings** (flat hum at -50 to -45 dB) — the onset detector sees the flat profile vs. the sharp voice attack and trims correctly. The old -40 dB gate saw the hum as "content" and skipped.
+
+#### Step 7.3 — Trim-amount summary
+
+After trimming, parse the output and present files sorted by most-trimmed → least. User needs to see which files had the most silence removed to prioritize by-ear verification. Format:
+
+```
+Top trimmed (lead removed):
+  18       2220ms
+  22       2170ms
+  36       1950ms
+  ...
+```
+
+Construct by extracting `trim_lead Xms` from each line, sort descending, show all (or top ~12 if >30 files).
+
+#### Step 7.5 — Final validate
 
 ```bash
 uv run _dev_scripts/validate_pa.py audio/<line>/<diagram>/pa
 ```
 
-Each PA segment should have brief silence (≥ 50 ms at -40 dB) at both ends — if the cut lands inside speech, voice from one side bleeds into the other. The validator flags `MISSING LEAD` / `MISSING TRAIL` per file.
+Fast -40 dB gate after trimming. Expect 0 flags on low-noise files; a few flags may remain on files where the noise floor sits just above -40 dB in the 80ms pad — treat as false-positive suggestions, not failures. The onset detector is the ground truth.
 
-Known limitations:
-- **Terminus PA** (e.g. `narita-airport-arr` for Sobu) runs to source EOF and naturally has no trailing silence — false positive.
-- **Per-file check only** — doesn't cross-reference against the next PA's leading silence. A `MISSING TRAIL` on file A is genuinely fine if file B has a generous lead, since the silence got assigned to B's leading edge instead of A's trailing edge. Treat single-sided flags as suggestions, not failures.
+#### Step 7.6 — By-ear verification
 
-For the strictest interpretation: any flag = re-listen + adjust timestamp by a few hundred ms.
+```bash
+uv run python _dev_scripts/verify_pa_listen.py audio/<line>/<diagram>
+```
+
+Plays first 3s of each PA segment (head), then last 3s before EOF (tail) — sequential auto-playback so you hear both ends. Seeks via `pygame.mixer.music.play(start=offset)` (same mechanism as STA verifier). PASS/FAIL per file, notes editable. Verdicts persist to `audio_src/<line>/<diagram>/pa_verify_results.json`. Includes both `pa` and `pa_at_station` entries.
+
+Keys: P pass  F fail  R replay  E edit note  ↑↓ navigate  Q/ESC quit
+
+**IMPORTANT: do not launch this from bash tool — pygame audio mixer won't reach the user's speakers.** Generate the `--only` filter from NOT_REVIEWED entries and present it; user runs it themselves.
 
 ## Conventions
 
@@ -282,7 +315,9 @@ Hepburn romanization, macrons stripped, lowercase, hyphens for word boundaries �
 
 - `_dev_scripts/transcribe_pa.py` — Whisper wrapper. CUDA-enabled, downloads model on first run, outputs JSON with segment-level timestamps + text. Defaults to `large-v3` on `cuda`. JSON output lands next to the source mp3 by default.
 - `_dev_scripts/format_pa_timestamps.py` — formatter that converts a `{station: voice_onsets}` mapping into `timestamps.txt` with safety-margin (`floor()`) applied.
-- `_dev_scripts/validate_pa.py` — silence-bracket validator on the cut output.
+- `_dev_scripts/trim_pa_silence.py` — voice-onset detection + stream-copy trimming. Finds actual voice start (noise_floor + 12 dB attack), trims to ~80ms pad before onset. Idempotent. Replaces the old simple -40 dB gate.
+- `_dev_scripts/validate_pa.py` — fast -40 dB silence-bracket validator. Secondary check after voice-onset trim; flags below 50ms lead/trail.
+- `_dev_scripts/verify_pa_listen.py` — by-ear verifier. Plays first 3s of each PA segment. PASS/FAIL with notes. Covers both `pa` and `pa_at_station` entries.
 
 ### Dependencies (pre-installed as dev deps)
 
@@ -303,6 +338,8 @@ First run on a new machine downloads the ~3 GB `large-v3` model into the local h
 - **Always pre-trim** to the user-specified start offset before transcription. Transcribing the entire un-trimmed source pollutes context with content from preceding lines.
 - **Always `large-v3`** for production. Medium loses bilingual content + adds homophone errors. Speed is not the bottleneck on GPU.
 - **The trim offset must be added back** when converting Whisper output (relative to trimmed input) to original-source seconds for the splitter. The `voice_onsets` in the JSON for the formatter expects absolute coordinates.
+- **Voice onset detection beats the -40 dB gate.** Recording hiss / hum at -45 to -50 dB sits above the simple validator's threshold but is clearly not voice — flat amplitude profile, no attack slope. `trim_pa_silence.py` uses onset detection (noise_floor + 12 dB + 6 dB/30ms delta) which handles variable noise floors correctly. If `validate_pa.py` flags files post-trim with `MISSING LEAD` but onset detection passed, trust onset — the remaining gap is noise, not voice.
+- **Backup before trimming.** `trim_pa_silence.py` modifies files in place (lossless stream-copy). Snapshot `pa/` + `route.json` into `audio_src/<line>/<diagram>/` first — same convention as sta-make Step 7.
 
 ## Documentation hook
 

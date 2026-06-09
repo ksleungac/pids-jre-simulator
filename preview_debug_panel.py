@@ -5,8 +5,9 @@ Iterates the panel's visual design without the game running. Renders the actual
 that cover the realistic states (boot / running / paused / etc.).
 
 Keys:
-    1-5    switch scenario
+    1-6    switch scenario
     P      toggle pause (same effect as clicking the Pause button)
+    L      cycle UI language (en → zh_HK) to preview i18n
     ESC/Q  quit
 
 Click:
@@ -17,12 +18,17 @@ Click:
 from __future__ import annotations
 
 import sys
+import time
 
 import pygame
 
+import i18n
 from app_paths import project_root
 from auto_input import draw_debug_panel, handle_panel_click
 from constants import DEBUG_PANEL_HEIGHT
+
+# Languages to cycle with [L].
+_PREVIEW_LANGS = ("en", "zh_HK", "zh_CN")
 
 PANEL_W = 730
 FOOTER_H = 90
@@ -159,16 +165,39 @@ def _scenarios() -> list[tuple[str, dict, _MockState]]:
             },
             _MockState(curr_stop=3, cnt_pa=1),
         ),
+        (
+            "6. just departed — auto-played chip + (Passing)",
+            {
+                "badge": "PASSING",
+                "badge_diff": 2.0,
+                "speed": 88,
+                "speed_score": 0.95,
+                "distance": 2400,
+                "distance_score": 0.9,
+                "stopping_offset_cm": None,
+                "stopping_offset_score": 1.0,
+                "speed_limit": 100,
+                "speed_limit_score": 0.9,
+                "departure_observed": True,
+                "arrival_observed": False,
+                "at_station_observed": False,
+                "inferred_state": "CRUISING",
+                "segment_start_stop": 2,
+                "last_fire": {"ts": 0.0, "type": "departure"},  # ts refreshed live in the loop
+                "paused": False,
+            },
+            _MockState(curr_stop=3, cnt_pa=0),
+        ),
     ]
 
 
-def _draw_footer(surface: pygame.Surface, font: pygame.font.Font, label: str, paused: bool) -> None:
+def _draw_footer(surface: pygame.Surface, font: pygame.font.Font, label: str, paused: bool, lang: str) -> None:
     """Render the preview chrome below the panel."""
     surface.fill((30, 30, 36))
     pad = 12
     pygame.draw.line(surface, (60, 60, 70), (0, 0), (surface.get_width(), 0), 1)
-    surface.blit(font.render(label, True, (220, 220, 220)), (pad, pad))
-    hint1 = "Keys:  1-5 switch scenario   P toggle pause   ESC/Q quit"
+    surface.blit(font.render(f"{label}    [lang: {lang}]", True, (220, 220, 220)), (pad, pad))
+    hint1 = "Keys:  1-6 switch scenario   P toggle pause   L cycle language   ESC/Q quit"
     hint2 = "Click: Pause / Report buttons on the panel above"
     surface.blit(font.render(hint1, True, (160, 160, 160)), (pad, pad + 24))
     surface.blit(font.render(hint2, True, (160, 160, 160)), (pad, pad + 44))
@@ -183,6 +212,9 @@ def main() -> None:
     window = pygame.display.set_mode((WIN_W, WIN_H))
     clock = pygame.time.Clock()
     footer_font = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 14)
+
+    i18n.init("en")  # the panel pulls strings via i18n.t(); load + set default lang
+    lang_idx = 0
 
     sim = _MockSim()
     scenarios = _scenarios()
@@ -201,7 +233,10 @@ def main() -> None:
                     running = False
                 elif event.key == pygame.K_p:
                     sim.auto_driver.paused = not sim.auto_driver.paused
-                elif pygame.K_1 <= event.key <= pygame.K_5:
+                elif event.key == pygame.K_l:
+                    lang_idx = (lang_idx + 1) % len(_PREVIEW_LANGS)
+                    i18n.set_language(_PREVIEW_LANGS[lang_idx])
+                elif pygame.K_1 <= event.key <= pygame.K_6:
                     new_idx = event.key - pygame.K_1
                     if new_idx < len(scenarios):
                         idx = new_idx
@@ -213,8 +248,12 @@ def main() -> None:
         # Override the scenario's `paused` with the live driver flag — clicking
         # Pause should affect any scenario, not only the "5. paused" one.
         live_status = {**status, "paused": sim.auto_driver.paused} if status else status
+        # Keep the auto-played chip alive while its scenario is on screen (the
+        # chip self-expires 3s after the fire ts).
+        if live_status and "last_fire" in live_status:
+            live_status["last_fire"] = {**live_status["last_fire"], "ts": time.time()}
         draw_debug_panel(panel_surface, live_status, mock_state, _STOPS)
-        _draw_footer(footer_surface, footer_font, label, sim.auto_driver.paused)
+        _draw_footer(footer_surface, footer_font, label, sim.auto_driver.paused, _PREVIEW_LANGS[lang_idx])
         pygame.display.flip()
         clock.tick(30)
 

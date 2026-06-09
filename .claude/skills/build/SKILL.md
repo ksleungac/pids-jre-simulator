@@ -16,9 +16,9 @@ Reproduce the PyInstaller build locally: produce a one-file exe with version met
 
 **Version** (e.g. `0.5.2`, `v0.5.2`, `0.5.2b`).
 
-- If the user didn't provide a version in the invocation, **ask for it first**. Do not guess, do not reuse a version from a prior session, do not read it from git tags — ask.
+- If the user didn't provide a version in the invocation, **ask for it first**. Do not guess, do not reuse a version from a prior session, do not read it from git tags — ask. (The version supplied here is embedded into the exe's PE metadata via `version_info.txt`; the running app reads it back through `app_paths.app_version()` for the update check — so the version you stamp at build time IS the single source of truth, no separate constant.)
 - **Subversion letters are NOT betas.** `a`, `b`, `c` are sequential sub-revisions of the same patch (user's scheme). Do not treat `b` as "beta" and suppress it anywhere — it must survive into the exe metadata and filenames verbatim.
-- **Normalize for filenames/display**: strip any leading `v`, then always re-add `v` in output filenames (see Step 6). So `0.5.2` and `v0.5.2` both produce `JRE-PA-Simulator-v0.5.2-distribution.zip`.
+- **Normalize for filenames/display**: strip any leading `v`, then always re-add `v` in output filenames (see Step 3). So `0.5.2` and `v0.5.2` both produce `JRE-PA-Simulator-v0.5.2-distribution.zip`.
 - **Parse into a 4-tuple `(major, minor, patch, sub)`** for the Windows version resource:
   - `major.minor.patch` from the numeric components (missing → `0`).
   - `sub` from the trailing letter: `a`→1, `b`→2, `c`→3, … (one-letter case `ord(letter) - ord('a') + 1`). No letter → `sub = 0`.
@@ -32,7 +32,19 @@ Reproduce the PyInstaller build locally: produce a one-file exe with version met
 
 If not provided, ask: *"What version should I tag this build? (e.g. 0.5.2)"*. Wait for answer before proceeding.
 
-### Step 2 — Generate `version_info.txt`
+### Step 2 — Build and stage (runs uninterrupted)
+
+After version is confirmed, run all sub-steps in sequence without pausing. If any sub-step fails, surface the error and stop.
+
+**2a — Dep pre-flight**
+
+```powershell
+uv run _harness/check_deps.py
+```
+
+If non-zero, stop and surface the violations. See `critical_lessons.md §3`.
+
+**2b — Generate `version_info.txt`**
 
 Write a PyInstaller Windows version resource to the project root. Overwrite any existing file. Template:
 
@@ -70,7 +82,7 @@ Substitute `MAJOR/MINOR/PATCH/BUILD` (numbers, per the parsing rules above — `
 
 The file lives at project root and is **gitignored** — it's a per-build artifact, not source. Overwrite freely.
 
-### Step 3 — Clean & build
+**2c — Clean & build**
 
 `dist-release/JRE-PA-Simulator/audio` may be a **junction** from a previous run (pointing at the project's real `audio/`). A naive `Remove-Item -Recurse` will follow the junction and delete your real audio files. Always break the junction first:
 
@@ -94,9 +106,9 @@ uv run --no-dev --group build pyinstaller --onefile --console --name "JRE-PA-Sim
 
 `--collect-data plotly` ships plotly's `package_data/` subdirectory — specifically `plotly.min.js`, the ~3MB JS bundle that `fig.to_html(include_plotlyjs='inline')` reads at runtime. PyInstaller's static import analysis bundles plotly's `.py` files but skips non-Python data files; without this flag, the Report ↓ button in the OCR debug panel silently breaks in release builds (lib loads, but its JS bundle is missing → render-time crash swallowed by the `try/except` in `auto_input/driver.py:_render_report_async`). Discovered by /review+fix Lens 1 on 2026-04-30 reviewing commit `51c7b07`. If a future runtime-asset-shipping lib enters `dependencies` (matplotlib, bokeh, ...), add a sibling `--collect-data <lib>` here.
 
-### Step 4 — Stage distribution folder (with audio junction for testing)
+**2d — Stage distribution folder (with audio junction for testing)**
 
-The shipped zip ships the audio folder populated with all real route data (excluding `audio/_*/` — preserved-but-not-shipped). During smoke-test we want the staged folder to be **immediately runnable** without first copying ~600 MB of audio, so we use a **junction**: `dist-release/JRE-PA-Simulator/audio` points at the project's real `audio/`. At zip time, Step 6 breaks the junction and replaces it with a real directory containing the shippable subset.
+The shipped zip ships the audio folder populated with all real route data (excluding `audio/_*/` — preserved-but-not-shipped). During smoke-test we want the staged folder to be **immediately runnable** without first copying ~600 MB of audio, so we use a **junction**: `dist-release/JRE-PA-Simulator/audio` points at the project's real `audio/`. At zip time, Step 3 breaks the junction and replaces it with a real directory containing the shippable subset.
 
 **Inclusion model — default-ship, not hand-picked.** Stage every top-level project-root directory by default; maintain only an exclusion list. This solves the recurring "we forgot to add the new asset folder" class (2026-05-05 line_icons + ocr_templates) — new folders ship automatically; if a folder shouldn't ship, you add it to `$shipExclude` in a single visible action. The cost asymmetry is heavy in favor of over-shipping: missing-required-asset = release crash; extra-shipped-folder = a few MB in the zip.
 
@@ -112,7 +124,7 @@ $shipExclude = @(
     'dist', 'dist-release', 'build',     # build outputs (would self-recurse)
     'displays', 'auto_input',            # Python source — bundled INTO exe by PyInstaller, not alongside
     'memory', 'lcd_references',          # repo-only / dev refs
-    'audio_src', 'docs'                  # dev tooling / repo-only
+    'audio_src', 'assets'                 # dev tooling / repo-only
 )
 
 $shipDirs = Get-ChildItem -Path "." -Directory | Where-Object {
@@ -124,7 +136,7 @@ $shipDirs | ForEach-Object { Write-Host "  $($_.Name)" }
 
 foreach ($dir in $shipDirs) {
     if ($dir.Name -eq 'audio') {
-        # audio/ — junction during smoke test (Step 6 breaks + replaces with real copy at zip time)
+        # audio/ — junction during smoke test (Step 3 breaks + replaces with real copy at zip time)
         $projectAudio = (Resolve-Path "audio").Path
         New-Item -ItemType Junction -Path "dist-release\JRE-PA-Simulator\audio" -Target $projectAudio | Out-Null
     } else {
@@ -140,14 +152,14 @@ foreach ($dir in $shipDirs) {
 
 - **The print-out of `$shipDirs`** is a soft guard — eyeball-confirm what's being staged at the start of every build. If something appears that shouldn't, add to `$shipExclude` (a deliberate, visible action) and re-run.
 - **Adding a new top-level dev-only folder** (e.g. `_visual_iter/`, `_recordings/`, `audio_src/`) — convention is `_*` prefix or `.*` prefix; otherwise add to `$shipExclude`. New shipped folders need no skill edit at all.
-- **The `_*` filter applies recursively** — `data/_*`, `fonts/_*`, `ocr_templates/_*` would all be excluded if added in future, matching the `audio/_*/` Step-6 pattern.
+- **The `_*` filter applies recursively** — `data/_*`, `fonts/_*`, `ocr_templates/_*` would all be excluded if added in future, matching the `audio/_*/` Step 3 pattern.
 - Junction caveats:
   - Works without admin rights (junctions ≠ symlinks on Windows).
   - The exe sees it as an ordinary `audio/` directory — `Path(sys.executable).parent / "audio" / ...` resolves through transparently.
-  - Never `Remove-Item -Recurse` the staged folder without breaking the junction first (see Step 3's guard).
-  - `Compress-Archive` follows the junction transparently. We still break + replace before zipping in Step 6 — both because we need to *exclude* `audio/_*/` from the shipped zip (the junction would pull them in) and because junctions inside zips are messy on extraction.
+  - Never `Remove-Item -Recurse` the staged folder without breaking the junction first (see Step 2c's guard above).
+  - `Compress-Archive` follows the junction transparently. We still break + replace before zipping in Step 3 — both because we need to *exclude* `audio/_*/` from the shipped zip (the junction would pull them in) and because junctions inside zips are messy on extraction.
 
-### Step 5 — Launch exe for user + HARD STOP for smoke test
+**2e — Launch exe + HARD STOP for smoke test**
 
 **Auto-launch the exe from the staged folder** so the user doesn't have to hunt for it. Use `Start-Process` (non-blocking — it returns immediately; the exe runs in its own window and does not tie up this shell):
 
@@ -171,9 +183,9 @@ Do NOT:
 - Assume `Start-Process` succeeding means the app is running correctly — it only means the OS accepted the launch request. Font loading, JSON path resolution, and mixer init all fail post-launch if they fail at all.
 - Try to read the exe's stdout/stderr to "check" (it's detached; output goes to its own console window).
 
-Wait for an explicit "works / ok / ship it / zip it" from the user before Step 6.
+Wait for an explicit "works / ok / ship it / zip it" from the user before Step 3.
 
-### Step 6 (ONLY after user confirms smoke test passed) — Break audio junction, copy shippable audio, then zip
+### Step 3 (ONLY after user confirms smoke test passed) — Zip
 
 The staged `audio/` is a junction to the project's real `audio/`. We need to break it and replace with a real directory containing only the line folders that ship — *excluding* `audio/_*/` (preserved-but-not-shipped: `_archive/`, `_mock/`).
 
@@ -194,21 +206,26 @@ Get-ChildItem -Path "audio" -Directory | Where-Object { $_.Name -notmatch '^_' }
     Copy-Item -Path $_.FullName -Destination $audioJunction -Recurse -Force
 }
 
+# Remove smoke-test-generated runtime state (see note below) before zipping.
+Remove-Item -Path "dist-release\JRE-PA-Simulator\settings.json" -Force -ErrorAction SilentlyContinue
+
 # Zip
 Compress-Archive -Path "dist-release\JRE-PA-Simulator" -DestinationPath "dist-release\JRE-PA-Simulator-v<VERSION>-distribution.zip" -Force
 ```
 
 The `_*` exclusion is critical: `_archive/` (working backups, Sobu reference recordings, etc.) and `_mock/` (preview-only test catalog) must never reach end users — those are repo-internal scaffolding.
 
+**Smoke-test self-pollution — strip `settings.json` before zip.** `i18n.py` writes `settings.json` to `project_root()`, which in the exe resolves to `Path(sys.executable).parent` = the staged folder. The Step 2e smoke-test launch therefore *creates* `dist-release\JRE-PA-Simulator\settings.json` (e.g. `{"language": "en", "oobe_completed": true}`) carrying the tester's language choice + a completed-OOBE flag. If zipped, end users skip the first-run language picker and inherit the tester's locale. The `Remove-Item` above deletes it pre-zip. Any future runtime-written user-state file at project root (logs, caches, crash dumps from the smoke test) needs the same treatment — they only appear after Step 2e, so the include-everything staging in Step 2d can't pre-empt them.
+
 **Never** use `Remove-Item -Recurse -Force $audioJunction` — `Remove-Item` with `-Recurse` on a junction follows the reparse point and deletes the real audio directory. Use `[System.IO.Directory]::Delete(path, false)` instead, which removes only the junction entry.
 
 **Filename version**: always `v` + the normalized numeric+letter string (e.g. `v0.5.2`, `v0.5.2b`). If the user typed `v0.5.2`, strip their `v` first and re-add one — never produce `vv0.5.2`.
 
-**After zipping**: the staged folder now has a populated real `audio/` directory (~600 MB), not the junction. If the user wants to keep iterating with the staged folder against live audio edits, re-run `/build` to recreate the junction in Step 4. Mention zip size in the final report — typical ship: ~660 MB (exe + fonts + data + audio); GitHub release file limit is 2 GB so there's headroom.
+**After zipping**: the staged folder now has a populated real `audio/` directory (~600 MB), not the junction. If the user wants to keep iterating with the staged folder against live audio edits, re-run `/build` to recreate the junction in Step 2d. Mention zip size in the final report — typical ship: ~660 MB (exe + fonts + data + audio); GitHub release file limit is 2 GB so there's headroom.
 
 ## Next step (when user wants to publish)
 
-After the user has confirmed the smoke test and zipped (Step 6), the publish flow continues in `/release`. That skill picks up here: pre-flights the build artifacts, drafts `release_notes.md` with the criteria below, tags the commit, and hands the `gh release create` command to the user.
+After the user has confirmed the smoke test and zipped (Step 3), the publish flow continues in `/release`. That skill picks up here: pre-flights the build artifacts, drafts `release_notes.md` with the criteria below, tags the commit, and hands the `gh release create` command to the user.
 
 Don't run `/release` automatically — wait for the user to invoke it. `/build` ends at "zip ready on disk."
 
@@ -220,9 +237,9 @@ Don't run `/release` automatically — wait for the user to invoke it. `/build` 
 
 ## `_*` folder convention (preserved-but-not-shipped)
 
-Folders prefixed with `_` under `audio/` (e.g. `audio/_mock/`, `audio/_archive/`) are preserved in the repo but **must not ship** to end users. Step 6 explicitly enforces this via the `Where-Object { $_.Name -notmatch '^_' }` filter when copying line folders into the staged audio directory. Same convention applies recursively to any future `data/_*`, `fonts/_*`, `ocr_templates/_*` — Step 4's per-dir `Get-ChildItem ... | Where-Object { $_.Name -notmatch '^_' }` block already excludes them, so no skill edit is needed when new harness subdirs appear under shipped trees.
+Folders prefixed with `_` under `audio/` (e.g. `audio/_mock/`, `audio/_archive/`) are preserved in the repo but **must not ship** to end users. Step 3 explicitly enforces this via the `Where-Object { $_.Name -notmatch '^_' }` filter when copying line folders into the staged audio directory. Same convention applies recursively to any future `data/_*`, `fonts/_*`, `ocr_templates/_*` — Step 2d's per-dir `Get-ChildItem ... | Where-Object { $_.Name -notmatch '^_' }` block already excludes them, so no skill edit is needed when new harness subdirs appear under shipped trees.
 
-The smoke-test junction in Step 4 transparently includes `_*/` folders — that's intentional. The user can preview-test against the mock catalog from inside the staged folder before the zip excludes them.
+The smoke-test junction in Step 2d transparently includes `_*/` folders — that's intentional. The user can preview-test against the mock catalog from inside the staged folder before the zip excludes them.
 
 ## Release notes criteria (for when `release.ps1` eventually runs)
 

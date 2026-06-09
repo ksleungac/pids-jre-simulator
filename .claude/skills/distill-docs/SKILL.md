@@ -1,6 +1,6 @@
 ---
 name: distill-docs
-description: Periodic audit of domain docs (DISPLAY.md, DISPLAY_E235.md, DATA_FORMAT.md, AUTO_INPUT.md, plus future per-series DISPLAY_*.md) — scan for accumulated bloat (history notes, code-snippet illustrations, speculative future sections, design-rationale prose, cross-doc duplication, cumulative staleness). Discussion-first, item-by-item; user approves each removal before any edit lands.
+description: Periodic audit of domain docs (DISPLAY.md, DISPLAY_E235.md, DATA_FORMAT.md, auto_input/README.md, plus future per-series DISPLAY_*.md) — scan for accumulated bloat (history notes, code-snippet illustrations, speculative future sections, design-rationale prose, cross-doc duplication, cumulative staleness). Discussion-first, item-by-item; user approves each removal before any edit lands.
 triggers:
   - /distill-docs
   - distill docs
@@ -13,7 +13,7 @@ triggers:
 
 ## Purpose
 
-Domain docs (`DISPLAY.md`, `DISPLAY_E235.md`, `DATA_FORMAT.md`, `AUTO_INPUT.md`, plus future per-series `DISPLAY_*.md` as new train models land) are written under feature-flow pressure. Even with each doc's `EDIT-CONTRACT` block at the top doing heavy lifting at write-time, three failure modes accumulate that the gate structurally can't catch:
+Domain docs (`DISPLAY.md`, `DISPLAY_E235.md`, `DATA_FORMAT.md`, `auto_input/README.md`, plus future per-series `DISPLAY_*.md` as new train models land) are written under feature-flow pressure. Even with each doc's `EDIT-CONTRACT` block at the top doing heavy lifting at write-time, three failure modes accumulate that the gate structurally can't catch:
 
 1. **Cross-doc drift** — a fact gets stated in DISPLAY.md, then later (correctly) added to CLAUDE.md mental model, or a skill, or an inline `# CONTRACT:`. Each edit looks fine in isolation; the duplicate only shows up reading both.
 2. **Cumulative staleness** — a feature commit makes half of an old section obsolete, but the editor was focused on the new content. Old content remains as background noise.
@@ -28,7 +28,7 @@ NOT for one-off cleanup of a specific section — just edit in place. NOT for ge
 In scope:
 - `DISPLAY.md`
 - `DATA_FORMAT.md`
-- `AUTO_INPUT.md`
+- `auto_input/README.md`
 - `audio/README.md` (per-line IRL + sim quirks; growing surface as lines accumulate)
 
 Out of scope:
@@ -93,7 +93,7 @@ Skip flagging if verification fails or is ambiguous — leave it for the next pa
 Baseline (current → after-proposal):
 - DISPLAY.md: <N> lines → ~<N - X> lines
 - DATA_FORMAT.md: <N> → ~<N - Y>
-- AUTO_INPUT.md: <N> → ~<N - Z>
+- auto_input/README.md: <N> → ~<N - Z>
 
 ### DISPLAY.md
 | # | Shape | Section / lines | Verification |
@@ -107,7 +107,7 @@ Baseline (current → after-proposal):
 |---|---|---|---|
 | ... |
 
-### AUTO_INPUT.md
+### auto_input/README.md
 | # | Shape | Section / lines | Verification |
 |---|---|---|---|
 | ... |
@@ -121,7 +121,7 @@ Baseline (current → after-proposal):
 ### Total proposed removal: ~<line-count> lines across <file-count> files
 ```
 
-Wait for user decisions per finding. Don't apply until the user signs off, item by item — same discipline as `/distill-memory` and `/vibe-check`. Batch-approval within one shape category is fine if the user signals it ("remove all history notes").
+Wait for user decisions per finding. Don't apply until the user signs off, item by item — same discipline as `/distill-rules` and `/vibe-check`. Batch-approval within one shape category is fine if the user signals it ("remove all history notes").
 
 ### Step 5 — Apply approved changes
 
@@ -136,7 +136,7 @@ After all approved removals, re-record the line counts so the next distill pass 
 ```
 DISPLAY.md: <N> lines (-<delta>)
 DATA_FORMAT.md: <N> lines (-<delta>)
-AUTO_INPUT.md: <N> lines (-<delta>)
+auto_input/README.md: <N> lines (-<delta>)
 ```
 
 ### Step 6 — Report
@@ -146,7 +146,7 @@ AUTO_INPUT.md: <N> lines (-<delta>)
 
 - DISPLAY.md: -<X> lines, <N> sections removed/merged
 - DATA_FORMAT.md: -<Y> lines, <N> sections removed/merged
-- AUTO_INPUT.md: -<Z> lines, <N> sections removed/merged
+- auto_input/README.md: -<Z> lines, <N> sections removed/merged
 - Cross-doc dedup: <N> facts unified to canonical home
 - Files touched: <list>
 
@@ -180,7 +180,7 @@ Recognize these patterns and don't flag them:
 
 ## Scope
 
-- **Does** scan DISPLAY.md, DATA_FORMAT.md, AUTO_INPUT.md for the named bloat shapes.
+- **Does** scan DISPLAY.md, DATA_FORMAT.md, auto_input/README.md for the named bloat shapes.
 - **Does** verify each finding via cross-doc grep / git log / code read.
 - **Does** propose removals item-by-item, ask before non-trivial deletions, record before/after line counts.
 - **Does not** autofix without discussion.

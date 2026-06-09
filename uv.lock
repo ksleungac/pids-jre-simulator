@@ -954,7 +954,7 @@ wheels = [
 
 [[package]]
 name = "pids-jre-simulator"
-version = "0.5.0"
+version = "0.5.4"
 source = { virtual = "." }
 dependencies = [
     { name = "dxcam" },

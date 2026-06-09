@@ -42,6 +42,7 @@ _sta_verify_*.json
 # committed runtime artifacts under ocr_templates/ are what's actually loaded
 # at runtime — these source PNGs are NOT a runtime dependency.
 /_ocr_calibration/
+/_ocr_calibration_1080p/
 
 # Drive recorder / OCR blackbox logs — JSONL per drive session, written by
 # the in-process auto-driver at runtime. Local-only; user-private telemetry.

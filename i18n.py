@@ -1,7 +1,11 @@
 """App-chrome internationalisation.
 
-v1 surface: language picker + setup screen. OOBE / debug panel come later.
-LCD station-name rendering is unrelated and stays on its own translations.json.
+Surfaces: language picker + setup screen + auto-input debug panel (`panel.*`
+keys; de-jargoned for the lightly-public audience, 2026-05-31). OOBE still to
+come. LCD station-name rendering is unrelated and stays on its own
+translations.json — but note the debug panel mixes both: chrome labels via
+`font()` here, station names via its own CJK face (see conventions.md §
+"Mixed-script i18n chrome needs two fonts").
 
 Three concerns colocated here:
 - Settings persistence (alongside-exe writable file, one field for now).

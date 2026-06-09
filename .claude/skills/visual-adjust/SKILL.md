@@ -102,17 +102,17 @@ two separate images side-by-side is unreliable. Build a composite that:
    (<label>): <name>` below
 4. Saves as `compare_<label>_<station>.png`
 
-`compare_fonts.py` (root of repo) is a working implementation. Pattern:
+`_dev_scripts/compare_fonts.py` is a working implementation. Pattern:
 ```bash
 # 1. render variants under a label
 uv run preview_display.py --screenshot screenshot_v1_bold_tokyo.png --mode english --stop 0 --pa 2
 # ... one per reference station
 
 # 2. build composites
-uv run compare_fonts.py v1_bold
+uv run _dev_scripts/compare_fonts.py v1_bold
 ```
 
-For A/B/C comparison of multiple variants at once, see `compare_grid.py` —
+For A/B/C comparison of multiple variants at once, see `_dev_scripts/compare_grid.py` —
 stacks reference + N candidate renders for each station.
 
 Use this whenever there's a static reference photo and you're iterating —

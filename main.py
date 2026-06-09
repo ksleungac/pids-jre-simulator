@@ -5,13 +5,13 @@ visual display and audio playback with loudness normalization.
 """
 
 import os
-import sys
 import pygame
 
 # Suppress pygame welcome message
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 
 import i18n
+import update_check
 from language_picker import LanguagePicker
 from setup import SetupScreen
 from app import PASimulator
@@ -44,6 +44,10 @@ def main():
     # Initialize pygame for the setup screen
     pygame.init()
     pygame.mixer.init()
+
+    # Kick off the fail-silent update check early so its 3s network window
+    # overlaps the picker/setup screens; the setup screen polls the result.
+    update_check.check_async()
 
     # Repo root (dev) / alongside-exe (frozen) — single canonical helper.
     from app_paths import project_root
@@ -83,14 +87,13 @@ def main():
     # Run setup screen to select route. The "? Tutorial" replay button shows
     # only when oobe_completed=True (it's a re-run affordance, not a first-run
     # gate). Loop in case the user clicks it: run tutorial, return to setup.
-    # OCR Auto-PA UI hidden by default; opt in via `--auto-input` for dev /
-    # power-user runs. Code path + dxcam dep ship in every build; the flag
-    # only controls whether the setup-screen toggle/steppers render.
-    show_ocr_ui = "--auto-input" in sys.argv
+    # OCR Auto-PA toggle is always available on the setup screen. It stays
+    # opt-in: enabling goes through the pill, which fires the consent
+    # disclaimer and persists to settings["auto_input"]. Default OFF — OCR
+    # never starts without the user's explicit consent.
     setup = SetupScreen(
         screen,
         show_tutorial_button=settings.get("oobe_completed", False),
-        show_ocr_ui=show_ocr_ui,
     )
     audio_dir = os.path.join(BASE_DIR, "audio")
     setup.scan_routes(audio_dir)

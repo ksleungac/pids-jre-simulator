@@ -19,6 +19,7 @@ Flags:
   --lead N         arrival distance threshold in meters (default 900;
                    bump to 1200 for transfer-heavy lines like Tokaido or Yamanote)
   --interval N     sample interval seconds (default 5)
+  --res 1080p|1440p  override desktop resolution (default: auto-detect from first frame)
 
 Stop: Ctrl+C
 """
@@ -39,9 +40,10 @@ import keyboard
 import pygame
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from auto_input.hud_layout import HUD_BBOX  # noqa: E402
+from auto_input.hud_layout import PROFILES  # noqa: E402
 from auto_input.ocr import (  # noqa: E402
-    badge_cell_from_surface,
+    DEFAULT_TEMPLATES_DIR,
+    Templates,
     build_templates,
     classify_badge_state,
     load_badge_anchors,
@@ -49,17 +51,21 @@ from auto_input.ocr import (  # noqa: E402
     read_speed,
     read_speed_limit,
     read_stopping_offset,
-    speed_cell_from_surface,
-    speed_limit_cell_from_surface,
-    value_cell_from_surface,
+    seg_for_scale,
 )
+
+import numpy as np  # noqa: E402
 
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(2)
 except (AttributeError, OSError):
     ctypes.windll.user32.SetProcessDPIAware()
 
-EXPECTED_RES = (2560, 1440)
+_RES_FLAG_MAP = {
+    "1080p": (1920, 1080),
+    "1440p": (2560, 1440),
+}
+
 DEFAULT_INTERVAL_S = 5
 DEFAULT_LEAD_M = 900
 OUTPUT_DIR = Path(__file__).parent.parent / "_experiments" / "live_captures"
@@ -140,7 +146,7 @@ class PaEventDetector:
         # STOPPED→{MOVING,PASSING} departures always show speed climbing from 0;
         # black-screen at platform leaves speed=0 (parked) or None (OCR FAIL).
         # When prev_badge==STOPPED, require speed>0 to accept the transition.
-        # Mirrors auto_input/driver.py:_Detector. See AUTO_INPUT.md § "Cross-attribute reject".
+        # Mirrors auto_input/driver.py:_Detector. See auto_input/README.md § "Cross-attribute reject".
         if self.prev_badge == "STOPPED" and badge in ("MOVING", "PASSING") and (speed is None or speed == 0):
             events.append(f"CROSS-REJECT raw_badge={badge} (prev=STOPPED, speed={speed} — train hasn't moved; likely black-screen at platform)")
             badge = None
@@ -180,11 +186,21 @@ class PaEventDetector:
 
 
 # ─────────────────────────── helpers ────────────────────────────
-def save_hud_crop(surf: pygame.Surface, path: Path) -> None:
-    hx, hy, hw, hh = HUD_BBOX
+def save_hud_crop(surf: pygame.Surface, path: Path, profile) -> None:
+    hx, hy, hw, hh = profile.hud_bbox
     hud = pygame.Surface((hw, hh))
     hud.blit(surf, (0, 0), area=pygame.Rect(hx, hy, hw, hh))
     pygame.image.save(hud, str(path))
+
+
+def _crop_cell(surf: pygame.Surface, profile, cell_bbox: tuple) -> np.ndarray:
+    """Crop a HUD-relative cell bbox from a full-desktop surface."""
+    hx, hy, _, _ = profile.hud_bbox
+    vx, vy, vw, vh = cell_bbox
+    cell = pygame.Surface((vw, vh))
+    cell.blit(surf, (0, 0), area=pygame.Rect(hx + vx, hy + vy, vw, vh))
+    arr = pygame.surfarray.array3d(cell)
+    return np.transpose(arr, (1, 0, 2))
 
 
 def load_route(route_path: Path) -> dict[str, Any] | None:
@@ -254,6 +270,9 @@ def main() -> int:
     parser.add_argument("--lead", type=int, default=DEFAULT_LEAD_M, help=f"arrival threshold in meters (default {DEFAULT_LEAD_M})")
     parser.add_argument("--interval", type=int, default=DEFAULT_INTERVAL_S, help=f"sample interval seconds (default {DEFAULT_INTERVAL_S})")
     parser.add_argument(
+        "--res", choices=list(_RES_FLAG_MAP), default=None, help="override desktop resolution (default: auto-detect from first frame)"
+    )
+    parser.add_argument(
         "--route",
         type=Path,
         default=None,
@@ -265,22 +284,58 @@ def main() -> int:
     pygame.init()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+    print("Initializing dxcam...")
+    camera = dxcam.create(output_color="BGRA")
+    if camera is None:
+        print("dxcam.create() returned None — DXGI capture unavailable.")
+        return 1
+
+    # ── Resolution detection ───────────────────────────────────────────────────
+    if args.res:
+        res_key = _RES_FLAG_MAP[args.res]
+        print(f"Resolution: {args.res} (forced via --res)")
+    else:
+        print("Detecting desktop resolution from first frame...")
+        probe = None
+        for _ in range(5):
+            probe = camera.grab()
+            if probe is not None:
+                break
+            time.sleep(0.2)
+        if probe is None:
+            print("FATAL: dxcam returned None on probe — cannot detect resolution.")
+            return 1
+        ph, pw = probe.shape[:2]
+        res_key = (pw, ph)
+        print(f"Detected: {pw}x{ph}")
+
+    profile = PROFILES.get(res_key)
+    if profile is None:
+        supported = ", ".join(f"{w}x{h}" for w, h in sorted(PROFILES))
+        print(f"FATAL: resolution {res_key[0]}x{res_key[1]} not supported. Supported: {supported}")
+        return 1
+
+    res_label = f"{profile.desktop_w}x{profile.desktop_h}"
+    seg = seg_for_scale(profile.scale)
+
+    # ── Load resolution-appropriate assets ────────────────────────────────────
+    print(f"\nResolution profile: {res_label} (scale={profile.scale})")
     print("Building templates from ocr_templates/")
-    templates = build_templates()
+    templates = build_templates()  # always 1440p — resize-to-glyph handles cross-res
     missing = set("0123456789") - templates.glyphs.keys()
     if missing:
         print(f"WARNING: missing digit templates: {sorted(missing)}")
     else:
         print(f"Templates loaded: {sorted(templates.glyphs.keys())}")
 
-    badge_anchors = load_badge_anchors()
-    print(f"Badge anchors: { {k: len(v) for k, v in badge_anchors.items()} }")
+    red_dir = DEFAULT_TEMPLATES_DIR / profile.templates_subdir / "digits_red" if profile.templates_subdir else DEFAULT_TEMPLATES_DIR / "digits_red"
+    red_templates: Templates | None = build_templates(red_dir) if red_dir.exists() else None
+    rt_count = len(red_templates.glyphs) if red_templates else 0
+    print(f"Red templates: {rt_count}/10 from {red_dir}")
 
-    print("Initializing dxcam...")
-    camera = dxcam.create(output_color="BGRA")
-    if camera is None:
-        print("dxcam.create() returned None — DXGI capture unavailable.")
-        return 1
+    badges_dir = DEFAULT_TEMPLATES_DIR / profile.badges_subdir
+    badge_anchors = load_badge_anchors(badges_dir)
+    print(f"Badge anchors: { {k: len(v) for k, v in badge_anchors.items()} }")
 
     keys = KeyTracker()
     keyboard.on_press_key("page down", lambda _: keys.on_pagedown())
@@ -310,21 +365,23 @@ def main() -> int:
                 continue
 
             height, width = frame.shape[:2]
-            if (width, height) != EXPECTED_RES:
-                print(f"[warn] captured {width}x{height}, expected {EXPECTED_RES[0]}x{EXPECTED_RES[1]}")
+            if (width, height) != (profile.desktop_w, profile.desktop_h):
+                print(f"[warn] captured {width}x{height}, expected {res_label} — skipping frame")
+                time.sleep(args.interval)
+                continue
 
             surf = pygame.image.frombuffer(frame.tobytes(), (width, height), "BGRA")
 
-            d_cell = value_cell_from_surface(surf)
-            s_cell = speed_cell_from_surface(surf)
-            sl_cell = speed_limit_cell_from_surface(surf)
-            b_cell = badge_cell_from_surface(surf)
+            d_cell = _crop_cell(surf, profile, profile.distance_value_bbox)
+            s_cell = _crop_cell(surf, profile, profile.speed_value_bbox)
+            sl_cell = _crop_cell(surf, profile, profile.speed_limit_value_bbox)
+            b_cell = _crop_cell(surf, profile, profile.badge_bbox)
             badge, b_diff = classify_badge_state(b_cell, badge_anchors)
-            s_val, _, s_score = read_speed(s_cell, templates)
+            s_val, _, s_score = read_speed(s_cell, templates, seg=seg)
             # Cell self-identifies via color — run both readers, only one will succeed.
-            d_val, _, d_score = read_distance(d_cell, templates)
-            offset_val, _, offset_score = read_stopping_offset(d_cell, templates)
-            sl_val, _, sl_score = read_speed_limit(sl_cell, templates)
+            d_val, _, d_score = read_distance(d_cell, templates, seg=seg)
+            offset_val, _, offset_score = read_stopping_offset(d_cell, templates, seg=seg)
+            sl_val, _, sl_score = read_speed_limit(sl_cell, templates, seg=seg, red_templates=red_templates)
 
             ts = time.strftime("%H:%M:%S")
             s_str = f"{s_val:>3}km/h" if s_val is not None else " --"
@@ -344,7 +401,7 @@ def main() -> int:
 
             ts_fname = time.strftime("%Y%m%d_%H%M%S")
             d_label = str(d_val) if d_val is not None else "FAIL"
-            save_hud_crop(surf, OUTPUT_DIR / f"hud_{ts_fname}_d{d_label}.png")
+            save_hud_crop(surf, OUTPUT_DIR / f"hud_{ts_fname}_d{d_label}.png", profile)
 
             time.sleep(args.interval)
         except KeyboardInterrupt:

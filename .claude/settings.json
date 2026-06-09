@@ -2,6 +2,15 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run _harness/unread_readme_hook.py 2>/dev/null || exit 0"
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {
@@ -9,14 +18,37 @@
             "command": "input=$(cat); case \"$input\" in *CLAUDE_COMMIT_VIA_SKILL=1*) exit 0 ;; *\"git commit\"*) printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Direct git commit blocked: this project requires the /commit skill (commit-hygiene gate that runs file-classification, splits unrelated changes, and surfaces the session-recap pre-flight). Run /commit. If you are already inside the /commit skill flow, prepend CLAUDE_COMMIT_VIA_SKILL=1 to the git commit call as the bypass marker.\"}}' ;; *) exit 0 ;; esac"
           }
         ]
-      }
-    ],
-    "UserPromptSubmit": [
+      },
       {
+        "matcher": "Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"Drop articles/filler/pleasantries/hedging. Fragments OK. Plain over complex. Cut self-justifying connective tissue.\\nMaterial-consequence/security/clarification: write normal. Casual/chatty/pushback register ≠ carve-out.\"}}'"
+            "command": "uv run _harness/edit_nudge_hook.py 2>/dev/null || exit 0"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); echo \"$input\" | grep -q 'git status' && uv run _harness/classify_commit.py --hook 2>/dev/null || exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run _harness/stale_ref_hook.py 2>/dev/null || exit 0"
+          },
+          {
+            "type": "command",
+            "command": "uv run _harness/route_json_hook.py 2>/dev/null || exit 0"
           }
         ]
       }

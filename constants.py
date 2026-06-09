@@ -49,5 +49,5 @@ SMALL_WIDTH = 400
 SMALL_HEIGHT = 200
 SMALL_Y = 100
 
-# Auto-input debug panel — shown above the LCD when --auto-input is enabled
-DEBUG_PANEL_HEIGHT = 80
+# Auto-input debug panel — shown above the LCD when OCR Auto-PA is enabled
+DEBUG_PANEL_HEIGHT = 54
