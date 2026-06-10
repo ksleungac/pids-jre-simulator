@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from typing import List, Tuple
 
 import pygame
+import pygame.gfxdraw
 
 BADGE_TEXT = (15, 15, 15)  # dark — text sits on white interior
 WHITE_BG = (230, 230, 230)
@@ -38,6 +39,117 @@ def clip(surface: pygame.Surface, rect):
         yield
     finally:
         surface.set_clip(old)
+
+
+# =============================================================================
+# JR East logo — vector primitive (through-service frame-swap restart screen)
+#
+# The single closed path from JR_logo_(east).svg (viewBox 300×162.6), rendered
+# as a flattened-bezier filled polygon rather than a rasterized asset: no
+# SDL-image SVG runtime dependency, no committed binary to ship/copy, scales
+# clean at any size. Path flattened + bbox-normalized once, cached.
+# =============================================================================
+
+_JR_LOGO_PATH = (
+    "M-249,264.4h40.8v49.7c0,11.1,27.8,11.5,34.1,11.5c6.3,0,41.6-0.4,41.6-14.5"
+    "V199.5H19c27.1,0,32,38.7,32,48.6c0,9.5-4.5,52-29.7,52H5.5L51,357.4H-0.1"
+    "l-74-92.9H2.7c8.9,0,9.3-12.2,9.3-14.8c0-2.6-0.4-13.4-8.9-13.4h-95.4v82.4"
+    "c0,36.4-57.2,43.4-78.7,43.4c-29.7,0-78-10-78-40.8L-249,264.4"
+)
+_JR_LOGO_GREEN = (10, 140, 13)  # SVG fill #0A8C0D
+_jr_logo_norm_cache: List[Tuple[float, float]] = []
+
+
+def _flatten_svg_path(d: str, steps: int = 24) -> List[Tuple[float, float]]:
+    """Flatten an SVG path (M/L/l/H/h/V/v/C/c/Z subset) to a polygon point list.
+
+    Cubic beziers are sampled at ``steps`` segments. Sufficient for the static
+    JR logo path; not a general-purpose SVG parser (only the commands that path
+    uses are handled).
+    """
+    toks = re.findall(r"[MmHhVvCcLlZz]|-?\d*\.?\d+(?:e-?\d+)?", d)
+    i, cur, start, poly = 0, (0.0, 0.0), (0.0, 0.0), []
+
+    def num() -> float:
+        nonlocal i
+        v = float(toks[i])
+        i += 1
+        return v
+
+    def cubic(p0, p1, p2, p3):
+        for s in range(1, steps + 1):
+            t = s / steps
+            u = 1 - t
+            x = u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0]
+            y = u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1]
+            poly.append((x, y))
+
+    while i < len(toks):
+        c = toks[i]
+        i += 1
+        if c == "M":
+            cur = (num(), num())
+            start = cur
+            poly.append(cur)
+        elif c == "L":
+            cur = (num(), num())
+            poly.append(cur)
+        elif c == "l":
+            cur = (cur[0] + num(), cur[1] + num())
+            poly.append(cur)
+        elif c == "H":
+            cur = (num(), cur[1])
+            poly.append(cur)
+        elif c == "h":
+            cur = (cur[0] + num(), cur[1])
+            poly.append(cur)
+        elif c == "V":
+            cur = (cur[0], num())
+            poly.append(cur)
+        elif c == "v":
+            cur = (cur[0], cur[1] + num())
+            poly.append(cur)
+        elif c == "C":
+            p1, p2, p3 = (num(), num()), (num(), num()), (num(), num())
+            cubic(cur, p1, p2, p3)
+            cur = p3
+        elif c == "c":
+            p1 = (cur[0] + num(), cur[1] + num())
+            p2 = (cur[0] + num(), cur[1] + num())
+            p3 = (cur[0] + num(), cur[1] + num())
+            cubic(cur, p1, p2, p3)
+            cur = p3
+        elif c in "Zz":
+            cur = start
+    return poly
+
+
+def _jr_logo_norm() -> List[Tuple[float, float]]:
+    """Bbox-normalized (0..1) JR logo polygon, built once and cached."""
+    global _jr_logo_norm_cache
+    if not _jr_logo_norm_cache:
+        poly = _flatten_svg_path(_JR_LOGO_PATH)
+        xs = [p[0] for p in poly]
+        ys = [p[1] for p in poly]
+        minx, miny = min(xs), min(ys)
+        w, h = max(xs) - minx, max(ys) - miny
+        _jr_logo_norm_cache = [((x - minx) / w, (y - miny) / h) for x, y in poly]
+    return _jr_logo_norm_cache
+
+
+# Logo aspect ratio (width / height) from the 300×162.6 viewBox.
+JR_LOGO_ASPECT = 300.0 / 162.6
+
+
+def draw_jr_logo(screen, center_x: float, center_y: float, height: float, color=_JR_LOGO_GREEN) -> None:
+    """Draw the JR East logo (green) centered at (center_x, center_y), sized to
+    ``height`` px (width follows JR_LOGO_ASPECT). Anti-aliased filled polygon."""
+    norm = _jr_logo_norm()
+    width = height * JR_LOGO_ASPECT
+    left, top = center_x - width / 2.0, center_y - height / 2.0
+    pts = [(int(round(left + nx * width)), int(round(top + ny * height))) for nx, ny in norm]
+    pygame.gfxdraw.filled_polygon(screen, pts, color)
+    pygame.gfxdraw.aapolygon(screen, pts, color)
 
 
 def draw_aapolygon(

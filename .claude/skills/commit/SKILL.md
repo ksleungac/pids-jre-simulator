@@ -12,6 +12,8 @@ triggers:
 
 Keep each commit to one logical change. Mixing related data + program changes is fine. Mixing unrelated data fixes into a program commit pollutes history and breaks `/release` note drafting.
 
+**One clean topic → one commit.** When the whole dirty tree is a single topic — including that topic's session-recap codifications (rules, memory, TODO) — make ONE commit. Don't reflexively split feature from recap; the feature+recap split is only for when they're genuinely separate topics. (2026-06-10) User: *"next time when commits are clean about one topic, just make them 1 commit."*
+
 ## Pre-flight (4 checks before drafting commit message)
 
 1. **Smoke test** — invoke the modified code path, observe expected output. "It compiles" doesn't count. Or: `/review-dirty` produced clean output.

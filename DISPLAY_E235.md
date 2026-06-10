@@ -143,6 +143,16 @@ Lower-LCD fonts load in `JapaneseDisplay.__init__` (locale-safe). Sizes live in 
 
 ---
 
+### Through-service restart transition (E235-1000)
+
+Frame-swap mechanics (arm / hold / fire, windowing, continuity) are cross-model — [DISPLAY.md § Through-Service Display Frames](DISPLAY.md). E235-1000 specifics:
+
+- **Restart screen** (`LowerDisplay._draw_restart_transition`): on swap fire, the WHOLE screen blanks to `WHITE_BG` with the JR East logo centered, held `_TRANSITION_DURATION` (5 s), then the new frame renders. Full-screen (upper + lower) — relies on the app drawing lower AFTER upper (`app.py` main loop + boot draw), so the lower's fill overdraws the upper. Cancels on any position change.
+- **JR logo** = `displays.utils.draw_jr_logo` — `JR_logo_(east).svg`'s single path rendered as a flattened-bezier filled polygon (vector primitive). No rasterized asset ships; nothing read at runtime, no `app_paths` / `/build` bundling needed. Tuneables (`logo_height`, color, duration) in the method's `# fmt: off` block.
+- **Frame background** = `WHITE_BG` — an LCD-model constant, NOT route-derived. The frame `line` identity is metadata only; not surfaced on this model's chrome (same physical JO service across the swap, so accent stays the route color).
+
+---
+
 ### E235-1000 — linear full-route
 
 #### Layout / Centering

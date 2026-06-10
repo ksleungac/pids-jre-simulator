@@ -267,6 +267,44 @@ Non-circular routes terminate at route-level `dest`, not at `len(stops) - 1`. So
 
 ---
 
+## Through-Service Display Frames
+
+A through-service route (one physical train across multiple operational segments) partitions its station list into ordered display **frames**. Lower LCD renders only the frame holding the train; swaps at the junction with a restart screen. Plain route = one implicit frame = legacy behavior (no `frames` key — byte-identical to pre-frames). Authored schema → [DATA_FORMAT.md § frames](DATA_FORMAT.md). Per-model restart transition → [DISPLAY_E235.md](DISPLAY_E235.md).
+
+### Active-frame windowing
+
+Each frame = window `[from_idx … to_idx]` over combined `pre_stops + stops` (loader closure, `route_loader._resolve_frames`). The renderer reframes each frame to look EXACTLY like a standalone `pre_stops` route — so existing pixel code handles it unchanged; only WHAT list/offset is fed in changes. Lives in `_FrameWindowMixin` (mixed into both lower-LCD view classes):
+
+- `display_stops` = frame's slice; layout recomputed against it (`_relayout`).
+- `display_offset` = always-passed prefix length WITHIN the frame = `max(0, min(to_idx+1, len(pre_stops)) - from_idx)`. Frame 0 keeps the pre_stops prefix; later frames start fresh at 0.
+- `_frame_sim_base` = frame's first simulated `stops[]` index = `max(0, from_idx - len(pre_stops))`. Maps sim → frame-local display index: `curr = state.curr_stop - _frame_sim_base + display_offset`.
+- `_frame_global_lo` = frame's first cell global index; lets continuity compare a window's GLOBAL position against the full route.
+
+Legacy (no `frames`): `_frames_view` None, `_frame_sim_base = 0`, `display_stops` = whole list.
+
+### Frame selection + swap timing
+
+Active frame = first frame whose global window contains the train (junction = shared boundary belongs to the EARLIER frame). Two synced resolvers: `_FrameWindowMixin._select_frame` (renderer fallback, on `_frames_view` slices) + `LowerDisplay._natural_frame` (manager, on the route closure's `frames`).
+
+`LowerDisplay` owns the swap (it sees the view-cycle) and pushes the lagging frame index into the active renderer via `set_active_frame`:
+
+- **Armed** at STOPPING@junction (`at_station` + position == active frame's `to_idx`, frame has a successor).
+- **Held** through one full page rotation (= sum of slot durations available at arm = "all pages shown once"). The STOPPING-edge resets the cycle to its anchor slot the same instant arm records its time, so `arm + rotation_dur` lands on the slot rollover → no mid-page cut. (Latent caveat: a junction with NO transfers isn't cycle-reset, could fire mid-page — see TODO.)
+- **Fires**: advance `_active_frame_idx`, start the restart transition. Frame now LEADS position (shows frame N+1 while train still parked at the junction) — held until the train departs.
+- **Jump / backward / fast-page** → resync to the natural frame, disarm, cancel any restart.
+
+### Continuity at a frame boundary
+
+A non-final frame's right edge (the junction) is a continuation, NOT a terminus — but the frame slice makes the renderer read it as the route end. Continuity checks therefore compare the window's GLOBAL position against the FULL route, not the slice:
+
+- 8-station: `route_continues = (_frame_global_lo + last_gi) < len(_full_display_stops) - 1`. Reduces to the original `last_gi < len(display_stops) - 1` for legacy.
+- Full-route: `_frame_continues` forces the tail continuity slot (chevrons) on for a non-final frame.
+- **Drawing fix (8-station)**: when the train stops ON the last visible cell, `draw_times` skips that cell's 分-area, so the continuity triangle would float past the red pentagon. The 分-area bar extension is painted before the pointer (pentagon overdraws it) so the triangle always connects to the route bar.
+
+> **Pending IRL verification**: continuity arrow at the screen-edge / row-end case (full-route chevrons + 8-station triangle) when a frame boundary lands at a row end — see `TODO.md`.
+
+---
+
 ## Adding New Train Model
 
 1. Create `displays/train_models/{model_name}/` directory.

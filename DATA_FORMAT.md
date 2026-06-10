@@ -355,7 +355,8 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
     "type_color": [R, G, B],       // Color for train type text (optional, default: black)
     "type": "列車種別",             // Train type (e.g., 快速，普通，各駅停車)
     "dest": "終点",                 // Final destination (kanji) - furigana loaded from data/translations.json
-    "pre_stops": [...]             // Optional. Through-service pre-route stations rendered as dim/passed
+    "pre_stops": [...],            // Optional. Through-service pre-route stations rendered as dim/passed
+    "frames": [...]                // Optional. Through-service display frames — partitions the route, LCD swaps at junctions
 }
 ```
 
@@ -390,6 +391,30 @@ Stations train traversed **before** simulator's active route begins — typicall
 - Window logic operates on `pre_stops + stops` combined. Long combined journeys (>28 cells) flip from first-window view to last-window view exactly once, same final shape as native long routes — but trigger differs: native uses **early-flip** (when `remaining < STOPS_QUANTITY`); pre_stops routes use **late-flip** (when train would scroll off right edge of first window). Late-flip keeps through-service prefix visible at boot. See `_get_stops_list_disp` in `lower_lcd.py` for branching.
 - App's `state.curr_stop` still indexes into `stops[]` (sim truth); display code shifts by `len(pre_stops)` internally.
 - Translations / furigana / English are loaded and displayed for pre-route stations during language cycling.
+
+#### `frames` Array (Through-Service Display Frames) — Optional
+
+Partitions the route's station list into ordered display **frames** for a through-service that reframes the LCD at a junction (e.g. 1217F: Sōbu Rapid 久里浜→千葉, then Narita Line 千葉→成田空港 as a self-contained route). LCD renders only the frame holding the train's position; swaps at the junction. **No `frames` key = one implicit frame = legacy behavior** — none of the existing routes carry it.
+
+```json
+"frames": [
+    {"from": "久里浜", "to": "千葉",     "line": "yokosuka_sobu.sobu"},
+    {"from": "千葉",   "to": "成田空港", "line": "narita_line"}
+]
+```
+
+| Key | Meaning |
+|-----|---------|
+| `from` / `to` | Station-name **text** (kanji). Window extent, inclusive. Must resolve to a `name` in the combined `pre_stops + stops` list (`from` may reference a pre_stop). |
+| `line` | `lines.json` slug, optional `.variant` (dot — same resolver as `stations.json` transfers). Carries the frame's line identity (name_ja / name_en / badges / color). |
+
+**No `dest` / `color` fields.** Destination governed by the dest-closure (above — route-level `dest` + per-stop overrides); a junction dest-change = a per-stop `dest` on the junction stop. Background = LCD-model constant (E235-1000 → `WHITE_BG`), not route-derived.
+
+**Shared boundary.** Junction station is one frame's `to` AND the next frame's `from` — declared in both; validator enforces they abut.
+
+**Loader closure** (`route_loader._resolve_frames`): resolves `from`/`to` → indices over `pre_stops + stops`, resolves `line` → entry, enriches each frame in place with `from_idx` / `to_idx` / `line_entry`. Fails loud on unresolved station, bad slug, non-abutting boundary, or incomplete coverage (frames must tile start→end). Renderers read the closure directly.
+
+**Render / swap behavior** (active-frame windowing, junction swap timing, JR-logo restart transition) → [DISPLAY.md § Through-Service Display Frames](DISPLAY.md) (cross-model) + [DISPLAY_E235.md § Through-service restart transition](DISPLAY_E235.md) (E235-1000).
 
 ### Stop-Level Fields
 
@@ -571,6 +596,7 @@ Exits 0 if clean, 1 if issues found (suitable for pre-commit / CI). Checks perfo
 - Passing stations (`pa: []`, non-first) have NO `sta`, NO `sta_cut`, NO `time`, NO `pa_at_station`
 - First station has `time: 0`; all other non-passing stops have `time` set
 - `pre_stops[]` entries have required `name` + `sta_code`; forbidden `pa` / `pa_at_station` / `sta` / `sta_cut` / `time`
+- `frames[]` (if present): each entry has string `from` / `to` / `line` (shape). Semantic checks — `from`/`to` resolve in `pre_stops+stops`, `line` resolves in `lines.json`, frames abut + tile start→end — surface via the loader smoke-check (`route_loader._resolve_frames`)
 - Compound translations (key contains `・`) encode `english` as `"A&\nB"` form (no space before `&`, newline immediately after)
 
 **Cross-reference rules** (skipped for fixtures under `audio/_*/` — those use out-of-scope strings + lack real audio by design):
