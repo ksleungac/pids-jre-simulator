@@ -60,6 +60,17 @@ When the user says "push directly" / "skip my confirmation", bypass per-file gat
 - Chain authorizations suppress per-step gates within the chain. Re-gate if a step falls outside the chain's declared scope.
 - Each /commit consumes its own recap.
 
+### Never prompt to commit
+Never suggest, offer, or ask about committing — no "want me to commit?", no "/commit this?", no end-of-task commit nudge. The urge-to-commit reasoning path is blocked entirely. Commit happens ONLY on explicit user request or a manual `/commit` invocation.
+
+**Why:** The softer "each /commit consumes its own recap" above didn't stop the reflex — every task end drifted toward a commit offer, which demotes recap (the thinking checkpoint) to bookkeeping appended onto commit (the seal). Examples:
+- (2026-06-11) User: *"i hate the urge to commit, in fact never prompt me to commit … need to block off this reasoning path entirely."*
+
+**How to apply:**
+- Task finished → stop at what's done. No commit offer.
+- Status question ("is there anything left?", "what's uncommitted?") → state the facts including uncommitted changes; do NOT append "want me to commit it?"
+- Recap and commit are both user-invoked; neither gets a proactive nudge.
+
 ### Verify before claiming
 Before claiming "X is a bug" or "X works like Y", read the call sites and trace state transitions. Don't infer from partial context.
 
