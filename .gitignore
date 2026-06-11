@@ -64,3 +64,9 @@ _sta_verify_*.json
 
 # Caveman hook turn counter (UserPromptSubmit modulo state)
 .claude/.caveman_turn_count
+
+# Serena coding-agent toolkit (local dev aid, per-machine). The MCP launch
+# config + Serena's per-project cache/config dir. Personal tooling — not a
+# runtime dep, not forced on clones. uvx fetches Serena from git on demand.
+/.mcp.json
+/.serena/
