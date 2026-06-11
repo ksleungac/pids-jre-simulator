@@ -384,7 +384,9 @@ State machine works in Layer 3 named-state vocabulary — see "State machine lay
 | `DIST_DOWN_<lead>` | `badge==MOVING` AND `distance ≤ arrival_lead_m` AND `arrival_observed=False` | Fire arrival PA, set `arrival_observed=True` |
 | `FIRE_AT_STATION` | `badge==STOPPED` AND `arrival_observed=True` AND `at_station_observed=False` | Fire silent press that flips sim into STOPPING (sets `state.at_station=True`); set `at_station_observed=True` |
 
-`arrival_lead_m` defaults to **900m**. For 1a, adjust on setup-screen Lead stepper (range 500–1500, ±100m) before launching. For 1b, override with `--lead` on `_dev_scripts/capture_game.py` invocation. Use 1200m for transfer-heavy lines (Tokyo, Shinjuku scenarios).
+`arrival_lead_m` = base **900m**. 1a: adjust on setup-screen Lead stepper (range 500–1500, ±100m). 1b: `--lead` on `_dev_scripts/capture_game.py`.
+
+**Long-approach bump (auto, per-stop).** Stops whose arrival PA (`pa[1]`) runs ≥ `LONG_APPROACH_PA_SEC` (40s) fire arrival `LONG_APPROACH_BUMP_M` (+400m) earlier → effective 1300m. Probed once from audio headers on thread start (`_compute_long_approach`, soundfile header read, no decode); per-cycle `_lead_for(curr_stop)` sets `arrival_lead_m` before `update()`, so both the level-test and re-entry (`_resolve_reentry_target`) sites read it. Auto-derived per route — no route.json authoring, applies to future routes. Threshold = duration 900m can't cover at cruise (~23 m/s); flat bump (not scaled) because long PA ↔ slow approach self-compensates in distance. Replaces the old manual "1200m for transfer-heavy lines" guidance — Shinjuku / Atami / major junctions now self-bump. Rationale: `memory/2026-06-11.md`.
 
 **Per-segment observed flags** prevent double-firing within a single segment when OCR misreads transiently flip a threshold-crossing condition (e.g. speed misread as `7` between two real `>30` reads would fire `SPEED_UP_30` twice without the flag). All three flags (`departure_observed`, `arrival_observed`, `at_station_observed`) reset on `BADGE_STOPPED→MOVING`. PASSING transitions do NOT reset flags — PASSING = transient sub-state of MOVING within a segment, not new segment.
 

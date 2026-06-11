@@ -10,7 +10,6 @@ Centralized backlog. Source-of-truth pointers under each section so the detail i
 
 The OCR auto-PA feature shipped in `feat(auto-input): OCR-driven auto-PA — in-process driver, PASSING badge, setup-screen toggle` (commit `65d0cd3`). Open work that didn't make that scope:
 
-- [ ] **Dynamic arrival threshold.** Replace the static Lead value with per-stop 900m vs 1200m derived from "is this stop's last PA significantly longer than the route average?" (transfer guides are characteristically longer). 1a has direct access to `sim.stops` + can probe audio durations via `mutagen`/`soundfile`. (`auto_input/README.md` § "Future enhancements".)
 - [ ] **Multi-PA queue auto-advance.** `_next_pa()` plays one PA per call; multi-PA stops (transfer hubs with 3+ PAs) currently auto-fire only the first arrival, user manually fires the rest. Either fire multiple `pending_next_pa` flags spaced by audio duration, or have the simulator auto-chain. (`auto_input/README.md` § "Future enhancements".)
 - [ ] **Resolution selector in main program.** `driver.py` auto-detects from bootstrap grab (no user input needed today). If multi-monitor or non-native-fullscreen edge cases surface, expose override in setup screen. (Deferred — auto-detect sufficient for current use.)
 - [ ] **Separate-window debug panel.** Today the panel shares the LCD pygame window via sub-surfaces (no overlap, but same window). Could decouple via `pygame._sdl2.video.Window` for a fully separate OS window. Not blocking; deferred. (`auto_input/README.md` § "Future enhancements".)
