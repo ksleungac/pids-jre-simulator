@@ -46,6 +46,7 @@ from auto_input.ocr import (  # noqa: E402
     Templates,
     build_templates,
     classify_badge_state,
+    crop_cell,
     load_badge_anchors,
     read_distance,
     read_speed,
@@ -191,16 +192,6 @@ def save_hud_crop(surf: pygame.Surface, path: Path, profile) -> None:
     hud = pygame.Surface((hw, hh))
     hud.blit(surf, (0, 0), area=pygame.Rect(hx, hy, hw, hh))
     pygame.image.save(hud, str(path))
-
-
-def _crop_cell(surf: pygame.Surface, profile, cell_bbox: tuple) -> np.ndarray:
-    """Crop a HUD-relative cell bbox from a full-desktop surface."""
-    hx, hy, _, _ = profile.hud_bbox
-    vx, vy, vw, vh = cell_bbox
-    cell = pygame.Surface((vw, vh))
-    cell.blit(surf, (0, 0), area=pygame.Rect(hx + vx, hy + vy, vw, vh))
-    arr = pygame.surfarray.array3d(cell)
-    return np.transpose(arr, (1, 0, 2))
 
 
 def load_route(route_path: Path) -> dict[str, Any] | None:
@@ -372,10 +363,10 @@ def main() -> int:
 
             surf = pygame.image.frombuffer(frame.tobytes(), (width, height), "BGRA")
 
-            d_cell = _crop_cell(surf, profile, profile.distance_value_bbox)
-            s_cell = _crop_cell(surf, profile, profile.speed_value_bbox)
-            sl_cell = _crop_cell(surf, profile, profile.speed_limit_value_bbox)
-            b_cell = _crop_cell(surf, profile, profile.badge_bbox)
+            d_cell = crop_cell(surf, profile, profile.distance_value_bbox)
+            s_cell = crop_cell(surf, profile, profile.speed_value_bbox)
+            sl_cell = crop_cell(surf, profile, profile.speed_limit_value_bbox)
+            b_cell = crop_cell(surf, profile, profile.badge_bbox)
             badge, b_diff = classify_badge_state(b_cell, badge_anchors)
             s_val, _, s_score = read_speed(s_cell, templates, seg=seg)
             # Cell self-identifies via color — run both readers, only one will succeed.

@@ -37,7 +37,7 @@ from pathlib import Path
 import numpy as np
 import pygame
 
-from .hud_layout import BADGE_BBOX, DISTANCE_VALUE_BBOX, HUD_BBOX, SPEED_LIMIT_VALUE_BBOX, SPEED_VALUE_BBOX
+from .hud_layout import BADGE_BBOX, DISTANCE_VALUE_BBOX, HUD_BBOX, SPEED_LIMIT_VALUE_BBOX, SPEED_VALUE_BBOX, ResolutionProfile
 
 BADGE_ANCHOR_FILES: dict[str, list[str]] = {
     "MOVING": ["running_en", "running_ja"],
@@ -176,14 +176,24 @@ def seg_for_scale(scale: float) -> SegConfig:
     )
 
 
-def crop_cell_from_surface(surf: pygame.Surface, cell_bbox: tuple[int, int, int, int]) -> np.ndarray:
-    """Crop a HUD cell from any game-window surface. cell_bbox is HUD-relative."""
-    hx, hy, _, _ = HUD_BBOX
+def _crop_hud_cell(surf: pygame.Surface, hud_bbox: tuple[int, int, int, int], cell_bbox: tuple[int, int, int, int]) -> np.ndarray:
+    """Shared cropper body: blit a HUD-relative cell out of a full surface."""
+    hx, hy, _, _ = hud_bbox
     vx, vy, vw, vh = cell_bbox
     cell = pygame.Surface((vw, vh))
     cell.blit(surf, (0, 0), area=pygame.Rect(hx + vx, hy + vy, vw, vh))
     arr = pygame.surfarray.array3d(cell)
     return np.transpose(arr, (1, 0, 2))  # pygame is column-major; convert to (H, W, 3)
+
+
+def crop_cell_from_surface(surf: pygame.Surface, cell_bbox: tuple[int, int, int, int]) -> np.ndarray:
+    """Crop a HUD cell from any game-window surface. cell_bbox is HUD-relative (1440p reference HUD_BBOX)."""
+    return _crop_hud_cell(surf, HUD_BBOX, cell_bbox)
+
+
+def crop_cell(surf: pygame.Surface, profile: ResolutionProfile, cell_bbox: tuple[int, int, int, int]) -> np.ndarray:
+    """Profile-aware sibling of crop_cell_from_surface: HUD origin from the profile, not the 1440p constant."""
+    return _crop_hud_cell(surf, profile.hud_bbox, cell_bbox)
 
 
 def value_cell_from_surface(surf: pygame.Surface) -> np.ndarray:

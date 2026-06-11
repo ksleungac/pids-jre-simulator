@@ -228,7 +228,7 @@ def _write_sample(f: TextIO, sample: dict) -> None:
 
 
 def _write_event(f: TextIO, kind: str, curr_stop: int, ts: float) -> None:
-    """Write a transition event line. `kind` ∈ {arrival, departure, passing_start, passing_end}."""
+    """Write a transition event line. `kind` ∈ {arrival, departure, passing_start, passing_end, cross_reject}."""
     try:
         f.write(
             json.dumps(
@@ -433,6 +433,8 @@ def handle_panel_click(sim, pos: tuple[int, int]) -> bool:
         if driver is not None:
             driver.paused = not driver.paused
             print(f"[AutoDriver] {'paused' if driver.paused else 'resumed'} via panel button")
+        else:
+            print("[AutoDriver] Pause clicked but no driver is attached — ignoring.")
         return True
     if _report_button_rect is not None and _report_button_rect.collidepoint(pos):
         log_path = getattr(sim, "drive_log_path", None)
@@ -716,6 +718,10 @@ class _Detector:
             print(
                 f"          [AD] >>> CROSS-REJECT raw_badge={badge} (prev=STOPPED, speed={speed} — train hasn't moved; likely black-screen at platform)"
             )
+            # Surface the rejection to the caller so it lands in the JSONL drive
+            # log too — the sample line keeps the raw badge, so without this
+            # marker a replay tool sees transitions the live detector ignored.
+            events.append("CROSS_REJECT")
             badge = None
         # Segment boundaries: STOPPED ↔ (MOVING | PASSING). Both MOVING and
         # PASSING signal "the train is moving" — the OCR can mis-classify
@@ -932,7 +938,9 @@ class AutoDriver:
                         # Mark status so panel renders the indicator. Preserve last OCR
                         # values — only the paused flag flips so the panel doesn't blank.
                         self.sim.auto_input_status = {**self.sim.auto_input_status, "paused": True}
-                        self._stop_event.wait(self.interval_s)
+                        # Short poll while paused — resume must take effect promptly,
+                        # not after a full sample interval (up to 5s of dead lag).
+                        self._stop_event.wait(min(self.interval_s, 0.5))
                         continue
                     # Click-jump re-anchor (Layer 1 authoritative → Layer 2 belief).
                     # The user clicked a station on the lower LCD; App jumped to
@@ -1076,6 +1084,13 @@ class AutoDriver:
                     # runs this cycle.
                     self._detector.arrival_lead_m = self._lead_for(self.sim.state.curr_stop)
                     for ev in self._detector.update(d_val, s_val, badge):
+                        if ev == "CROSS_REJECT":
+                            # Log-only marker, not a fire. Pairs with the sample
+                            # line just written (same ts) which holds the raw
+                            # badge/diff/speed the detector rejected.
+                            if log_file is not None:
+                                _write_event(log_file, "cross_reject", self.sim.state.curr_stop, sample_ts)
+                            continue
                         self._handle_event(ev)
                     # Re-entry (Layer 3 → Layer 2/1 catch-up) runs AFTER the
                     # event loop so it reads the cross-reject-guarded badge and
