@@ -22,6 +22,11 @@ import re
 import sys
 from pathlib import Path
 
+# Kanji-bearing issue text (station names, _resolve_frames errors) crashes on
+# cp1252 stdout under a piped/CI run. Reconfigure at entry — same fix as the
+# harness sensors. See conventions.md § Tooling.
+sys.stdout.reconfigure(encoding="utf-8")
+
 SUFFIX_RE = re.compile(r"_[A-Z]{2,}$")
 AUDIO_ROOT = Path("audio")
 DATA_ROOT = Path("data")
@@ -251,6 +256,36 @@ def check_route_transfer_view(route_path: Path, stations_data: dict, issues: lis
         )
 
 
+def check_route_frames(route_path: Path, issues: list) -> None:
+    """Through-service ``frames[]`` authored-shape: each entry carries
+    string ``from`` / ``to`` / ``line`` keys. Collects every shape issue
+    (loader fails fast on the first).
+
+    Semantic validation — ``from``/``to`` resolve to a stop, ``line``
+    resolves in lines.json, frames abut at the shared boundary + tile the
+    whole route — lives solely in ``route_loader._resolve_frames`` and
+    surfaces via ``check_route_loads``. Not re-checked here, to keep one
+    source of truth for the frame rules (per principles.md "Sync downstream
+    enforcers"). See DATA_FORMAT.md § frames.
+    """
+    rel = route_path.parent.relative_to(AUDIO_ROOT).as_posix()
+    frames = load(route_path).get("frames")
+    if not frames:
+        return
+    if not isinstance(frames, list):
+        issues.append((rel, f"frames: expected array, got {type(frames).__name__}"))
+        return
+    for i, fr in enumerate(frames):
+        if not isinstance(fr, dict):
+            issues.append((rel, f"frames[{i}]: expected object, got {type(fr).__name__}"))
+            continue
+        for key in ("from", "to", "line"):
+            if key not in fr:
+                issues.append((rel, f"frames[{i}]: missing required '{key}'"))
+            elif not isinstance(fr[key], str):
+                issues.append((rel, f"frames[{i}]: '{key}' must be a string"))
+
+
 def check_route_loads(route_path: Path, station_db: dict, issues: list) -> None:
     """Smoke-check: route.json runs through production's loader without
     crashing. Catches anything ``route_loader.finalize_route`` trips on
@@ -309,6 +344,7 @@ def main():
 
     for route_path in route_paths:
         check_route(route_path, translations, train_types, issues)
+        check_route_frames(route_path, issues)
         check_route_loads(route_path, translations, issues)
         check_route_transfer_view(route_path, stations, issues)
 

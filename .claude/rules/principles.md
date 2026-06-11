@@ -60,11 +60,22 @@ When the user says "push directly" / "skip my confirmation", bypass per-file gat
 - Chain authorizations suppress per-step gates within the chain. Re-gate if a step falls outside the chain's declared scope.
 - Each /commit consumes its own recap.
 
+### Never prompt to commit
+Never suggest, offer, or ask about committing — no "want me to commit?", no "/commit this?", no end-of-task commit nudge. The urge-to-commit reasoning path is blocked entirely. Commit happens ONLY on explicit user request or a manual `/commit` invocation.
+
+**Why:** The softer "each /commit consumes its own recap" above didn't stop the reflex — every task end drifted toward a commit offer, which demotes recap (the thinking checkpoint) to bookkeeping appended onto commit (the seal). Examples:
+- (2026-06-11) User: *"i hate the urge to commit, in fact never prompt me to commit … need to block off this reasoning path entirely."*
+
+**How to apply:**
+- Task finished → stop at what's done. No commit offer.
+- Status question ("is there anything left?", "what's uncommitted?") → state the facts including uncommitted changes; do NOT append "want me to commit it?"
+- Recap and commit are both user-invoked; neither gets a proactive nudge.
+
 ### Verify before claiming
 Before claiming "X is a bug" or "X works like Y", read the call sites and trace state transitions. Don't infer from partial context.
 
 **Why:** Reasoning from cached impression instead of re-reading source already in context. Examples:
-- (2026-04-28) Claimed `cnt_pa = 0` skipped `pa[0]`; the file showed `pa[0]` is the prev-stop dep.
+- (2026-06-10) Claimed `preview_display.py` is "mock-only" from CLAUDE.md's bare `uv run preview_display.py` example; its docstring documents `--route`. A usage example shows one invocation, not the tool's full capability.
 - (2026-05-08 PM) Defended green ring on Yamanote time circle across multiple pushbacks; user: *"there is NO green ring."* Code and doc were stale relative to user's IRL mental model.
 - (2026-05-12) Filled audio/README JJ from folder structure alone; route.json showed JJ is WIP. Folder shape ≠ data completeness.
 - (2026-05-29) Concluded a feature "already shipped at v0.5.3a" from `git log -S` string-match + tag ancestry; correct method = read commit messages `v<prev>..HEAD` + code at the tag. User lost confidence in release-note drafting.
@@ -74,6 +85,7 @@ Before claiming "X is a bug" or "X works like Y", read the call sites and trace 
 - Deriving release/history facts: read the commit messages in range + the code at the tag. `git log -S` (string match) and tag-ancestry are proxies, not the artifact.
 - When documenting per-line / per-instance facts, inspect data file content + run `validate_data.py` before authoring.
 - Before claiming a file/route/dataset doesn't exist, read the domain doc for that area first. Filesystem shape ≠ documented reality. (2026-05-29: claimed no yamanote data after glob missed flat layout; `audio/README.md § JY` documents it explicitly.)
+- A doc's usage example shows one invocation, not the tool's full capability — read the tool before claiming what it can't do.
 
 ### Verify runtime semantics from primary source
 For code whose behavior depends on deployment frame or external runtime (PyInstaller, threading, I/O timing, OS specifics), verify against primary source — not cached impression.
@@ -113,10 +125,12 @@ When the user states the positive shape of a rule but leaves edge cases / failur
 - (2026-04-30 PM) User said "use plotly", didn't specify dev vs runtime → I filled "dev dep" → silent release breakage.
 - (2026-04-30 evening) Spec said MEMORY.md entries are "one-line pointers" → I wrote multi-paragraph entries.
 - (2026-05-01) User stated "Rule 1 = use upper anchors", didn't specify collision behavior → I filled "all-or-nothing forfeit" into WIP doc → next-day session read it as user spec.
+- (2026-06-10) User specified full-screen restart in design; the WIP doc I authored recorded only "blank LCD → JR logo" → I rebuilt the transition lower-LCD-only. User: *"I said long before… restart is a full screen thing."*
 
 **How to apply:**
 - The moment a gap surfaces — ask. No "minimal placeholder", no "I'll just pick something reasonable."
 - Open questions, not leading. One gap per question.
+- **Record the user's stated scope verbatim into any WIP/design doc you author** — a scope stated in chat but omitted from the doc gets re-derived (often narrower) later.
 - **Scope fidelity when codifying feedback:** "don't use X for Y" stays scoped to Y — don't auto-broaden to "always use Z everywhere."
 
 ### Commit to a recommendation, don't offer menus
@@ -255,9 +269,13 @@ Write the minimum code that solves the problem. No speculative additions.
 ### Surgical Changes
 Touch only what the task requires. Don't expand edit scope autonomously.
 
+**Why:** Examples:
+- (2026-06-10) Continuity arrow missing at a frame boundary; added a `_frame_continues` override + `continuity[2]=1` (draw-side) instead of correcting the framing predicate that made the frame slice read the junction as the route terminus. User: *"there's no drawing code pixel making whatsoever needed on your part."*
+
 **How to apply:**
 - Don't "improve" adjacent code. Mention unrelated issues in chat; don't fix in the diff.
 - Remove orphans your own changes created. Clean up your own mess only.
+- Render symptom from a wrong upstream input → fix the input so existing draw code works untouched; don't add compensating draw-side logic.
 - The test: every changed line should trace directly to the user's request.
 
 ### Test the change, not just the bug

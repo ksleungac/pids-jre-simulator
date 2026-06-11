@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Optional, TextIO
 import dxcam
 import numpy as np
 import pygame
+import soundfile as sf
 
 import i18n
 from .hud_layout import PROFILES
@@ -56,6 +57,20 @@ if TYPE_CHECKING:
 SAMPLE_INTERVAL_S = 5
 SPEED_DEPARTURE_KMH = 30
 DEFAULT_LEAD_M = 900
+# Long-approach lead bump. Major junctions / termini have arrival announcements
+# far longer than a normal stop's (transfer guides, terminal sequences). A 900m
+# approach covers ~40s of talking at cruising speed (~23 m/s), so a stop whose
+# arrival PA (pa[1]) runs longer than that gets its arrival fired this much
+# earlier — the guide then finishes nearer the platform instead of overrunning.
+# Flat bump, same for every long stop (Atami ~128s and Shinjuku ~59s alike):
+# long PA ↔ slow approach already self-compensates in distance terms (the train
+# covers less ground during a long guide), so a proportional bump would
+# double-count and fire the slow-approach termini absurdly early. Threshold is
+# the duration 900m can't cover; the bump lands long stops at 1300m, which is
+# ~56s of cruise — matching the manual setting used IRL for Shinjuku-class stops.
+# See auto_input/README.md § "Arrival lead — per-stop long-approach bump".
+LONG_APPROACH_BUMP_M = 400
+LONG_APPROACH_PA_SEC = 40.0
 
 
 class Layer3State:
@@ -213,7 +228,7 @@ def _write_sample(f: TextIO, sample: dict) -> None:
 
 
 def _write_event(f: TextIO, kind: str, curr_stop: int, ts: float) -> None:
-    """Write a transition event line. `kind` ∈ {arrival, departure, passing_start, passing_end}."""
+    """Write a transition event line. `kind` ∈ {arrival, departure, passing_start, passing_end, cross_reject}."""
     try:
         f.write(
             json.dumps(
@@ -418,6 +433,8 @@ def handle_panel_click(sim, pos: tuple[int, int]) -> bool:
         if driver is not None:
             driver.paused = not driver.paused
             print(f"[AutoDriver] {'paused' if driver.paused else 'resumed'} via panel button")
+        else:
+            print("[AutoDriver] Pause clicked but no driver is attached — ignoring.")
         return True
     if _report_button_rect is not None and _report_button_rect.collidepoint(pos):
         log_path = getattr(sim, "drive_log_path", None)
@@ -701,6 +718,10 @@ class _Detector:
             print(
                 f"          [AD] >>> CROSS-REJECT raw_badge={badge} (prev=STOPPED, speed={speed} — train hasn't moved; likely black-screen at platform)"
             )
+            # Surface the rejection to the caller so it lands in the JSONL drive
+            # log too — the sample line keeps the raw badge, so without this
+            # marker a replay tool sees transitions the live detector ignored.
+            events.append("CROSS_REJECT")
             badge = None
         # Segment boundaries: STOPPED ↔ (MOVING | PASSING). Both MOVING and
         # PASSING signal "the train is moving" — the OCR can mis-classify
@@ -778,9 +799,39 @@ class AutoDriver:
     # by _fire_departure / _fire_arrival / _fire_at_station on success only;
     # skipped fires don't count.
     _last_fire: Optional[dict] = field(default=None, init=False)
+    # Stop indices whose arrival PA is long enough to warrant the long-approach
+    # lead bump (see LONG_APPROACH_PA_SEC). Probed once from audio headers on
+    # thread start; empty until then. Looked up per-cycle by _lead_for.
+    _long_approach: set = field(default_factory=set, init=False)
 
     def __post_init__(self) -> None:
         self._detector = _Detector(arrival_lead_m=self.lead_m)
+
+    def _lead_for(self, stop_idx: int) -> int:
+        """Arrival lead for the stop being approached: base + long-approach bump."""
+        bump = LONG_APPROACH_BUMP_M if stop_idx in self._long_approach else 0
+        return self.lead_m + bump
+
+    def _compute_long_approach(self) -> set:
+        """Stop indices whose arrival PA (pa[1]) exceeds LONG_APPROACH_PA_SEC.
+
+        Probed from the audio file headers via soundfile — header read only,
+        no decode, ~ms per file. Stops with <2 PA have no arrival announcement
+        (skipped). A missing/unreadable PA fails soft → treated as a normal stop
+        (base lead), never crashes the drive.
+        """
+        pa_dir = Path(self.sim.work_dir) / "pa"
+        long_set: set = set()
+        for i, st in enumerate(self.sim.stops):
+            pa = st.get("pa") or []
+            if len(pa) < 2:
+                continue
+            try:
+                if sf.info(str(pa_dir / (pa[1] + ".mp3"))).duration >= LONG_APPROACH_PA_SEC:
+                    long_set.add(i)
+            except Exception:
+                pass
+        return long_set
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -853,6 +904,15 @@ class AutoDriver:
             f"Capture region {profile.capture_region} (top-right quadrant)."
         )
 
+        # Probe arrival-PA durations once → the long-approach set. These stops
+        # fire arrival LONG_APPROACH_BUMP_M earlier so their long guides finish
+        # nearer the platform. Auto-derived per route from audio headers, so it
+        # needs no route.json authoring and applies to every (incl. future) route.
+        self._long_approach = self._compute_long_approach()
+        if self._long_approach:
+            names = ", ".join(self.sim.stops[i].get("name", "?") for i in sorted(self._long_approach))
+            print(f"[AutoDriver] Long-approach stops (lead +{LONG_APPROACH_BUMP_M}m → {self.lead_m + LONG_APPROACH_BUMP_M}m): {names}")
+
         # Open per-drive blackbox log (JSONL). One file per AutoDriver lifetime;
         # each sample below appends a line + flushes for crash safety. Path is
         # also stashed on the simulator so the debug-bar Report button can find
@@ -878,7 +938,9 @@ class AutoDriver:
                         # Mark status so panel renders the indicator. Preserve last OCR
                         # values — only the paused flag flips so the panel doesn't blank.
                         self.sim.auto_input_status = {**self.sim.auto_input_status, "paused": True}
-                        self._stop_event.wait(self.interval_s)
+                        # Short poll while paused — resume must take effect promptly,
+                        # not after a full sample interval (up to 5s of dead lag).
+                        self._stop_event.wait(min(self.interval_s, 0.5))
                         continue
                     # Click-jump re-anchor (Layer 1 authoritative → Layer 2 belief).
                     # The user clicked a station on the lower LCD; App jumped to
@@ -1014,7 +1076,21 @@ class AutoDriver:
                         f"sim:stop={self.sim.state.curr_stop} cnt_pa={self.sim.state.cnt_pa}"
                     )
 
+                    # Per-stop arrival lead: base + long-approach bump for the
+                    # stop being approached (curr_stop is the arrival target).
+                    # Both arrival-check sites — detector.update's level-test and
+                    # _resolve_reentry_target (via _maybe_reentry below) — read
+                    # _detector.arrival_lead_m, so set it once here before either
+                    # runs this cycle.
+                    self._detector.arrival_lead_m = self._lead_for(self.sim.state.curr_stop)
                     for ev in self._detector.update(d_val, s_val, badge):
+                        if ev == "CROSS_REJECT":
+                            # Log-only marker, not a fire. Pairs with the sample
+                            # line just written (same ts) which holds the raw
+                            # badge/diff/speed the detector rejected.
+                            if log_file is not None:
+                                _write_event(log_file, "cross_reject", self.sim.state.curr_stop, sample_ts)
+                            continue
                         self._handle_event(ev)
                     # Re-entry (Layer 3 → Layer 2/1 catch-up) runs AFTER the
                     # event loop so it reads the cross-reject-guarded badge and

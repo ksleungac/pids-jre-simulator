@@ -29,6 +29,7 @@ def finalize_route(route_data: dict, station_db: dict) -> dict:
     _fill_dest_closure(route_data)
     _merge_station_translations(route_data, station_db)
     _resolve_dest_furigana(route_data, station_db)
+    _resolve_frames(route_data)
     return route_data
 
 
@@ -70,3 +71,72 @@ def _resolve_dest_furigana(route_data: dict, station_db: dict) -> None:
     dest = route_data.get("dest", "")
     if dest and dest in station_db:
         route_data["dest_furigana"] = station_db[dest].get("furigana", "")
+
+
+def _resolve_frames(route_data: dict) -> None:
+    """Resolve the optional through-service ``frames`` array into the closure.
+
+    A through-service route partitions its station list into display
+    ``frames``; the LCD renders only the frame containing the train's
+    position and swaps at junctions. No ``frames`` key = legacy single-frame
+    route (today's behavior) — return untouched.
+
+    Per frame, enrich in place with:
+      - ``from_idx`` / ``to_idx`` — indices into the combined
+        ``pre_stops + stops`` list (the ``from`` may reference a pre_stop).
+      - ``line_entry`` — resolved ``lines.json`` entry (name_ja/name_en/
+        badges/color) for the frame's ``line`` slug (+ optional ``.variant``).
+
+    Fails loud (KeyError / ValueError) on any unresolved station, bad line
+    slug, non-abutting boundary, or incomplete coverage. The
+    ``check_route_loads`` smoke test in validate_data.py exercises this at
+    validate time. See DATA_FORMAT.md § frames.
+    """
+    frames = route_data.get("frames")
+    if not frames:
+        return
+
+    # Lazy imports: only through-service routes pay; keeps the legacy load
+    # path and validate_data's smoke test free of the displays/ dependency.
+    from app_paths import project_root
+    from displays.transfer_info import resolve_entry
+
+    lines = json.loads((project_root() / "data" / "lines.json").read_text(encoding="utf-8"))
+
+    combined = route_data.get("pre_stops", []) + route_data.get("stops", [])
+    # First-occurrence-wins. Frames assume a LINEAR route: a circular route
+    # (Yamanote — stops[0] == stops[-1], duplicate loop-point name) would
+    # resolve a `to` at the loop terminus to the first copy, tripping the
+    # "last frame must end at the route's final station" check below. Circular +
+    # frames is unsupported (and unneeded — through-service routes are linear).
+    name_to_idx: dict = {}
+    for i, stop in enumerate(combined):
+        name_to_idx.setdefault(stop.get("name", ""), i)
+
+    def _idx(name: str, role: str, fi: int) -> int:
+        if name not in name_to_idx:
+            raise KeyError(f"frame[{fi}] {role}='{name}' not found in pre_stops+stops")
+        return name_to_idx[name]
+
+    prev_to = None
+    for fi, frame in enumerate(frames):
+        f_idx = _idx(frame["from"], "from", fi)
+        t_idx = _idx(frame["to"], "to", fi)
+        if f_idx > t_idx:
+            raise ValueError(f"frame[{fi}] from='{frame['from']}'(#{f_idx}) is after " f"to='{frame['to']}'(#{t_idx})")
+        if prev_to is not None and f_idx != prev_to:
+            raise ValueError(
+                f"frame[{fi}] from='{frame['from']}'(#{f_idx}) does not abut "
+                f"the previous frame's to(#{prev_to}); frames must share a "
+                f"boundary station"
+            )
+        frame["from_idx"] = f_idx
+        frame["to_idx"] = t_idx
+        frame["line_entry"] = resolve_entry(frame["line"], lines)  # fails loud
+        prev_to = t_idx
+
+    last = len(combined) - 1
+    if frames[0]["from_idx"] != 0:
+        raise ValueError(f"first frame must start at the route's first station " f"(from_idx={frames[0]['from_idx']}, expected 0)")
+    if frames[-1]["to_idx"] != last:
+        raise ValueError(f"last frame must end at the route's last station " f"(to_idx={frames[-1]['to_idx']}, expected {last})")

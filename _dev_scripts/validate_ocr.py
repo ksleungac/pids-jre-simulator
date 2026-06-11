@@ -29,6 +29,7 @@ from auto_input.ocr import (  # noqa: E402
     DEFAULT_TEMPLATES_DIR,
     build_templates,
     classify_badge_state,
+    crop_cell,
     load_badge_anchors,
     read_speed_limit,
     read_stopping_offset,
@@ -114,18 +115,6 @@ _RES_TO_PROFILE_KEY = {
 }
 
 
-# ── helpers ────────────────────────────────────────────────────────────────────
-
-
-def _crop_cell(surf: pygame.Surface, profile: ResolutionProfile, cell_bbox: tuple) -> np.ndarray:
-    hx, hy, _, _ = profile.hud_bbox
-    vx, vy, vw, vh = cell_bbox
-    cell_surf = pygame.Surface((vw, vh))
-    cell_surf.blit(surf, (0, 0), area=pygame.Rect(hx + vx, hy + vy, vw, vh))
-    arr = pygame.surfarray.array3d(cell_surf)
-    return np.transpose(arr, (1, 0, 2))
-
-
 # ── test runners ───────────────────────────────────────────────────────────────
 
 
@@ -146,7 +135,7 @@ def test_badges(
             continue
         total += 1
         surf = pygame.image.load(str(p))
-        cell = _crop_cell(surf, profile, profile.badge_bbox)
+        cell = crop_cell(surf, profile, profile.badge_bbox)
         state, diff = classify_badge_state(cell, anchors)
         verdict = "PASS" if state == expected else "FAIL"
         if state == expected:
@@ -174,7 +163,7 @@ def test_speed_limits(
             continue
         total += 1
         surf = pygame.image.load(str(p))
-        cell = _crop_cell(surf, profile, profile.speed_limit_value_bbox)
+        cell = crop_cell(surf, profile, profile.speed_limit_value_bbox)
         val, raw, score = read_speed_limit(cell, dark_templates, seg=seg, red_templates=red_templates)
         verdict = "PASS" if val == expected else "FAIL"
         if val == expected:
@@ -201,7 +190,7 @@ def test_stopping_offsets(
             continue
         total += 1
         surf = pygame.image.load(str(p))
-        cell = _crop_cell(surf, profile, profile.distance_value_bbox)
+        cell = crop_cell(surf, profile, profile.distance_value_bbox)
         val, _, score = read_stopping_offset(cell, dark_templates, seg=seg)
         if expected is None:
             verdict = "PASS" if val is not None else "PASS(None)"  # no crash = pass

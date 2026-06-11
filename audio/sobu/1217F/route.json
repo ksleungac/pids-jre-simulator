@@ -7,6 +7,10 @@
     "type_color": [22, 64, 152],
     "type": "快速",
     "dest": "成田空港",
+    "frames": [
+        {"from": "久里浜", "to": "千葉",     "line": "yokosuka_sobu.sobu"},
+        {"from": "千葉",   "to": "成田空港", "line": "narita_line"}
+    ],
     "pre_stops": [
         {"name": "久里浜",   "sta_code": "JO01"},
         {"name": "衣笠",     "sta_code": "JO02"},

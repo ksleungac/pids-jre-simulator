@@ -39,6 +39,7 @@ from auto_input.ocr import (  # noqa: E402
     BADGE_ANCHOR_FILES,
     SegConfig,
     badge_cell_from_surface,
+    crop_cell,
     extract_glyph,
     load_value_cell,
     seg_for_scale,
@@ -135,22 +136,9 @@ def save_anchor_crop(cell: np.ndarray, path: Path) -> None:
     pygame.image.save(surf, str(path))
 
 
-def _crop_cell_for_profile(surf: pygame.Surface, profile: object, cell_bbox: tuple) -> np.ndarray:
-    """Crop an arbitrary HUD cell from a full-desktop surface using a ResolutionProfile.
-
-    `cell_bbox` is HUD-relative (x, y, w, h), matching a ResolutionProfile cell field.
-    """
-    hx, hy, _, _ = profile.hud_bbox  # type: ignore[union-attr]
-    vx, vy, vw, vh = cell_bbox
-    cell = pygame.Surface((vw, vh))
-    cell.blit(surf, (0, 0), area=pygame.Rect(hx + vx, hy + vy, vw, vh))
-    arr = pygame.surfarray.array3d(cell)
-    return np.transpose(arr, (1, 0, 2))
-
-
 def _crop_badge_for_profile(surf: pygame.Surface, profile: object) -> np.ndarray:
     """Crop badge cell from a full-desktop surface using a ResolutionProfile."""
-    return _crop_cell_for_profile(surf, profile, profile.badge_bbox)  # type: ignore[union-attr]
+    return crop_cell(surf, profile, profile.badge_bbox)  # type: ignore[arg-type, union-attr]
 
 
 def extract_digits(sources_dir: Path, digits_dir: Path) -> dict[str, str]:
@@ -287,7 +275,7 @@ def main() -> int:
             SOURCES_DIR_1080P,
             OUT_DIR / "1080p" / "digits_red",
             known_limit_values=KNOWN_LIMIT_VALUES_1080P,
-            crop_fn=lambda surf: _crop_cell_for_profile(surf, PROFILE_1920_1080, PROFILE_1920_1080.speed_limit_value_bbox),
+            crop_fn=lambda surf: crop_cell(surf, PROFILE_1920_1080, PROFILE_1920_1080.speed_limit_value_bbox),
             seg=seg_1080,
         )
     else:
