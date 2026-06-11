@@ -284,7 +284,7 @@ Legacy (no `frames`): `_frames_view` None, `_frame_sim_base = 0`, `display_stops
 
 ### Frame selection + swap timing
 
-Active frame = first frame whose global window contains the train (junction = shared boundary belongs to the EARLIER frame). Two synced resolvers: `_FrameWindowMixin._select_frame` (renderer fallback, on `_frames_view` slices) + `LowerDisplay._natural_frame` (manager, on the route closure's `frames`).
+Active frame = first frame whose global window contains the train (junction = shared boundary belongs to the EARLIER frame). Single resolver: `LowerDisplay._natural_frame` (on the route closure's `frames`). The manager pushes the resulting (lag-adjusted) index into the renderer via `set_active_frame`; renderers never derive their own frame.
 
 `LowerDisplay` owns the swap (it sees the view-cycle) and pushes the lagging frame index into the active renderer via `set_active_frame`:
 
@@ -298,7 +298,7 @@ Active frame = first frame whose global window contains the train (junction = sh
 A non-final frame's right edge (the junction) is a continuation, NOT a terminus — but the frame slice makes the renderer read it as the route end. Continuity checks therefore compare the window's GLOBAL position against the FULL route, not the slice:
 
 - 8-station: `route_continues = (_frame_global_lo + last_gi) < len(_full_display_stops) - 1`. Reduces to the original `last_gi < len(display_stops) - 1` for legacy.
-- Full-route: `_frame_continues` forces the tail continuity slot (chevrons) on for a non-final frame.
+- Full-route: `_get_stops_list_disp` sets the tail slot (slot 2 two-row / slot 0 single-row) from the SAME comparison — `_frame_global_lo + window_last < len(_full_display_stops) - 1`. Symmetric with 8-station; no draw-side override.
 - **Drawing fix (8-station)**: when the train stops ON the last visible cell, `draw_times` skips that cell's 分-area, so the continuity triangle would float past the red pentagon. The 分-area bar extension is painted before the pointer (pentagon overdraws it) so the triangle always connects to the route bar.
 
 > **Pending IRL verification**: continuity arrow at the screen-edge / row-end case (full-route chevrons + 8-station triangle) when a frame boundary lands at a row end — see `TODO.md`.

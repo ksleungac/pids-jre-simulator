@@ -107,6 +107,10 @@ Open items surfaced by `/review+fix` that were deferred (not blocking, scope-cre
 
 - [ ] **Frame-swap fire is boundary-aligned only when the junction has transfers** — `displays/train_models/e235_1000/lower_lcd.py:2030` (lens 1, info; rule: DISPLAY.md § Through-Service Display Frames "no mid-page cut"; first flagged 2026-06-10) — The swap fires on `current_time - _swap_arm_time >= _swap_rotation_dur` (elapsed time). For a junction WITH transfers (e.g. 千葉), `_handle_at_station_edge` force-resets `_slot_start = arm_time` on the STOPPING edge, so `arm + rotation_dur` lands exactly on the slot rollover → boundary-aligned, no mid-page cut. But at a junction WITHOUT transfers, TRANSFER isn't force-reset, so the rotation phase is offset and the fire could land mid-page. Deferred because: latent — no current route has a no-transfer junction (1217F's 千葉 has transfers). Fix path if it arises: fire on the next `_tick_cycle` slot rollover at/after `arm + rotation_dur` instead of on raw elapsed time.
 
+### From 2026-06-11 (Fable review of the through-service commit)
+
+- [ ] **`holding_ahead` misreads a backward jump to exactly the junction** — `displays/train_models/e235_1000/lower_lcd.py` `LowerDisplay._update_active_frame` (lens 1, warning; rule: DISPLAY.md § Through-Service "Jump / backward / fast-page → resync to the natural frame"; first flagged 2026-06-11 by Fable review) — The post-fire hold is inferred via `a == natural + 1 and gi == _frames[natural]["to_idx"]`. A backward jump (click / arrow) to EXACTLY the junction (千葉) from the next frame satisfies the same predicate, so the display stays on frame N+1 instead of resyncing to the earlier frame per the contract. Visually coherent (junction is frame N+1's cell 0), preview-only, exact-junction-only. Deferred because: the explicit-`_holding_ahead`-boolean fix adds more state than this edge earns (Simplicity First). Fix path: track the hold with a boolean set at fire, cleared on departure/resync, instead of inferring it.
+
 ---
 
 ## Closed-off paths (don't re-propose)

@@ -22,6 +22,11 @@ import re
 import sys
 from pathlib import Path
 
+# Kanji-bearing issue text (station names, _resolve_frames errors) crashes on
+# cp1252 stdout under a piped/CI run. Reconfigure at entry — same fix as the
+# harness sensors. See conventions.md § Tooling.
+sys.stdout.reconfigure(encoding="utf-8")
+
 SUFFIX_RE = re.compile(r"_[A-Z]{2,}$")
 AUDIO_ROOT = Path("audio")
 DATA_ROOT = Path("data")

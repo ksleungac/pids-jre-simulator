@@ -104,9 +104,14 @@ def _resolve_frames(route_data: dict) -> None:
     lines = json.loads((project_root() / "data" / "lines.json").read_text(encoding="utf-8"))
 
     combined = route_data.get("pre_stops", []) + route_data.get("stops", [])
+    # First-occurrence-wins. Frames assume a LINEAR route: a circular route
+    # (Yamanote — stops[0] == stops[-1], duplicate loop-point name) would
+    # resolve a `to` at the loop terminus to the first copy, tripping the
+    # "last frame must end at the route's final station" check below. Circular +
+    # frames is unsupported (and unneeded — through-service routes are linear).
     name_to_idx: dict = {}
     for i, stop in enumerate(combined):
-        name_to_idx.setdefault(stop.get("name", ""), i)  # first occurrence wins
+        name_to_idx.setdefault(stop.get("name", ""), i)
 
     def _idx(name: str, role: str, fi: int) -> int:
         if name not in name_to_idx:

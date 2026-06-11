@@ -88,18 +88,14 @@ class _FrameWindowMixin:
         self._full_display_stops = self.display_stops
         self._frame_sim_base = 0
         self._active_frame_idx: Optional[int] = None
-        # True when the active frame is followed by another — the route
-        # continues past this frame's right edge (the junction), so the tail
-        # continuity chevrons must render even though the frame window ends here.
-        self._frame_continues = False
         # Global index of the active frame's first cell within the full
         # pre_stops+stops list. Lets continuity checks compare a window's GLOBAL
         # position against the full route instead of the (sliced) frame length.
         self._frame_global_lo = 0
-        # When set (by the LowerDisplay manager, which owns swap timing), the
-        # renderer shows THIS frame instead of deriving from position — lets the
-        # swap stay on the old frame through the junction's page rotation, then
-        # flip. None = standalone fallback (preview without a manager): derive.
+        # The frame to display, pushed every draw by the LowerDisplay manager
+        # (which owns swap timing) via set_active_frame. Lagged on purpose — the
+        # swap stays on the old frame through the junction's page rotation, then
+        # flips. The manager is the sole frame-picker (LowerDisplay._natural_frame).
         self._forced_frame_idx: Optional[int] = None
         frames = self.route_data.get("frames")
         if not frames:
@@ -119,24 +115,6 @@ class _FrameWindowMixin:
         ]
         self._apply_frame(0)
 
-    def _select_frame(self, sim_curr: int) -> Optional[int]:
-        """Active frame index for a sim stop. First frame whose global window
-        contains the train — so a junction (shared boundary) belongs to the
-        EARLIER frame; the view swaps once the train moves past it. The exact
-        swap timing / animation is Phase 3; this is the steady-state rule.
-
-        Same containment rule as ``LowerDisplay._natural_frame`` (which owns swap
-        timing); this one operates on the renderer's ``_frames_view`` slices,
-        that one on the route closure's ``frames``. Keep the two in sync.
-        """
-        if self._frames_view is None:
-            return None
-        gi = sim_curr + len(self.pre_stops)
-        for i, v in enumerate(self._frames_view):
-            if v["lo"] <= gi <= v["hi"]:
-                return i
-        return len(self._frames_view) - 1
-
     def _apply_frame(self, idx: Optional[int]) -> None:
         if self._frames_view is None or idx is None or idx == self._active_frame_idx:
             return
@@ -145,23 +123,19 @@ class _FrameWindowMixin:
         self.display_offset = v["offset"]
         self._frame_sim_base = v["sim_base"]
         self._active_frame_idx = idx
-        self._frame_continues = idx < len(self._frames_view) - 1
         self._frame_global_lo = v["lo"]
         self._relayout()
 
     def set_active_frame(self, idx: Optional[int]) -> None:
-        """Manager hook — force the displayed frame (overrides derivation).
-        No-op effect for legacy routes (``_frames_view`` None)."""
+        """Manager hook — set the frame to display (the manager is the sole
+        frame-picker). No-op effect for legacy routes (``_frames_view`` None)."""
         self._forced_frame_idx = idx
 
     def _frame_indices(self, state) -> Tuple[int, int]:
-        """Apply the active frame (manager-forced if set, else derived from
-        position) and return frame-local (curr, cursor) display indices. For
-        legacy routes this reduces to ``state.curr_stop + display_offset``."""
-        idx = self._forced_frame_idx
-        if idx is None:
-            idx = self._select_frame(state.curr_stop)
-        self._apply_frame(idx)
+        """Apply the manager-forced frame and return frame-local (curr, cursor)
+        display indices. For legacy routes (_apply_frame no-ops) this reduces to
+        ``state.curr_stop + display_offset``."""
+        self._apply_frame(self._forced_frame_idx)
         curr = state.curr_stop - self._frame_sim_base + self.display_offset
         cursor = state.cursor_pos - self._frame_sim_base + self.display_offset
         return curr, cursor
@@ -276,44 +250,51 @@ class JapaneseDisplay(_FrameWindowMixin):
         Operates on ``self.display_stops`` (pre_stops + stops) so a
         through-service pre-route extends the visible journey naturally.
 
-        Side effect: keeps ``self.continuity[2]`` in sync with whether the
-        currently visible window reaches the route's last stop. Without this,
-        the slot-2 chevrons would render past the destination on long routes
-        once the window slides (e.g. Keihin Ofuna).
+        Side effect: keeps the tail continuity slot (``continuity[2]`` two-row /
+        ``continuity[0]`` single-row) in sync with whether the visible window's
+        right edge reaches the GLOBAL route terminus. Frame-aware — a non-final
+        through-service frame's right edge (the junction) is < the full route
+        end, so the chevrons correctly stay on. Without this the slot-2 chevrons
+        would render past the destination on long routes once the window slides
+        (e.g. Keihin Ōfuna).
         """
         if len(self.display_stops) <= self.STOPS_QUANTITY:
-            return list(enumerate(self.display_stops))
-
-        window_start = 0
-        f_stops = self.display_stops[: self.STOPS_QUANTITY]
-
-        # Flip rule: native long routes use early-flip ("remaining < QUANTITY"
-        # so the user sees the end approaching). Routes with an always-passed
-        # prefix use late-flip — keep window at start (so the through-service
-        # prefix remains visible) until the train is forced off the right edge
-        # of the first window. Without this distinction, sobu/1217F (37 cells,
-        # train enters at display idx 18) would flip at boot — hiding
-        # Kurihama..Tokyo from view. Condition is the prefix length (frame-aware
-        # = display_offset), not raw pre_stops, so a frame whose prefix differs
-        # from len(pre_stops) flips correctly.
-        if self.display_offset:
-            should_flip = curr_stop > self.STOPS_QUANTITY - 1
+            window_start = 0
+            f_stops = self.display_stops
         else:
-            remaining = len(self.display_stops) - curr_stop
-            should_flip = 0 < remaining < self.STOPS_QUANTITY
+            window_start = 0
+            f_stops = self.display_stops[: self.STOPS_QUANTITY]
 
-        if should_flip:
-            # Window has slid — visible window now includes the route's last
-            # stop. Suppress slot 2 (no continuity past dest) for non-circular
-            # routes.
-            window_start = len(self.display_stops) - self.STOPS_QUANTITY
-            f_stops = self.display_stops[window_start:]
-            if self.circular != 1:
-                self.continuity[2] = 0
-        elif self.circular != 1 and len(self.display_stops) > 28:
-            # Window hasn't slid yet (or user jumped back to an earlier stop):
-            # there IS more route past the visible window. Restore slot 2.
-            self.continuity[2] = 1
+            # Flip rule: native long routes use early-flip ("remaining < QUANTITY"
+            # so the user sees the end approaching). Routes with an always-passed
+            # prefix use late-flip — keep window at start (so the through-service
+            # prefix remains visible) until the train is forced off the right edge
+            # of the first window. Without this distinction, sobu/1217F frame 0
+            # (train enters at display idx 18) would flip at boot — hiding
+            # Kurihama..Tokyo from view. Condition is the prefix length (frame-
+            # aware = display_offset), not raw pre_stops, so a frame whose prefix
+            # differs from len(pre_stops) flips correctly.
+            if self.display_offset:
+                should_flip = curr_stop > self.STOPS_QUANTITY - 1
+            else:
+                remaining = len(self.display_stops) - curr_stop
+                should_flip = 0 < remaining < self.STOPS_QUANTITY
+
+            if should_flip:
+                window_start = len(self.display_stops) - self.STOPS_QUANTITY
+                f_stops = self.display_stops[window_start:]
+
+        # Tail continuity (chevrons): ON iff the visible window's right edge is
+        # NOT the GLOBAL route terminus. Frame-aware by construction — a non-final
+        # frame's right edge is the junction, whose global index < the full
+        # route's end, so the chevrons correctly stay on. Mirror of the 8-station
+        # `route_continues` predicate; reduces to the legacy window check for
+        # single-frame routes (_frame_global_lo=0, _full_display_stops==display_stops).
+        if self.circular != 1:
+            last_global = self._frame_global_lo + window_start + len(f_stops) - 1
+            route_continues = last_global < len(self._full_display_stops) - 1
+            tail_slot = 2 if len(self.display_stops) > self.per_line else 0
+            self.continuity[tail_slot] = 1 if route_continues else 0
 
         return [(window_start + i, stop) for i, stop in enumerate(f_stops)]
 
@@ -673,16 +654,9 @@ class JapaneseDisplay(_FrameWindowMixin):
         curr_stop, cursor_pos = self._frame_indices(state)
 
         f_stops = self._get_stops_list_disp(curr_stop)
-        # Through-service: a non-final frame's right edge (the junction) is a
-        # continuation, not a terminus. _get_stops_list_disp / _calculate_layout
-        # cleared the tail slot because the frame window ends here; force it back
-        # on so the chevrons show the route continues into the next frame. Tail
-        # slot = row-2 tail (slot 2) when two-row, else row-1 tail (slot 0).
-        if self._frame_continues:
-            if len(self.display_stops) > self.per_line:
-                self.continuity[2] = 1
-            else:
-                self.continuity[0] = 1
+        # Tail continuity (chevrons at the frame's right edge) is set inside
+        # _get_stops_list_disp via the global-terminus comparison — frame-aware,
+        # no draw-side correction needed here.
         self._last_window = f_stops
         x = self.x
         y = self.y
@@ -1982,11 +1956,7 @@ class LowerDisplay:
     def _natural_frame(self, sim_curr: int) -> int:
         """Frame whose global window contains the train (first match — a
         junction belongs to the EARLIER frame). The displayed frame tracks
-        this except while a fired swap holds the next frame at the junction.
-
-        Same containment rule as ``_FrameWindowMixin._select_frame`` (renderer
-        side, on ``_frames_view`` slices); this one is on the route closure's
-        ``frames``. Keep the two in sync."""
+        this except while a fired swap holds the next frame at the junction."""
         gi = sim_curr + self._pre_len
         for i, fr in enumerate(self._frames):
             if fr["from_idx"] <= gi <= fr["to_idx"]:
@@ -2108,11 +2078,11 @@ class LowerDisplay:
         # --- Restart-screen params (adjust freely) ---
         bg_color    = WHITE_BG     # blank fill behind the logo
         logo_height = 90           # logo height in px (width follows aspect)
-        logo_color  = (10, 140, 13)  # JR East green (#0A8C0D)
         # ---------------------------------------------
         # fmt: on
+        # Logo color = draw_jr_logo's canonical default (_JR_LOGO_GREEN in utils).
         pygame.draw.rect(self.screen, bg_color, pygame.Rect(0, 0, S_WIDTH, S_HEIGHT))
-        draw_jr_logo(self.screen, S_WIDTH // 2, S_HEIGHT // 2, logo_height, logo_color)
+        draw_jr_logo(self.screen, S_WIDTH // 2, S_HEIGHT // 2, logo_height)
 
     def hit_test(self, mx: int, my: int) -> Optional[int]:
         """Dispatch a click in LCD-local coords to the active renderer's hit_test.
