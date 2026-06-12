@@ -151,9 +151,11 @@ When working through user-stated logic, reason strictly in the vocabulary and fr
 
 **Why:** Imported context shifts the frame off the user's logic. Examples:
 - (2026-05-02) Reached conclusion via "opaque badge paints over text"; user never mentioned opacity. User: *"just dead logic to follow."*
+- (2026-06-12) "the dot is obstructing" → resolved "dot" to the rendered marker dot (I'd just merged the m0/d0 dots, so that frame was top-of-mind) and built a hide-toggle; user meant the editor drag handle. Built + reverted the wrong fix.
 
 **How to apply:**
 - If a justification uses vocabulary the user didn't introduce, stop and ask.
+- An ambiguous referent + about to implement → confirm WHICH referent before building. Don't resolve it toward your own recent work — that's the anchor that makes the wrong reading feel obvious.
 
 ### Scope-expansion guard
 When the user states a rule with a scope phrase ("also applies to all", "everywhere"), apply it ONLY to the axis the prior sentence was about. If extension to a sibling axis is plausible, ask.

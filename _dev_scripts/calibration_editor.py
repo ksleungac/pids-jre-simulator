@@ -97,13 +97,17 @@ _REGISTRY = {
         "dicts": [
             ("displays.train_models.e235_0.lower_lcd", "_TUNEABLES_FIVE_STATION"),
         ],
-        # Draggable handles: m<N>=circle markers (white), g<N>=badge+name
-        # group anchors (cyan). Both absolute x/y pairs. Grabbing either selects
-        # station N → the panel filters to that station's keys (`^[mg]N_`).
+        # Draggable handles: m<N>=circle markers (white; m0 = the station-0
+        # dot), g<N>=badge+name group anchors (cyan), v<N>=the station-0
+        # free-polygon vertices (red). All absolute x/y pairs. Grabbing an m/g
+        # handle selects station N → the panel filters to that station's keys
+        # (`^[mg]N_`); v grabs DON'T re-select (they're vertices, not stations
+        # — `select_prefixes` scopes the per-station reselection).
         "waypoints": {
             "dict": ("displays.train_models.e235_0.lower_lcd", "_TUNEABLES_FIVE_STATION"),
-            "prefixes": ["m", "g"],
+            "prefixes": ["m", "g", "v"],
             "per_station": True,
+            "select_prefixes": ["m", "g"],
         },
     },
 }
@@ -135,9 +139,17 @@ _candidate_state: dict = {}
 # MOUSEBUTTONDOWN over a handle; cleared on MOUSEBUTTONUP. While set,
 # MOUSEMOTION updates the underlying `arc_pN_x` / `arc_pN_y` values.
 _dragging_waypoint: Optional[tuple] = None  # (prefix, idx) of dragged handle, or None
-_HANDLE_HIT_R = 12  # Figma-style generous hit radius (px)
-_HANDLE_VISUAL_R = 5  # visible filled circle radius
-_HANDLE_VISUAL_R_DRAG = 7  # enlarged while dragging
+# Grab offset (wp - mouse) captured at mousedown so dragging is relative —
+# without it, the generous hit radius makes every grab snap the waypoint to
+# the click point (position drifts just by clicking a handle).
+_drag_grab_offset: tuple = (0, 0)
+# `H` toggles handle visibility — even hollow rings sit on top of the element
+# being judged; hide them for a clean look at the render. Hidden handles are
+# also inert to grabs (click falls through to element focus).
+_handles_visible: bool = True
+_HANDLE_HIT_R = 12  # Figma-style generous hit radius (px) — grab area, NOT visual
+_HANDLE_ARM = 6  # crosshair arm half-length (px) — small + open-centre
+_HANDLE_ARM_DRAG = 8  # crosshair arm half-length while dragging
 
 # Reference-image overlay (--overlay flag). Set once via set_overlay() at
 # launch; rendered on top of LCD A's lower-LCD area at _OVERLAY_ALPHA when
@@ -180,7 +192,7 @@ def enter_edit_mode(sim) -> None:
     pygame.key.set_repeat(400, 50)
     print("[calibration] Edit mode ON. Click DEST_RECT on upper LCD to focus.")
     print("[calibration] Up/Down select  Left/Right nudge  Shift+Arrow +-10  R reset  Ctrl+S save  ESC quit")
-    print("[calibration] M=cycle mode (kanji/furigana/english)  L=sync mode to focused dict  [=prev stop  ]=next stop")
+    print("[calibration] M=cycle mode (kanji/furigana/english)  L=sync mode to focused dict" "  [=prev stop  ]=next stop  H=toggle drag handles")
 
 
 def _snapshot_originals() -> None:
@@ -263,7 +275,7 @@ def get_focused_target() -> Optional[str]:
 
 def handle_event(event, sim) -> bool:
     """Dispatch a pygame event. Returns True if absorbed."""
-    global _should_quit, _dragging_waypoint, _overlay_dragging
+    global _should_quit, _dragging_waypoint, _drag_grab_offset, _handles_visible, _overlay_dragging
     global _overlay_drag_mouse_start, _overlay_drag_offset_start
     global _overlay_offset_x, _overlay_offset_y, _overlay_scale
     global _overlay_visible, _selected_station
@@ -284,13 +296,22 @@ def handle_event(event, sim) -> bool:
         wp_idx = _arc_waypoint_at_pos(event.pos)
         if wp_idx is not None:
             _dragging_waypoint = wp_idx
+            # Relative drag: remember where on the handle the grab landed so
+            # the waypoint doesn't snap to the click point (QOL 2026-06-12).
+            for p, idx, px, py in _arc_waypoints():
+                if (p, idx) == wp_idx:
+                    _drag_grab_offset = (px - event.pos[0], py - event.pos[1])
+                    break
             # Grabbing a station's handle selects it → panel filters to it.
+            # `select_prefixes` (when present) restricts which prefixes count as
+            # a station handle — vertex/dot grabs (v/d) leave the filter alone.
             wp = _focused_waypoint_cfg() or {}
             if wp.get("per_station"):
-                _selected_station = wp_idx[1]
-                _rebuild_param_rows()
+                select_prefixes = wp.get("select_prefixes")
+                if select_prefixes is None or wp_idx[0] in select_prefixes:
+                    _selected_station = wp_idx[1]
+                    _rebuild_param_rows()
             _focus_waypoint_row(wp_idx)
-            _apply_waypoint_drag(event.pos)
             return True
         return _on_click(event.pos, sim)
     if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
@@ -302,6 +323,7 @@ def handle_event(event, sim) -> bool:
             return True
         if _dragging_waypoint is not None:
             _dragging_waypoint = None
+            _drag_grab_offset = (0, 0)
             return True
         return False
     if event.type == pygame.MOUSEMOTION:
@@ -367,6 +389,10 @@ def handle_event(event, sim) -> bool:
             _overlay_visible = not _overlay_visible
             print(f"[calibration] Overlay {'ON' if _overlay_visible else 'OFF'}")
             _save_overlay_state()
+            return True
+        if event.key == pygame.K_h:
+            _handles_visible = not _handles_visible
+            print(f"[calibration] Handles {'ON' if _handles_visible else 'OFF (H to restore; grabs disabled)'}")
             return True
         # Alt + = / - → zoom overlay (laptop keyboard fallback for wheel).
         # Step matches the wheel: 5% per press, clamped 0.1×..10×.
@@ -450,13 +476,21 @@ def _ensure_fonts() -> None:
 
 def _rebuild_param_rows() -> None:
     """Rebuild _param_rows for the focused element, honoring the per-station
-    filter when one is active. Call after focus or selected-station changes."""
-    global _param_rows
+    filter when one is active. Call after focus or selected-station changes.
+
+    Clamps _focused_row — row counts differ across stations (e.g. station 0
+    carries `m0_a`), so a focus index valid before the rebuild can point past
+    the new list."""
+    global _param_rows, _focused_row
     if _focused_element is None:
         _param_rows = []
+        _focused_row = 0
         return
     cfg = _REGISTRY[_focused_element]
     _param_rows = _build_param_rows(cfg["dicts"], cfg.get("waypoints"), _selected_station)
+    if _focused_row >= len(_param_rows):
+        _focused_row = max(0, len(_param_rows) - 1)
+    _ensure_focused_visible()
 
 
 def _on_click(pos, sim) -> bool:
@@ -1053,6 +1087,8 @@ def _arc_waypoint_at_pos(pos) -> Optional[tuple]:
     """
     if _focused_waypoint_cfg() is None:
         return None
+    if not _handles_visible:
+        return None  # hidden handles are inert — clicks fall through to focus
     mx, my = pos
     r_sq = _HANDLE_HIT_R * _HANDLE_HIT_R
     for p, idx, px, py in _arc_waypoints():
@@ -1081,7 +1117,8 @@ def _focus_waypoint_row(handle: tuple) -> None:
 
 
 def _apply_waypoint_drag(pos) -> None:
-    """Write mouse pos into `arc_p<idx>_x` / `_y` for the dragged waypoint.
+    """Write mouse pos (plus the mousedown grab offset) into `arc_p<idx>_x`
+    / `_y` for the dragged waypoint.
 
     Live update — band reshapes next frame. Scratch saved per motion so a
     crash mid-drag doesn't lose the new position.
@@ -1101,34 +1138,52 @@ def _apply_waypoint_drag(pos) -> None:
     y_key = f"{p}{idx}_y"
     if x_key not in t or y_key not in t:
         return
-    t[x_key] = int(pos[0])
-    t[y_key] = int(pos[1])
+    t[x_key] = int(pos[0] + _drag_grab_offset[0])
+    t[y_key] = int(pos[1] + _drag_grab_offset[1])
     _save_scratch()
 
 
 def _draw_arc_polyline_preview(screen) -> None:
-    """Figma-style filled grab handles at each waypoint.
+    """Small open-crosshair grab handles at each waypoint.
 
     Renders only when arc element is focused (caller-gated). The smooth
     Catmull-Rom band IS the preview — straight-line connector dropped
     (would visibly diverge from the rendered curve). Handles use a generous
-    hit radius (_HANDLE_HIT_R) but a smaller visible circle so they don't
-    crowd the band. Dragged handle enlarges + recolors for feedback.
+    hit radius (_HANDLE_HIT_R) but a small, OPEN-centre crosshair visual so
+    the point being aligned (and any element underneath) stays visible.
     """
-    # Per-prefix fill so the user distinguishes handle sets (m=white circles,
-    # b=cyan group anchors). Dragged handle enlarges + recolors.
-    prefix_fill = {"m": (245, 245, 250), "b": (90, 210, 230)}
-    border = (40, 40, 50)
-    drag_fill = (120, 200, 255)
+    if not _handles_visible:
+        return
+    # All handles render as small OPEN crosshairs — least obstructive: the open
+    # centre keeps the point being aligned against the overlay visible (and, for
+    # m-handles, the countdown digit underneath — a filled/ring centre made
+    # digit-size calibration impossible, user-flagged 2026-06-12), while the
+    # thin arms cover almost nothing. The grab area (_HANDLE_HIT_R) is unchanged,
+    # so the small visual doesn't make handles harder to catch.
+    #
+    # CONTRASTIVE: each arm is TWO-TONE — a dark casing under a bright core — so
+    # it reads against ANY backdrop (a single colour can't: red vertices vanish
+    # on the red marker, white m-handles on the white disks). On light surfaces
+    # the dark casing carries the contrast; on dark/coloured ones the bright
+    # core does. Per-prefix core colour still distinguishes the sets (m=white
+    # markers/dot, b=cyan group anchors, v=red polygon vertices); dragged handle
+    # grows its arms + cores blue.
+    prefix_color = {"m": (245, 245, 250), "b": (90, 210, 230), "v": (255, 90, 90)}
+    drag_color = (120, 200, 255)
+    casing = (15, 15, 20)  # near-black underlay → contrast on light surfaces
+    gap = 2  # clear centre radius — keeps the target pixel + neighbourhood open
     for p, idx, px, py in _arc_waypoints():
         is_dragging = (p, idx) == _dragging_waypoint
-        r = _HANDLE_VISUAL_R_DRAG if is_dragging else _HANDLE_VISUAL_R
-        fill = drag_fill if is_dragging else prefix_fill.get(p, (245, 245, 250))
-        # Yellow ring around the selected station's handles (both m + g).
+        arm = _HANDLE_ARM_DRAG if is_dragging else _HANDLE_ARM
+        color = drag_color if is_dragging else prefix_color.get(p, (245, 245, 250))
+        # Thin yellow ring around the selected station's handles.
         if idx == _selected_station:
-            pygame.draw.circle(screen, (255, 210, 60), (px, py), r + 4, 2)
-        pygame.draw.circle(screen, fill, (px, py), r)
-        pygame.draw.circle(screen, border, (px, py), r, 1)
+            pygame.draw.circle(screen, (255, 210, 60), (px, py), arm + 2, 1)
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            a_pt = (px + dx * gap, py + dy * gap)
+            b_pt = (px + dx * arm, py + dy * arm)
+            pygame.draw.line(screen, casing, a_pt, b_pt, 3)
+            pygame.draw.line(screen, color, a_pt, b_pt, 1)
 
 
 def _draw_polar_spoke(screen, color, cx: int, cy: int, length: int, angle_deg: float) -> None:

@@ -21,6 +21,19 @@ a real-world ground truth photo provided by the user.
 
 ## Workflow
 
+### Step 0: Full-view inventory (multi-element work)
+When the task spans more than one element, start wide before going deep:
+
+1. **Full view first** — render the whole LCD + the whole reference, list every
+   element that's off (and which lower view / mode it lives in — captures the
+   "wrong view screenshotted" class of error before any tuning).
+2. **Discuss the list with the user** — agree which elements to fix and in what
+   order before touching code.
+3. **Per element: zoom the reference crop** — eyeball at 6–8× magnification of
+   the relevant reference region, not the full-res photo. Corner geometry, halo
+   widths, dot placements only become readable zoomed. (User-proposed flow,
+   2026-06-12 pentagon round.)
+
 ### Step 1: Get ground truth
 Ask the user for a reference screenshot if they haven't provided one.
 Study it carefully — note font sizes, spacing, alignment, colors, margins.
@@ -72,6 +85,12 @@ see "Side-by-side composites" below.
   take screenshots and compare against ground truth yourself. Don't ask the user to
   review every intermediate screenshot — iterate autonomously until it looks right,
   then present the final result. Only show intermediates if the user specifically asks.
+  **Stop criterion for shape work:** when iterating a SHAPE (not just a position)
+  against a photo reference, add a numeric check — red/colored-mask IoU or XOR
+  fringe between normalized render and reference crops. When the residual is a
+  1–2px uniform fringe, you've hit the photo's JPEG-blur noise floor — stop
+  iterating; further "fixes" chase compression artifacts. (2026-06-12 pentagon:
+  filled-mask IoU 0.865 on a 46px shape ≈ noise floor.)
 - **When the user IS in the loop, don't re-read the PNG.** The previous rule covers
   claude-alone iteration against fixed ground truth. The opposite mode — user providing
   rapid feedback ("color bar wider", "stroke 2px narrower", "10px more gap") — has the
@@ -147,10 +166,17 @@ When writing or adjusting layout code:
    large for the container, they should see the overflow — that's their signal to
    tune the value.
 
-5. **Discuss alignment approach before coding**: before writing a new element,
-   briefly describe the intended reactive behaviour (e.g. "text group centered
-   vertically in the white interior, both rows horizontally centered on the same
-   axis") and confirm with the user. Saves back-and-forth on the wrong layout model.
+5. **Confirm each param's reactivity before coding — including coupling to OTHER
+   elements**: before writing a new element or wiring a tuneable, describe the
+   intended reactive behaviour (e.g. "text group centered vertically in the white
+   interior") AND name what derives from what across elements — "digit size =
+   ratio × circle radius (changes when you resize the circle)" vs "digit size =
+   its own param". Confirm with the user per relationship. A silently-coupled
+   param surprises the user mid-tuning; a silently-independent one forces them to
+   eyeball N copies of the same proportion. (2026-06-12: 5-station countdown
+   digit was hard-derived from circle radius at a guessed ratio — one circle fit,
+   another broke; the derive-or-independent question belonged up front.) Saves
+   back-and-forth on the wrong layout model.
 
 ## Preview Script Reference
 

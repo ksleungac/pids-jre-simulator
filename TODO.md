@@ -51,6 +51,7 @@ The chrome i18n foundation shipped 2026-04-29 evening: `i18n.py`, language picke
 ## Housekeeping (small, do-when-you-touch-the-area)
 
 - [ ] **Re-grab `passing_en.png` at native 2560×1440.** Current capture is 2559×1439 — pygame blit handles it, classifier diff=0.00, but a clean re-capture is tidier.
+- [ ] **Full-route numbered-circle digit centering.** The 5-station view's `_draw_numbered_circle` now centers digits on ink bounds (baseline + glyph metrics); `CircularFullRouteDisplay`'s copy still box-centers (digits park ~1.5px low). Apply the same fix if it reads off there too. (2026-06-12.)
 - [ ] **Migrate live commit gate to the hardened `commit_gate.py`.** `.claude/settings.json` still uses the old spoofable inline-bash gate (`CLAUDE_COMMIT_VIA_SKILL=1` substring match); the `init-memory-loop` package moved past this to a preflight-file marker via `.claude/hooks/commit_gate.py` back at the 2026-05-15 revision — the live repo never adopted its own fix. Port the package's `commit_gate.py` + preflight-marker flow back into this project. (Surfaced 2026-06-09 during the harness-package port.)
 
 ---

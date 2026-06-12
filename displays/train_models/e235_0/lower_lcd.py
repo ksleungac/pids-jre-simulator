@@ -161,22 +161,36 @@ def _bake_band(color) -> pygame.Surface:
 # Badge sub-fonts derive from b; the minute digit derives from r (no extra knobs).
 # fmt: off
 _TUNEABLES_FIVE_STATION = {
-    # station 0 — current stop (red pentagon); m0_a = apex angle in degrees
-    # (0=right, -90=up, -125≈aim at station 1). CCW-negative, screen y-down.
-    "m0_x": 458, "m0_y": 363, "m0_r": 24, "m0_a": -125,
-    "g0_x": 526, "g0_y": 350, "g0_b": 42, "g0_ns": 48, "g0_ni": 44,
-    # station 1
-    "m1_x": 408, "m1_y": 292, "m1_r": 22,
-    "g1_x": 476, "g1_y": 288, "g1_b": 38, "g1_ns": 46, "g1_ni": 38,
+    # station 0 — current stop (red stopping marker). FREE POLYGON: the
+    # marker is drawn at one fixed slot + fixed orientation (only ever at
+    # k==0; the 5-station view re-centres on the current stop), so there is NO
+    # parametric shape model — the five vertices v0..v4 ARE the shape,
+    # hand-placed against lcd_references/E2350.png via the editor's drag
+    # handles. Order = polygon winding: v0=apex, v1=shoulder R, v2=back R,
+    # v3=back L, v4=shoulder L. m0_x/m0_y = the white dot centre (its own drag
+    # handle) AND the index-0 anchor the m-prefix handle scan needs to reach
+    # m1..m4; m0_dr = dot radius (px). Breath scales the polygon about its
+    # centroid; halo is a uniform edge-normal offset. To reshape: drag the
+    # v-handles — no knobs, no math.
+    "m0_x": 458, "m0_y": 360, "m0_dr": 9,
+    "v0_x": 444, "v0_y": 333, "v1_x": 475, "v1_y": 335, "v2_x": 498, "v2_y": 371,
+    "v3_x": 447, "v3_y": 396, "v4_x": 428, "v4_y": 356,
+    "g0_x": 526, "g0_y": 350, "g0_b": 42, "g0_ns": 46, "g0_ni": 39,
+    # station 1 — m<N>_ts = countdown digit point size. Deliberately
+    # PER-STATION params, NOT a radius-derived formula — tuned by eye and
+    # kept explicit per user call (2026-06-12). Don't fold into a scale law
+    # unless the user asks.
+    "m1_x": 414, "m1_y": 292, "m1_r": 22, "m1_ts": 33,
+    "g1_x": 481, "g1_y": 288, "g1_b": 38, "g1_ns": 44, "g1_ni": 37,
     # station 2
-    "m2_x": 350, "m2_y": 240, "m2_r": 19,
-    "g2_x": 409, "g2_y": 228, "g2_b": 34, "g2_ns": 41, "g2_ni": 34,
+    "m2_x": 357, "m2_y": 241, "m2_r": 19, "m2_ts": 29,
+    "g2_x": 416, "g2_y": 229, "g2_b": 34, "g2_ns": 40, "g2_ni": 31,
     # station 3
-    "m3_x": 285, "m3_y": 198, "m3_r": 17,
-    "g3_x": 334, "g3_y": 178, "g3_b": 29, "g3_ns": 32, "g3_ni": 32,
+    "m3_x": 293, "m3_y": 200, "m3_r": 17, "m3_ts": 26,
+    "g3_x": 339, "g3_y": 180, "g3_b": 29, "g3_ns": 32, "g3_ni": 32,
     # station 4 — farthest ahead
-    "m4_x": 219, "m4_y": 167, "m4_r": 15,
-    "g4_x": 256, "g4_y": 146, "g4_b": 25, "g4_ns": 28, "g4_ni": 28,
+    "m4_x": 225, "m4_y": 167, "m4_r": 15, "m4_ts": 20,
+    "g4_x": 262, "g4_y": 146, "g4_b": 25, "g4_ns": 28, "g4_ni": 28,
 }
 # fmt: on
 
@@ -1181,13 +1195,16 @@ class JapaneseFiveStationDisplay:
                 if not (0 <= idx < len(self.stops)):
                     continue
                 stop = self.stops[idx]
-                radius = t[f"m{k}_r"]
                 gpos = (t[f"g{k}_x"], t[f"g{k}_y"])  # badge+name group anchor
                 # Marker on the band first, then the badge + name group.
                 if k == 0:
-                    self._draw_pentagon(pos, radius, angle_deg=t["m0_a"])
+                    verts = [(t[f"v{j}_x"], t[f"v{j}_y"]) for j in range(5)]
+                    self._draw_pentagon(verts, (t["m0_x"], t["m0_y"]), t["m0_dr"])
                 elif k - 1 < len(minutes):
-                    digit_font = self._font("HelveticaNeue-Bold.otf", radius * 0.82)
+                    # Digit size = per-station tuneable m<N>_ts (eyeball pass;
+                    # radius→size law to be derived from the tuned values).
+                    radius = t[f"m{k}_r"]
+                    digit_font = self._font("HelveticaNeue-Bold.otf", t[f"m{k}_ts"])
                     self._draw_numbered_circle(pos, minutes[k - 1], radius, digit_font)
                 self._draw_jy_badge(stop, gpos, t[f"g{k}_b"])
                 self._draw_station_name(stop.get("name", ""), gpos, t[f"g{k}_ns"], t[f"g{k}_ni"])
@@ -1222,83 +1239,129 @@ class JapaneseFiveStationDisplay:
         r = int(radius)
         pygame.gfxdraw.filled_circle(self.screen, cx, cy, r, disk_color)
         pygame.gfxdraw.aacircle(self.screen, cx, cy, r, disk_color)
+        # Centre the digit's INK on (cx, cy), not its rendered surface box: the
+        # surface is a full font line-height tall and the font's ascent gap
+        # above a digit exceeds its descent gap below, so box-centring parks the
+        # digit low (~1.5px at the largest circle). Place by baseline + glyph
+        # metrics instead — exact across all four circle sizes.
         img = font.render(str(minutes), True, DARK_BG)
-        self.screen.blit(img, img.get_rect(center=(cx, cy)))
+        glyphs = [g for g in font.metrics(str(minutes)) if g]
+        maxy = max(g[3] for g in glyphs)  # ink extent above baseline (cap height)
+        miny = min(g[2] for g in glyphs)  # below baseline (~0 for digits)
+        top = cy + (maxy + miny) / 2.0 - font.get_ascent()
+        self.screen.blit(img, (cx - img.get_width() / 2.0, top))
 
-    def _draw_pentagon(self, pos: Tuple[int, int], radius: int, angle_deg: float = 0.0) -> None:
-        """Red pentagon at current stop, apex pointing in `angle_deg` (degrees,
-        0=right, -90=up; CCW-negative in screen y-down space), with uniform-scale
-        breathing animation + pulsing glow. Sized by `radius` (= the marker's
-        `m0_r`), so it scales with the editor; angle comes from `m0_a`.
+    @staticmethod
+    def _offset_convex_poly(points, d: float):
+        """Uniform outward offset of a convex polygon: every edge moves `d` px
+        along its outward normal, corners re-intersected (miter join). Gives a
+        constant-width halo regardless of shape asymmetry or rotation — a
+        uniform SCALE can't (offset would vary with each edge's distance from
+        center), and an x-shift smear can't (width varies with edge direction).
+        """
+        n = len(points)
+        ccx = sum(p[0] for p in points) / n
+        ccy = sum(p[1] for p in points) / n
+        edges = []
+        for i in range(n):
+            (x0, y0), (x1, y1) = points[i], points[(i + 1) % n]
+            ex, ey = x1 - x0, y1 - y0
+            length = math.hypot(ex, ey) or 1.0
+            nx, ny = ey / length, -ex / length
+            # Flip the normal if it points toward the centroid.
+            mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+            if (mx + nx - ccx) ** 2 + (my + ny - ccy) ** 2 < (mx - ccx) ** 2 + (my - ccy) ** 2:
+                nx, ny = -nx, -ny
+            edges.append((x0 + nx * d, y0 + ny * d, ex, ey))
+        out = []
+        for i in range(n):
+            # Intersect offset edge i-1 with offset edge i (lines, param form).
+            ax, ay, aex, aey = edges[i - 1]
+            bx, by, bex, bey = edges[i]
+            den = aex * bey - aey * bex
+            if abs(den) < 1e-9:  # parallel edges — fall back to edge start
+                out.append((bx, by))
+                continue
+            s = ((bx - ax) * bey - (by - ay) * bex) / den
+            out.append((ax + aex * s, ay + aey * s))
+        return out
 
-        Copied from CircularFullRouteDisplay._draw_pentagon (breathing pattern);
-        the horizontal apex is rotated by the configured angle.
+    def _draw_pentagon(
+        self,
+        vertices: List[Tuple[int, int]],
+        dot: Tuple[int, int],
+        dot_r: int,
+    ) -> None:
+        """Red stopping marker — a freely-placed polygon, with uniform-scale
+        breathing animation + pulsing glow + a white dot.
+
+        No parametric shape model: this marker is only ever drawn at one fixed
+        slot and one fixed orientation (k==0 in the 5-station view, which
+        re-centres on the current stop), so the `vertices` ARE the shape —
+        hand-placed against lcd_references/E2350.png via the calibration
+        editor's drag handles (keys v0..v4). `dot` is the white dot centre
+        (handle d0) and `dot_r` its radius (m0_dr). The earlier home-plate +
+        knobs (heading / side-length / right-tilt / cap) model was dropped: it
+        couldn't represent the photographed shape, and a free polygon makes
+        any pentagon reachable — see conventions / the 2026-06-12 third-man.
+
+        Breath scales the polygon about its centroid; the halo is a true
+        uniform edge-normal offset via `_offset_convex_poly`; the dot does NOT
+        breathe (stays put while the red body pulses). Glow + breath pattern
+        share the CircularFullRouteDisplay pentagon's feel.
         """
         # fmt: off
-        # --- Pentagon static params (adjust freely; all scale with `radius`) ---
-        rect_half_w_back     = radius * 1.24       # flat-back half-width
-        rect_half_w_apex     = radius * 1.24 - 1   # apex-side half-width
-        triangle_d           = radius * 0.24       # apex extension
-        inner_dot_r          = max(2, int(radius * 0.3))
-        halo_offset          = 3
-        breath_period_s      = 1.2
-        breath_min_scale     = 0.82                # body shrinks to this of max
-        glow_max_r           = radius * 1.8        # peak radius of the pulsing glow
-        glow_alpha           = 70                  # peak glow opacity
-        # ----------------------------------------------------------------------
+        # --- Pentagon static params (adjust freely) ---
+        halo_w           = 3      # uniform white halo width (px, edge-normal)
+        breath_period_s  = 1.2
+        breath_min_scale = 0.82   # body shrinks to this of max
+        glow_reach_mult  = 1.8    # peak glow radius = polygon reach × this
+        glow_alpha       = 70     # peak glow opacity
+        # ----------------------------------------------
         # fmt: on
-        cx, cy = pos
-
-        half_h_max = radius
-        scale_min = breath_min_scale
+        n = len(vertices)
+        ccx = sum(v[0] for v in vertices) / n
+        ccy = sum(v[1] for v in vertices) / n
+        reach = max(math.hypot(v[0] - ccx, v[1] - ccy) for v in vertices)
 
         t_seconds = pygame.time.get_ticks() / 1000.0
         cycle = (t_seconds / breath_period_s) % 1.0
         phase = 1 - 2 * cycle if cycle < 0.5 else 2 * cycle - 1
-        scale = scale_min + (1.0 - scale_min) * phase
+        scale = breath_min_scale + (1.0 - breath_min_scale) * phase
 
         # Pulsing red glow halo behind the marker — fades out as it expands,
         # synced to the breath phase (brightest when the body is largest).
-        glow_r = int(glow_max_r * (0.6 + 0.4 * phase))
+        glow_r = int(reach * glow_reach_mult * (0.6 + 0.4 * phase))
         a = int(glow_alpha * phase)
         if a > 0 and glow_r > 0:
             glow = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
             pygame.gfxdraw.filled_circle(glow, glow_r, glow_r, glow_r, (*self.contrast_color, a))
-            self.screen.blit(glow, (int(cx) - glow_r, int(cy) - glow_r))
+            self.screen.blit(glow, (int(ccx) - glow_r, int(ccy) - glow_r))
 
-        # Apex-right base geometry, then rotate so the apex aims at angle_deg.
-        rect_left_x = cx - rect_half_w_back
-        rect_right_x = cx + rect_half_w_apex
-        apex_x = rect_right_x + triangle_d
-        max_points = [
-            (rect_left_x, cy - half_h_max),
-            (rect_left_x, cy + half_h_max),
-            (rect_right_x, cy + half_h_max),
-            (apex_x, cy),
-            (rect_right_x, cy - half_h_max),
-        ]
-        ang = math.radians(angle_deg)
-        ca, sa = math.cos(ang), math.sin(ang)
-        max_points = [(cx + (px - cx) * ca - (py - cy) * sa, cy + (px - cx) * sa + (py - cy) * ca) for (px, py) in max_points]
+        max_points = list(vertices)
+        red_points = [(ccx + (px - ccx) * scale, ccy + (py - ccy) * scale) for (px, py) in max_points]
 
-        red_points = [(cx + (px - cx) * scale, cy + (py - cy) * scale) for (px, py) in max_points]
-
-        draw_aapolygon(self.screen, PASSED_COLOR, [(i - halo_offset, j) for (i, j) in max_points])
-        draw_aapolygon(self.screen, PASSED_COLOR, [(i + halo_offset, j) for (i, j) in max_points])
-        draw_aapolygon(self.screen, PASSED_COLOR, max_points)
+        # White halo = max outline dilated by halo_w (uniform width on every
+        # edge at any rotation). Filled, so it also backs the breathing red.
+        draw_aapolygon(self.screen, PASSED_COLOR, self._offset_convex_poly(max_points, halo_w))
         draw_aapolygon(self.screen, self.contrast_color, red_points)
-        pygame.gfxdraw.filled_circle(self.screen, int(cx), int(cy), inner_dot_r, PASSED_COLOR)
-        pygame.gfxdraw.aacircle(self.screen, int(cx), int(cy), inner_dot_r, PASSED_COLOR)
+        dot_x, dot_y = int(dot[0]), int(dot[1])
+        inner_dot_r = max(2, int(dot_r))
+        pygame.gfxdraw.filled_circle(self.screen, dot_x, dot_y, inner_dot_r, PASSED_COLOR)
+        pygame.gfxdraw.aacircle(self.screen, dot_x, dot_y, inner_dot_r, PASSED_COLOR)
 
     def _draw_jy_badge(self, stop: Dict, gpos: Tuple[int, int], size: float) -> None:
         """Station-number badge (e.g. JY29), left-center anchored at the group
         anchor. Square, side `size`.
 
-        Uses the shared `draw_station_code_badge` with the SAME params as the
-        upper-LCD badge, scaled by size/68 (the upper badge is 68px), so the
-        look is identical across both LCDs — black frame, route-color ring,
-        Frutiger face (fixed in the helper). No code_3 band: the IRL Yamanote
-        stopping-view badges are number-only.
+        Uses the shared `draw_station_code_badge` with the upper-LCD param
+        set, but as the NO-black-ring variation (IRL the 5-station badges
+        have the route-color frame running to the badge edge, same as the
+        e235_1000 8-station mini-badge). Scale reference is 54px — the upper
+        badge's 68px minus its 2x7px black ring — so at the same tuned size
+        the color ring / interior / text grow to fill the removed ring's
+        space. Frutiger face fixed in the helper. No code_3 band: the IRL
+        Yamanote stopping-view badges are number-only.
         """
         sta_code = stop.get("sta_code")
         if not sta_code:
@@ -1306,7 +1369,7 @@ class JapaneseFiveStationDisplay:
         b = int(size)
         bx = int(gpos[0])
         by = int(gpos[1]) - b // 2
-        s = b / 68.0  # scale from the upper-LCD 68 px badge reference
+        s = b / 54.0  # scale from the upper-LCD badge minus its black ring (68 - 2*7)
         draw_station_code_badge(
             self.screen,
             bx,
@@ -1317,10 +1380,10 @@ class JapaneseFiveStationDisplay:
             self.color,
             prefix_size=18 * s,
             num_size=22 * s,
-            ring_black=max(1, round(7 * s)),
+            ring_black=0,
             ring_color=max(1, round(7 * s)),
-            outer_radius=max(1, round(8 * s)),
-            color_radius=max(1, round(4 * s)),
+            outer_radius=max(1, round(6 * s)),
+            color_radius=max(1, round(6 * s)),
             text_gap=max(1, round(3 * s)),
             prefix_x_offset=1,
         )
