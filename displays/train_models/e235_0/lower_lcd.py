@@ -26,6 +26,7 @@ import math
 from typing import Dict, List, Optional, Tuple
 import pygame
 import pygame.gfxdraw
+import pygame.surfarray
 
 from app_paths import project_root
 from constants import (
@@ -42,7 +43,13 @@ from displays.train_models.e235_0 import (
     DARK_BG,
     WHITE_BG,
 )
-from displays.utils import arrow_points, draw_1col_text_plain, draw_aapolygon
+from displays.utils import (
+    arrow_points,
+    draw_1col_text_plain,
+    draw_aapolygon,
+    draw_station_code_badge,
+    draw_text_given_width,
+)
 from displays.train_models.e235_1000.lower_lcd import (
     LowerDisplay as E235_1000_LowerDisplay,
 )
@@ -102,6 +109,76 @@ _ARC_STATION_SLOTS = (1, 2, 3, 4, 5)
 # editor doesn't need pixel-tight bounding since the arc is the only thing
 # on the lower LCD in Phase 1.
 ARC_RECT = pygame.Rect(0, UPPER_HEIGHT, S_WIDTH, S_HEIGHT - UPPER_HEIGHT)
+
+
+# =============================================================================
+# Five-station band — Tier-2 mask PNG (WIP_calibration_editor.md § "Two-tier
+# tuning model"). The band shape is hand-drawn white-on-transparent in
+# Photoshop (pixel-precise, not parametric) and shipped under data/. At
+# __init__ it is tinted with the route line color via an alpha-stencil bake:
+# the mask's ALPHA is the only coverage source; RGB is forced white then
+# multiplied by the color, so anti-aliased / non-255 edge pixels can't darken
+# the result. This supersedes the Catmull-Rom arc machinery above (retired —
+# removed at the master-port together with the calibration-editor drag handles).
+# =============================================================================
+
+_BAND_MASK_PATH = project_root() / "data" / "e235_0" / "five_station_band.png"
+
+# Pixels whose min RGB channel is >= this are treated as the band's white FILL
+# and recolored to the route line color. Anything below (e.g. the hand-drawn
+# grey outline hugging the band edge) is left at its drawn RGB — rendered as-is.
+_BAND_FILL_MIN = 190
+
+
+def _bake_band(color) -> pygame.Surface:
+    """Tint the band mask's white FILL with `color`, preserving everything else.
+
+    Only near-white opaque pixels (the fill) are recolored to the route line
+    color; any other drawn pixels — notably the grey outline along the band's
+    outer edge — keep their original RGB so they render as-drawn. The alpha
+    channel (coverage / anti-aliasing) is never touched, so edges stay smooth.
+    One bake; the surface is blitted as-is each frame.
+    """
+    band = pygame.image.load(str(_BAND_MASK_PATH)).convert_alpha()
+    rgb = pygame.surfarray.pixels3d(band)  # live (w,h,3) view; locks surface
+    is_fill = rgb.min(axis=2) >= _BAND_FILL_MIN
+    rgb[is_fill] = color
+    del rgb  # unlock before blitting
+    return band
+
+
+# =============================================================================
+# Five-station marker positions (Tier-1 — calibration-editor tuneable). Markers
+# sit ALONG the band: m0 = current stop (bottom), m1..m4 = next four stops going
+# up. `_x`/`_y` pairs follow the editor suffix convention so they drag in the
+# sidebar. Names sit left of each marker. See WIP_calibration_editor.md.
+# =============================================================================
+
+# Each station is its own object: a circle marker `m<k>_*` (x/y draggable, r =
+# radius) + a badge+name group `g<k>_*` (x/y draggable anchor, b = badge size
+# (square), ns = name font px, ni = name inset). Every per-station key matches
+# `^[mg]<k>_`, which the calibration editor uses to show one station at a time.
+# Badge sub-fonts derive from b; the minute digit derives from r (no extra knobs).
+# fmt: off
+_TUNEABLES_FIVE_STATION = {
+    # station 0 — current stop (red pentagon); m0_a = apex angle in degrees
+    # (0=right, -90=up, -125≈aim at station 1). CCW-negative, screen y-down.
+    "m0_x": 458, "m0_y": 363, "m0_r": 24, "m0_a": -125,
+    "g0_x": 526, "g0_y": 350, "g0_b": 42, "g0_ns": 48, "g0_ni": 44,
+    # station 1
+    "m1_x": 408, "m1_y": 292, "m1_r": 22,
+    "g1_x": 476, "g1_y": 288, "g1_b": 38, "g1_ns": 46, "g1_ni": 38,
+    # station 2
+    "m2_x": 350, "m2_y": 240, "m2_r": 19,
+    "g2_x": 409, "g2_y": 228, "g2_b": 34, "g2_ns": 41, "g2_ni": 34,
+    # station 3
+    "m3_x": 285, "m3_y": 198, "m3_r": 17,
+    "g3_x": 334, "g3_y": 178, "g3_b": 29, "g3_ns": 32, "g3_ni": 32,
+    # station 4 — farthest ahead
+    "m4_x": 219, "m4_y": 167, "m4_r": 15,
+    "g4_x": 256, "g4_y": 146, "g4_b": 25, "g4_ns": 28, "g4_ni": 28,
+}
+# fmt: on
 
 
 def _build_catmull_rom_centerline(
@@ -1042,126 +1119,227 @@ class CircularFullRouteDisplay:
 
 
 class JapaneseFiveStationDisplay:
-    """Universal EIGHT-slot replacement for E235-0 — Phase 1 scaffold.
+    """Universal EIGHT-slot replacement for E235-0 — 5-station stopping view.
 
-    Today: renders only the big green curve arc per `_TUNEABLES_ARC` module
-    constants. Stations + pentagon + minute markers + per-route adaptation
-    are deferred (Phase 2). The arc is universal — same renderer regardless
-    of which route is loaded into E235-0 (no Yamanote dispatch, unlike the
-    full-route slot which has a linear fallback for out-of-spec routes).
+    Renders the hand-drawn green band (Tier-2 mask PNG, baked with the route
+    color in `_bake_band`) plus five station markers along it (Tier-1
+    `_TUNEABLES_FIVE_STATION` positions): the current stop as a red pentagon
+    at the bottom, the next four stops as numbered countdown circles going up.
+    Station kanji names sit to the left of each marker. The marker primitives
+    (`_draw_numbered_circle`, `_draw_pentagon`) are copied from this module's
+    `CircularFullRouteDisplay` per conventions.md § "Forking a sibling-model
+    renderer: copy primitives, don't reinvent".
 
     Same interface as JapaneseEightStationDisplay (the class it replaces):
-    `show_stops(state, current_time)` for the LowerDisplay manager dispatch,
-    and `hit_test` returning None until clickability lands.
+    `show_stops(state, current_time)` + `hit_test`.
     """
 
     def __init__(self, screen, route_data, stops):
         self.screen = screen
         self.route_data = route_data
         self.stops = stops
+        self.color = route_data.get("color", [116, 193, 30])
+        self.contrast_color = route_data.get("contrast_color", [224, 54, 37])
+        # Bake the band mask once with the route line color (Yamanote green by
+        # default). See _bake_band / WIP_calibration_editor.md § "Two-tier".
+        self._band = _bake_band(self.color)
+
+        # Fonts are built per-station at base*scale sizes, so they're cached by
+        # (filename, size) — keeps the editor responsive while dragging scale.
+        self._font_cache: Dict[Tuple[str, int], pygame.font.Font] = {}
+
+    def _font(self, name: str, size: float) -> pygame.font.Font:
+        key = (name, max(1, int(round(size))))
+        f = self._font_cache.get(key)
+        if f is None:
+            f = pygame.font.Font(str(project_root() / "fonts" / name), key[1])
+            self._font_cache[key] = f
+        return f
+
+    # -------------------------------------------------------------------------
+    # Main draw entry point
+    # -------------------------------------------------------------------------
 
     def show_stops(self, state, current_time: float = 0.0) -> None:
-        """Phase 1: fill lower-LCD bg white, then draw the arc band.
+        """Fill bg white, blit the tinted band, then draw the 5 station markers.
 
-        State and current_time are accepted but ignored — arc is static
-        geometry. Phase 2 will derive station positions from `state.curr_stop`
-        and minute markers from `current_time`.
+        Marker 0 = current stop (red pentagon when STOPPING); markers 1..4 =
+        next four stops as numbered countdown circles. Names sit left of each.
         """
         self.screen.fill(WHITE_BG, ARC_RECT)
-        self._draw_arc()
-
-    def _draw_arc(self) -> None:
-        """Build the band polygon by offsetting a centripetal Catmull-Rom centerline.
-
-        Walks `arc_pN_x` / `arc_pN_y` pairs in N order to collect waypoints.
-        Densifies the centerline via centripetal Catmull-Rom spline (passes
-        through every waypoint, C1 continuity, neighbor points define tangents).
-        Endpoints get reflected-phantom neighbors so the spline doesn't fly off.
-        Per-waypoint stroke linearly interpolates along each segment. Outer
-        edge = sample + local_normal * stroke/2; inner = sample - normal *
-        stroke/2. Local normal via central difference on the dense centerline.
-        """
-        t = _TUNEABLES_ARC
-        ARC_RECT.update(0, UPPER_HEIGHT, S_WIDTH, S_HEIGHT - UPPER_HEIGHT)
-
-        pts: List[Tuple[float, float]] = []
-        strokes: List[float] = []
-        i = 0
-        while f"arc_p{i}_x" in t and f"arc_p{i}_y" in t:
-            pts.append((float(t[f"arc_p{i}_x"]), float(t[f"arc_p{i}_y"])))
-            strokes.append(float(t.get(f"arc_p{i}_stroke", 0)))
-            i += 1
-        if len(pts) < 2:
-            return
-
-        color = t["arc_color"]
-
-        # Centerline densification — _SAMPLES_PER_SEG sub-points per waypoint
-        # pair. 20 is enough to look smooth at this canvas size; bump if visible
-        # faceting appears on tight curves.
-        SAMPLES_PER_SEG = 20
-        centerline, sample_strokes = _build_catmull_rom_centerline(pts, strokes, SAMPLES_PER_SEG)
-        smoothing = int(t.get("arc_smoothing", 0))
-        if smoothing > 0:
-            centerline, sample_strokes = _smooth_centerline(centerline, sample_strokes, smoothing)
-
-        # Local normal at each centerline sample via central difference.
-        n = len(centerline)
-        outer_pts: List[Tuple[int, int]] = []
-        inner_pts: List[Tuple[int, int]] = []
-        for k in range(n):
-            if k == 0:
-                dx = centerline[1][0] - centerline[0][0]
-                dy = centerline[1][1] - centerline[0][1]
-            elif k == n - 1:
-                dx = centerline[k][0] - centerline[k - 1][0]
-                dy = centerline[k][1] - centerline[k - 1][1]
-            else:
-                dx = centerline[k + 1][0] - centerline[k - 1][0]
-                dy = centerline[k + 1][1] - centerline[k - 1][1]
-            mag = math.hypot(dx, dy)
-            if mag == 0:
-                nx, ny = 0.0, 0.0
-            else:
-                nx, ny = dy / mag, -dx / mag
-            half_w = sample_strokes[k] / 2.0
-            cx, cy = centerline[k]
-            outer_pts.append((int(cx + nx * half_w), int(cy + ny * half_w)))
-            inner_pts.append((int(cx - nx * half_w), int(cy - ny * half_w)))
-
-        poly = outer_pts + list(reversed(inner_pts))
-        # Clip to lower-LCD area so the band can't bleed up into the upper
-        # LCD's header when a waypoint's stroke pushes outer-edge offsets
-        # above UPPER_HEIGHT.
         old_clip = self.screen.get_clip()
         self.screen.set_clip(ARC_RECT)
         try:
-            pygame.gfxdraw.filled_polygon(self.screen, poly, color)
-            pygame.gfxdraw.aapolygon(self.screen, poly, color)
-            # Time-circle proxies at the 5 station slots. Pre-IRL stand-in so
-            # the user can eyeball station positioning against the IRL ref
-            # while tuning waypoint coords. Phase 2 replaces with the real
-            # time-circle render (arrival-minute number, current-stop
-            # pentagon, etc.) once station data wires in.
-            # NOTE: radius + colors deliberately NOT in _TUNEABLES_ARC. They
-            # are placeholder geometry; promoting to tuneables would invite
-            # bikeshedding on values that will be replaced wholesale once
-            # the Phase 2 time-circle primitive lands (copy from
-            # e235_1000.lower_lcd per conventions.md § "Forking a sibling-
-            # model renderer: copy primitives, don't reinvent").
-            for slot in _ARC_STATION_SLOTS:
-                cx_key = f"arc_p{slot}_x"
-                cy_key = f"arc_p{slot}_y"
-                if cx_key not in t or cy_key not in t:
+            self.screen.blit(self._band, (0, 0))
+
+            t = _TUNEABLES_FIVE_STATION
+            minutes = self._ahead_minutes(state)
+            curr = state.curr_stop
+            for k in range(5):
+                pos = (t[f"m{k}_x"], t[f"m{k}_y"])
+                idx = curr + k
+                if not (0 <= idx < len(self.stops)):
                     continue
-                cx, cy = int(t[cx_key]), int(t[cy_key])
-                pygame.gfxdraw.filled_circle(self.screen, cx, cy, 12, (245, 245, 250))
-                pygame.gfxdraw.aacircle(self.screen, cx, cy, 12, (40, 40, 50))
+                stop = self.stops[idx]
+                radius = t[f"m{k}_r"]
+                gpos = (t[f"g{k}_x"], t[f"g{k}_y"])  # badge+name group anchor
+                # Marker on the band first, then the badge + name group.
+                if k == 0:
+                    self._draw_pentagon(pos, radius, angle_deg=t["m0_a"])
+                elif k - 1 < len(minutes):
+                    digit_font = self._font("HelveticaNeue-Bold.otf", radius * 0.82)
+                    self._draw_numbered_circle(pos, minutes[k - 1], radius, digit_font)
+                self._draw_jy_badge(stop, gpos, t[f"g{k}_b"])
+                self._draw_station_name(stop.get("name", ""), gpos, t[f"g{k}_ns"], t[f"g{k}_ni"])
         finally:
             self.screen.set_clip(old_clip)
 
+    def _ahead_minutes(self, state) -> List[int]:
+        """Cumulative arrival minutes for the next four stops after current."""
+        mins: List[int] = []
+        cumulative = 0
+        for k in range(1, 5):
+            idx = state.curr_stop + k
+            if idx >= len(self.stops):
+                break
+            cumulative += self.stops[idx].get("time", 0)
+            mins.append(max(1, cumulative))
+        return mins
+
+    # -------------------------------------------------------------------------
+    # Marker primitives — copied from CircularFullRouteDisplay (same model).
+    # -------------------------------------------------------------------------
+
+    def _draw_numbered_circle(self, pos: Tuple[int, int], minutes: int, radius: float, font: pygame.font.Font) -> None:
+        """White countdown disk + dark minute digit. Green band shows as the
+        ring around the disk (no explicit ring drawn)."""
+        # fmt: off
+        # --- Numbered circle params (adjust freely) ---
+        disk_color = (245, 245, 250)   # near-white disk; green band peeks as ring
+        # ----------------------------------------------
+        # fmt: on
+        cx, cy = int(pos[0]), int(pos[1])
+        r = int(radius)
+        pygame.gfxdraw.filled_circle(self.screen, cx, cy, r, disk_color)
+        pygame.gfxdraw.aacircle(self.screen, cx, cy, r, disk_color)
+        img = font.render(str(minutes), True, DARK_BG)
+        self.screen.blit(img, img.get_rect(center=(cx, cy)))
+
+    def _draw_pentagon(self, pos: Tuple[int, int], radius: int, angle_deg: float = 0.0) -> None:
+        """Red pentagon at current stop, apex pointing in `angle_deg` (degrees,
+        0=right, -90=up; CCW-negative in screen y-down space), with uniform-scale
+        breathing animation + pulsing glow. Sized by `radius` (= the marker's
+        `m0_r`), so it scales with the editor; angle comes from `m0_a`.
+
+        Copied from CircularFullRouteDisplay._draw_pentagon (breathing pattern);
+        the horizontal apex is rotated by the configured angle.
+        """
+        # fmt: off
+        # --- Pentagon static params (adjust freely; all scale with `radius`) ---
+        rect_half_w_back     = radius * 1.24       # flat-back half-width
+        rect_half_w_apex     = radius * 1.24 - 1   # apex-side half-width
+        triangle_d           = radius * 0.24       # apex extension
+        inner_dot_r          = max(2, int(radius * 0.3))
+        halo_offset          = 3
+        breath_period_s      = 1.2
+        breath_min_scale     = 0.82                # body shrinks to this of max
+        glow_max_r           = radius * 1.8        # peak radius of the pulsing glow
+        glow_alpha           = 70                  # peak glow opacity
+        # ----------------------------------------------------------------------
+        # fmt: on
+        cx, cy = pos
+
+        half_h_max = radius
+        scale_min = breath_min_scale
+
+        t_seconds = pygame.time.get_ticks() / 1000.0
+        cycle = (t_seconds / breath_period_s) % 1.0
+        phase = 1 - 2 * cycle if cycle < 0.5 else 2 * cycle - 1
+        scale = scale_min + (1.0 - scale_min) * phase
+
+        # Pulsing red glow halo behind the marker — fades out as it expands,
+        # synced to the breath phase (brightest when the body is largest).
+        glow_r = int(glow_max_r * (0.6 + 0.4 * phase))
+        a = int(glow_alpha * phase)
+        if a > 0 and glow_r > 0:
+            glow = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+            pygame.gfxdraw.filled_circle(glow, glow_r, glow_r, glow_r, (*self.contrast_color, a))
+            self.screen.blit(glow, (int(cx) - glow_r, int(cy) - glow_r))
+
+        # Apex-right base geometry, then rotate so the apex aims at angle_deg.
+        rect_left_x = cx - rect_half_w_back
+        rect_right_x = cx + rect_half_w_apex
+        apex_x = rect_right_x + triangle_d
+        max_points = [
+            (rect_left_x, cy - half_h_max),
+            (rect_left_x, cy + half_h_max),
+            (rect_right_x, cy + half_h_max),
+            (apex_x, cy),
+            (rect_right_x, cy - half_h_max),
+        ]
+        ang = math.radians(angle_deg)
+        ca, sa = math.cos(ang), math.sin(ang)
+        max_points = [(cx + (px - cx) * ca - (py - cy) * sa, cy + (px - cx) * sa + (py - cy) * ca) for (px, py) in max_points]
+
+        red_points = [(cx + (px - cx) * scale, cy + (py - cy) * scale) for (px, py) in max_points]
+
+        draw_aapolygon(self.screen, PASSED_COLOR, [(i - halo_offset, j) for (i, j) in max_points])
+        draw_aapolygon(self.screen, PASSED_COLOR, [(i + halo_offset, j) for (i, j) in max_points])
+        draw_aapolygon(self.screen, PASSED_COLOR, max_points)
+        draw_aapolygon(self.screen, self.contrast_color, red_points)
+        pygame.gfxdraw.filled_circle(self.screen, int(cx), int(cy), inner_dot_r, PASSED_COLOR)
+        pygame.gfxdraw.aacircle(self.screen, int(cx), int(cy), inner_dot_r, PASSED_COLOR)
+
+    def _draw_jy_badge(self, stop: Dict, gpos: Tuple[int, int], size: float) -> None:
+        """Station-number badge (e.g. JY29), left-center anchored at the group
+        anchor. Square, side `size`.
+
+        Uses the shared `draw_station_code_badge` with the SAME params as the
+        upper-LCD badge, scaled by size/68 (the upper badge is 68px), so the
+        look is identical across both LCDs — black frame, route-color ring,
+        Frutiger face (fixed in the helper). No code_3 band: the IRL Yamanote
+        stopping-view badges are number-only.
+        """
+        sta_code = stop.get("sta_code")
+        if not sta_code:
+            return
+        b = int(size)
+        bx = int(gpos[0])
+        by = int(gpos[1]) - b // 2
+        s = b / 68.0  # scale from the upper-LCD 68 px badge reference
+        draw_station_code_badge(
+            self.screen,
+            bx,
+            by,
+            b,
+            b,
+            sta_code,
+            self.color,
+            prefix_size=18 * s,
+            num_size=22 * s,
+            ring_black=max(1, round(7 * s)),
+            ring_color=max(1, round(7 * s)),
+            outer_radius=max(1, round(8 * s)),
+            color_radius=max(1, round(4 * s)),
+            text_gap=max(1, round(3 * s)),
+            prefix_x_offset=1,
+        )
+
+    def _draw_station_name(self, name: str, gpos: Tuple[int, int], name_size: float, inset: float) -> None:
+        """Horizontal kanji station name at `name_size` px, inset `inset` from the
+        group anchor, vertically CENTER-ALIGNED with the badge (both centered on
+        gpos_y). Fixed 3-char width: 2-char middle-padded, 4+ compressed.
+        """
+        if not name:
+            return
+        font = self._font("ShinGoPr6N-Medium.otf", name_size)
+        width = font.size("永")[0] * 3
+        nx = int(gpos[0]) + int(inset)
+        ny = int(gpos[1]) - font.get_height() // 2  # center on gpos_y == badge center
+        draw_text_given_width(nx, ny, width, font, name, DARK_BG, self.screen)
+
     def hit_test(self, state, mx: int, my: int) -> Optional[int]:
-        """Click hit-test. Deferred — Phase 1 has no clickable elements."""
+        """Click hit-test. Deferred — no clickable elements yet."""
         return None
 
 

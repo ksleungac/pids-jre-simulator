@@ -79,8 +79,10 @@ Before claiming "X is a bug" or "X works like Y", read the call sites and trace 
 - (2026-05-08 PM) Defended green ring on Yamanote time circle across multiple pushbacks; user: *"there is NO green ring."* Code and doc were stale relative to user's IRL mental model.
 - (2026-05-12) Filled audio/README JJ from folder structure alone; route.json showed JJ is WIP. Folder shape ≠ data completeness.
 - (2026-05-29) Concluded a feature "already shipped at v0.5.3a" from `git log -S` string-match + tag ancestry; correct method = read commit messages `v<prev>..HEAD` + code at the tag. User lost confidence in release-note drafting.
+- (2026-06-12) Theorized SVG-deployment risk across ~2 rounds; the user had already shipped that exact pattern (`data/line_icons/` SVG-sourced PNGs). Resolved only after reading `setup.py`. Don't raise a hypothetical risk the repo may have already solved.
 
 **How to apply:**
+- When the user references their own existing setup ("if you read my X you'll know") — read it BEFORE theorizing, especially before raising a risk/blocker. The answer is often already in-repo.
 - When user pushes back, re-read the source — don't re-justify from memory.
 - Deriving release/history facts: read the commit messages in range + the code at the tag. `git log -S` (string match) and tag-ancestry are proxies, not the artifact.
 - When documenting per-line / per-instance facts, inspect data file content + run `validate_data.py` before authoring.

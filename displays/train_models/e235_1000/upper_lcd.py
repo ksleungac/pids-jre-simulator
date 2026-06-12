@@ -448,10 +448,8 @@ class UpperDisplay:
         }
         self.mode_cycler = ModeCycler(self.mode_displays, default_mode=DisplayMode.KANJI)
 
-        # Station code badge fonts — sizes tunable here; layout auto-adjusts in _draw_station_code_badge
-        self.font_sta_code_prefix = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 18)
-        self.font_sta_code_num = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 22)
-        self.font_sta_code_3letter = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 20)
+        # Badge typeface is fixed inside draw_station_code_badge (Frutiger);
+        # point sizes live in the _draw_station_code_badge params block.
 
         # Load translations (station names, destinations)
         self.translations = load_json_relative("data/translations.json")
@@ -563,6 +561,9 @@ class UpperDisplay:
         badge_x = 222  # left edge
         badge_w = 68  # total width
         badge_h = 68  # total height (framed JY/03 portion only)
+        prefix_size = 18  # "JY" letters pt (face fixed to Frutiger in draw_station_code_badge)
+        num_size = 22  # station-number pt
+        code_3_size = 20  # 3-letter interchange-code pt
         ring_black = 7  # outer black ring thickness
         ring_color = 7  # route color ring thickness (green bottom aligns with color ribbon)
         outer_radius = 8  # corner rounding of outer black frame
@@ -576,7 +577,6 @@ class UpperDisplay:
         code_3_band_h = 12  # height of the top band added above the framed badge (smaller = black rect starts lower)
         code_3_x_offset = 0  # nudge code_3 text horizontally (0 = centered on badge)
         code_3_y_offset = 4  # nudge code_3 text vertically within band (positive = lower, closer to green ring)
-        # Font size lives in __init__ as self.font_sta_code_3letter — increase pt if the text should be bigger.
         # -------------------------------------
         # fmt: on
 
@@ -594,10 +594,10 @@ class UpperDisplay:
                 badge_h,
                 sta_code,
                 self.color,
-                self.font_sta_code_prefix,
-                self.font_sta_code_num,
+                prefix_size=prefix_size,
+                num_size=num_size,
                 code_3=code_3,
-                font_code_3=self.font_sta_code_3letter,
+                code_3_size=code_3_size,
                 ring_black=ring_black,
                 ring_color=ring_color,
                 outer_radius=outer_radius,

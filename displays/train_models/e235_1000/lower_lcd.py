@@ -952,9 +952,8 @@ class JapaneseEightStationDisplay(_FrameWindowMixin):
         self.font_stops = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), self.label_font_size)
         self.font_time = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), FONT_TIME_SIZE + 7)
         self.font_minute = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), FONT_STOPS_MINUTE_SIZE + 3)
-        # Badge fonts.
-        self.font_badge_prefix = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 8)
-        self.font_badge_num = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 11)
+        # Badge typeface is fixed inside draw_station_code_badge (Frutiger);
+        # point sizes (prefix_size/num_size) live in the badge params block.
         self.font_disclaimer = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 10)
         # Hardcoded bar-extension width from the canonical ShinGo "分" glyph.
         # Subclasses override font_minute but NOT this — bar width stays fixed.
@@ -1407,6 +1406,8 @@ class JapaneseEightStationDisplay(_FrameWindowMixin):
         # --- Mini-badge params (adjust freely) ---
         badge_w = self.badge_w
         badge_h = self.badge_h
+        prefix_size = 8  # "JY" letters pt (face fixed to Frutiger in draw_station_code_badge)
+        num_size = 11  # station-number pt
         # Reference shows NO black outer ring on the per-cell badges — the
         # route-color frame goes all the way to the badge edge. The shared
         # `draw_station_code_badge` helper still draws a black rect under the
@@ -1431,8 +1432,8 @@ class JapaneseEightStationDisplay(_FrameWindowMixin):
             badge_h,
             sta_code,
             self.color,
-            self.font_badge_prefix,
-            self.font_badge_num,
+            prefix_size=prefix_size,
+            num_size=num_size,
             ring_black=ring_black,
             ring_color=ring_color,
             outer_radius=outer_radius,

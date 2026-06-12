@@ -101,9 +101,9 @@ PREFIX_RECT = pygame.Rect(
 )
 _TUNEABLES_STATION_RECT = {
     "station_x": 302,
-    "station_y": 35,
+    "station_y": 41,
     "station_w": 384,
-    "station_h": 82,
+    "station_h": 91,
 }
 STATION_RECT = pygame.Rect(
     _TUNEABLES_STATION_RECT["station_x"],
@@ -121,7 +121,7 @@ STATION_RECT = pygame.Rect(
 # STATION_RECT 2026-05-14; BADGE_RECT / PA_HINT_RECT pending.
 # See WIP_calibration_editor.md § "Region-level tuneability pattern".
 _TUNEABLES_CLOCK_RECT = {
-    "clock_x": 560,
+    "clock_x": 573,
     "clock_y": 0,
     "clock_w": 75,
     "clock_h": 28,
@@ -185,12 +185,12 @@ def _bg(region: str):
 # JapaneseDisplay.draw_destination at render time; mutated by the calibration
 # editor (see WIP_calibration_editor.md). Inherited unchanged by FuriganaDisplay.
 _TUNEABLES_DEST_KANJI = {
-    "dest_box_x": 12,
-    "dest_box_y": 56,
-    "dest_box_w": 170,
+    "dest_box_x": 6,
+    "dest_box_y": 62,
+    "dest_box_w": 167,
     "suffix_right_offset": 10,
     "suffix_bottom_margin": 5,
-    "font_dest_size": 30,
+    "font_dest_size": 35,
     "font_suffix_size": 18,
 }
 
@@ -200,7 +200,7 @@ _TUNEABLES_DEST_KANJI = {
 # JapaneseDisplay.draw_clock and EnglishDisplay.draw_clock.
 _TUNEABLES_CLOCK = {
     "text_y": -3,
-    "font_size": 29,
+    "font_size": 31,
 }
 
 
@@ -216,7 +216,7 @@ _TUNEABLES_PREFIX_KANJI = {
 # JapaneseDisplay.draw_station. Inherited unchanged by FuriganaDisplay.
 _TUNEABLES_STATION_KANJI = {
     "text_bottom_margin": 5,
-    "font_size": 78,
+    "font_size": 84,
 }
 
 
@@ -580,10 +580,8 @@ class UpperDisplay:
         }
         self.mode_cycler = ModeCycler(self.mode_displays, default_mode=DisplayMode.KANJI)
 
-        # Station code badge fonts — sizes tunable here; layout auto-adjusts in _draw_station_code_badge
-        self.font_sta_code_prefix = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 18)
-        self.font_sta_code_num = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 22)
-        self.font_sta_code_3letter = pygame.font.Font(str(project_root() / "fonts" / "NeueFrutigerWorld-Bold.otf"), 20)
+        # Badge typeface is fixed inside draw_station_code_badge (Frutiger);
+        # point sizes live in the _draw_station_code_badge params block.
 
         # Load translations (station names, destinations)
         self.translations = load_json_relative("data/translations.json")
@@ -668,6 +666,9 @@ class UpperDisplay:
         badge_x = 222  # left edge
         badge_w = 68  # total width
         badge_h = 68  # total height (framed JY/03 portion only)
+        prefix_size = 18  # "JY" letters pt (face fixed to Frutiger in draw_station_code_badge)
+        num_size = 22  # station-number pt
+        code_3_size = 20  # 3-letter interchange-code pt
         ring_black = 7  # outer black ring thickness
         ring_color = 7  # route color ring thickness (green bottom aligns with color ribbon)
         outer_radius = 8  # corner rounding of outer black frame
@@ -681,7 +682,6 @@ class UpperDisplay:
         code_3_band_h = 12  # height of the top band added above the framed badge (smaller = black rect starts lower)
         code_3_x_offset = 0  # nudge code_3 text horizontally (0 = centered on badge)
         code_3_y_offset = 4  # nudge code_3 text vertically within band (positive = lower, closer to green ring)
-        # Font size lives in __init__ as self.font_sta_code_3letter — increase pt if the text should be bigger.
         # -------------------------------------
         # fmt: on
 
@@ -699,10 +699,10 @@ class UpperDisplay:
                 badge_h,
                 sta_code,
                 self.color,
-                self.font_sta_code_prefix,
-                self.font_sta_code_num,
+                prefix_size=prefix_size,
+                num_size=num_size,
                 code_3=code_3,
-                font_code_3=self.font_sta_code_3letter,
+                code_3_size=code_3_size,
                 ring_black=ring_black,
                 ring_color=ring_color,
                 outer_radius=outer_radius,

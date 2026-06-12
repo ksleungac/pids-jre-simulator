@@ -8,13 +8,31 @@ display package — every train-model module imports from here.
 
 import re
 from contextlib import contextmanager
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import pygame
 import pygame.gfxdraw
 
+from app_paths import project_root
+
 BADGE_TEXT = (15, 15, 15)  # dark — text sits on white interior
 WHITE_BG = (230, 230, 230)
+
+# Station-code badges ALWAYS render in NeueFrutigerWorld-Bold — the JR East
+# signage typeface (Frutiger). The face is hardcoded here on purpose: callers
+# pass only a point size, never a font, so no badge can ever be drawn in the
+# wrong face. Cached by size to avoid per-frame Font construction.
+_BADGE_FONT_FILE = "NeueFrutigerWorld-Bold.otf"
+_badge_font_cache: Dict[int, pygame.font.Font] = {}
+
+
+def _badge_font(size: float) -> pygame.font.Font:
+    key = max(1, int(round(size)))
+    f = _badge_font_cache.get(key)
+    if f is None:
+        f = pygame.font.Font(str(project_root() / "fonts" / _BADGE_FONT_FILE), key)
+        _badge_font_cache[key] = f
+    return f
 
 
 # =============================================================================
@@ -469,11 +487,11 @@ def draw_station_code_badge(
     h: int,
     sta_code: str,
     color,
-    font_prefix: pygame.font.Font,
-    font_num: pygame.font.Font,
     *,
+    prefix_size: float,
+    num_size: float,
     code_3: str = "",
-    font_code_3: pygame.font.Font = None,
+    code_3_size: float = 20,
     text_color=BADGE_TEXT,
     ring_black: int = 7,
     ring_color: int = 7,
@@ -506,12 +524,19 @@ def draw_station_code_badge(
     Used by upper-LCD (large badge with optional code_3 band), the lower-LCD
     8-station view (smaller per-cell badge, no code_3 band), and the setup
     screen (line-marker mode, letters only).
+
+    The typeface is fixed (NeueFrutigerWorld-Bold, the JR signage face) — see
+    `_badge_font`. Callers control only the point sizes (`prefix_size`,
+    `num_size`, `code_3_size`), which scale per badge.
     """
     m = re.match(r"([A-Za-z]+)(\d*)", sta_code or "")
     if not m:
         return
     letters = m.group(1).upper()
     number = m.group(2)  # may be empty (line-marker mode)
+
+    font_prefix = _badge_font(prefix_size)
+    font_num = _badge_font(num_size)
 
     inset = ring_black + ring_color
     interior_x = x + inset
@@ -554,8 +579,8 @@ def draw_station_code_badge(
         num_y = start_y + l_rect.height + text_gap
         screen.blit(num_surf, (center_x - n_rect.width // 2 - n_rect.x, num_y - n_rect.y))
 
-    if code_3 and font_code_3 is not None:
-        code_3_surf = font_code_3.render(code_3, True, WHITE_BG)
+    if code_3:
+        code_3_surf = _badge_font(code_3_size).render(code_3, True, WHITE_BG)
         c_rect = code_3_surf.get_bounding_rect()
         band_center_x = x + w // 2
         band_center_y = outer_y + code_3_band_h // 2

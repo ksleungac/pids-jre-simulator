@@ -18,7 +18,7 @@ a partial-module circular import.
 # Per-model screen dimensions (E235-0 LCD pair, real-display aspect ratio)
 S_WIDTH = 730
 S_HEIGHT = 420
-UPPER_HEIGHT = int(S_HEIGHT * 0.28)  # 117px
+UPPER_HEIGHT = 130  # measured against IRL overlay (was int(S_HEIGHT*0.28)=117)
 
 # Per-model palette
 DARK_BG = [25, 25, 25]

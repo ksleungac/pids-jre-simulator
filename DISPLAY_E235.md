@@ -49,11 +49,11 @@ Both sub-series share the same English-station-name treatment.
 
 ### Station Code Badge
 
-`_draw_station_code_badge()` reads `sta_code` (per-stop, from `route.json`) → renders the framed JY/03 square. Body is a thin wrapper that calls `displays.utils.draw_station_code_badge` with upper-LCD-specific params (badge_x=222, badge_w=68, badge_h=68, ring 7+7, fonts 18/22, etc.) and the optional `code_3` band. The same helper is reused by the 8-station view's per-cell mini badges (smaller box, no `code_3` band, no black ring).
+`_draw_station_code_badge()` reads `sta_code` (per-stop, from `route.json`) → renders the framed JY/03 square. Body is a thin wrapper that calls `displays.utils.draw_station_code_badge` with upper-LCD-specific params (badge_x=222, badge_w=68, badge_h=68, ring 7+7, sizes 18/22pt, etc.) and the optional `code_3` band. **`draw_station_code_badge` is the single badge renderer** — reused by the 8-station view's per-cell mini badges (smaller box, no `code_3` band, no black ring) and the **E235-0 5-station stopping view** (`JapaneseFiveStationDisplay._draw_jy_badge`, which scales the upper-LCD 68px params by `b/68` so the look is identical, no `code_3`). The **typeface is fixed** inside the helper (Frutiger / `NeueFrutigerWorld-Bold`) — callers pass point sizes, never a font face (see conventions.md). The Wikipedia `Template:JRSN` is a simplified CSS rendering (flat colored border, generic browser font) — *lower* fidelity than this helper, not a source to mimic; it was only useful for confirming proportions.
 
 If the Japanese station name has a `code_3` entry in `data/stations.json`, the outer black rect extends UPWARD into a top band showing the 3-letter Roman code (white text, e.g. AKB/TYO).
 
-All layout knobs live in the params block at the top of the method: `code_3_band_h`, `code_3_x_offset`, `code_3_y_offset`; font size in `__init__` as `self.font_sta_code_3letter`.
+All layout knobs live in the params block at the top of the method: `code_3_band_h`, `code_3_x_offset`, `code_3_y_offset`, and the point sizes `prefix_size` / `num_size` / `code_3_size` (the face is fixed in the helper, not loaded here).
 
 **Draw order:** badge draws **last** in `UpperDisplay.draw()` (after prefix/station) so the extended top band is not clipped. The prefix `DARK_BG` rect and the badge share `x=222` — earlier ordering painted over the top of the extension.
 
@@ -378,7 +378,7 @@ When the route continues past the visible window, the last cell's bar extends in
 
 #### Layout tuneable params
 
-Live as labeled locals at the top of `JapaneseEightStationDisplay.__init__` (`VISIBLE_COUNT`, `LOCK_THRESHOLD`, `side_margin`, `label_top_pad`, `label_h_chars`, `label_font_size`, `bar_height`, `bar_badge_gap`, `badge_w/h`, `font_badge_prefix/num`). Adjust there — values not duplicated here to avoid drift.
+Live as labeled locals at the top of `JapaneseEightStationDisplay.__init__` (`VISIBLE_COUNT`, `LOCK_THRESHOLD`, `side_margin`, `label_top_pad`, `label_h_chars`, `label_font_size`, `bar_height`, `bar_badge_gap`, `badge_w/h`). Adjust there — values not duplicated here to avoid drift. Badge point sizes (`prefix_size`/`num_size`) live in the per-cell badge params block; the badge **typeface is fixed** (Frutiger) inside `draw_station_code_badge` and is not a caller parameter.
 
 #### Route disclaimer
 

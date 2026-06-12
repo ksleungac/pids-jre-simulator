@@ -90,13 +90,21 @@ _REGISTRY = {
             ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_STATION_ENGLISH"),
         ],
     },
-    "arc": {
+    "five_station": {
         "rect_module": "displays.train_models.e235_0.lower_lcd",
         "rect_attr": "ARC_RECT",
         "target": "lower",
         "dicts": [
-            ("displays.train_models.e235_0.lower_lcd", "_TUNEABLES_ARC"),
+            ("displays.train_models.e235_0.lower_lcd", "_TUNEABLES_FIVE_STATION"),
         ],
+        # Draggable handles: m<N>=circle markers (white), g<N>=badge+name
+        # group anchors (cyan). Both absolute x/y pairs. Grabbing either selects
+        # station N → the panel filters to that station's keys (`^[mg]N_`).
+        "waypoints": {
+            "dict": ("displays.train_models.e235_0.lower_lcd", "_TUNEABLES_FIVE_STATION"),
+            "prefixes": ["m", "g"],
+            "per_station": True,
+        },
     },
 }
 
@@ -104,6 +112,9 @@ _REGISTRY = {
 # ── State ──────────────────────────────────────────────────────────────
 
 _focused_element: Optional[str] = None  # e.g. "dest"
+# For per-station elements (five_station): which station the panel shows.
+# Set on focus (0) and when a station's handle is grabbed. None = no filter.
+_selected_station: Optional[int] = None
 _focused_row: int = 0  # index into the flattened param list of focused element
 _param_rows: list = []  # cached flat list of editable rows for focused element
 _should_quit: bool = False
@@ -123,7 +134,7 @@ _candidate_state: dict = {}
 # Drag state for waypoint handles (arc element Phase 1b). Set on
 # MOUSEBUTTONDOWN over a handle; cleared on MOUSEBUTTONUP. While set,
 # MOUSEMOTION updates the underlying `arc_pN_x` / `arc_pN_y` values.
-_dragging_waypoint: Optional[int] = None  # waypoint index, or None
+_dragging_waypoint: Optional[tuple] = None  # (prefix, idx) of dragged handle, or None
 _HANDLE_HIT_R = 12  # Figma-style generous hit radius (px)
 _HANDLE_VISUAL_R = 5  # visible filled circle radius
 _HANDLE_VISUAL_R_DRAG = 7  # enlarged while dragging
@@ -255,7 +266,7 @@ def handle_event(event, sim) -> bool:
     global _should_quit, _dragging_waypoint, _overlay_dragging
     global _overlay_drag_mouse_start, _overlay_drag_offset_start
     global _overlay_offset_x, _overlay_offset_y, _overlay_scale
-    global _overlay_visible
+    global _overlay_visible, _selected_station
     if event.type == pygame.QUIT:
         return False  # let caller close
     alt_held = bool(pygame.key.get_mods() & pygame.KMOD_ALT)
@@ -273,6 +284,11 @@ def handle_event(event, sim) -> bool:
         wp_idx = _arc_waypoint_at_pos(event.pos)
         if wp_idx is not None:
             _dragging_waypoint = wp_idx
+            # Grabbing a station's handle selects it → panel filters to it.
+            wp = _focused_waypoint_cfg() or {}
+            if wp.get("per_station"):
+                _selected_station = wp_idx[1]
+                _rebuild_param_rows()
             _focus_waypoint_row(wp_idx)
             _apply_waypoint_drag(event.pos)
             return True
@@ -432,8 +448,19 @@ def _ensure_fonts() -> None:
         _sidebar_hint_font = pygame.font.Font(font_path, 12)
 
 
+def _rebuild_param_rows() -> None:
+    """Rebuild _param_rows for the focused element, honoring the per-station
+    filter when one is active. Call after focus or selected-station changes."""
+    global _param_rows
+    if _focused_element is None:
+        _param_rows = []
+        return
+    cfg = _REGISTRY[_focused_element]
+    _param_rows = _build_param_rows(cfg["dicts"], cfg.get("waypoints"), _selected_station)
+
+
 def _on_click(pos, sim) -> bool:
-    global _focused_element, _focused_row, _param_rows, _scroll_offset
+    global _focused_element, _focused_row, _param_rows, _scroll_offset, _selected_station
     # Hit-test each registered element.
     for element_id, cfg in _REGISTRY.items():
         rect = _resolve_rect(cfg)
@@ -441,7 +468,10 @@ def _on_click(pos, sim) -> bool:
             continue
         if rect.collidepoint(pos):
             _focused_element = element_id
-            _param_rows = _build_param_rows(cfg["dicts"])
+            # Per-station elements default to showing station 0's panel.
+            wp = cfg.get("waypoints") or {}
+            _selected_station = 0 if wp.get("per_station") else None
+            _param_rows = _build_param_rows(cfg["dicts"], cfg.get("waypoints"), _selected_station)
             # Auto-switch to KANJI when focusing a lower-LCD element. The
             # EIGHT slot dispatches `japanese_eight_display` only in
             # KANJI/FURIGANA modes; ENGLISH falls through to the full-route
@@ -508,19 +538,36 @@ def _resolve_rect(cfg) -> Optional[pygame.Rect]:
         return None
 
 
-def _build_param_rows(dict_specs) -> list:
+def _build_param_rows(dict_specs, waypoints=None, station=None) -> list:
     """Flatten dicts into rows. Tuple values expand into N sub-rows.
 
     Each row: (dict_qualified_name, param_name, sub_idx, type_tag)
     - sub_idx is None for scalars, 0..N-1 for tuple channels.
     - type_tag in {"int", "float", "tuple", "str"} drives nudge behaviour.
+
+    Waypoint `<prefix><N>_x` / `_y` keys are SKIPPED when the element has drag
+    handles — they're repositioned by dragging, so listing them just clogs the
+    sidebar. (Their handles still render; only the rows are hidden.)
     """
+    skip_re = None
+    station_re = None
+    if waypoints:
+        prefixes = waypoints.get("prefixes") or [waypoints["prefix"]]
+        alt = "|".join(re.escape(p) for p in prefixes)
+        skip_re = re.compile(rf"^({alt})\d+_[xy]$")
+        # Per-station filter: show only the selected station's keys (`^[mg]N_`).
+        if station is not None:
+            station_re = re.compile(rf"^({alt}){station}_")
     rows = []
     for mod_path, dict_name in dict_specs:
         mod = importlib.import_module(mod_path)
         d = getattr(mod, dict_name)
         dqn = f"{mod_path}.{dict_name}"
         for key, val in d.items():
+            if skip_re and skip_re.match(key):
+                continue
+            if station_re and not station_re.match(key):
+                continue
             if isinstance(val, bool):
                 rows.append((dqn, key, None, "bool"))  # nudging bool is just toggle
             elif isinstance(val, int):
@@ -836,7 +883,7 @@ def _draw_indicator_at(screen) -> None:
     # polyline (faint dots + connecting line) so user sees the whole
     # shape even while tuning a single waypoint. Runs BEFORE the focused-
     # param highlight so the focused waypoint's bright ring lands on top.
-    if _focused_element == "arc":
+    if _focused_waypoint_cfg() is not None:
         _draw_arc_polyline_preview(screen)
     dqn, key, sub_idx, type_tag = _param_rows[_focused_row]
     if type_tag in ("candidate", "unsupported"):
@@ -960,43 +1007,63 @@ def _draw_indicator_at(screen) -> None:
         _draw_polar_spoke(screen, color, cx, cy, radius, angle_deg=val)
 
 
-def _arc_waypoints() -> list:
-    """Return list of (idx, x, y) for every arc waypoint, in N order.
+def _focused_waypoint_cfg() -> Optional[dict]:
+    """Waypoint config of the focused element, or None. Drives the generic
+    drag-handle machinery: `{"dict": (mod, name), "prefixes": ["m", "b"]}` →
+    each `<prefix><N>_x` / `<prefix><N>_y` pair is a draggable handle."""
+    cfg = _REGISTRY.get(_focused_element) if _focused_element else None
+    return cfg.get("waypoints") if cfg else None
 
-    Empty list if dict / keys missing. Used by hit-test + render.
+
+def _waypoint_prefixes(wp: dict) -> list:
+    """Prefix list for a waypoint cfg (back-compat with single `prefix`)."""
+    return wp.get("prefixes") or [wp["prefix"]]
+
+
+def _arc_waypoints() -> list:
+    """Return list of (prefix, idx, x, y) for every waypoint of the focused
+    element, across all its prefixes.
+
+    Empty list if the element has no waypoint config or keys missing. Used by
+    hit-test + handle render. Element-agnostic (five-station markers + groups).
     """
+    wp = _focused_waypoint_cfg()
+    if not wp:
+        return []
     try:
-        mod = importlib.import_module("displays.train_models.e235_0.lower_lcd")
-        t = getattr(mod, "_TUNEABLES_ARC")
+        mod = importlib.import_module(wp["dict"][0])
+        t = getattr(mod, wp["dict"][1])
     except (ImportError, AttributeError):
         return []
     out = []
-    i = 0
-    while f"arc_p{i}_x" in t and f"arc_p{i}_y" in t:
-        out.append((i, int(t[f"arc_p{i}_x"]), int(t[f"arc_p{i}_y"])))
-        i += 1
+    for p in _waypoint_prefixes(wp):
+        i = 0
+        while f"{p}{i}_x" in t and f"{p}{i}_y" in t:
+            out.append((p, i, int(t[f"{p}{i}_x"]), int(t[f"{p}{i}_y"])))
+            i += 1
     return out
 
 
-def _arc_waypoint_at_pos(pos) -> Optional[int]:
-    """Hit-test mouse pos against arc waypoints. Returns idx or None.
+def _arc_waypoint_at_pos(pos) -> Optional[tuple]:
+    """Hit-test mouse pos against the focused element's waypoints. Returns
+    (prefix, idx) or None.
 
-    Only returns a hit when the arc element is focused — keeps drag handles
-    inert when tuning other elements (no accidental grabs).
+    Only returns a hit when the focused element has waypoints — keeps drag
+    handles inert when tuning other elements (no accidental grabs).
     """
-    if _focused_element != "arc":
+    if _focused_waypoint_cfg() is None:
         return None
     mx, my = pos
     r_sq = _HANDLE_HIT_R * _HANDLE_HIT_R
-    for idx, px, py in _arc_waypoints():
+    for p, idx, px, py in _arc_waypoints():
         dx = px - mx
         dy = py - my
         if dx * dx + dy * dy <= r_sq:
-            return idx
+            return (p, idx)
     return None
 
 
-def _focus_waypoint_row(idx: int) -> None:
+def _focus_waypoint_row(handle: tuple) -> None:
     """Jump sidebar focus to the dragged waypoint's `_x` row (auto-scrolls).
 
     QOL: numeric feedback for the waypoint you're moving stays visible
@@ -1004,7 +1071,8 @@ def _focus_waypoint_row(idx: int) -> None:
     (the indicator paired-ruler logic also keys off `_x` rows).
     """
     global _focused_row
-    target_key = f"arc_p{idx}_x"
+    p, idx = handle
+    target_key = f"{p}{idx}_x"
     for row_i, (_dqn, key, _sub, _tag) in enumerate(_param_rows):
         if key == target_key:
             _focused_row = row_i
@@ -1020,14 +1088,17 @@ def _apply_waypoint_drag(pos) -> None:
     """
     if _dragging_waypoint is None:
         return
+    wp = _focused_waypoint_cfg()
+    if not wp:
+        return
     try:
-        mod = importlib.import_module("displays.train_models.e235_0.lower_lcd")
-        t = getattr(mod, "_TUNEABLES_ARC")
+        mod = importlib.import_module(wp["dict"][0])
+        t = getattr(mod, wp["dict"][1])
     except (ImportError, AttributeError):
         return
-    idx = _dragging_waypoint
-    x_key = f"arc_p{idx}_x"
-    y_key = f"arc_p{idx}_y"
+    p, idx = _dragging_waypoint
+    x_key = f"{p}{idx}_x"
+    y_key = f"{p}{idx}_y"
     if x_key not in t or y_key not in t:
         return
     t[x_key] = int(pos[0])
@@ -1044,13 +1115,19 @@ def _draw_arc_polyline_preview(screen) -> None:
     hit radius (_HANDLE_HIT_R) but a smaller visible circle so they don't
     crowd the band. Dragged handle enlarges + recolors for feedback.
     """
-    fill = (245, 245, 250)
+    # Per-prefix fill so the user distinguishes handle sets (m=white circles,
+    # b=cyan group anchors). Dragged handle enlarges + recolors.
+    prefix_fill = {"m": (245, 245, 250), "b": (90, 210, 230)}
     border = (40, 40, 50)
     drag_fill = (120, 200, 255)
-    for idx, px, py in _arc_waypoints():
-        is_dragging = idx == _dragging_waypoint
+    for p, idx, px, py in _arc_waypoints():
+        is_dragging = (p, idx) == _dragging_waypoint
         r = _HANDLE_VISUAL_R_DRAG if is_dragging else _HANDLE_VISUAL_R
-        pygame.draw.circle(screen, drag_fill if is_dragging else fill, (px, py), r)
+        fill = drag_fill if is_dragging else prefix_fill.get(p, (245, 245, 250))
+        # Yellow ring around the selected station's handles (both m + g).
+        if idx == _selected_station:
+            pygame.draw.circle(screen, (255, 210, 60), (px, py), r + 4, 2)
+        pygame.draw.circle(screen, fill, (px, py), r)
         pygame.draw.circle(screen, border, (px, py), r, 1)
 
 
