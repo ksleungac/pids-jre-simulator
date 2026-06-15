@@ -99,15 +99,29 @@ _REGISTRY = {
         ],
         # Draggable handles: m<N>=circle markers (white; m0 = the station-0
         # dot), g<N>=badge+name group anchors (cyan), v<N>=the station-0
-        # free-polygon vertices (red). All absolute x/y pairs. Grabbing an m/g
-        # handle selects station N → the panel filters to that station's keys
-        # (`^[mg]N_`); v grabs DON'T re-select (they're vertices, not stations
-        # — `select_prefixes` scopes the per-station reselection).
+        # free-polygon vertices (red), a<N>=approaching arrow tip (yellow;
+        # a0_x/a0_y only drawn in APPROACHING state). All absolute x/y pairs.
+        # Grabbing an m/g handle selects station N → the panel filters to that
+        # station's keys (`^[mg]N_`); v/a grabs DON'T re-select (vertices +
+        # arrow are not stations — `select_prefixes` scopes the per-station
+        # reselection).
         "waypoints": {
             "dict": ("displays.train_models.e235_0.lower_lcd", "_TUNEABLES_FIVE_STATION"),
-            "prefixes": ["m", "g", "v"],
+            "prefixes": ["m", "g", "v", "a"],
             "per_station": True,
             "select_prefixes": ["m", "g"],
+        },
+        # draw_state: maps prefix or specific key → which at_station value draws it.
+        # "stopping"   = drawn only when state.at_station is True
+        # "approaching" = drawn only when state.at_station is False
+        # Absent entries = always drawn (m, g, m0_x, m0_y, m1..m4, g* all absent).
+        "draw_state": {
+            "v": "stopping",  # pentagon vertex handles
+            "a": "approaching",  # arrow handle + params
+            "m0_dr": "stopping",  # pentagon dot radius (sidebar scalar)
+            "m0_circle_r": "approaching",
+            "m0_circle_inset": "approaching",
+            "m0_ts": "approaching",
         },
     },
 }
@@ -170,6 +184,10 @@ _overlay_drag_offset_start: Optional[tuple] = None
 _SCRATCH_PATH = project_root() / "_calibration_session.json"
 _OVERLAY_STATE_PATH = project_root() / "_overlay_state.json"
 
+# Live sim reference — stored in enter_edit_mode so gating helpers can read
+# state.at_station without threading sim through every internal call.
+_edit_sim = None
+
 _sidebar_font: Optional[pygame.font.Font] = None
 _sidebar_header_font: Optional[pygame.font.Font] = None
 _sidebar_hint_font: Optional[pygame.font.Font] = None
@@ -185,6 +203,8 @@ def enter_edit_mode(sim) -> None:
     source-file value, not a prior session's tweaks. Scratch is user-side
     state; originals are pristine-source state.
     """
+    global _edit_sim
+    _edit_sim = sim
     _snapshot_originals()
     _restore_from_scratch()
     # Enable held-key repeats — nudge / scroll / row-cycle all feel snappier
@@ -429,6 +449,9 @@ def _cycle_stop(sim, delta: int) -> None:
     sim.upper.set_state(sim.state.curr_stop, sim.state.cnt_pa, at_station=sim.state.at_station)
     # ASCII-only print — Windows cp1252 stdout can't encode kanji station names.
     print(f"[calibration] Stop = {sim.state.curr_stop} / {n - 1}")
+    # at_station may have flipped (STOPPING ↔ APPROACHING) — rebuild so
+    # draw_state gating in the sidebar reflects the new state.
+    _rebuild_param_rows()
 
 
 def draw_overlay(screen, sidebar_layout: str = "below_upper") -> None:
@@ -476,18 +499,24 @@ def _ensure_fonts() -> None:
 
 def _rebuild_param_rows() -> None:
     """Rebuild _param_rows for the focused element, honoring the per-station
-    filter when one is active. Call after focus or selected-station changes.
+    filter when one is active. Call after focus, selected-station, or stop
+    changes (stop cycle can flip at_station, which changes draw_state gating).
 
     Clamps _focused_row — row counts differ across stations (e.g. station 0
-    carries `m0_a`), so a focus index valid before the rebuild can point past
-    the new list."""
+    carries `m0_dr` etc), so a focus index valid before the rebuild can point
+    past the new list."""
     global _param_rows, _focused_row
     if _focused_element is None:
         _param_rows = []
         _focused_row = 0
         return
     cfg = _REGISTRY[_focused_element]
-    _param_rows = _build_param_rows(cfg["dicts"], cfg.get("waypoints"), _selected_station)
+    _param_rows = _build_param_rows(
+        cfg["dicts"],
+        cfg.get("waypoints"),
+        _selected_station,
+        draw_state=cfg.get("draw_state", {}),
+    )
     if _focused_row >= len(_param_rows):
         _focused_row = max(0, len(_param_rows) - 1)
     _ensure_focused_visible()
@@ -505,7 +534,12 @@ def _on_click(pos, sim) -> bool:
             # Per-station elements default to showing station 0's panel.
             wp = cfg.get("waypoints") or {}
             _selected_station = 0 if wp.get("per_station") else None
-            _param_rows = _build_param_rows(cfg["dicts"], cfg.get("waypoints"), _selected_station)
+            _param_rows = _build_param_rows(
+                cfg["dicts"],
+                cfg.get("waypoints"),
+                _selected_station,
+                draw_state=cfg.get("draw_state", {}),
+            )
             # Auto-switch to KANJI when focusing a lower-LCD element. The
             # EIGHT slot dispatches `japanese_eight_display` only in
             # KANJI/FURIGANA modes; ENGLISH falls through to the full-route
@@ -572,7 +606,7 @@ def _resolve_rect(cfg) -> Optional[pygame.Rect]:
         return None
 
 
-def _build_param_rows(dict_specs, waypoints=None, station=None) -> list:
+def _build_param_rows(dict_specs, waypoints=None, station=None, draw_state=None) -> list:
     """Flatten dicts into rows. Tuple values expand into N sub-rows.
 
     Each row: (dict_qualified_name, param_name, sub_idx, type_tag)
@@ -582,9 +616,16 @@ def _build_param_rows(dict_specs, waypoints=None, station=None) -> list:
     Waypoint `<prefix><N>_x` / `_y` keys are SKIPPED when the element has drag
     handles — they're repositioned by dragging, so listing them just clogs the
     sidebar. (Their handles still render; only the rows are hidden.)
+
+    draw_state: optional dict mapping prefix-or-key → "stopping"|"approaching".
+    Rows whose key (or whose leading prefix stem) is gated to a state that
+    doesn't match the current at_station are hidden from the sidebar.
     """
+    if draw_state is None:
+        draw_state = {}
     skip_re = None
     station_re = None
+    prefix_re = None
     if waypoints:
         prefixes = waypoints.get("prefixes") or [waypoints["prefix"]]
         alt = "|".join(re.escape(p) for p in prefixes)
@@ -592,6 +633,9 @@ def _build_param_rows(dict_specs, waypoints=None, station=None) -> list:
         # Per-station filter: show only the selected station's keys (`^[mg]N_`).
         if station is not None:
             station_re = re.compile(rf"^({alt}){station}_")
+        # Build a regex that captures the prefix stem of any registered key,
+        # so we can gate full key groups by prefix (e.g. "v" gates "v0_dr" etc).
+        prefix_re = re.compile(rf"^({alt})\d+")
     rows = []
     for mod_path, dict_name in dict_specs:
         mod = importlib.import_module(mod_path)
@@ -602,6 +646,14 @@ def _build_param_rows(dict_specs, waypoints=None, station=None) -> list:
                 continue
             if station_re and not station_re.match(key):
                 continue
+            # Draw-state gating: check exact key first, then prefix stem.
+            if draw_state:
+                if not _draw_state_allows(draw_state, key):
+                    continue
+                if prefix_re:
+                    m = prefix_re.match(key)
+                    if m and not _draw_state_allows(draw_state, m.group(1)):
+                        continue
             if isinstance(val, bool):
                 rows.append((dqn, key, None, "bool"))  # nudging bool is just toggle
             elif isinstance(val, int):
@@ -1054,6 +1106,37 @@ def _waypoint_prefixes(wp: dict) -> list:
     return wp.get("prefixes") or [wp["prefix"]]
 
 
+def _current_at_station() -> Optional[bool]:
+    """Return state.at_station from the live sim, or None if unavailable."""
+    if _edit_sim is None:
+        return None
+    try:
+        return _edit_sim.state.at_station
+    except AttributeError:
+        return None
+
+
+def _draw_state_allows(draw_state: dict, key_or_prefix: str) -> bool:
+    """Return True if the key (or prefix) should be shown given the current
+    at_station state.
+
+    draw_state maps prefix-or-key → "stopping" | "approaching". A match means
+    the element is only drawn in that state. If not in the map, always allowed.
+    at_station=None (sim unavailable) → allow everything (safe default).
+    """
+    if key_or_prefix not in draw_state:
+        return True
+    at_station = _current_at_station()
+    if at_station is None:
+        return True
+    required = draw_state[key_or_prefix]
+    if required == "stopping":
+        return at_station
+    if required == "approaching":
+        return not at_station
+    return True
+
+
 def _arc_waypoints() -> list:
     """Return list of (prefix, idx, x, y) for every waypoint of the focused
     element, across all its prefixes.
@@ -1069,8 +1152,11 @@ def _arc_waypoints() -> list:
         t = getattr(mod, wp["dict"][1])
     except (ImportError, AttributeError):
         return []
+    draw_state = _REGISTRY.get(_focused_element, {}).get("draw_state", {})
     out = []
     for p in _waypoint_prefixes(wp):
+        if not _draw_state_allows(draw_state, p):
+            continue
         i = 0
         while f"{p}{i}_x" in t and f"{p}{i}_y" in t:
             out.append((p, i, int(t[f"{p}{i}_x"]), int(t[f"{p}{i}_y"])))
@@ -1233,7 +1319,7 @@ def _nudge_focused(delta: int, sim=None) -> None:
     if type_tag == "int":
         d[key] = int(val) + delta
     elif type_tag == "float":
-        d[key] = round(float(val) + delta * 1.0, 2)
+        d[key] = round(float(val) + delta * 0.1, 2)
     elif type_tag == "tuple":
         new_chan = val[sub_idx] + delta
         # Clamp RGB-style 0-255 if channel looks color-shaped (3-tuple of ints).

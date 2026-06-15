@@ -13,7 +13,7 @@ LIGHT_GRAY = [240, 240, 240]
 
 # Station display colors (lower LCD route map)
 PASSED_COLOR = [230, 230, 230]
-CURRENT_COLOR = [175, 150, 6]
+CURRENT_COLOR = [226, 180, 25]
 INACTIVE_COLOR = [110, 110, 110]
 
 # Lower LCD font sizes (shared across lower-LCD mode renderers)
@@ -27,7 +27,7 @@ STOPS_WIDTH = 42
 STOPS_PER_LINE = 14
 
 # Timing
-FRAME_RATE = 15
+FRAME_RATE = 30
 KEY_REPEAT_DELAY = 200
 SETUP_KEY_REPEAT_DELAY = 300  # Initial delay before key repeat starts (milliseconds)
 SETUP_KEY_REPEAT_INTERVAL = 30  # Interval between repeated key events (milliseconds)

@@ -22,9 +22,10 @@ from displays.transfer_info import (
 )
 from app_paths import project_root
 
-# Canvas dimensions for the transfer-info body (lower-LCD region).
+# Canvas width for the transfer-info body (lower-LCD region). Height is read
+# per-render from the actual subsurface (render_transfer uses surf.get_height())
+# so it adapts to each model's UPPER_HEIGHT.
 W = S_WIDTH
-H = S_HEIGHT - UPPER_HEIGHT
 BG_COLOR = (255, 255, 255)
 TEXT_COLOR = (0, 0, 0)
 
@@ -886,7 +887,7 @@ def render_transfer(
 
     content_h = (max(p[2] for p in positions) + entry_h) if positions else 0
 
-    avail = H - banner_h
+    avail = surf.get_height() - banner_h
     top_gap = max(banner_to_body_gap, (avail - content_h - bottom_extra) // 2)
     body_y_start = banner_h + top_gap
 
@@ -897,11 +898,19 @@ def render_transfer(
 class TransferInfoDisplay(_BaseTransferInfoDisplay):
     """E235-1000-specific transfer-info renderer."""
 
+    def __init__(self, screen, route_data, stops, upper_height=UPPER_HEIGHT):
+        super().__init__(screen, route_data, stops)
+        # Upper-LCD height for the ACTIVE model — drives the lower-LCD subsurface
+        # top. Defaults to e235_1000's UPPER_HEIGHT (117); e235_0 overrides to its
+        # own (130) so the transfer slot's lower region aligns with the full-route
+        # and 5-station slots (otherwise the upper LCD looks 13px shorter here).
+        self.upper_height = upper_height
+
     def _render(self, transfers: List[str], current_time: float) -> None:
         del current_time  # not used yet — animations may consume it later
 
-        lower_h = S_HEIGHT - UPPER_HEIGHT
-        sub = self.screen.subsurface(pygame.Rect(0, UPPER_HEIGHT, S_WIDTH, lower_h))
+        lower_h = S_HEIGHT - self.upper_height
+        sub = self.screen.subsurface(pygame.Rect(0, self.upper_height, S_WIDTH, lower_h))
 
         # render_transfer's blueprint algorithm calls max() on derived row
         # sums — an empty transfers list crashes it. Bail early with a blank
