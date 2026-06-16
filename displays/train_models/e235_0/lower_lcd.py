@@ -22,6 +22,7 @@ Per-station rendering states: pentagon (current stop), numbered countdown
 No dim/passed treatment — circular loops have no terminal "behind".
 """
 
+import json
 import math
 from typing import Dict, List, Optional, Tuple
 import pygame
@@ -53,6 +54,8 @@ from displays.utils import (
 from displays.train_models.e235_1000.lower_lcd import (
     LowerDisplay as E235_1000_LowerDisplay,
 )
+from displays.transfer_info import apply_transfer_filter, resolve_entry
+from displays.train_models.e235_1000.transfer_info import load_icon
 
 # =============================================================================
 # 5-station view — green curve band geometry (Phase 1 scaffold)
@@ -109,6 +112,14 @@ _ARC_STATION_SLOTS = (1, 2, 3, 4, 5)
 # editor doesn't need pixel-tight bounding since the arc is the only thing
 # on the lower LCD in Phase 1.
 ARC_RECT = pygame.Rect(0, UPPER_HEIGHT, S_WIDTH, S_HEIGHT - UPPER_HEIGHT)
+
+# Hit-test rect for the inline transfer panel (left column). A sub-region of
+# ARC_RECT — the calibration editor checks it BEFORE `five_station` so clicks
+# in the left column focus the panel, while clicks on the arc/markers (x ≥ this
+# width, where m4 starts at x=225) fall through to the marker element. This is
+# only the click-to-FOCUS region; the panel's curved right edge (tp1/tp2/tp3) may
+# extend right of it, but those handles are grabbable once the panel is focused.
+TP_RECT = pygame.Rect(0, UPPER_HEIGHT, 224, S_HEIGHT - UPPER_HEIGHT)
 
 
 # =============================================================================
@@ -191,10 +202,10 @@ _TUNEABLES_FIVE_STATION = {
     # kept explicit per user call (2026-06-12). Don't fold into a scale law
     # unless the user asks.
     "m1_x": 410, "m1_y": 293, "m1_r": 21, "m1_ts": 31,
-    "g1_x": 481, "g1_y": 288, "g1_b": 38, "g1_ns": 42, "g1_ni": 37,
+    "g1_x": 481, "g1_y": 288, "g1_b": 38, "g1_ns": 40, "g1_ni": 44,
     # station 2
     "m2_x": 355, "m2_y": 243, "m2_r": 19, "m2_ts": 28,
-    "g2_x": 416, "g2_y": 229, "g2_b": 34, "g2_ns": 40, "g2_ni": 31,
+    "g2_x": 416, "g2_y": 229, "g2_b": 34, "g2_ns": 38, "g2_ni": 35,
     # station 3
     "m3_x": 293, "m3_y": 200, "m3_r": 17, "m3_ts": 26,
     "g3_x": 339, "g3_y": 180, "g3_b": 29, "g3_ns": 32, "g3_ni": 32,
@@ -216,6 +227,43 @@ _TUNEABLES_FIVE_STATION = {
     "a0_sweep_dur":   1.0,  # seconds for A→B travel (= full-route sweep_duration_s)
     "a0_fade_dur":    0.4,  # seconds to fade out at B (= full-route fade_out_s)
     "a0_rest_gap":    0.3,  # seconds of invisible gap before restart (= full-route rest_s)
+}
+# fmt: on
+
+
+# =============================================================================
+# Inline transfer panel — left column of the 5-station view. IRL the panel is
+# always shown when the target station has transfers (NOT the horizontal
+# transfer SLOT — that one stays inherited from e235_1000). Data path reuses
+# the parent filter (apply_transfer_filter) so the entry ORDER matches the
+# slot. Fonts smaller than the slot; no list-level compression (knob reserved).
+# Shinkansen take one row but wrap their long name at `・` into two lines shrunk
+# to fit the row pitch. See DISPLAY_E235.md § "Transfer Info".
+# =============================================================================
+# fmt: off
+_TUNEABLES_TRANSFER_PANEL = {
+    "tp0_x":          10,   # panel anchor x (left margin) — DRAG handle (pairs with tp0_y)
+    "tp0_y":         205,   # panel anchor y (header top) — DRAG handle (pairs with tp0_x)
+    "tp1_x":         303,   # right-edge CURVE pt1 (top) x — DRAG handle (pairs tp1_y)
+    "tp1_y":         251,   # right-edge curve pt1 (top) y — DRAG handle (pairs tp1_x)
+    "tp2_x":         367,   # right-edge CURVE pt2 (mid) x — DRAG handle (pairs tp2_y)
+    "tp2_y":         310,   # right-edge curve pt2 (mid) y — DRAG handle (pairs tp2_x)
+    "tp3_x":         417,   # right-edge CURVE pt3 (bot) x — DRAG (wider: more room low)
+    "tp3_y":         396,   # right-edge curve pt3 (bot) y — DRAG handle (pairs tp3_x)
+    "tp_header_size": 16,   # {station}駅 — ShinGo Heavy (most bold)
+    "tp_sub_gap":      2,   # gap header-bottom → subtitle-top
+    "tp_sub_size":    16,   # 乗換えのご案内 — ShinGo Light (thin)
+    "tp_list_gap":    8,   # gap subtitle-bottom → first row-top
+    "tp_row_pitch":   24,   # fixed vertical step per entry (push-down; no compression)
+    "tp_compress":   1.0,   # list-level vertical compression (1.0 = none; reserved for overflow)
+    "tp_badge":       19,   # line badge square size (px) — smaller than slot
+    "tp_badge_gap":    3,   # gap badge group → name
+    "tp_name_size":   16,   # line name — ShinGo Medium (= slot face, smaller size)
+    "tp_inter_badge":  2,   # gap between stacked badges within one entry
+    "tp_col_gap":     10,   # gap between the two columns when 2 entries share a row
+    "tp_wrap_lgap":    2,   # gap between the two wrapped lines (both full size, no shrink)
+    "tp_pair_min_n":   6,   # pair only when ≥ this many transfers; fewer → all solo
+    "tp_shink_wrap_x": 233, # shinkansen 2-line wrap right edge (NARROWER than curve; fixed cut at 北海道|上越)
 }
 # fmt: on
 
@@ -740,8 +788,8 @@ class CircularFullRouteDisplay:
         rest_s            = 0.3   # empty gap (NO chev visible) between one chev's fade-out end and the other's spawn at A
         endpoint_gap_A    = 3     # px gap between chev tip and last station's circle near edge (= start position)
         endpoint_gap_B    = 1     # px gap between chev tip and curr_stop's circle near edge (= end position)
-        ease_in_power     = 2     # sweep position eased via sweep_t**ease_in_power (>1 = accelerating: slow at A, fast at B)
-        fade_in_full_at   = 0.5   # alpha hits 1.0 when eased position reaches this fraction (0.5 = midpoint)
+        ease_out_power    = 2     # sweep position eased via 1-(1-sweep_t)**ease_out_power (>1 = decelerating: fast at A, slow at B)
+        fade_in_full_at   = 0.5   # alpha hits 1.0 when raw sweep_t reaches this fraction (0.5 = midpoint); decoupled from position so ease-out flick keeps a smooth fade-in
         fade_out_power    = 2     # fade-out alpha = 1 - fade_t**fade_out_power (>1 = accelerating: slow drop early, fast drop late)
         # ----------------------------------------
         # fmt: on
@@ -760,9 +808,9 @@ class CircularFullRouteDisplay:
             t_chev = (t_now - chev_t_offset) % cycle_period_s
             if t_chev < sweep_duration_s:
                 sweep_t = t_chev / sweep_duration_s
-                eased = sweep_t**ease_in_power
+                eased = 1 - (1 - sweep_t) ** ease_out_power
                 tip_x = tip_x_A + (tip_x_B - tip_x_A) * eased
-                alpha = min(1.0, eased / fade_in_full_at)
+                alpha = min(1.0, sweep_t / fade_in_full_at)
             elif t_chev < sweep_duration_s + fade_out_s:
                 fade_t = (t_chev - sweep_duration_s) / fade_out_s
                 alpha = 1.0 - fade_t**fade_out_power
@@ -1195,6 +1243,19 @@ class JapaneseFiveStationDisplay:
         # (filename, size) — keeps the editor responsive while dragging scale.
         self._font_cache: Dict[Tuple[str, int], pygame.font.Font] = {}
 
+        # Inline transfer panel — data path mirrors the parent
+        # TransferInfoDisplay so the filtered entry ORDER matches the
+        # horizontal slot. Pure-function reuse (apply_transfer_filter /
+        # resolve_entry) per displays/transfer_info.py; load lines+stations
+        # once here. line_code / transfer_view optional (out-of-spec routes
+        # render unfiltered — soft floor per CLAUDE.md scope table).
+        root = project_root()
+        self._tp_lines = json.loads((root / "data" / "lines.json").read_text(encoding="utf-8"))
+        self._tp_stations = json.loads((root / "data" / "stations.json").read_text(encoding="utf-8"))
+        self._tp_line_code = route_data.get("line_code")
+        self._tp_transfer_view = route_data.get("transfer_view")
+        self._tp_icon_cache: dict = {}
+
     def _font(self, name: str, size: float) -> pygame.font.Font:
         key = (name, max(1, int(round(size))))
         f = self._font_cache.get(key)
@@ -1337,6 +1398,9 @@ class JapaneseFiveStationDisplay:
                     self._draw_numbered_circle(pos, minutes[k - 1], radius, digit_font)
                 self._draw_jy_badge(stop, gpos, t[f"g{k}_b"])
                 self._draw_station_name(stop.get("name", ""), gpos, t[f"g{k}_ns"], t[f"g{k}_ni"])
+
+            # Inline transfer panel — left column (target station's transfers).
+            self._draw_transfer_panel(state)
         finally:
             self.screen.set_clip(old_clip)
 
@@ -1391,6 +1455,244 @@ class JapaneseFiveStationDisplay:
             cumulative += self.stops[idx].get("time", 0)
             mins.append(int(cumulative))
         return mins
+
+    # -------------------------------------------------------------------------
+    # Inline transfer panel (left column)
+    # -------------------------------------------------------------------------
+
+    def _draw_transfer_panel(self, state) -> None:
+        """Left-column transfer list for the target station (IRL inline panel).
+
+        Reuses the parent transfer filter (``apply_transfer_filter``) so the
+        entry order matches the horizontal transfer slot. Hidden entirely when
+        the station has no transfers. Shinkansen entries occupy one row but
+        wrap their long name at ``・`` into two lines shrunk to the row pitch.
+        Panel stays Japanese in every mode (mirrors the kanji-only 5-station
+        map). See DISPLAY_E235.md § "Transfer Info".
+        """
+        if state is None:
+            return
+        idx = state.curr_stop
+        if not (0 <= idx < len(self.stops)):
+            return
+        station_name = self.stops[idx].get("name", "")
+        sd = self._tp_stations.get(station_name, {})
+        refs = apply_transfer_filter(
+            list(sd.get("transfers", [])),
+            self._tp_line_code,
+            self._tp_transfer_view,
+            sd,
+            self._tp_lines,
+        )
+        if not refs:
+            return  # no transfers → hide whole panel (header + subtitle + list)
+
+        t = _TUNEABLES_TRANSFER_PANEL
+        px = int(t["tp0_x"])
+
+        # Header: {station}駅 — ShinGo Heavy (most bold).
+        header_font = self._font("ShinGoPr6N-Heavy.otf", t["tp_header_size"])
+        header_img = header_font.render(station_name + "駅", True, DARK_BG)
+        hy = int(t["tp0_y"])
+        self.screen.blit(header_img, (px, hy))
+
+        # Subtitle: 乗換えのご案内 — ShinGo Light (thin).
+        sub_font = self._font("ShinGoPr6N-Light.otf", t["tp_sub_size"])
+        sub_img = sub_font.render("乗換えのご案内", True, DARK_BG)
+        sy = hy + header_img.get_height() + int(t["tp_sub_gap"])
+        self.screen.blit(sub_img, (px, sy))
+
+        # Entry rows — responsive packing. A shinkansen takes its OWN full-width
+        # row and wraps its long name to ≤2 full-size lines (badge beside line 1).
+        # Every other entry NEVER wraps (single line); two share a row when both
+        # fit a half-column — short pairs share a row (IRL layout, and halves
+        # vertical use so dense stations fit). A non-shinkansen too wide to share
+        # takes a full row alone, still single line. At most 2 entries per row.
+        name_font = self._font("ShinGoPr6N-Medium.otf", t["tp_name_size"])
+        line_h = name_font.get_height()
+        badge_h = int(t["tp_badge"])
+        badge_gap = int(t["tp_badge_gap"])
+        inter_badge = int(t["tp_inter_badge"])
+        wrap_lgap = int(t["tp_wrap_lgap"])
+        col_gap = int(t["tp_col_gap"])
+        pitch = t["tp_row_pitch"] * t["tp_compress"]
+        row_gap = max(0, pitch - max(line_h, badge_h))  # inter-row gap implied by pitch
+
+        # Right edge is a CURVE, not a vertical line: the green band sweeps right
+        # as it descends, so lower rows get more width. The boundary is a
+        # piecewise-linear curve through the draggable handles tp1/tp2/tp3 (sorted
+        # by y); _right_edge(row_y) interpolates between the bracketing pair and
+        # extrapolates along the end segments past the outermost handles. Left
+        # edge stays vertical at px (tp0_x). See DISPLAY_E235.md § "Transfer Info".
+        _curve_pts = sorted(
+            (
+                (int(t["tp1_y"]), int(t["tp1_x"])),
+                (int(t["tp2_y"]), int(t["tp2_x"])),
+                (int(t["tp3_y"]), int(t["tp3_x"])),
+            )
+        )
+
+        def _right_edge(yy):
+            pts = _curve_pts
+            if yy <= pts[0][0]:
+                (y0, x0), (y1, x1) = pts[0], pts[1]
+            elif yy >= pts[-1][0]:
+                (y0, x0), (y1, x1) = pts[-2], pts[-1]
+            else:
+                (y0, x0), (y1, x1) = pts[0], pts[1]
+                for k in range(len(pts) - 1):
+                    if pts[k][0] <= yy <= pts[k + 1][0]:
+                        (y0, x0), (y1, x1) = pts[k], pts[k + 1]
+                        break
+            if y1 == y0:
+                return float(x0)
+            return x0 + (x1 - x0) * (yy - y0) / (y1 - y0)
+
+        def _icons(e):
+            return [load_icon(b["icon"], badge_h, self._tp_icon_cache) for b in (e.get("badges") or [{"icon": "_universal"}])]
+
+        def _is_shink(e):
+            return e.get("category") == "shinkansen"
+
+        def _entry_w(e):
+            ics = _icons(e)
+            bw = sum(ic.get_width() for ic in ics) + inter_badge * (len(ics) - 1)
+            return bw + badge_gap + name_font.size(e["name_ja"])[0]
+
+        def _entry_lines(e, ex):
+            """Lines for entry ``e`` drawn at column-x ``ex``. Only shinkansen
+            wrap (to ≤2 lines at ``･``); every other entry is a single line
+            (never wraps, per spec). Shinkansen wrap against the NARROWER fixed
+            boundary ``tp_shink_wrap_x`` (decoupled from the row-push curve), so
+            the cut stays fixed (東北･山形･秋田 | 北海道…) even when the curve is
+            widened for pairing."""
+            ics = _icons(e)
+            bw = sum(ic.get_width() for ic in ics) + inter_badge * (len(ics) - 1)
+            text_x = ex + bw + badge_gap
+            if _is_shink(e):
+                avail = int(t["tp_shink_wrap_x"]) - text_x
+                if name_font.size(e["name_ja"])[0] > avail:
+                    return [ln for ln in self._wrap_two_lines(e["name_ja"], name_font, avail) if ln]
+            return [e["name_ja"]]
+
+        def _content_h(lines):
+            return len(lines) * line_h + (len(lines) - 1) * wrap_lgap
+
+        def _draw_entry(e, ex, top_y):
+            """Badge group + name at column-x ``ex``, first line top at ``top_y``."""
+            ics = _icons(e)
+            bw = sum(ic.get_width() for ic in ics) + inter_badge * (len(ics) - 1)
+            text_x = ex + bw + badge_gap
+            lines = _entry_lines(e, ex)
+            # Badge group vertically centered on the FIRST line.
+            by = int(round(top_y + line_h / 2.0 - badge_h / 2.0))
+            bx = ex
+            for j, ic in enumerate(ics):
+                self.screen.blit(ic, (bx, by))
+                bx += ic.get_width()
+                if j < len(ics) - 1:
+                    bx += inter_badge
+            ty = top_y
+            for ln in lines:
+                self.screen.blit(name_font.render(ln, True, DARK_BG), (text_x, int(round(ty))))
+                ty += line_h + wrap_lgap
+
+        # Grouping (col-1 left at px; col-2 shares one anchor so 2nd badges align)
+        # + curved boundary + monotone repair. Algorithm + stability proof in
+        # DISPLAY_E235.md § "Transfer Info" → "Inline panel (5-station view)".
+        resolved = [resolve_entry(ref, self._tp_lines) for ref in refs]
+        list_y0 = sy + sub_img.get_height() + int(t["tp_list_gap"])
+        # Threshold T (overfit Yamanote): pairing engages only when the station
+        # has ≥ tp_pair_min_n transfers. Fewer → every entry stacks one-per-row,
+        # regardless of free width (IRL: 秋葉原/神田/日暮里 etc. stay solo even
+        # with room). Yamanote's effective transfer counts are 1,2,3,6,7,8,9 —
+        # never 4 or 5 — so the gap makes the 6-cutoff unambiguous. See
+        # DISPLAY_E235.md § "Transfer Info".
+        pairing_on = len(resolved) >= int(t["tp_pair_min_n"])
+
+        def _build(disabled):
+            """Lay rows top-down. Shinkansen → solo full-width row (may wrap).
+            Non-shinkansen → pair consecutive when pairing is on AND the pair's
+            own footprint fits the boundary at that row; else solo. Returns list
+            of row dicts."""
+            rows = []
+            yy = list_y0
+            j = 0
+            while j < len(resolved):
+                e = resolved[j]
+                nxt = resolved[j + 1] if j + 1 < len(resolved) else None
+                if (
+                    pairing_on
+                    and j not in disabled
+                    and nxt is not None
+                    and not _is_shink(e)
+                    and not _is_shink(nxt)
+                    and _entry_w(e) + col_gap + _entry_w(nxt) <= _right_edge(yy) - px
+                ):
+                    members = [e, nxt]
+                    j += 2
+                else:
+                    members = [e]
+                    j += 1
+                # Row height: only a solo shinkansen wraps; pairs/solos are 1 line.
+                if len(members) == 1 and _is_shink(members[0]):
+                    ch = _content_h(_entry_lines(members[0], px))
+                else:
+                    ch = line_h
+                row_h = max(badge_h, ch)
+                rows.append({"members": members, "y": yy, "i": j - len(members), "row_h": row_h})
+                yy += row_h + row_gap
+            return rows
+
+        disabled: set = set()
+        col2_x = None
+        rows: list = []
+        for _ in range(len(resolved) + 1):
+            rows = _build(disabled)
+            paired = [r for r in rows if len(r["members"]) == 2]
+            if not paired:
+                col2_x = None
+                break
+            col2_x = px + max(_entry_w(r["members"][0]) for r in paired) + col_gap
+            violators = [r for r in paired if col2_x + _entry_w(r["members"][1]) > _right_edge(r["y"])]
+            if not violators:
+                break
+            for r in violators:
+                disabled.add(r["i"])
+
+        for r in rows:
+            yy = r["y"]
+            members = r["members"]
+            _draw_entry(members[0], px, yy)
+            if len(members) == 2:
+                _draw_entry(members[1], col2_x, yy)
+
+    def _wrap_two_lines(self, name: str, font, avail_w: int) -> Tuple[str, str]:
+        """Greedy-to-width split into (line1, line2).
+
+        ``･``-delimited (shinkansen — half-width middle dot U+FF65, matching the
+        dest separator convention): the longest run of segments whose joined
+        width INCLUDING a trailing ``･`` fits ``avail_w`` stays on line 1 with
+        that ``･`` kept (the dot is not dropped at the break); the rest go to
+        line 2. ``avail_w`` here is the NARROWER shinkansen wrap budget
+        (``tp_shink_wrap_x``), not the row-push curve — IRL the cut is fixed
+        (東北･山形･秋田 | 北海道･上越･北陸新幹線) and must not shift when the curve
+        widens for pairing. No ``･``: break at the longest char prefix that fits.
+        Always returns two strings (line 2 may overrun a too-wide remainder)."""
+        dot = "･"  # U+FF65 halfwidth katakana middle dot (shinkansen separator)
+        if dot in name:
+            segs = name.split(dot)
+            k = 1  # at least the first segment stays on line 1
+            for i in range(1, len(segs)):
+                if font.size(dot.join(segs[:i]) + dot)[0] <= avail_w:
+                    k = i
+                else:
+                    break
+            return dot.join(segs[:k]) + dot, dot.join(segs[k:])
+        for i in range(len(name) - 1, 0, -1):
+            if font.size(name[:i])[0] <= avail_w:
+                return name[:i], name[i:]
+        return name, ""
 
     # -------------------------------------------------------------------------
     # Marker primitives — copied from CircularFullRouteDisplay (same model).
@@ -1458,17 +1760,17 @@ class JapaneseFiveStationDisplay:
         t_cycle = t_now % cycle_period
 
         # fmt: off
-        ease_in_power    = 2    # sweep position: slow at A, fast at B (matches full-route)
-        fade_in_full_at  = 0.5  # alpha hits 1.0 when eased position reaches this fraction
+        ease_out_power   = 2    # sweep position: fast at A, slow at B (decelerating, matches full-route)
+        fade_in_full_at  = 0.5  # alpha hits 1.0 when raw sweep_t reaches this fraction (decoupled from position)
         fade_out_power   = 2    # fade-out: 1 - t^2 (matches full-route)
         # fmt: on
 
         if t_cycle < sweep_dur:
             sweep_t = t_cycle / sweep_dur
-            eased = sweep_t**ease_in_power
+            eased = 1 - (1 - sweep_t) ** ease_out_power
             tip_x = tip_x_A + (tip_x_B - tip_x_A) * eased
             tip_y = tip_y_A + (tip_y_B - tip_y_A) * eased
-            alpha = min(1.0, eased / fade_in_full_at)
+            alpha = min(1.0, sweep_t / fade_in_full_at)
         elif t_cycle < sweep_dur + fade_dur:
             fade_t = (t_cycle - sweep_dur) / fade_dur
             tip_x = tip_x_B

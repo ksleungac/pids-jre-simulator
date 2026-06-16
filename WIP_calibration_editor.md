@@ -18,6 +18,10 @@ Graduation gate (b) partially proven by the arc; full sign-off still needs the r
 
 2026-06-15: `five_station` element gains draw-state gating (handles + sidebar rows hidden when the element they tune isn't drawn in the current state), approaching arrow renamed to draggable `a0` handle. Current `_TUNEABLES_FIVE_STATION` key schema: always-shown `m0_x/y`, `m1..m4_x/y/r/ts`, `g0..g4_x/y/b/ns/ni`; stopping-only `v0..v4_x/y` (pentagon vertices), `m0_dr` (dot radius); approaching-only `m0_circle_r`, `m0_circle_inset`, `m0_ts` (digit size), `a0_x/y/angle/scale/halo_w` (arrow).
 
+2026-06-15 (later): **`transfer_panel`** registered as a second lower-LCD element — the 5-station view's inline left-column transfer list (`displays/.../e235_0/lower_lcd.py:_draw_transfer_panel`, dict `_TUNEABLES_TRANSFER_PANEL`). Rect `TP_RECT` = the left column (width ≈ panel right edge), registered **before** `five_station` so left-column clicks focus the panel while arc/marker clicks (x ≥ 224) fall through to the markers. Single draggable anchor `tp0_x`/`tp0_y` (panel top-left; header → subtitle → list flow from it); every other `tp_*` key is a nudge-only scalar (sizes / gaps / pitch / shinkansen-scale). Handle prefix `tp` (per_station=False), distinct green core.
+
+2026-06-15 (later): **per-element drag lock** — `K` toggles a lock on the focused element. Locked handles render dimmed (no bright core) and are inert to grabs, so an accidental drag can't be swept into the next Ctrl+S; keyboard nudge of a deliberately-selected row still works (drag is the accident vector, not nudge). **Whole-element** granularity, **persisted** across launches to gitignored `_editor_locks.json` (loaded in `enter_edit_mode`; ids no longer in `_REGISTRY` are dropped on load). Sidebar header shows `[LOCKED — K]`.
+
 ---
 
 ## Architecture (locked)
@@ -28,7 +32,7 @@ Graduation gate (b) partially proven by the arc; full sign-off still needs the r
 | Editor surface | In-pygame sidebar overlay (Lane A) — single window |
 | Selection | Click LCD element → sidebar shows that element's dict params (α-first) |
 | Edit mode | Frozen frame. Sim paused, audio stops |
-| Persistence | Scratch JSON auto-save per change (`_calibration_session.json`, gitignored) + Ctrl+S writeback to source (type-guarded value-swap, no AST rewrite) |
+| Persistence | **Three states kept distinct** (2026-06-16 refactor): baseline = source at launch (`_originals`); edits = `_edited_keys` per-(dict,key) set of what the user actually changed; live = the in-place-mutated module dict the renderer reads. **Ctrl+S writes back ONLY keys in `_edited_keys`** (type-guarded value-swap; `_swap_dict_literal(allowed_keys=…)` leaves every other key's source text byte-for-byte). No save → in-memory mutation discarded, source reloads next launch. Silent scratch auto-restore **removed** — it was the cross-session drift vector (one element's stale state leaking into source on the next unrelated Ctrl+S). |
 | Mode-switch | Manual via `L` — sync sim mode to focused dict's family. No auto-switch on row change (disrupts flow) |
 | Sidebar layout | Dispatched from focused element's `target` field on `_REGISTRY` entry: `"upper"` → sidebar below upper LCD (side-by-side LCDs above); `"lower"` → sidebar on right half of doubled window, LCD A spans full window left half (upper + lower visible). Lower-LCD focus auto-switches sim to KANJI so the `japanese_eight_display` renderer dispatches (ENGLISH would fall through to full-route). |
 
@@ -108,6 +112,8 @@ Sibling to the region-rect dict above. Each region's drawable internals get a `_
 | Cycle stop | `[` prev, `]` next |
 | Scroll sidebar | mousewheel / `PgUp` / `PgDn` (auto-scroll on row select) |
 | Save back to source | `Ctrl+S` (clears scratch JSON) |
+| Toggle drag handles (hidden = inert to grabs) | `H` |
+| Lock / unlock focused element (drag-inert; persists to `_editor_locks.json`) | `K` |
 | Quit (scratch persists for resume) | `ESC` |
 
 **Sidebar shows:**

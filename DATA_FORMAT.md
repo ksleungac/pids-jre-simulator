@@ -221,7 +221,7 @@ Catalog of rail lines referenced as transfer entries on station displays. Stores
         "category": "jr_east",
         "variants": {
             "oimachi_kamata": {
-                "name_ja": "京浜東北線(大井町・蒲田方面)",
+                "name_ja": "京浜東北線（大井町・蒲田方面）",
                 "name_en": "Keihin-Tōhoku Line (for Ōimachi/Kamata)"
             }
         }
@@ -255,7 +255,7 @@ Catalog of rail lines referenced as transfer entries on station displays. Stores
 | `name_ja` | Japanese display name. Required at base unless slug is **only** referenced via variants (e.g. `yokosuka_sobu` — base never used directly). |
 | `name_en` | English display name (Hepburn-with-macrons). Same required-unless-variant-only rule as `name_ja`. |
 | `category` | One of `jr_east` / `shinkansen` / `non_jr`. Drives row-grouping. |
-| `variants` | Optional. Map of `<variant_name> → {field overrides}`. Each variant overrides any subset of base fields; missing fields inherit from base. Used for zone-specific badge subsets (UT JT-only south, JU-only north), through-service display variants (Yokosuka vs Sōbu Rapid label on same JO physical line), and direction-qualified line names (Keihin-Tōhoku with `(大井町・蒲田方面)` suffix). Variants referenced from `stations.json` via dot notation: `slug.variant_name`. |
+| `variants` | Optional. Map of `<variant_name> → {field overrides}`. Each variant overrides any subset of base fields; missing fields inherit from base. Used for zone-specific badge subsets (UT JT-only south, JU-only north), through-service display variants (Yokosuka vs Sōbu Rapid label on same JO physical line), and direction-qualified line names (Keihin-Tōhoku with `（大井町・蒲田方面）` suffix). Variants referenced from `stations.json` via dot notation: `slug.variant_name`. |
 
 ### Reference resolution (variant + scale)
 
@@ -276,6 +276,7 @@ Catalog of rail lines referenced as transfer entries on station displays. Stores
 - **Slug names don't carry codes** — `yokosuka_sobu` not `jo_through`. Codes = filter-machinery; names = human-readable. Variant names follow same rule (`tokaido`/`tohoku` not `jt`/`ju`).
 - **Naming asymmetry to watch**: route folder `audio/sobu/` ↔ lines slug `yokosuka_sobu`. Same physical line, different namespaces (route folder = sim-route diagram; lines slug = transfer catalog). Don't conflate when refactoring either.
 - **Icon slug = filename stem** under `data/line_icons/`. Convention: JR letter codes use bare code (`JY`, `JK`, `JT`, …); Tokyo Metro / Toei use operator-prefixed slugs (`metro_marunouchi`, `toei_asakusa`, …); descriptive for others; `_universal` for fallback. Source SVGs live in `lcd_references/line_badges/`, regenerate via `magick -background none <src.svg> -resize 128x128 <dst.png>`.
+- **Punctuation in `name_ja` is per-line IRL fidelity — match the real PIDS, don't normalize for consistency.** Width is NOT uniform across lines: `keihin_tohoku.oimachi_kamata` uses **full-width** brackets `（）` and dot `・` (`京浜東北線（大井町・蒲田方面）`) — this is IRL-special at 品川; a "consistency" pass that half-widthed it would be wrong. Other direction suffixes use **half-width** `()` (e.g. `宇都宮線(東北線)`). Shinkansen names use the **half-width** middle dot `･` (U+FF65), matching the destination-separator convention (`東北･山形･秋田･北海道･上越･北陸新幹線`) — the 5-station inline panel wraps on this exact codepoint (see [DISPLAY_E235.md § Inline transfer panel](DISPLAY_E235.md)).
 
 ---
 

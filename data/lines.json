@@ -7,7 +7,7 @@
         "category": "jr_east",
         "variants": {
             "oimachi_kamata": {
-                "name_ja": "京浜東北線(大井町・蒲田方面)",
+                "name_ja": "京浜東北線（大井町・蒲田方面）",
                 "name_en": "Keihin-Tōhoku Line (for Ōimachi/Kamata)"
             }
         }
@@ -34,7 +34,7 @@
         "badges": [{"code": "JU", "icon": "JU"}],
         "category": "jr_east",
         "variants": {
-            "utsunomiya": {"name_ja": "宇都宮線（東北線）", "name_en": "Utsunomiya Line (Tōhoku Line)"},
+            "utsunomiya": {"name_ja": "宇都宮線(東北線)", "name_en": "Utsunomiya Line (Tōhoku Line)"},
             "takasaki":   {"name_ja": "高崎線",            "name_en": "Takasaki Line"}
         }
     },
@@ -92,8 +92,8 @@
             "sawara": {"name_ja": "成田線(佐原方面)",   "name_en": "Narita Line (for Sawara)"}
         }
     },
-    "tohoku_shinkansen":  {"badges": [{"icon": "shinkansen_jr_east"}],    "name_ja": "東北・山形・秋田・北海道・上越・北陸新幹線", "name_en": "Tōhoku・Yamagata・Akita・Hokkaido・Jōetsu・Hokuriku Shinkansen",                           "category": "shinkansen"},
-    "tokaido_shinkansen": {"badges": [{"icon": "shinkansen_jr_central"}], "name_ja": "東海道・山陽新幹線", "name_en": "Tōkaidō・Sanyō Shinkansen",                                                          "category": "shinkansen"},
+    "tohoku_shinkansen":  {"badges": [{"icon": "shinkansen_jr_east"}],    "name_ja": "東北･山形･秋田･北海道･上越･北陸新幹線", "name_en": "Tōhoku・Yamagata・Akita・Hokkaido・Jōetsu・Hokuriku Shinkansen",                           "category": "shinkansen"},
+    "tokaido_shinkansen": {"badges": [{"icon": "shinkansen_jr_central"}], "name_ja": "東海道･山陽新幹線", "name_en": "Tōkaidō・Sanyō Shinkansen",                                                          "category": "shinkansen"},
     "marunouchi":         {"badges": [{"icon": "metro_marunouchi"}],      "name_ja": "丸ノ内線",   "name_en": "Marunouchi Line",                                            "category": "non_jr"},
     "ginza":              {"badges": [{"icon": "metro_ginza"}],           "name_ja": "銀座線",     "name_en": "Ginza Line",                                                 "category": "non_jr"},
     "hibiya":             {"badges": [{"icon": "metro_hibiya"}],          "name_ja": "日比谷線",   "name_en": "Hibiya Line",                                                "category": "non_jr"},
@@ -107,7 +107,7 @@
     "oedo":               {"badges": [{"icon": "toei_oedo"}],             "name_ja": "都営大江戸線", "name_en": "Toei Ōedo Line",                                           "category": "non_jr"},
     "tokyo_monorail":     {"badges": [{"icon": "tokyo_monorail"}],        "name_ja": "東京モノレール羽田空港線", "name_en": "Tokyo Monorail Haneda Airport Line",                  "category": "non_jr"},
     "yurikamome":         {"badges": [{"icon": "_universal"}],            "name_ja": "ゆりかもめ", "name_en": "Yurikamome",                                                 "category": "non_jr"},
-    "tsukuba_express":    {"badges": [{"icon": "_universal"}],            "name_ja": "つくばエクスプレス", "name_en": "Tsukuba Express",                                       "category": "non_jr"},
+    "tsukuba_express":    {"badges": [{"icon": "_universal"}],            "name_ja": "つくばエクスプレス線", "name_en": "Tsukuba Express",                                       "category": "non_jr"},
     "tobu_noda":          {"badges": [{"icon": "_universal"}],            "name_ja": "東武野田線", "name_en": "Tōbu Noda Line",                                             "category": "non_jr"},
     "new_shuttle":        {"badges": [{"icon": "_universal"}],            "name_ja": "ニューシャトル", "name_en": "New Shuttle",                                            "category": "non_jr"},
     "shonan_monorail":    {"badges": [{"icon": "_universal"}],            "name_ja": "湘南モノレール", "name_en": "Shōnan Monorail",                                       "category": "non_jr"},

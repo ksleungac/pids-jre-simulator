@@ -3,11 +3,14 @@
 WIP, see WIP_calibration_editor.md at repo root. Wired up by preview_display.py
 when run with `--edit`. Single-file prototype; if it earns its keep we extract.
 
-Reads `_TUNEABLES_*` dicts from target modules at runtime. Mutates them in
-place — pygame redraws pick up new values next frame. Auto-saves to a
-gitignored scratch JSON for crash safety. Ctrl+S writes back to source
-(value-swap only, type-guarded to int/float/tuple/str). ESC quits without
-writeback (scratch JSON persists for resume).
+Reads `_TUNEABLES_*` dicts from target modules at runtime. Three states kept
+distinct: baseline (source values at launch, `_originals`), edits (`_edited_keys`
+— the (dict, key) pairs the user actually changed), and live (the in-place
+mutated dict the renderer reads each frame). Ctrl+S writes back ONLY edited keys
+(value-swap, type-guarded to int/float/tuple/str) — every other key keeps its
+source text. ESC discards the in-memory mutations; source reloads next launch.
+No hidden state is persisted between sessions (the old scratch-resume that
+silently leaked one element's state into source on save was removed 2026-06-16).
 
 Interaction:
     Click any registered element on upper LCD (dest / clock / prefix /
@@ -89,6 +92,28 @@ _REGISTRY = {
             ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_STATION_KANJI"),
             ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_STATION_ENGLISH"),
         ],
+    },
+    "transfer_panel": {
+        "rect_module": "displays.train_models.e235_0.lower_lcd",
+        "rect_attr": "TP_RECT",
+        "target": "lower",
+        "dicts": [
+            ("displays.train_models.e235_0.lower_lcd", "_TUNEABLES_TRANSFER_PANEL"),
+        ],
+        # Four draggable handles: tp0 (tp0_x/tp0_y) = panel top-left anchor
+        # (header → subtitle → list flow down from it); tp1/tp2/tp3 = the three
+        # control points of the panel's curved right edge (piecewise-linear by y;
+        # lower rows get more width as the band opens out). Every other tp_* key
+        # is a nudge-only scalar (sizes / gaps / pitch). Registered BEFORE
+        # five_station so its narrower left-column TP_RECT wins the click
+        # hit-test; arc/marker clicks (x ≥ 224) fall to five_station. tp1/tp2/tp3
+        # may sit right of TP_RECT but are grabbable once the panel is focused.
+        # NOT per-station — global params.
+        "waypoints": {
+            "dict": ("displays.train_models.e235_0.lower_lcd", "_TUNEABLES_TRANSFER_PANEL"),
+            "prefixes": ["tp"],
+            "per_station": False,
+        },
     },
     "five_station": {
         "rect_module": "displays.train_models.e235_0.lower_lcd",
@@ -181,8 +206,26 @@ _overlay_dragging: bool = False
 _overlay_drag_mouse_start: Optional[tuple] = None
 _overlay_drag_offset_start: Optional[tuple] = None
 
-_SCRATCH_PATH = project_root() / "_calibration_session.json"
 _OVERLAY_STATE_PATH = project_root() / "_overlay_state.json"
+_LOCKS_PATH = project_root() / "_editor_locks.json"
+
+# Per-element drag locks (K toggles the focused element). A locked element's
+# handles render dimmed and are inert to grabs — stops an accidental drag from
+# being swept into the next Ctrl+S. Persisted to _LOCKS_PATH across launches
+# (a finalized element stays locked). Keyboard nudge is unaffected.
+_locked_elements: set = set()
+
+# Edit model (three states kept distinct, per the 2026-06-16 refactor):
+#   baseline = source values at launch, captured in `_originals` BEFORE anything
+#              else (immutable reference; what reset / "untouched" mean).
+#   edits    = `_edited_keys` — the (dqn, key) pairs the user explicitly changed
+#              this session. A key enters on nudge/drag, LEAVES when its value
+#              returns to baseline (nudged/reset back). Nothing else adds to it.
+#   live     = the in-place-mutated module dict the renderer reads each frame.
+# Ctrl+S writes back ONLY keys in `_edited_keys` — every other key keeps its
+# exact source text, so it CANNOT drift. No silent scratch-restore feeds the
+# live state at launch, so a stale scratch can't leak into source either.
+_edited_keys: set = set()  # of (dqn, key)
 
 # Live sim reference — stored in enter_edit_mode so gating helpers can read
 # state.at_station without threading sim through every internal call.
@@ -197,22 +240,27 @@ _sidebar_hint_font: Optional[pygame.font.Font] = None
 
 
 def enter_edit_mode(sim) -> None:
-    """Snapshot originals, restore values from scratch JSON if present, print help.
+    """Snapshot baseline from source, load locks, print help.
 
-    Originals captured BEFORE scratch-restore so the R reset target is the
-    source-file value, not a prior session's tweaks. Scratch is user-side
-    state; originals are pristine-source state.
+    Baseline (`_originals`) is the source file's values at launch — the live
+    module dicts ARE the source at this point (no scratch merge), so baseline
+    == live == source on entry. The editor never silently restores a prior
+    session's scratch over the source (that was the drift vector); save writes
+    only explicitly-edited keys. Quit discards in-memory mutations untouched.
     """
     global _edit_sim
     _edit_sim = sim
     _snapshot_originals()
-    _restore_from_scratch()
+    _load_locks()
     # Enable held-key repeats — nudge / scroll / row-cycle all feel snappier
     # when you can hold instead of mash. 400 ms initial delay, ~20 Hz repeat.
     pygame.key.set_repeat(400, 50)
     print("[calibration] Edit mode ON. Click DEST_RECT on upper LCD to focus.")
     print("[calibration] Up/Down select  Left/Right nudge  Shift+Arrow +-10  R reset  Ctrl+S save  ESC quit")
-    print("[calibration] M=cycle mode (kanji/furigana/english)  L=sync mode to focused dict" "  [=prev stop  ]=next stop  H=toggle drag handles")
+    print(
+        "[calibration] M=cycle mode (kanji/furigana/english)  L=sync mode to focused dict"
+        "  [=prev stop  ]=next stop  H=toggle drag handles  K=lock/unlock focused element"
+    )
 
 
 def _snapshot_originals() -> None:
@@ -277,6 +325,30 @@ def _load_overlay_state() -> None:
     _overlay_offset_y = int(data.get("offset_y", 0))
     _overlay_scale = float(data.get("scale", 1.0))
     _overlay_visible = bool(data.get("visible", True))
+
+
+def _save_locks() -> None:
+    """Persist locked element ids to gitignored JSON."""
+    try:
+        _LOCKS_PATH.write_text(json.dumps(sorted(_locked_elements)))
+    except OSError as e:
+        print(f"[calibration] WARN: locks save failed: {e}")
+
+
+def _load_locks() -> None:
+    """Restore locked element ids from gitignored JSON, if present. Drops ids
+    no longer in the registry (renamed/removed element)."""
+    global _locked_elements
+    if not _LOCKS_PATH.exists():
+        return
+    try:
+        data = json.loads(_LOCKS_PATH.read_text())
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"[calibration] WARN: locks corrupt, starting unlocked: {e}")
+        return
+    _locked_elements = {e for e in data if e in _REGISTRY}
+    if _locked_elements:
+        print(f"[calibration] Locked (restored): {', '.join(sorted(_locked_elements))}")
 
 
 def get_focused_target() -> Optional[str]:
@@ -413,6 +485,18 @@ def handle_event(event, sim) -> bool:
         if event.key == pygame.K_h:
             _handles_visible = not _handles_visible
             print(f"[calibration] Handles {'ON' if _handles_visible else 'OFF (H to restore; grabs disabled)'}")
+            return True
+        if event.key == pygame.K_k:
+            if _focused_element is None:
+                print("[calibration] No element focused — click one first to lock.")
+                return True
+            if _focused_element in _locked_elements:
+                _locked_elements.discard(_focused_element)
+                print(f"[calibration] Unlocked: {_focused_element}")
+            else:
+                _locked_elements.add(_focused_element)
+                print(f"[calibration] Locked: {_focused_element} (handles inert to drag; K to unlock)")
+            _save_locks()
             return True
         # Alt + = / - → zoom overlay (laptop keyboard fallback for wheel).
         # Step matches the wheel: 5% per press, clamped 0.1×..10×.
@@ -1175,6 +1259,8 @@ def _arc_waypoint_at_pos(pos) -> Optional[tuple]:
         return None
     if not _handles_visible:
         return None  # hidden handles are inert — clicks fall through to focus
+    if _focused_element in _locked_elements:
+        return None  # locked element's handles are inert to grabs (K to unlock)
     mx, my = pos
     r_sq = _HANDLE_HIT_R * _HANDLE_HIT_R
     for p, idx, px, py in _arc_waypoints():
@@ -1206,8 +1292,8 @@ def _apply_waypoint_drag(pos) -> None:
     """Write mouse pos (plus the mousedown grab offset) into `arc_p<idx>_x`
     / `_y` for the dragged waypoint.
 
-    Live update — band reshapes next frame. Scratch saved per motion so a
-    crash mid-drag doesn't lose the new position.
+    Live update — the element redraws next frame. Each axis is recorded in
+    `_edited_keys` via `_mark_edit`, so only dragged handles persist on Ctrl+S.
     """
     if _dragging_waypoint is None:
         return
@@ -1226,7 +1312,9 @@ def _apply_waypoint_drag(pos) -> None:
         return
     t[x_key] = int(pos[0] + _drag_grab_offset[0])
     t[y_key] = int(pos[1] + _drag_grab_offset[1])
-    _save_scratch()
+    dqn = f"{wp['dict'][0]}.{wp['dict'][1]}"
+    _mark_edit(dqn, x_key, t)
+    _mark_edit(dqn, y_key, t)
 
 
 def _draw_arc_polyline_preview(screen) -> None:
@@ -1254,16 +1342,20 @@ def _draw_arc_polyline_preview(screen) -> None:
     # core does. Per-prefix core colour still distinguishes the sets (m=white
     # markers/dot, b=cyan group anchors, v=red polygon vertices); dragged handle
     # grows its arms + cores blue.
-    prefix_color = {"m": (245, 245, 250), "b": (90, 210, 230), "v": (255, 90, 90)}
+    prefix_color = {"m": (245, 245, 250), "g": (90, 210, 230), "v": (255, 90, 90), "tp": (120, 230, 150)}
     drag_color = (120, 200, 255)
     casing = (15, 15, 20)  # near-black underlay → contrast on light surfaces
     gap = 2  # clear centre radius — keeps the target pixel + neighbourhood open
+    locked = _focused_element in _locked_elements
     for p, idx, px, py in _arc_waypoints():
         is_dragging = (p, idx) == _dragging_waypoint
         arm = _HANDLE_ARM_DRAG if is_dragging else _HANDLE_ARM
-        color = drag_color if is_dragging else prefix_color.get(p, (245, 245, 250))
-        # Thin yellow ring around the selected station's handles.
-        if idx == _selected_station:
+        if locked:
+            color = (90, 90, 100)  # dimmed — locked, inert to grabs
+        else:
+            color = drag_color if is_dragging else prefix_color.get(p, (245, 245, 250))
+        # Thin yellow ring around the selected station's handles (not when locked).
+        if idx == _selected_station and not locked:
             pygame.draw.circle(screen, (255, 210, 60), (px, py), arm + 2, 1)
         for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
             a_pt = (px + dx * gap, py + dy * gap)
@@ -1303,6 +1395,36 @@ def _draw_v_ruler(screen, color, y0: int, y1: int, x: int, tick: int = 3) -> Non
     pygame.draw.line(screen, color, (x - tick, b), (x + tick, b), 1)
 
 
+def _values_equal(a, b) -> bool:
+    """Baseline equality with float tolerance. Float nudges go through
+    `round(x + delta*0.1, 2)`, so nudging back to a source value must compare
+    with tolerance — exact `==` would leave the key stuck in `_edited_keys`.
+    Recurses into tuples (color/coord channels)."""
+    if isinstance(a, tuple) and isinstance(b, tuple) and len(a) == len(b):
+        return all(_values_equal(x, y) for x, y in zip(a, b))
+    if isinstance(a, float) or isinstance(b, float):
+        try:
+            return abs(float(a) - float(b)) < 1e-9
+        except (TypeError, ValueError):
+            return a == b
+    return a == b
+
+
+def _mark_edit(dqn: str, key: str, d: dict) -> None:
+    """Record (or clear) a single key edit by comparing the live value to the
+    baseline captured at launch. A key counts as edited ONLY while it differs
+    from source — nudging or resetting it back to baseline drops it, so a no-op
+    round-trip never writes. This per-key set is what ``commit_to_source``
+    persists; every other key keeps its source text untouched."""
+    baseline = _originals.get(dqn, {})
+    if key not in baseline:
+        return  # no baseline to compare against → can't prove a change; never auto-write
+    if _values_equal(d[key], baseline[key]):
+        _edited_keys.discard((dqn, key))
+    else:
+        _edited_keys.add((dqn, key))
+
+
 def _nudge_focused(delta: int, sim=None) -> None:
     if not _param_rows:
         return
@@ -1331,7 +1453,7 @@ def _nudge_focused(delta: int, sim=None) -> None:
         d[key] = not val
     elif type_tag == "str":
         return  # string nudging not implemented
-    _save_scratch()
+    _mark_edit(dqn, key, d)
 
 
 def _reset_focused(sim=None) -> None:
@@ -1365,7 +1487,7 @@ def _reset_focused(sim=None) -> None:
         if cur[sub_idx] == orig[sub_idx]:
             return
         d[key] = cur[:sub_idx] + (orig[sub_idx],) + cur[sub_idx + 1 :]
-    _save_scratch()
+    _mark_edit(dqn, key, d)
 
 
 def _build_dest_candidates(sim) -> tuple:
@@ -1479,7 +1601,8 @@ def _draw_sidebar_contents(surf) -> None:
     if _focused_element is None:
         header_text = "Calibration Editor — click DEST_RECT to start"
     else:
-        header_text = f"Editing: {_focused_element}"
+        lock_tag = "  [LOCKED — K]" if _focused_element in _locked_elements else ""
+        header_text = f"Editing: {_focused_element}{lock_tag}"
     header_img = _sidebar_header_font.render(header_text, True, (240, 240, 245))
     surf.blit(header_img, (pad_x, header_y))
 
@@ -1588,87 +1711,52 @@ def _draw_sidebar_contents(surf) -> None:
         surf.blit(hint_img, (pad_x, h - 20))
 
 
-# ── Persistence ────────────────────────────────────────────────────────
-
-
-def _collect_current_values() -> dict:
-    """Dump all registered dicts to a JSON-serializable shape."""
-    data = {}
-    for element_id, cfg in _REGISTRY.items():
-        for mod_path, dict_name in cfg["dicts"]:
-            mod = importlib.import_module(mod_path)
-            d = getattr(mod, dict_name)
-            data[f"{mod_path}.{dict_name}"] = {k: (list(v) if isinstance(v, tuple) else v) for k, v in d.items()}
-    return data
-
-
-def _save_scratch() -> None:
-    try:
-        _SCRATCH_PATH.write_text(json.dumps(_collect_current_values(), indent=2))
-    except OSError as e:
-        print(f"[calibration] WARN: scratch save failed: {e}")
-
-
-def _restore_from_scratch() -> None:
-    if not _SCRATCH_PATH.exists():
-        return
-    try:
-        data = json.loads(_SCRATCH_PATH.read_text())
-    except (json.JSONDecodeError, OSError) as e:
-        print(f"[calibration] WARN: scratch corrupt, starting from source defaults: {e}")
-        return
-    for element_id, cfg in _REGISTRY.items():
-        for mod_path, dict_name in cfg["dicts"]:
-            qname = f"{mod_path}.{dict_name}"
-            if qname not in data:
-                continue
-            mod = importlib.import_module(mod_path)
-            d = getattr(mod, dict_name)
-            for k, v in data[qname].items():
-                if k not in d:
-                    continue  # source dropped this key; skip
-                # Re-tuplify lists.
-                src_val = d[k]
-                if isinstance(src_val, tuple) and isinstance(v, list):
-                    d[k] = tuple(v)
-                else:
-                    d[k] = v
-    print(f"[calibration] Restored values from {_SCRATCH_PATH.name}")
-
-
 # ── Writeback ──────────────────────────────────────────────────────────
 
 
 def commit_to_source() -> None:
-    """Write current dict values back into source .py files. Type-guarded:
-    only int / float / tuple-of-numeric / str values get written. Other
-    types abort with a loud warning."""
-    by_module: dict[str, list[str]] = {}
-    for element_id, cfg in _REGISTRY.items():
-        for mod_path, dict_name in cfg["dicts"]:
-            by_module.setdefault(mod_path, []).append(dict_name)
+    """Write back ONLY the keys the user edited this session — every other key
+    keeps its exact source text, so an untouched key cannot drift. Type-guarded:
+    only int / float / tuple-of-numeric / str values get written.
 
-    for mod_path, dict_names in by_module.items():
+    `_edited_keys` holds (dqn, key) pairs that currently differ from baseline.
+    Grouped here into module → dict → {keys}; `_swap_dict_literal` rewrites only
+    those keys' value-sides."""
+    if not _edited_keys:
+        print("[calibration] No edits this session — nothing to write.")
+        return
+    # module path -> dict_name -> set(keys)
+    by_module: dict[str, dict[str, set]] = {}
+    for dqn, key in _edited_keys:
+        mod_path, dict_name = dqn.rsplit(".", 1)
+        by_module.setdefault(mod_path, {}).setdefault(dict_name, set()).add(key)
+
+    for mod_path, dicts in by_module.items():
         rel = mod_path.replace(".", "/") + ".py"
         src_path = project_root() / rel
         if not src_path.exists():
             print(f"[calibration] WARN: source not found: {src_path}")
             continue
         text = src_path.read_text(encoding="utf-8")
-        for dict_name in dict_names:
+        n = 0
+        for dict_name, keys in dicts.items():
             mod = importlib.import_module(mod_path)
             current = getattr(mod, dict_name)
-            text = _swap_dict_literal(text, dict_name, current, src_path)
+            text = _swap_dict_literal(text, dict_name, current, src_path, allowed_keys=keys)
+            n += len(keys)
         src_path.write_text(text, encoding="utf-8")
-        print(f"[calibration] Wrote back to {rel}")
+        print(f"[calibration] Wrote {n} edited key(s) to {rel}")
 
-    if _SCRATCH_PATH.exists():
-        _SCRATCH_PATH.unlink()
-    print("[calibration] Scratch cleared. git diff to review.")
+    _edited_keys.clear()
+    print("[calibration] git diff to review.")
 
 
-def _swap_dict_literal(text: str, dict_name: str, new_values: dict, src_path: Path) -> str:
-    """Find `<dict_name> = {...}` at module-level, replace value-side per key."""
+def _swap_dict_literal(text: str, dict_name: str, new_values: dict, src_path: Path, allowed_keys=None) -> str:
+    """Find `<dict_name> = {...}` at module-level, replace value-side per key.
+
+    When ``allowed_keys`` is given, ONLY those keys are rewritten — every other
+    key's source text is left byte-for-byte untouched, so an unedited key can
+    never drift even if the live dict's in-memory value differs."""
     tree = ast.parse(text)
     target_node = None
     for node in ast.walk(tree):
@@ -1698,6 +1786,8 @@ def _swap_dict_literal(text: str, dict_name: str, new_values: dict, src_path: Pa
             continue
         key = k_node.value
         if key not in new_values:
+            continue
+        if allowed_keys is not None and key not in allowed_keys:
             continue
         new_val = new_values[key]
         if not isinstance(new_val, (int, float, tuple, str)):

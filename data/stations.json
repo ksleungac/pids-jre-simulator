@@ -10,10 +10,11 @@
             "joban_rapid",
             "ueno_tokyo.tohoku_joban",
             "ginza",
-            "hibiya"
+            "hibiya",
+            "keisei"
         ],
         "transfers_by_view": {
-            "JY_inner": {"drop": ["keihin_tohoku"]}
+            "JY_inner": {"drop": ["keihin_tohoku", "ueno_tokyo"]}
         }
     },
     "品川": {
@@ -360,7 +361,7 @@
             "marunouchi"
         ],
         "transfers_by_view": {
-            "JY_inner": {"drop": ["keihin_tohoku", "chuo_rapid", "ueno_tokyo"]}
+            "JY_inner": {"drop": ["keihin_tohoku"]}
         }
     },
     "横浜": {

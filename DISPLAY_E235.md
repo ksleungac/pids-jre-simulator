@@ -26,7 +26,7 @@ Per-series renderers for the E235 train family. Two sub-series ship today: **E23
 | Sub-series | IRL line scope | Upper LCD | Lower LCD | Status |
 |---|---|---|---|---|
 | **E235-1000** | Yokosuka Line, Sōbu Rapid (incl. through-service to Sōtobō / Narita) | Shipped | Shipped (linear full-route + 8-station + transfer-info) | Stable |
-| **E235-0** | Yamanote Line | Shipped — same as E235-1000 minus train-type cell | Circular full-route shipped (Yamanote-only); 8-station + transfer-info inherited from E235-1000 (interim until 5-station view lands) | Upper + circular full-route |
+| **E235-0** | Yamanote Line | Shipped — same as E235-1000 minus train-type cell | Circular full-route (Yamanote) + 5-station stopping view (owns the EIGHT slot, all routes) with inline transfer panel; horizontal transfer slot inherited from E235-1000 | Shipped |
 
 Per [CLAUDE.md](CLAUDE.md) "Mental Model → Per-model IRL line scope": each sub-series is in-spec only for its IRL lines. Out-of-spec routes loaded into either sub-series get best-effort rendering (no crashes, no broken layouts, but no IRL-fidelity obligation).
 
@@ -126,8 +126,9 @@ Each sub-series's `lower_lcd.py` declares its own renderer set:
 
 **E235-0** (`displays/train_models/e235_0/lower_lcd.py`):
 - **CircularFullRouteDisplay** — Yamanote-only circular racetrack. Replaces E235-1000's linear `JapaneseDisplay` for the FULL slot when `route_data["route"] == "山手線"`.
-- **8-station + transfer-info** — interim inheritance from E235-1000 (until 5-station replacement lands).
-- **EnglishDisplay** — inherits E235-1000's linear `EnglishDisplay` as a linear fallback for non-Yamanote routes.
+- **JapaneseFiveStationDisplay** — owns the EIGHT slot universally (E235-0 has no 8-station view). The 5-station stopping view: hand-drawn green band + five station markers + an inline transfer panel down the left column. Same instance is wired for ENGLISH (kanji-only regardless of mode).
+- **Horizontal transfer slot** — inherited unchanged from E235-1000 (the `transfer_display` concrete; distinct from the 5-station view's inline panel).
+- **EnglishDisplay** — inherits E235-1000's linear `EnglishDisplay` as a linear fallback for the FULL slot on non-Yamanote routes.
 
 **JapaneseDisplay (E235-1000) methods:**
 
@@ -250,7 +251,7 @@ Two things in `JapaneseDisplay.draw_times` that look wrong but aren't:
 
 ### E235-0 — circular full-route (Yamanote)
 
-Live in [`displays/train_models/e235_0/lower_lcd.py`](displays/train_models/e235_0/lower_lcd.py). Manager subclasses `e235_1000.LowerDisplay` and swaps only the full-route slot's renderer when `route_data["route"] == "山手線"`. EIGHT (8-station) + TRANSFER slots inherit unchanged from E235-1000 (interim until the 5-station view lands).
+Live in [`displays/train_models/e235_0/lower_lcd.py`](displays/train_models/e235_0/lower_lcd.py). Manager subclasses `e235_1000.LowerDisplay` and swaps the FULL-slot renderer to circular when `route_data["route"] == "山手線"`, and the EIGHT-slot renderer to `JapaneseFiveStationDisplay` universally (all routes). The horizontal TRANSFER slot inherits unchanged from E235-1000.
 
 **Track shape — rounded-corner rectangle (NOT a full stadium / ellipse):** each cap = top quarter-arc + vertical straight middle segment + bottom quarter-arc. Pygame's `pygame.draw.rect(border_radius=...)` draws this natively. Border-radius derives as `v − vert_seg_h/2` per outer + inner rect; outer + inner are independently parameterized (`vert_seg_h_outer = 20`, `vert_seg_h_inner = 15` → smaller inner vert_seg = larger inner border_radius = inner corner more rounded). Stroke at the apex vertical segment stays = `track_stroke_w` since the inner rect is inset by stroke_w on all sides; the corner arcs are NOT concentric (asymmetric flatness) so stroke gradient varies slightly along the arc — by design.
 
@@ -262,7 +263,7 @@ Live in [`displays/train_models/e235_0/lower_lcd.py`](displays/train_models/e235
   - **Breath animation**: red body uniformly scales toward `(cx, cy)` between `half_h_max = 17` (= `STOPS_BAR_HEIGHT/2 + overhang`) and `half_h_min = track_stroke_w/2 = 14` (= color-bar height). Halo + drop-shadow stay at max bbox throughout. Triangle wave (constant velocity, no rest at peaks) with period 1.2s (= 0.6s big→small + 0.6s small→big). Frame-rate independent via `pygame.time.get_ticks()`.
 - **Numbered countdown circle** for the next 15 stations ahead in inner-loop direction. PASSED_COLOR full disk (the green track band peeking around the disk provides the visible "ring" effect — no route-color outline drawn explicitly) with a CURRENT_COLOR inner overlay only at curr_stop in APPROACHING (mirrors `e235_1000.draw_marks`'s `if gi == curr_stop:` gate, sized larger via `self.circle_outer_radius`). Black countdown digit on top + optional `(分)` suffix on the 15th-ahead. The `(分)` glyph anchors 2px above the color-bar bottom edge (NOT vertically centered with the circle — IRL placement). Time formula = same as `e235_1000.JapaneseDisplay.draw_times`.
 - **Plain dot** for the remaining stations (the other half of the loop). Copied from `e235_1000.draw_marks` small-dot path: gray fill at radius 5 via `gfxdraw.filled_circle + aacircle`.
-- **Animated approaching-arrow cascade** at curr_stop when `at_station=False` (APPROACHING). Two chevs phase-offset by sweep duration, each sweeping from last station's near-edge (A, +3px past in travel direction) to curr_stop's circle's near-edge (B, −1px before). Per chev: sweep+fade-in (1.0s, ease-in via `sweep_t**ease_in_power`, alpha hits 1.0 at position-midpoint) → fade-out at B (0.4s) → rest (0.4s). Cycle 1.8s. Geometry: `e235_1000` full-route chevron primitive verbatim — body 17×32 stroke 11 (tip-portion 6), halo +5 wider / −4 shorter / +6 stroke / 2px back-offset. Endpoints reactive to `self.circle_outer_radius`. Same-row only; cross-row + no-previous fall back to static chev at B. Tuneables in `_compute_chevron_animation_state`. Alpha via SRCALPHA Surface + `BLEND_RGBA_MULT` (`gfxdraw` / `draw_aapolygon` take solid colors only).
+- **Animated approaching-arrow cascade** at curr_stop when `at_station=False` (APPROACHING). Two chevs phase-offset by sweep duration, each sweeping from last station's near-edge (A, +3px past in travel direction) to curr_stop's circle's near-edge (B, −1px before). Per chev: sweep+fade-in (1.0s, ease-out via `1-(1-sweep_t)**ease_out_power` — fast off A, decelerating into B; alpha fade-in on raw `sweep_t`, decoupled from position so the flick keeps a smooth fade) → fade-out at B (0.4s) → rest (0.4s). Cycle 1.8s. Geometry: `e235_1000` full-route chevron primitive verbatim — body 17×32 stroke 11 (tip-portion 6), halo +5 wider / −4 shorter / +6 stroke / 2px back-offset. Endpoints reactive to `self.circle_outer_radius`. Same-row only; cross-row + no-previous fall back to static chev at B. Tuneables in `_compute_chevron_animation_state`. Alpha via SRCALPHA Surface + `BLEND_RGBA_MULT` (`gfxdraw` / `draw_aapolygon` take solid colors only).
 
 The "15 ahead" walk dedupes by sta_code, handling the route.json shape where Yamanote's traversal doubles the start station (`stops[0] = stops[-1] = 大崎/JY24`).
 
@@ -283,9 +284,46 @@ The "15 ahead" walk dedupes by sta_code, handling the route.json shape where Yam
 
 ---
 
+### E235-0 — 5-station stopping view (Yamanote)
+
+Live in [`displays/train_models/e235_0/lower_lcd.py`](displays/train_models/e235_0/lower_lcd.py) `JapaneseFiveStationDisplay`. Owns the **EIGHT slot** universally on E235-0 (the manager swaps it in for every route — E235-0 has no 8-station view). The view: the green band, five station markers along it, and an inline transfer panel down the left column.
+
+**Band — Tier-2 mask PNG.** Shape is hand-drawn white-on-transparent (`data/e235_0/five_station_band.png`, pixel-precise, not parametric), baked once with the route line color at `__init__` (`_bake_band` — alpha-stencil tint: near-white fill → line color, the grey edge outline left as-drawn, alpha untouched). A bottom-up green fill animation (`_BAND_FILL_DURATION`, sweep axis `_BAND_FILL_ANGLE`) replays on each slot-enter via a masked half-plane erase. The Catmull-Rom arc machinery is retired — see [WIP_calibration_editor.md § "Two-tier tuning model"](WIP_calibration_editor.md).
+
+**Five markers** (positions in `_TUNEABLES_FIVE_STATION`, calibration-editor tuneable): m0 = current stop at the bottom, m1..m4 = next four going up. m0 is a **free-polygon** red pentagon (five hand-placed vertices v0..v4 — fixed slot + orientation, so no parametric shape model; the white dot rides m0/`m0_dr`) when STOPPING; an approaching-circle + countdown digit + animated sweep arrow (`a0_*`) when APPROACHING. m1..m4 are numbered countdown circles. Minute values = the E235-1000 `draw_times` cumulative chain (`_ahead_minutes` / `_first_stop_minutes`); the chain restarts from 0 when STOPPED (the curr→curr+1 leg is already travelled) vs seeds from the remaining-to-curr time when APPROACHING.
+
+#### Inline transfer panel (left column)
+
+Distinct from the horizontal TRANSFER slot — a vertical panel drawn *inside* the 5-station view (`_draw_transfer_panel`): header `{station}駅` (ShinGo Heavy) + subtitle 乗換えのご案内 (ShinGo Light) + the entry list. Reuses the parent `apply_transfer_filter`, so entry order matches the slot. Hidden entirely when the station has no transfers. Panel stays kanji in every mode (mirrors the kanji-only map).
+
+**Grouping algorithm** (overfit to Yamanote — the only IRL line with this design):
+
+1. **Threshold T (pair-or-stack).** Pairing engages only when `N ≥ tp_pair_min_n` (=6); below, every entry stacks one-per-row regardless of free width (IRL: 神田 / 秋葉原 / 日暮里 stay solo with room to spare). Yamanote's effective transfer counts are **1, 2, 3, 6, 7, 8, 9 — never 4 or 5**, so the 6-cutoff is unambiguous.
+2. **Two columns, shared col-2 anchor.** Col-1 is left-aligned at `tp0_x`. When two entries share a row, col-2 shares ONE anchor `col2_x = px + max(col-1 width over all paired rows) + tp_col_gap`, so every row's 2nd-element badge aligns vertically.
+3. **Curved right edge.** The boundary is a piecewise-linear curve through three draggable control points tp1 / tp2 / tp3 (sorted by y, extrapolated past the ends): lower rows get more width as the green band sweeps right. `_right_edge(y)` interpolates.
+4. **Greedy pairing + monotone repair.** `_build` lays rows top-down, pairing consecutive non-shinkansen when the pair's own footprint fits `_right_edge(y)`. Then the repair loop computes `col2_x`, disables any paired row whose col-2 entry overflows `_right_edge(row_y)`, and rebuilds — repeated until no violators. Disabling only ever removes pairs, so it converges in ≤ N rounds.
+5. **Shinkansen.** Always solo (own full-width row); the long name wraps at `･` into ≤ 2 lines against the **narrower fixed** boundary `tp_shink_wrap_x` (decoupled from the row-push curve), so the cut stays fixed (東北･山形･秋田 ｜ 北海道･上越･北陸新幹線) even when the curve is widened for pairing.
+
+Tuneables live in `_TUNEABLES_TRANSFER_PANEL` (calibration-editor `transfer_panel` element): `tp0_x/y` = panel anchor (drag handle), tp1/tp2/tp3 = curve control points (drag handles), the rest are nudge-only scalars.
+
+**Regression corpus** — algorithm output vs IRL row-groupings, **12/12 in-spec ✓** (verified 2026-06-16 via `_dev_scripts/_sim_panel_layout.py`, which reads the live tuneables and faithfully replicates `_build` + repair + shinkansen wrap height; cross-checked against the all-stations montage). Re-run it after any tuneable change to re-baseline.
+
+| Station | N | Rows (members per row) | Lead-row note |
+|---|---|---|---|
+| 神田 / 高田馬場 (+ every N ≤ 2 stop) | ≤ 2 | all solo | threshold T |
+| 大崎 / 目黒 / 新橋 / 日暮里 / 秋葉原 | 3 | (1,1,1) | threshold T |
+| 品川 | 6 | (1,1,2,2) | long 京浜東北線（大井町・蒲田方面） leads solo |
+| 上野 | 7 | (1,2,2,2) | solo shinkansen row 0 |
+| 池袋 | 7 | (2,2,2,1) | |
+| 渋谷 | 8 | (2,2,2,2) | |
+| 東京 | 9 | (1,1,2,2,2,1) | two solo shinkansen rows |
+| 新宿 | 9 | (2,2,2,2,1) | |
+
+---
+
 ### 8-Station Zoomed-In View (`JapaneseEightStationDisplay`)
 
-A second Japanese-mode renderer that shows the next 8 upcoming stations at ~2× cell width, alternating with the full-route view via the slot cycler. Currently shared by both sub-series (E235-1000 native; E235-0 inherits unchanged as interim — the eventual 5-station replacement is tracked in [TODO.md § Display / LCD fidelity](TODO.md)).
+A second Japanese-mode renderer that shows the next 8 upcoming stations at ~2× cell width, alternating with the full-route view via the slot cycler. **E235-1000 only** — E235-0's EIGHT slot is owned by `JapaneseFiveStationDisplay` (see [§ E235-0 — 5-station stopping view](#e235-0--5-station-stopping-view-yamanote)).
 
 #### Window invariant — always exactly 8 cells
 
@@ -407,7 +445,7 @@ The `stroke` parameter is the chevron's **body thickness**, NOT a typical line s
 
 Lower-LCD slot showing the station's transfer-info frame (banner + per-line entries) when at a station with `transfers` data. The parent `displays/transfer_info.py:TransferInfoDisplay` handles state binding + active-line filter + `transfers_by_view` drop/edit ops + variant resolution (`resolve_entry`); the E235-1000 concrete `displays/train_models/e235_1000/transfer_info.py` provides the renderer (`render_transfer`), wired into `LowerDisplay`'s view-cycler in `lower_lcd.py`.
 
-E235-0 inherits the E235-1000 transfer-info renderer unchanged today (interim — visual fidelity for E235-0's transfer slot has not been validated against IRL Yamanote refs).
+E235-0 inherits the E235-1000 transfer-info renderer unchanged for its horizontal TRANSFER slot (interim — visual fidelity for that slot has not been validated against IRL Yamanote refs). E235-0 *also* has a separate **inline transfer panel** inside its 5-station view, with its own grouping algorithm — see [§ Inline transfer panel](#inline-transfer-panel-left-column).
 
 ### Pipeline
 

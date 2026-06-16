@@ -26,6 +26,7 @@ The OCR auto-PA feature shipped in `feat(auto-input): OCR-driven auto-PA — in-
   - [x] E235-0 lower LCD — ENGLISH renderer. Fixed 2026-06-15: FULL → Yamanote-circular and EIGHT → 5-station in ENGLISH mode (same-instance override; was leaking e235_1000 linear full-route + 8-station). Station names stay kanji (IRL-correct for the Yamanote route map).
   - [x] E235-0 lower LCD — transfer-info slot integration. Verified + fixed 2026-06-15: `upper_height` parametrized so the upper-LCD boundary matches the other slots (was 13px short); visually verified at Tokyo + Shinjuku.
   - [ ] E235-0 5-station — remaining visual finetune (marker sizes / positions / sweep timing) + re-probe Yamanote `contrast_color` (currently `[101,20,5]` from maxresdefault, but JPEG clips saturated red — want a cleaner reference shot).
+    - **Chevron sweep easing curve** — switched to ease-out (fast→slow) with decoupled fade-in 2026-06-15; `ease_out_power` / `fade_in_full_at` / fade-out tuneables in both `_compute_chevron_animation_state` (full-route circular) + `_compute_five_station_arrow_animation` (5-station), kept matched. Cherry-on-top; nudge the powers when there's time to compare side-by-side.
 - [ ] **DISPLAY_E235.md — caveman-full voice + Voice EDIT-CONTRACT line.** Deferred from 2026-05-11 caveman adoption push (DATA_FORMAT / DISPLAY / auto_input/README.md rewritten that session). Skipped due to active E235-0 churn — mass rewrite mid-flight risks conflicts with in-flight content. Apply when E235-0 stabilizes (5-station zoom + ENGLISH renderer + transfer-info verification above all shipped).
 - [ ] **Through-service continuity arrow — screen-edge / row-end case.** Verify the full-route chevrons + 8-station triangle render correctly when a frame boundary lands at a row end that runs off the screen edge, against IRL reference. ([DISPLAY.md § Through-Service Display Frames](DISPLAY.md) — "Pending IRL verification".)
 - [ ] **Transfer-info — stations data population.** Extend beyond current ~48 (code_3 catalog + JO Sōbu Rapid done). Curation priority: stations served by ≥1 LCD-equipped line (E233+/E235). Skip 戸塚, 高輪ゲートウェイ, JY-only, JO-only east. `transfers_by_view` populated as raw observations, not derived. Note: 赤羽 JK/JA inner spacing observation pending verification. **Deferred until E235-0 + E233 models land** — no point adding e.g. Chūō transfers when there aren't enough in-spec train models to calibrate against. ([DISPLAY_E235.md § Transfer Info](DISPLAY_E235.md))
@@ -67,7 +68,7 @@ Open items surfaced by `/review+fix` that were deferred (not blocking, scope-cre
 
 ### From 2026-05-02 (transfer-info schema)
 
-- [ ] **Variant-only base slugs raise KeyError downstream rather than at resolver** — `DATA_FORMAT.md:254` (lens 1, info; first flagged 2026-05-02) — `yokosuka_sobu` has no `name_ja`/`name_en` at base; if referenced plain (no `.variant` suffix), the entry resolves without name fields → KeyError downstream. Today's data always uses variants for these slugs. Revisit when validator pass surfaces, or add explicit resolver guard.
+- [ ] **Variant-only base slugs raise KeyError downstream rather than at resolver** — `DATA_FORMAT.md:254` (lens 1, info; first flagged 2026-05-02; recurred 2026-06-16) — `yokosuka_sobu` has no `name_ja`/`name_en` at base; if referenced plain (no `.variant` suffix), the entry resolves without name fields → KeyError downstream. Today's data always uses variants for these slugs. 2026-06-16 review surfaced the same gap in the new e235_0 inline panel (`displays/train_models/e235_0/lower_lcd.py` `_entry_w`/`_draw_entry`/`_entry_lines` direct `e["name_ja"]` subscript) — in-spec Yamanote never triggers it. Revisit when validator pass surfaces, or add explicit resolver guard (covers both call sites).
 - [ ] **`ueno_tokyo.tohoku` variant inherits non-IRL `name_ja`/`name_en`** — `data/lines.json:28` (lens 1, info; first flagged 2026-05-02) — IRL on JU-zone (Takasaki/Utsunomiya) the LCD typically labels by 宇都宮線/高崎線, not "Ueno-Tōkyō Line". Out of scope until first JU-zone station with `transfers` is added.
 
 ### From 2026-05-03 (transfer-info LowerDisplay hookup)
@@ -90,18 +91,7 @@ Open items surfaced by `/review+fix` that were deferred (not blocking, scope-cre
 
 ### From 2026-05-09 (OCR speed-limit + stopping-offset feature shipping)
 
-- [x] ~~**Cross-attribute reject is invisible in JSONL** — `auto_input/driver.py:620` (lens 1, info; first flagged 2026-05-09)~~ — RESOLVED 2026-06-11: detector appends `CROSS_REJECT` to its events list; `_run` intercepts it (log-only, no fire) and writes a `cross_reject` JSONL event pairing by ts with the raw-badge sample line.
 - [ ] **`MISREAD_DUMP_DIR` placement under `_ocr_calibration/`** — `auto_input/driver.py:120` (lens 3, info; sibling of `critical_lessons.md` 2026-04-27 § "naming carries semantics"; first flagged 2026-05-09) — Misread dumps land at `_ocr_calibration/_misread_dumps/`, but `_ocr_calibration/` is documented elsewhere as "OCR calibration sources" (input screenshots consumed by `extract_ocr_assets.py`). Mixing runtime debug-output into a sources-named folder conflates two dev-material categories; sibling precedent is `_recordings/` for runtime blackbox. Deferred because: thematic locality wins (both are OCR-related) + 31 existing dumps already in the path. Revisit if the mixed-purpose folder causes navigation friction.
-
-### From 2026-05-28 (multi-res OCR)
-
-- [x] ~~**`_crop_cell` forked across three dev scripts** — `_dev_scripts/validate_ocr.py`, `_dev_scripts/capture_game.py`, `_dev_scripts/extract_ocr_assets.py` (lens 2, warning; vibe-check #1 duplicated helpers; first flagged 2026-05-28)~~ — RESOLVED 2026-06-11: `crop_cell(surf, profile, cell_bbox)` promoted into `auto_input/ocr.py` (shares body with `crop_cell_from_surface` via `_crop_hud_cell`); all three scripts import it. Full `validate_ocr.py` run pending calibration screenshots (other PC); synthetic equivalence vs legacy verified at 1440p.
-
-### From 2026-05-09 PM (debug-panel redesign + audio-busy fix + Layer 3 rename)
-
-- [x] ~~**`_LAYER3_HUMAN` near-identity map** — `auto_input/driver.py:85` (lens 2, info; first flagged 2026-05-09 PM)~~ — RESOLVED 2026-05-31: the "future divergence (i18n)" hook it was justified by became real. Replaced with `_STATE_KEY` mapping Layer 3 states → `panel.state.*` i18n keys (en/zh_HK/zh_CN), so the map is no longer identity — it now serves the de-jargoned, translated debug panel.
-- [x] ~~**Silent click-absorb when `sim.auto_driver=None`** — `auto_input/driver.py:402` (lens 2, info; vibe-check #3 half-finished; first flagged 2026-05-09 PM)~~ — RESOLVED 2026-06-11: else-branch logs a hint (matching the Report button's empty-log path); still absorbs the click so it can't fall through as an accidental click-jump.
-- [x] ~~**Pause-loop resume latency up to `interval_s`** — `auto_input/driver.py:786` (lens 1, info; first flagged 2026-05-09 PM)~~ — RESOLVED 2026-06-11: paused branch now polls `min(interval_s, 0.5)`; Resume takes effect within 0.5s.
 
 ### From 2026-06-10 (through-service display frames)
 
@@ -112,6 +102,10 @@ Open items surfaced by `/review+fix` that were deferred (not blocking, scope-cre
 - [ ] **`holding_ahead` misreads a backward jump to exactly the junction** — `displays/train_models/e235_1000/lower_lcd.py` `LowerDisplay._update_active_frame` (lens 1, warning; rule: DISPLAY.md § Through-Service "Jump / backward / fast-page → resync to the natural frame"; first flagged 2026-06-11 by Fable review) — The post-fire hold is inferred via `a == natural + 1 and gi == _frames[natural]["to_idx"]`. A backward jump (click / arrow) to EXACTLY the junction (千葉) from the next frame satisfies the same predicate, so the display stays on frame N+1 instead of resyncing to the earlier frame per the contract. Visually coherent (junction is frame N+1's cell 0), preview-only, exact-junction-only. Deferred because: the explicit-`_holding_ahead`-boolean fix adds more state than this edge earns (Simplicity First). Fix path: track the hold with a boolean set at fire, cleared on departure/resync, instead of inferring it.
 
 ---
+
+### From 2026-06-16 (editor save/edit refactor review)
+
+- [ ] **Dangling cross-ref: `critical_lessons.md § "AST source-edit must iterate values in reverse"` doesn't exist** — `WIP_calibration_editor.md:137,187` + inline comments in `_dev_scripts/calibration_editor.py:_swap_dict_literal` cite a numbered critical_lessons section that was never written; the lesson lives only in the WIP doc + inline comment (lens 3, info; rule: principles.md § "Single source of truth"; first flagged 2026-06-16) — Deferred because: doc-consistency only, code complies (reverse iteration intact). Fix path: either add the AST-reverse lesson as a numbered `critical_lessons.md` entry (it's deployment-class source-corruption) or correct the citations to point at the inline comment as canonical.
 
 ## Closed-off paths (don't re-propose)
 
