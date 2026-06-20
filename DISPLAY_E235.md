@@ -26,7 +26,7 @@ Per-series renderers for the E235 train family. Two sub-series ship today: **E23
 | Sub-series | IRL line scope | Upper LCD | Lower LCD | Status |
 |---|---|---|---|---|
 | **E235-1000** | Yokosuka Line, Sōbu Rapid (incl. through-service to Sōtobō / Narita) | Shipped | Shipped (linear full-route + 8-station + transfer-info) | Stable |
-| **E235-0** | Yamanote Line | Shipped — same as E235-1000 minus train-type cell | Circular full-route (Yamanote) + 5-station stopping view (owns the EIGHT slot, all routes) with inline transfer panel; horizontal transfer slot inherited from E235-1000 | Shipped |
+| **E235-0** | Yamanote Line | Shipped — same as E235-1000 minus train-type cell | Circular full-route (Yamanote) / open-horseshoe full-route (other routes) + 5-station stopping view (owns the EIGHT slot, all routes) with inline transfer panel; horizontal transfer slot inherited from E235-1000 | Shipped |
 
 Per [CLAUDE.md](CLAUDE.md) "Mental Model → Per-model IRL line scope": each sub-series is in-spec only for its IRL lines. Out-of-spec routes loaded into either sub-series get best-effort rendering (no crashes, no broken layouts, but no IRL-fidelity obligation).
 
@@ -125,10 +125,10 @@ Each sub-series's `lower_lcd.py` declares its own renderer set:
 - **EnglishDisplay** — linear full-route display. Renders Romaji station names rotated 45 degrees counter-clockwise using HelveticaNeue-Bold at 17 pt. Employs 4x supersampling with bilinear downscaling (via `rotozoom`) to eliminate pixelation and applies a horizontal squeeze compression on long station names (exceeding 110px in 1x scale) before rotation. Draws "min" instead of "分" for minute markers.
 
 **E235-0** (`displays/train_models/e235_0/lower_lcd.py`):
-- **CircularFullRouteDisplay** — Yamanote-only circular racetrack. Replaces E235-1000's linear `JapaneseDisplay` for the FULL slot when `route_data["route"] == "山手線"`.
+- **CircularFullRouteDisplay** — Yamanote-only circular racetrack. Drives the FULL slot when `route_data["route"] == "山手線"`.
+- **OpenRouteFullRouteDisplay** — the FULL slot for every **non-Yamanote** route: `CircularFullRouteDisplay` opened into a horseshoe (one end cap dropped). Subclasses it, reusing its marker primitives and overriding only the JY-keyed pieces to be stop-index keyed + linear. Replaces the old E235-1000 linear fallback; both Japanese and English modes use the same instance (kanji-only, like the circular). See [§ E235-0 — open-horseshoe full-route](#e235-0--open-horseshoe-full-route-non-yamanote).
 - **JapaneseFiveStationDisplay** — owns the EIGHT slot universally (E235-0 has no 8-station view). The 5-station stopping view: hand-drawn green band + five station markers + an inline transfer panel down the left column. Same instance is wired for ENGLISH (kanji-only regardless of mode).
 - **Horizontal transfer slot** — inherited unchanged from E235-1000 (the `transfer_display` concrete; distinct from the 5-station view's inline panel).
-- **EnglishDisplay** — inherits E235-1000's linear `EnglishDisplay` as a linear fallback for the FULL slot on non-Yamanote routes.
 
 **JapaneseDisplay (E235-1000) methods:**
 
@@ -251,7 +251,7 @@ Two things in `JapaneseDisplay.draw_times` that look wrong but aren't:
 
 ### E235-0 — circular full-route (Yamanote)
 
-Live in [`displays/train_models/e235_0/lower_lcd.py`](displays/train_models/e235_0/lower_lcd.py). Manager subclasses `e235_1000.LowerDisplay` and swaps the FULL-slot renderer to circular when `route_data["route"] == "山手線"`, and the EIGHT-slot renderer to `JapaneseFiveStationDisplay` universally (all routes). The horizontal TRANSFER slot inherits unchanged from E235-1000.
+Live in [`displays/train_models/e235_0/lower_lcd.py`](displays/train_models/e235_0/lower_lcd.py). Manager subclasses `e235_1000.LowerDisplay`: the FULL-slot renderer is `CircularFullRouteDisplay` when `route_data["route"] == "山手線"`, else `OpenRouteFullRouteDisplay` (the open horseshoe — see below). The EIGHT-slot renderer is `JapaneseFiveStationDisplay` universally (all routes). The horizontal TRANSFER slot inherits unchanged from E235-1000.
 
 **Track shape — rounded-corner rectangle (NOT a full stadium / ellipse):** each cap = top quarter-arc + vertical straight middle segment + bottom quarter-arc. Pygame's `pygame.draw.rect(border_radius=...)` draws this natively. Border-radius derives as `v − vert_seg_h/2` per outer + inner rect; outer + inner are independently parameterized (`vert_seg_h_outer = 20`, `vert_seg_h_inner = 15` → smaller inner vert_seg = larger inner border_radius = inner corner more rounded). Stroke at the apex vertical segment stays = `track_stroke_w` since the inner rect is inset by stroke_w on all sides; the corner arcs are NOT concentric (asymmetric flatness) so stroke gradient varies slightly along the arc — by design.
 
@@ -275,12 +275,38 @@ The "15 ahead" walk dedupes by sta_code, handling the route.json shape where Yam
 
 **Disclaimer**: left-bottom anchored at `x=8, y=lower_bottom - 4`. Truncated text (drops the standard `一部区間では時間を表示しません。` tail since Yamanote always shows times). 9pt.
 
-**Out-of-spec fallback**: any non-Yamanote route loaded into E235-0 gets E235-1000's linear full-route renderer instead of the circular one — best-effort floor per the per-model IRL-line-scope policy.
+**Out-of-spec fallback**: any non-Yamanote route loaded into E235-0 gets the open horseshoe (`OpenRouteFullRouteDisplay`) — the same racetrack with one cap dropped, NOT a linear bar. See [§ E235-0 — open-horseshoe full-route](#e235-0--open-horseshoe-full-route-non-yamanote).
 
 **Pending iteration / known gaps:**
 
 - Hit-test (click-to-jump on the racetrack) returns `None` for now — pentagon is animated + no clickable affordance yet.
 - The breath animation only cycles in interactive preview / app mode; screenshots capture a single frame at random phase.
+
+---
+
+### E235-0 — open-horseshoe full-route (non-Yamanote)
+
+Live in [`displays/train_models/e235_0/lower_lcd.py`](displays/train_models/e235_0/lower_lcd.py) `OpenRouteFullRouteDisplay`. Subclasses `CircularFullRouteDisplay`, reusing its marker primitives (dot / numbered circle / pentagon / approaching-arrow / `_chevron_frames` timeline / name) verbatim and overriding only the JY-keyed pieces to be **stop-index keyed** and linear. Drives the FULL slot for every non-Yamanote route (the circular is Yamanote-only). A best-effort *invented* look — E235-0 is Yamanote-only IRL, so there's no reference photo; floor per the per-model IRL-line-scope policy.
+
+**Shape** — the racetrack with **one end cap dropped** = a horseshoe, not a loop. Bottom row runs L→R from the origin; folds up the right cap; top row runs R→L to the terminus. The left side is open — the two rows terminate at independent flat edges (origin + destination). `_draw_track(band_color=…)` draws the parent's closed racetrack, then whitens the left cap (two rects split at the centerline) plus the band left of each row's leftmost station.
+
+**Layout** (`_build_positions`, keyed by stop index, NOT `sta_code`):
+- Split: bottom = `stops[0 : ⌈N/2⌉]`, top = the rest. Shared pitch from the longer (bottom) row, **right-aligned at the fold** (open-left ends float; odd N staggers the two open ends by one slot).
+- **No sweep / no window flip** — fit-to-rows by shrinking pitch (longest in scope is Keihin-Tōhoku 46 → 23/row). Revisit only if a real route reads too cramped.
+- Direction chevron on the fold (right) cap only (`^`).
+
+**Passed dimming** (the circular has none — a loop has no terminal "behind"):
+- Boundary follows the animated `state.cursor_pos` (== `curr_stop` when not mid-skip), matching E235-1000's `gi < cursor_pos`.
+- Band: `_draw_passed_band(cursor)` clip-redraws the band gray (`INACTIVE_COLOR`) over the passed portion of the folded path — bottom-left only when curr is on the bottom row; whole bottom + fold cap + top-band-right-of-boundary when curr is on the top row. Green/gray boundary at the `curr-1 ↔ curr` midpoint.
+- Passed station dots + names dim to `INACTIVE_COLOR`.
+
+**Skip / passing stations** (carried over from E235-1000's linear renderer; the Yamanote circular has none):
+- Passing station = empty `pa` (carries `time: None`). Renders as a **light chevron** (`_draw_passing_chevron`, `PASSED_COLOR`, no halo) pointing in the row's travel direction — right on the bottom row, left on the top — never a numbered circle.
+- Passing-station **names always dim**, even when active.
+- `_ahead_indices` **skips passing stations**, so only stopping stations get a countdown number; the minute chain (`_compute_minutes_for_ahead`) sums only stopping-station `time` (a stop's `time` already spans the stations skipped to reach it). This also dodges a `None + int` crash that feeding passing stations into the cumulative would cause.
+- The APPROACHING pointer cascade is **unchanged** — anchored on `curr_stop` (not `cursor_pos`); `cursor_pos` only drives the dimming.
+
+**Pentagon / approaching arrow** — `face_left = (idx >= n_bottom)` (top row travels R→L). `_compute_chevron_animation_state` walks the previous station as `curr_stop − 1`; at the fold (curr = first top stop, a cross-row pair) it synthesizes a phantom previous one slot to the right of curr on the top row so the chevron sweeps along the top instead of across the fold. Origin (no previous) → static fallback chevron.
 
 ---
 

@@ -6,20 +6,25 @@ the circular variant on Yamanote routes. Other slots (8-station zoom,
 transfer-info) inherit unchanged from E235-1000 — interim until the
 E235-0-specific 5-station view lands.
 
-Dispatch is route-keyed: ``route_data["route"] == "山手線"`` → circular;
-else → E235-1000's linear full-route renderer (best-effort fallback for
-out-of-spec routes loaded into E235-0).
+Dispatch is route-keyed: ``route_data["route"] == "山手線"`` → circular
+racetrack (`CircularFullRouteDisplay`); else → `OpenRouteFullRouteDisplay`,
+the same racetrack opened into a horseshoe (one cap dropped) — a best-effort
+E235-0 look for out-of-spec routes, replacing the old E235-1000 linear
+fallback.
 
 Geometry: stadium / racetrack — two horizontal rows joined by semicircular
-end caps. Bottom row holds JY17..JY30+JY01 (left→right in inner-loop
-travel direction); top row holds JY02..JY16 (right→left in travel
-direction). Station screen positions are keyed by ``sta_code``, so missing
-stations (e.g. JY26 高輪ゲートウェイ in pre-2020 data) auto-redistribute
-the row's spacing across the present count without leaving a gap.
+end caps. Circular (Yamanote): bottom row holds JY17..JY30+JY01 (left→right
+in inner-loop travel direction); top row holds JY02..JY16 (right→left in
+travel direction); station screen positions are keyed by ``sta_code``, so
+missing stations (e.g. JY26 高輪ゲートウェイ in pre-2020 data) auto-redistribute
+the row's spacing without leaving a gap. Open (non-Yamanote): one cap dropped,
+positions keyed by stop index, split ⌈N/2⌉ bottom / rest top, right-aligned at
+the fold; the open-left side terminates at two flat edges (origin + terminus).
 
 Per-station rendering states: pentagon (current stop), numbered countdown
-(next 15 ahead in inner-loop direction), or plain dot (rest of loop).
-No dim/passed treatment — circular loops have no terminal "behind".
+(next 15 ahead in travel direction), or plain dot. The circular has no
+dim/passed treatment (a loop has no terminal "behind"); the open variant adds
+it — stations before the current stop dim to INACTIVE_COLOR.
 """
 
 import json
@@ -32,6 +37,7 @@ import pygame.surfarray
 from app_paths import project_root
 from constants import (
     CURRENT_COLOR,
+    INACTIVE_COLOR,
     PASSED_COLOR,
     STOPS_BAR_HEIGHT,
     STOPS_WIDTH,
@@ -773,6 +779,18 @@ class CircularFullRouteDisplay:
         else:
             last_pos = self.positions[last_jy]
 
+        return self._chevron_frames(last_pos, curr_pos)
+
+    def _chevron_frames(self, last_pos: Tuple[float, float], curr_pos: Tuple[float, float]) -> List[Tuple[float, float, bool, float]]:
+        """Compute the two phase-offset chevron frames for a same-row segment
+        from ``last_pos`` (station A) toward ``curr_pos`` (station B).
+
+        Pure timing/geometry — agnostic to how A and B were resolved (JY-code
+        walk for the circular loop, index walk for the open route). Returns
+        0..2 ``(tip_x, tip_y, face_left, alpha)`` tuples; an empty list is a
+        legitimate rest-gap frame (caller draws nothing, NOT the static
+        fallback).
+        """
         # fmt: off
         # --- Animation params (adjust freely) ---
         # Per-chev timeline within cycle_period_s:
@@ -862,10 +880,12 @@ class CircularFullRouteDisplay:
         pygame.draw.line(self.screen, WHITE_BG, left, tip, stroke)
         pygame.draw.line(self.screen, WHITE_BG, tip, right, stroke)
 
-    def _draw_dot(self, pos: Tuple[int, int]) -> None:
+    def _draw_dot(self, pos: Tuple[int, int], color=PASSED_COLOR) -> None:
         """Plain dot for stations beyond the 15-ahead countdown window.
 
         Copied from e235_1000.JapaneseDisplay.draw_marks's small_dot path.
+        ``color`` defaults to PASSED_COLOR (circular's only dot state); the
+        open-route variant passes INACTIVE_COLOR to dim passed stations.
         """
         # fmt: off
         # --- Dot params (adjust freely) ---
@@ -873,8 +893,8 @@ class CircularFullRouteDisplay:
         # ----------------------------------
         # fmt: on
         cx, cy = int(pos[0]), int(pos[1])
-        pygame.gfxdraw.filled_circle(self.screen, cx, cy, radius, PASSED_COLOR)
-        pygame.gfxdraw.aacircle(self.screen, cx, cy, radius, PASSED_COLOR)
+        pygame.gfxdraw.filled_circle(self.screen, cx, cy, radius, color)
+        pygame.gfxdraw.aacircle(self.screen, cx, cy, radius, color)
 
     def _draw_numbered_circle(self, pos: Tuple[int, int], minutes: int, with_minute_suffix: bool = False, is_current: bool = False) -> None:
         """Numbered countdown circle — verbatim primitive from
@@ -1007,7 +1027,7 @@ class CircularFullRouteDisplay:
     # Station name labels (vertical text)
     # -------------------------------------------------------------------------
 
-    def _draw_station_name(self, name: str, pos: Tuple[int, int], on_top_row: bool, is_major: bool = False) -> None:
+    def _draw_station_name(self, name: str, pos: Tuple[int, int], on_top_row: bool, is_major: bool = False, color=DARK_BG) -> None:
         """Draw vertical Japanese station name above (top row) or below (bottom row) its track position.
 
         Uses ``draw_1col_text_plain`` — tight back-to-back stacking, no
@@ -1018,6 +1038,9 @@ class CircularFullRouteDisplay:
         is the hardcoded module-level ``MAJOR_STATION_NAMES_BOLD`` (NOT
         derived from ``code_3``, since IRL Yamanote bolds a narrower set —
         e.g. 大崎 has code_3=OSK but is NOT bolded).
+
+        ``color`` defaults to DARK_BG (active); the open-route variant passes
+        INACTIVE_COLOR for passed stations.
         """
         if not name:
             return
@@ -1045,7 +1068,7 @@ class CircularFullRouteDisplay:
         else:
             top_y = pos[1] + clearance
 
-        draw_1col_text_plain(font, name, col_left_x, top_y, DARK_BG, self.screen, line_gap=line_gap)
+        draw_1col_text_plain(font, name, col_left_x, top_y, color, self.screen, line_gap=line_gap)
 
     # -------------------------------------------------------------------------
     # Time formula — mirrors e235_1000 JapaneseDisplay.draw_times semantics
@@ -1198,6 +1221,336 @@ class CircularFullRouteDisplay:
     def hit_test(self, state, mx: int, my: int) -> Optional[int]:
         """Click hit-test. Deferred — return None for now."""
         return None
+
+
+# =============================================================================
+# Open-route full-route display (non-Yamanote best-effort)
+# =============================================================================
+
+
+class OpenRouteFullRouteDisplay(CircularFullRouteDisplay):
+    """E235-0 full-route renderer for NON-Yamanote (linear) routes.
+
+    The Yamanote-style racetrack with **one cap removed** — a horseshoe, not a
+    loop. Bottom row runs L→R from the origin; folds up the right cap; top row
+    runs R→L to the terminus. The left side is open: the two rows terminate at
+    independent flat edges (route origin + destination).
+
+    E235-0 is Yamanote-only IRL, so this is a best-effort *invented* look for
+    out-of-spec routes loaded into E235-0 (no IRL reference) — replacing the
+    old E235-1000 linear fallback. Per CLAUDE.md "Per-model IRL line scope".
+
+    Reuses the parent's marker primitives (dot / numbered circle / pentagon /
+    approaching arrow / chevron timeline / name / minute chain) verbatim;
+    overrides only the JY-keyed pieces (layout, track shape, ahead/prev walk,
+    direction arrow) to be **stop-index keyed** and linear. Adds passed-station
+    dimming (gi < curr_stop → INACTIVE_COLOR), which the circular lacks.
+
+    Layout decisions (see WIP_calibration_editor.md / DISPLAY_E235.md):
+      - Split: bottom = stops[0 : ⌈N/2⌉], top = the rest.
+      - No sweep — fit-to-rows by shrinking pitch (longest route in scope is
+        Keihin-Tōhoku at 46 → 23/row; revisit if cramped).
+    """
+
+    def _build_positions(self) -> None:
+        """Index-keyed two-row layout, right-aligned at the fold (right cap).
+
+        ``self.positions`` is keyed by **stop index** here (the parent keys it
+        by JY code). Pitch comes from the longer (bottom) row so it fills the
+        straight section; the shorter top row reuses the pitch and right-aligns
+        at the fold, its open-left end floating.
+        """
+        n = len(self.stops)
+        n_bottom = (n + 1) // 2  # ceil — bottom row gets the larger/equal half
+        n_top = n - n_bottom
+
+        # Straight-section x-range — same derivation as the parent's circular
+        # layout (inside both cap corner-arcs). The open-left side has no cap to
+        # clear, but keeping the range symmetric with the circular keeps pitch
+        # parallel; the dead left margin is reclaimed only if cramped (future).
+        v_outer = self.curve_v_radius + self.track_stroke_w // 2
+        border_outer = v_outer - self.vert_seg_h_outer // 2
+        straight_left = self.track_left_pad + border_outer
+        straight_right = S_WIDTH - self.track_right_pad - border_outer
+        straight_w = straight_right - straight_left
+
+        cy = self.y_top + (self.track_top_y + self.track_bottom_y) // 2
+        top_row_y = cy - self.curve_v_radius
+        bot_row_y = cy + self.curve_v_radius
+
+        self.slot_w = straight_w / max(n_bottom, 1)
+        x_fold = straight_right - self.slot_w / 2  # rightmost slot center (= fold)
+
+        self.positions = {}
+        # Bottom row: indices 0..n_bottom-1, L→R. index 0 = origin (bottom-left),
+        # index n_bottom-1 = at the fold (bottom-right).
+        for i in range(n_bottom):
+            x = x_fold - (n_bottom - 1 - i) * self.slot_w
+            self.positions[i] = (int(x), bot_row_y)
+        # Top row: indices n_bottom..n-1, R→L. first top stop folds up at the
+        # fold (top-right); last stop = terminus (top-left, open end).
+        for k in range(n_top):
+            x = x_fold - k * self.slot_w
+            self.positions[n_bottom + k] = (int(x), top_row_y)
+
+        # Flat band edges for the open (left) side — half a slot left of each
+        # row's leftmost station. _draw_track whitens left of these.
+        self._open_edge_bottom = int(self.positions[0][0] - self.slot_w / 2) if n_bottom else straight_left
+        self._open_edge_top = int(self.positions[n - 1][0] - self.slot_w / 2) if n_top else self._open_edge_bottom
+
+    def _draw_track(self, band_color=None) -> None:
+        """Draw the parent's closed racetrack, then open the left side.
+
+        Whitens the left cap (split at the centerline) plus the band left of
+        each row's leftmost station, leaving two flat terminal edges. The right
+        cap stays as the fold.
+
+        ``band_color`` defaults to the route color; ``_draw_passed_band`` calls
+        this under a clip with INACTIVE_COLOR to re-stroke the passed segment
+        gray while preserving the exact band geometry (inner white hole, open
+        ends, rounded cap).
+        """
+        color = band_color if band_color is not None else self.color
+        v_outer = self.curve_v_radius + self.track_stroke_w // 2
+        v_inner = max(1, self.curve_v_radius - self.track_stroke_w // 2)
+        border_outer = max(1, v_outer - self.vert_seg_h_outer // 2)
+        border_inner = max(1, v_inner - self.vert_seg_h_inner // 2)
+        cy = self.y_top + (self.track_top_y + self.track_bottom_y) // 2
+
+        outer_rect = pygame.Rect(
+            self.track_left_pad,
+            cy - v_outer,
+            S_WIDTH - self.track_left_pad - self.track_right_pad,
+            2 * v_outer,
+        )
+        pygame.draw.rect(self.screen, color, outer_rect, border_radius=border_outer)
+        inner_rect = pygame.Rect(
+            self.track_left_pad + self.track_stroke_w,
+            cy - v_inner,
+            S_WIDTH - self.track_left_pad - self.track_right_pad - 2 * self.track_stroke_w,
+            2 * v_inner,
+        )
+        pygame.draw.rect(self.screen, WHITE_BG, inner_rect, border_radius=border_inner)
+
+        # Open the left side. Two white rects split at cy: top half trims the
+        # top band to _open_edge_top, bottom half trims the bottom band to
+        # _open_edge_bottom; together they erase the left cap.
+        pad = 2
+        pygame.draw.rect(
+            self.screen,
+            WHITE_BG,
+            pygame.Rect(0, cy - v_outer - pad, self._open_edge_top, v_outer + pad),
+        )
+        pygame.draw.rect(
+            self.screen,
+            WHITE_BG,
+            pygame.Rect(0, cy, self._open_edge_bottom, v_outer + pad),
+        )
+
+    def _draw_passed_band(self, curr: int) -> None:
+        """Re-stroke the band gray (INACTIVE_COLOR) for the passed portion —
+        the route bar dims behind the train, matching E235-1000's per-cell
+        ``gi < cursor_pos`` graying. Done by clip-redrawing _draw_track(gray)
+        over the passed regions of the folded path; the green band is drawn
+        first (full) by the caller.
+
+        The green/gray boundary sits at the midpoint between stop ``curr-1`` and
+        ``curr`` (so the current cell stays green and everything behind it grays
+        — same boundary semantics as the per-cell linear bar).
+        """
+        if curr <= 0:
+            return  # at the origin nothing is behind the train
+        n = len(self.stops)
+        n_bottom = (n + 1) // 2
+        cy = self.y_top + (self.track_top_y + self.track_bottom_y) // 2
+        v_outer = self.curve_v_radius + self.track_stroke_w // 2
+        border_outer = v_outer - self.vert_seg_h_outer // 2
+        straight_right = S_WIDTH - self.track_right_pad - border_outer
+        pad = 3
+
+        clips: List[pygame.Rect] = []
+        if curr < n_bottom:
+            # Curr on the bottom row — only the bottom band left of the
+            # curr-1↔curr midpoint is passed.
+            bx = int((self.positions[curr - 1][0] + self.positions[curr][0]) / 2)
+            clips.append(pygame.Rect(0, cy, bx, v_outer + pad))  # bottom band, lower half
+        else:
+            # Curr on the top row — the whole bottom band + the fold cap are
+            # passed, plus the top band to the RIGHT of the boundary (top row
+            # travels R→L, so "behind" is rightward).
+            clips.append(pygame.Rect(0, cy, S_WIDTH, v_outer + pad))  # whole bottom band
+            cap_left = int(straight_right)
+            clips.append(pygame.Rect(cap_left, cy - v_outer - pad, S_WIDTH - cap_left + pad, 2 * (v_outer + pad)))  # fold cap
+            if curr == n_bottom:
+                btx = self.positions[curr][0]  # first top stop: only the cap crossing is passed
+            else:
+                btx = int((self.positions[curr - 1][0] + self.positions[curr][0]) / 2)
+            clips.append(pygame.Rect(int(btx), cy - v_outer - pad, S_WIDTH - int(btx) + pad, v_outer + pad))  # top band right of boundary
+
+        for r in clips:
+            self.screen.set_clip(r)
+            self._draw_track(band_color=INACTIVE_COLOR)
+        self.screen.set_clip(None)
+
+    def _draw_direction_arrows(self) -> None:
+        """Only the fold (right) cap carries a direction chevron — the open
+        (left) side has no cap. Travel folds bottom→top on the right → ^."""
+        # fmt: off
+        arrow_w = 28
+        arrow_h = 6
+        stroke  = 4
+        # fmt: on
+        cy = self.y_top + (self.track_top_y + self.track_bottom_y) // 2
+        right_band_cx = S_WIDTH - self.track_right_pad - self.track_stroke_w // 2
+        self._draw_chevron(right_band_cx, cy, arrow_w, arrow_h, stroke, point_down=False)
+
+    def _ahead_indices(self, curr_stop: int, include_curr: bool = False) -> List[Tuple[int, int]]:
+        """Linear next-N **stopping** stations ahead — passing stations (empty
+        ``pa``) are skipped so they get no countdown number (they render as
+        chevrons instead, like E235-1000). ``curr_stop`` is itself a stopping
+        station (a PA target); it's prepended when ``include_curr`` (APPROACHING).
+
+        Skipping passing stations also keeps the minute chain safe: passing
+        stations carry ``time: None``, which would crash the inherited
+        cumulative sum. The 2nd tuple slot is the parent's jy code, unused here
+        — filled with the stop index to keep _compute_minutes_for_ahead happy.
+        """
+        n = len(self.stops)
+        if not (0 <= curr_stop < n):
+            return []
+        result: List[Tuple[int, int]] = []
+        if include_curr:
+            result.append((curr_stop, curr_stop))
+        for idx in range(curr_stop + 1, n):
+            if not self.stops[idx].get("pa"):
+                continue  # passing station — no number, no time
+            result.append((idx, idx))
+            if len(result) >= self.NUMBERED_AHEAD_COUNT:
+                break
+        return result
+
+    def _compute_chevron_animation_state(self, curr_stop: int) -> Optional[List[Tuple[float, float, bool, float]]]:
+        """Linear variant: previous station is curr_stop-1. At the origin (no
+        previous) → None (static fallback). At the fold (curr = first top stop,
+        a cross-row pair) synthesize a phantom previous one slot to the RIGHT on
+        curr's row (top travels R→L) so the chev sweeps along the top row rather
+        than across the fold — mirrors the parent's cross-row phantom."""
+        n = len(self.stops)
+        if not (0 <= curr_stop < n):
+            return None
+        curr_pos = self.positions.get(curr_stop)
+        if curr_pos is None:
+            return None
+        prev = curr_stop - 1
+        if prev < 0:
+            return None
+        prev_pos = self.positions.get(prev)
+        if prev_pos is None:
+            return None
+        n_bottom = (n + 1) // 2
+        if (curr_stop >= n_bottom) != (prev >= n_bottom):
+            last_pos = (curr_pos[0] + self.slot_w, curr_pos[1])
+        else:
+            last_pos = prev_pos
+        return self._chevron_frames(last_pos, curr_pos)
+
+    def _draw_passing_chevron(self, pos: Tuple[int, int], face_left: bool) -> None:
+        """Light chevron marker for a passing station (empty ``pa``) — the
+        train runs through without stopping. Carried over from E235-1000's
+        ``draw_marks`` passing-arrow (PASSED_COLOR, no halo). Points in the
+        row's travel direction: bottom row L→R (right), top row R→L (left)."""
+        # fmt: off
+        w      = 14                       # chevron width (= e235_1000 passing_arrow_w)
+        h      = self.track_stroke_w - 8  # fits inside the color bar with margin
+        stroke = 6                        # body thickness (= e235_1000 passing_arrow_stroke)
+        # fmt: on
+        cx, cy = int(pos[0]), int(pos[1])
+        x = int(cx - w / 2)
+        y = int(cy - h / 2)
+        pts = arrow_points(x, y, w, h, stroke)
+        if face_left:
+            mid = x + w / 2
+            pts = [(2 * mid - px, py) for (px, py) in pts]
+        draw_aapolygon(self.screen, PASSED_COLOR, pts)
+
+    def show_stops(self, state, current_time: float = 0.0) -> None:
+        """Render the open horseshoe. Same draw order as the circular parent,
+        plus the carried-over skip semantics: the gray/dim boundary follows the
+        animated ``cursor_pos`` (lags curr_stop during a skip), passing stations
+        (empty ``pa``) render as chevrons not numbered circles, and passing-
+        station names always dim. The pointer cascade is unchanged (anchored on
+        curr_stop)."""
+        n = len(self.stops)
+        n_bottom = (n + 1) // 2
+        curr = state.curr_stop
+        cursor = state.cursor_pos  # animated; == curr when not mid-skip
+
+        # 1. Background
+        pygame.draw.rect(self.screen, WHITE_BG, pygame.Rect(0, self.y_top, S_WIDTH, self.lower_h))
+        # 2. Track (open) — green full, then gray the passed portion behind the
+        # cursor, then the fold-cap direction chevron.
+        self._draw_track()
+        self._draw_passed_band(cursor)
+        self._draw_direction_arrows()
+        # 3. Baseline per-station markers. passed (gi < cursor) → dim dot;
+        # active passing station → light chevron; active stopping station →
+        # light dot (numbered circles + pointer overpaint as needed).
+        for idx, pos in self.positions.items():
+            if idx < cursor:
+                self._draw_dot(pos, color=INACTIVE_COLOR)
+            elif not self.stops[idx].get("pa"):
+                self._draw_passing_chevron(pos, face_left=(idx >= n_bottom))
+            else:
+                self._draw_dot(pos, color=PASSED_COLOR)
+        # 4. Numbered countdown circles for next 15 STOPPING stations ahead
+        # (include curr when APPROACHING; passing stations skipped).
+        include_curr = not state.at_station
+        ahead = self._ahead_indices(curr, include_curr=include_curr)
+        minutes_list = self._compute_minutes_for_ahead(ahead, state, current_time)
+        for i, ((stop_idx, _jy), minutes) in enumerate(zip(ahead, minutes_list)):
+            pos = self.positions.get(stop_idx)
+            if pos is None:
+                continue
+            with_suffix = i == len(ahead) - 1
+            self._draw_numbered_circle(pos, minutes, with_minute_suffix=with_suffix, is_current=(stop_idx == curr))
+        # 5. Train indicator at curr — pentagon (STOPPING) / animated chevron (APPROACHING).
+        if 0 <= curr < n:
+            pos = self.positions.get(curr)
+            if pos is not None:
+                on_top = curr >= n_bottom
+                if state.at_station:
+                    self._draw_pentagon(pos, face_left=on_top)
+                else:
+                    chevs = self._compute_chevron_animation_state(curr)
+                    if chevs is None:
+                        dx_curr = -1 if on_top else 1
+                        tip_x_static = pos[0] - dx_curr * (self.circle_outer_radius + 1)
+                        self._draw_approaching_arrow(tip_x_static, pos[1], face_left=on_top)
+                    else:
+                        for tip_x, tip_y, face_left, alpha in chevs:
+                            self._draw_approaching_arrow(tip_x, tip_y, face_left, alpha)
+        # 6. Station names — dim (INACTIVE_COLOR) when passed (gi < cursor) OR a
+        # passing station (always dim, per E235-1000); else active DARK_BG.
+        for idx, pos in self.positions.items():
+            name = self.stops[idx].get("name", "")
+            is_passing = not self.stops[idx].get("pa")
+            self._draw_station_name(
+                name,
+                pos,
+                on_top_row=(idx >= n_bottom),
+                is_major=name in MAJOR_STATION_NAMES_BOLD,
+                color=INACTIVE_COLOR if (idx < cursor or is_passing) else DARK_BG,
+            )
+        # 7. Disclaimer — left-bottom-anchored (standard text; non-Yamanote may
+        # have non-time sections, so the full disclaimer is kept).
+        # fmt: off
+        disclaimer_text = "のりかえ、待合せ時間は含まれません。電車により多少時間が異なります。"
+        left_x      = 8
+        bottom_pad  = 4
+        # fmt: on
+        img = self.font_disclaimer.render(disclaimer_text, True, DARK_BG)
+        blit_y = self.y_top + self.lower_h - bottom_pad - img.get_height()
+        self.screen.blit(img, (left_x, blit_y))
 
 
 # =============================================================================
@@ -2033,11 +2386,10 @@ class LowerDisplay(E235_1000_LowerDisplay):
 
     Inherits the slot cycler (FULL/EIGHT/TRANSFER) from E235-1000. Overrides:
 
-    - **FULL slot**: swapped to the circular racetrack display when the
-      active route is 山手線. Out-of-spec routes (any non-Yamanote loaded
-      into E235-0) get the E235-1000 linear full-route renderer as a
-      best-effort fallback, consistent with the per-model IRL-line-scope
-      policy.
+    - **FULL slot**: route-keyed — 山手線 → circular racetrack
+      (`CircularFullRouteDisplay`); any other (non-Yamanote) route →
+      `OpenRouteFullRouteDisplay`, the same racetrack opened into a horseshoe
+      (one cap dropped). No E235-1000 linear fallback — both are E235-0 looks.
 
     - **EIGHT slot**: swapped to `JapaneseFiveStationDisplay` universally
       (no dispatch — all routes get the curve, including non-Yamanote
@@ -2048,14 +2400,16 @@ class LowerDisplay(E235_1000_LowerDisplay):
 
     def __init__(self, screen, route_data, stops, mode_cycler):
         super().__init__(screen, route_data, stops, mode_cycler)
-        # Swap full-route renderer for circular when route is Yamanote — in ALL
-        # modes. english_display points at the SAME circular instance so ENGLISH
-        # mode doesn't leak the inherited e235_1000 linear (non-Yamanote) full
-        # route. (Circular renders kanji station names regardless of mode — IRL
-        # the Yamanote route map stays kanji even under English chrome.)
+        # FULL slot — both branches are E235-0 racetrack renderers (Yamanote =
+        # closed loop, else = open horseshoe), replacing the inherited e235_1000
+        # linear. english_display points at the SAME instance: both render kanji
+        # station names regardless of mode — IRL the route map stays kanji even
+        # under English chrome, and the horseshoe inherits that convention.
         if route_data.get("route") == "山手線":
             self.japanese_display = CircularFullRouteDisplay(screen, route_data, stops)
-            self.english_display = self.japanese_display
+        else:
+            self.japanese_display = OpenRouteFullRouteDisplay(screen, route_data, stops)
+        self.english_display = self.japanese_display
         # Swap EIGHT slot renderer universally (Phase 1: arc-only scaffold).
         # E235-0 has NO 8-station view — the 5-station view owns the EIGHT slot in
         # ALL modes. Point english_eight_display at the SAME instance (not a new

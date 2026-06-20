@@ -107,6 +107,10 @@ Open items surfaced by `/review+fix` that were deferred (not blocking, scope-cre
 
 - [ ] **Dangling cross-ref: `critical_lessons.md § "AST source-edit must iterate values in reverse"` doesn't exist** — `WIP_calibration_editor.md:137,187` + inline comments in `_dev_scripts/calibration_editor.py:_swap_dict_literal` cite a numbered critical_lessons section that was never written; the lesson lives only in the WIP doc + inline comment (lens 3, info; rule: principles.md § "Single source of truth"; first flagged 2026-06-16) — Deferred because: doc-consistency only, code complies (reverse iteration intact). Fix path: either add the AST-reverse lesson as a numbered `critical_lessons.md` entry (it's deployment-class source-corruption) or correct the citations to point at the inline comment as canonical.
 
+### From 2026-06-20 (E235-0 open horseshoe full-route)
+
+- [ ] **`_draw_passed_band` re-derives track geometry inline** — `displays/train_models/e235_0/lower_lcd.py` `OpenRouteFullRouteDisplay._draw_passed_band` (lens 1, info; rule: conventions.md § UI code style "All downstream coordinates derive from those"; first flagged 2026-06-20) — Recomputes `v_outer` / `border_outer` / `straight_right` / `cy`, already derived in `_build_positions` + `_draw_track`. Values are consistent (all from the same `self.*` tuneables) so not a bug, but the gray-band clip rects could desync if a track-geometry formula is later edited in one site only — and this is the riskiest math in the class. Deferred because: not required for correctness + Surgical-Changes at wrap-up. Fix path: factor a shared `_band_geometry()` helper reused by `_build_positions`, `_draw_track`, and `_draw_passed_band`.
+
 ## Closed-off paths (don't re-propose)
 
 Recording the ground we've explicitly decided NOT to walk, so future sessions don't re-litigate:
