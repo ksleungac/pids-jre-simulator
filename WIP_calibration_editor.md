@@ -22,6 +22,8 @@ Graduation gate (b) partially proven by the arc; full sign-off still needs the r
 
 2026-06-15 (later): **per-element drag lock** — `K` toggles a lock on the focused element. Locked handles render dimmed (no bright core) and are inert to grabs, so an accidental drag can't be swept into the next Ctrl+S; keyboard nudge of a deliberately-selected row still works (drag is the accident vector, not nudge). **Whole-element** granularity, **persisted** across launches to gitignored `_editor_locks.json` (loaded in `enter_edit_mode`; ids no longer in `_REGISTRY` are dropped on load). Sidebar header shows `[LOCKED — K]`.
 
+2026-06-16 → 06-20: E235-0 display work finished — 5-station inline transfer panel + **open-horseshoe full-route** for non-Yamanote routes (Yamanote racetrack with one cap dropped; replaces the old E235-1000 linear fallback). E235-0 now functionally complete and ship-ready (user: "good looking enough"). *Note:* the Tier-2 mask-PNG arc was never exercised — the 5-station view shipped with direct markers / pentagon; mask-PNG remains an available Tier-2 tool, not a path E235-0 actually took. **Graduation decided 2026-06-20:** graduate BOTH E235-0 and the editor, E235-0 first; concrete sequence in "Merge plan" below. The merge is now a clean fast-forward (master was merged into the branch at `38be6cf`, branch 0 behind origin/master), NOT the heavy cherry-pick the old Port-strategy note assumed. **We are not merging today — plan recorded first.**
+
 ---
 
 ## Architecture (locked)
@@ -208,29 +210,38 @@ Before the calibration editor concept merges to master as the new standard, all 
 
 3. **Editor on master** — `_dev_scripts/calibration_editor.py` + `preview_display.py --edit` / `--overlay` ported to master. Arc drag-handle machinery removed or parked. Upper-LCD 4 elements stay wired.
 
-4. **Lint gate** — pre-commit or `lint_primitives.py` extension: flag magic numbers in draw methods that aren't in a `_TUNEABLES_*` dict. Without enforcement the convention decays silently on new model code.
+4. **Lint gate** — pre-commit or `lint_primitives.py` extension: flag magic numbers in draw methods that aren't in a `_TUNEABLES_*` dict. Without enforcement the convention decays silently on new model code. **(Deferred — decay-prevention, most false-positive-prone, not a prerequisite for the first new model. Lands as a post-graduation follow-up; see Merge plan.)**
 
-5. **New-model skeleton** — minimal `_TUNEABLES_*` template for `upper_lcd.py` + `lower_lcd.py` so E233-0 (or any next model) starts editor-compatible rather than retroactively converting.
+5. **New-model skeleton** — **`e235_0` IS the skeleton.** New models are forks (copy-primitives convention), not greenfield, so whatever `e235_0` has wired is what the next model inherits for free. P5 = finish wiring `e235_0`'s last elements (badge, route bar) into `_TUNEABLES_*` + register, so the fork-source is complete. No separate abstract template. **(Decision 2026-06-20: wire now — template-completeness, not visual polish.)**
 
-**Port strategy.** Branch is ~2 weeks behind master (harness reorg, EN display, update-check). Clean merge will conflict heavily — cherry-pick the calibration editor files individually onto master.
+**Port strategy (updated 2026-06-20).** Branch is a clean **fast-forward** onto master — master was merged in at `38be6cf`, so the branch contains all of origin/master (0 behind). The earlier "2 weeks behind, cherry-pick" plan is obsolete: `git merge --ff-only feat/calibration-editor` from master brings everything atomically, no conflicts. Do NOT split the merge by topic — the 12 commits interleave editor infra and E235-0 display; splitting is risky surgery for zero gain.
 
 ---
 
-## Chosen route: E235-0 as graduation vehicle (Route A)
+## Merge plan (Route A — E235-0 as graduation vehicle)
 
-E235-0 is the model that proves and finalizes the calibration editor standard before it merges to master.
+**Status: recorded 2026-06-20, NOT yet executed. We are not merging today.**
 
-**Sequence:**
-1. Complete E235-0 5-station view — mask PNG arc (Tier 2), station circle positions + minute number positions as `_TUNEABLES_*` entries (Tier 1)
-2. Wire remaining E235-0 upper LCD elements (badge, route bar) to `_TUNEABLES_*` + register in `_REGISTRY`
-3. All 5 pillars built (code standard in `conventions.md`, skill, editor port, lint gate, new-model skeleton)
-4. Port editor to master — cherry-pick calibration editor files, remove dead arc Catmull-Rom machinery
-5. E233-0 inherits a fully proven, already-exercised framework from day one
+Graduate BOTH (E235-0 + editor), E235-0 first. The git merge is a single clean fast-forward (see Port strategy) — "E235-0 first" sequences the *graduation work* (what becomes canonical), not the merge.
 
-E235-0 remaining elements convert as they're touched (no eager sweep). E233-0 starts editor-native.
+**Phase 1 — graduate E235-0:**
+1. Smoke-test E235-0 standalone: Yamanote (circular) + a non-Yamanote (horseshoe) + 8-station + transfer, all three modes — prove no editor *runtime* dependency.
+2. Confirm `DISPLAY_E235.md` is self-contained (no WIP-doc refs).
+3. FF-merge `feat/calibration-editor` → master + push. E235-0 ships. The editor *code* rides along (FF is atomic) but its *standard* is not canonical until Phase 2.
+
+**Phase 2 — graduate the editor standard:**
+4. **P1 code standard** → `conventions.md § UI code style`: `_TUNEABLES_*` module-level dict + suffix convention + hit-test rect + `_REGISTRY` entry + draw-reads-dict-each-frame. Reconcile with the existing method-local tuneable-block entry — that block is the *predecessor*; the module-level dict is the editor-compatible standard going forward (convert lazily, no eager backfill).
+5. **P5 golden template** → finish wiring `e235_0` badge + route bar into `_TUNEABLES_*` + register (decided: wire now). `e235_0` is the fork-source every future model inherits.
+6. **P3 editor on master** → verify `preview_display --edit`'s import of `_dev_scripts/calibration_editor` is lazy/gated (lint `_*/`-import ban + release-build safety).
+7. **P2 skill** → `/calibration-editor`: add-an-element + wire-a-new-model runbook — the "design a new model assumes a working editor" entry point.
+8. **Dissolve this WIP doc** → absorb implementation notes into the skill / `conventions.md` / `DISPLAY_E235.md`, delete `WIP_calibration_editor.md`.
+
+**Deferred:** P4 lint gate (post-graduation follow-up → TODO.md).
+
+E233-0 (next model) then forks a fully-proven, already-exercised, editor-native `e235_0` from day one.
 
 ---
 
 ## Trigger to graduate
 
-This doc deletes when all 5 pillars above are on master AND all E235-0 upper/lower LCD elements are wired via `_TUNEABLES_*` + suffix convention. Framework story lands in `conventions.md` + dedicated skill; this doc dissolves.
+This doc deletes at Merge-plan Phase 2 step 8 — once P1 (code standard), P2 (skill), P3 (editor on master), and P5 (`e235_0` fully wired) are on master and the framework story has landed in `conventions.md` + the dedicated skill + `DISPLAY_E235.md`. P4 (lint gate) is deferred and tracked in TODO.md — it does NOT block dissolution; it lands as a post-graduation follow-up.
