@@ -122,7 +122,7 @@ def main():
     auto_input = config.get("auto_input", False)
     driver = None
     try:
-        sim = PASimulator(config["work_dir"], config["route_data"], auto_input=auto_input)
+        sim = PASimulator(config["work_dir"], config["route_data"], auto_input=auto_input, model=config.get("model"))
         if auto_input:
             from auto_input import AutoDriver
 

@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional
 
 from constants import DEBUG_PANEL_HEIGHT, FRAME_RATE, KEY_REPEAT_DELAY, TIME_SCALE
 from audio import AudioPlayer
-from displays.train_models.e235_1000 import UpperDisplay, LowerDisplay, S_WIDTH, S_HEIGHT
+from displays.train_models import get_train_model
 from displays.utils import draw_text
 
 
@@ -138,6 +138,7 @@ class PASimulator:
         auto_input: bool = False,
         tutorial: bool = False,
         target_surface: Optional[pygame.Surface] = None,
+        model: Optional[str] = None,
     ):
         """Initialize the PA Simulator.
 
@@ -173,6 +174,11 @@ class PASimulator:
                 manually each frame — does NOT call ``run()``.
             target_surface: Pre-allocated LCD render target. Required when
                 ``tutorial=True``; ignored otherwise.
+            model: Train-display model key (e.g. "e235_0"). Selects the
+                upper/lower display classes + window dimensions via the
+                registry in ``displays/train_models/__init__.py``. Sourced
+                from the setup-screen picker (seeded by the route's default);
+                ``None`` / unknown falls back to the default model.
         """
         self.preview = preview
         self.auto_input = auto_input
@@ -180,6 +186,9 @@ class PASimulator:
         self.target_surface = target_surface
         self.work_dir = work_dir
         self.route_data = route_data
+        # Resolve the train-display model before _init_pygame (it needs the
+        # model's window dims) and the display instances below.
+        self._train_model = get_train_model(model)
         self._load_route_data()
         self._init_pygame()
 
@@ -201,11 +210,11 @@ class PASimulator:
 
         # Initialize components
         self.audio = _SilentAudio() if preview else AudioPlayer(work_dir, self.stops)
-        self.upper = UpperDisplay(self.screen, self.route_data, self.stops, audio=self.audio)
+        self.upper = self._train_model.upper_cls(self.screen, self.route_data, self.stops, audio=self.audio)
         # Lower shares the upper's mode_cycler — modes stay in lockstep, no
         # parallel timer. set_state below binds the state reference; lower
         # reads cursor_pos / skip / etc. live from it each frame.
-        self.lower = LowerDisplay(self.screen, self.route_data, self.stops, self.upper.mode_cycler)
+        self.lower = self._train_model.lower_cls(self.screen, self.route_data, self.stops, self.upper.mode_cycler)
         self.lower.set_state(self.state)
 
         self.running = True
@@ -312,11 +321,12 @@ class PASimulator:
         if not self.preview:
             pygame.mixer.init()
         self.clock = pygame.time.Clock()
+        s_width, s_height = self._train_model.s_width, self._train_model.s_height
         panel_h = DEBUG_PANEL_HEIGHT if self.auto_input else 0
-        self.window = pygame.display.set_mode((S_WIDTH, S_HEIGHT + panel_h))
+        self.window = pygame.display.set_mode((s_width, s_height + panel_h))
         if self.auto_input:
-            self.debug_surface = self.window.subsurface((0, 0, S_WIDTH, panel_h))
-            self.screen = self.window.subsurface((0, panel_h, S_WIDTH, S_HEIGHT))
+            self.debug_surface = self.window.subsurface((0, 0, s_width, panel_h))
+            self.screen = self.window.subsurface((0, panel_h, s_width, s_height))
         else:
             self.debug_surface = None
             self.screen = self.window
@@ -326,7 +336,7 @@ class PASimulator:
             # Set window position (real app only; preview uses default placement)
             try:
                 info = pygame.display.get_wm_info()
-                win32gui.SetWindowPos(info["window"], -1, S_WIDTH, S_HEIGHT, 0, 0, 1)
+                win32gui.SetWindowPos(info["window"], -1, s_width, s_height, 0, 0, 1)
             except Exception as e:
                 print(f"Warning: Could not set window position: {e}")
 

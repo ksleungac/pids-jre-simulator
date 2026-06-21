@@ -30,8 +30,8 @@ Train-family scope and in-spec/best-effort policy live in [CLAUDE.md](CLAUDE.md)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Factory Layer (displays/)                                  │
-│  - get_train_display() returns model-specific display       │
+│  Registry Layer (displays/)                                 │
+│  - get_train_model() returns a model's display classes      │
 │  - DisplayMode enum (KANJI, FURIGANA, ENGLISH)              │
 │  - ModeCycler (handles mode switching timing)               │
 └─────────────────────────────────────────────────────────────┘
@@ -56,7 +56,7 @@ Train-family scope and in-spec/best-effort policy live in [CLAUDE.md](CLAUDE.md)
 
 ```
 displays/
-├── __init__.py              # Package entry point: DisplayMode, ModeCycler, get_train_display
+├── __init__.py              # Package entry point: DisplayMode, ModeCycler, get_train_model
 ├── base.py                  # DisplayMode (IntEnum: KANJI=0, FURIGANA=1, ENGLISH=2), ModeCycler
 ├── utils.py                 # Shared helpers: draw_station_code_badge, draw_route_disclaimer,
 │                            # draw_text_given_width, draw_1col_text, draw_1col_text_plain,
@@ -64,7 +64,7 @@ displays/
 ├── transfer_info.py         # Parent TransferInfoDisplay (state binding, transfers_by_view,
 │                            # variant resolution) — concrete renderers are per-model
 └── train_models/
-    ├── __init__.py          # Factory registry: TRAIN_DISPLAYS, get_train_display()
+    ├── __init__.py          # Model registry: TRAIN_MODELS, get_train_model(), model_choices()
     ├── e235_1000/
     │   ├── __init__.py      # Per-model manifest: S_WIDTH, S_HEIGHT, UPPER_HEIGHT, palette;
     │   │                    # exports UpperDisplay, LowerDisplay
@@ -311,11 +311,16 @@ A non-final frame's right edge (the junction) is a continuation, NOT a terminus 
 2. Copy and modify `upper_lcd.py` for fonts/positions (often a fork from sibling sub-series — see [conventions.md § "Display module structure"](.claude/rules/conventions.md) for copy-don't-reinvent rule when forking).
 3. Implement `lower_lcd.py` with `LowerDisplay`. Subclass existing model's `LowerDisplay` and override only the slot renderer that differs (precedent: E235-0 subclasses E235-1000 and swaps only FULL slot's renderer when route is Yamanote).
 4. Create `__init__.py` exporting `UpperDisplay`, `LowerDisplay` + per-model dimensions/palette (`S_WIDTH`, `S_HEIGHT`, `UPPER_HEIGHT`, `DARK_BG`, `WHITE_BG`).
-5. Register in `displays/train_models/__init__.py`:
+5. Register in `displays/train_models/__init__.py` — import the package and add a `TRAIN_MODELS` entry (key = folder name = the route.json `model` value):
 
    ```python
-   TRAIN_DISPLAYS["{model_name}"] = {ModelName}UpperDisplay
+   from displays.train_models import e233_0   # alongside the existing models
+   TRAIN_MODELS["e233_0"] = TrainModel(
+       "e233_0", "E233-0", e233_0.UpperDisplay, e233_0.LowerDisplay, e233_0.S_WIDTH, e233_0.S_HEIGHT
+   )
    ```
+
+   The model then appears automatically in the setup-screen per-route dropdown (`model_choices()`); any route defaults to it via its route.json `model` field (see [DATA_FORMAT.md § Route-Level Fields](DATA_FORMAT.md)). `app.py` instantiates the registered classes from the `model` constructor arg — no `app.py` edit needed.
 
 6. Add per-series doc (`DISPLAY_{MODEL}.md`) for sub-series-specific renderer rules. Cross-reference from [Per-series displays](#per-series-displays) below.
 
@@ -331,11 +336,11 @@ upper.set_state(curr_stop=0, cnt_pa=0, at_station=True)  # boots STOPPING at sta
 upper.update(timestamp)
 upper.draw()
 
-# Factory (multiple train models)
-from displays import get_train_display
-display = get_train_display("e235_1000", screen, route_data, stops)
-display.update(timestamp)
-display.draw()
+# Registry (multiple train models) — what app.py / setup.py use
+from displays import get_train_model
+model = get_train_model("e235_1000")          # TrainModel record (default if unknown)
+upper = model.upper_cls(screen, route_data, stops)
+lower = model.lower_cls(screen, route_data, stops, upper.mode_cycler)
 ```
 
 ---

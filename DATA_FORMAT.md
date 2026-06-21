@@ -349,6 +349,7 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 ```json
 {
     "route": "路線名",              // Route name (e.g., 中央線快速電車，埼京線)
+    "model": "e235_0",             // Optional. Default train-display model for this route (registry key in displays/train_models/__init__.py, e.g. e235_1000 / e235_0). Seeds the setup-screen per-route model dropdown; the user can override per session. Absent / unknown → e235_1000 (DEFAULT_MODEL_KEY).
     "line_code": "JY",             // Optional. Active-line badge code (JY/JK/JC/JO/JU/JT/JJ/JE/JN/JA). Drives transfer-info active-line filter — entries whose badges include this code are dropped. Absent → no filter (renders raw transfers).
     "transfer_view": "JY_inner",   // Optional. Key into each station's `transfers_by_view` map (e.g. JY_inner, JK_south, JO_east). Selects per-station drop/edit ops for this train direction. Absent → no view ops applied.
     "color": [R, G, B],            // Main route color for UI elements

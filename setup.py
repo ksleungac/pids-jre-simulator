@@ -11,6 +11,7 @@ import i18n
 import update_check
 from app_paths import project_root, load_json_relative
 from constants import SETUP_KEY_REPEAT_DELAY, SETUP_KEY_REPEAT_INTERVAL
+from displays.train_models import get_train_model, model_choices, resolve_model_key
 
 
 class SetupScreen:
@@ -54,9 +55,15 @@ class SetupScreen:
         # for the kanji portion of line 1 in EN mode (two-pass with tail Latin).
         self.title_font = i18n.font(28, bold=True)
         self.route_font = i18n.font(18, bold=True)
+        # Line 2 (train type | destination) is secondary — render it smaller than
+        # the route name. This also keeps a two-line row inside the 50px highlight
+        # in tall-metric locales (Noto zh_CN's 18pt line height is 27px, so two
+        # full-size lines would overflow the row and the rows would overlap).
+        self.route_font_sub = i18n.font(14, bold=True)
         self.instruction_font = i18n.font(16, bold=True)
         self.control_font = i18n.font(14, bold=True)
         self.route_font_cjk = i18n.font_for_lang("zh_HK", 18, bold=True)
+        self.route_font_sub_cjk = i18n.font_for_lang("zh_HK", 14, bold=True)
         # Line badge icons — authentic Wikipedia SVG-sourced PNGs from
         # data/line_icons/, same assets the transfer-info display uses.
         self._line_icon_cache: dict[str, pygame.Surface] = {}
@@ -95,6 +102,23 @@ class SetupScreen:
         self._interval_minus_rect: pygame.Rect | None = None
         self._interval_plus_rect: pygame.Rect | None = None
         self._last_mouse_pos = (0, 0)
+
+        # Per-route train-model dropdown. Box rects (route_idx -> Rect) and
+        # option rects ((route_idx, model_key) -> Rect) are rebuilt each draw;
+        # _open_dropdown_idx is the route whose expanding list is open (None =
+        # none open). The per-row selection lives on each route dict's "model"
+        # key (seeded from route.json default in scan_routes, overridable here).
+        self._model_box_rects: dict[int, pygame.Rect] = {}
+        self._model_option_rects: dict[tuple[int, str], pygame.Rect] = {}
+        self._open_dropdown_idx: int | None = None
+        # Model label uses the per-language chrome font so it stays COHERENT
+        # within each locale's screen — the Latin diagram codes ("1654T") on the
+        # same rows already render in that locale's face (HelveticaNeue / ShinGo /
+        # Noto), so a pinned Latin face (HelveticaNeue / Frutiger) clashed beside
+        # them in the zh locales. Bound at construction to the session language.
+        self.model_font = i18n.font(14, bold=True)
+        self.dropdown_border = (122, 130, 148)  # crisp edge on dark bg + green highlight
+        self._train_icon_cache: dict[tuple[str, int], pygame.Surface | None] = {}
 
         # Cached raw screenshot surface for the OCR disclaimer popup.
         # Loaded once on first draw; False = tried and failed (no file / load error).
@@ -163,6 +187,9 @@ class SetupScreen:
                                 "dest": route_data.get("dest", ""),
                                 "line_code": line_code,
                                 "color": tuple(route_data.get("color") or (90, 90, 90)),
+                                # Default train model for this route (seeds the
+                                # per-row dropdown; user can override per session).
+                                "model": resolve_model_key(route_data.get("model")),
                             }
                         )
                 except Exception as e:
@@ -179,6 +206,7 @@ class SetupScreen:
             selected_idx: Index of currently selected route
         """
         self.screen.fill(self.bg_color)
+        self._model_box_rects = {}
 
         # Draw title
         title = i18n.t("setup.title")
@@ -267,27 +295,34 @@ class SetupScreen:
                 else:
                     line1_tail_img = None
                 line1_h = line1_name_img.get_height()
+                line1_ascent = self.route_font_cjk.get_ascent()
             else:
                 line1_name_img = None
                 line1 = f"{route_name} - {i18n.t('setup.diagram_label', diagram=diagram)}" if diagram else route_name
                 line1_tail_img = self.route_font.render(line1, True, text_color)
                 line1_h = line1_tail_img.get_height()
+                line1_ascent = self.route_font.get_ascent()
 
             # In EN mode, dest/type may have stayed kanji if their entries are
             # missing from translations.json / train_types.json. HelveticaNeue
             # has no CJK glyphs → would render as tofu boxes. Detect any CJK
             # codepoint in line2 and fall back to the CJK font for that string.
-            line2_font = self.route_font
+            line2_font = self.route_font_sub
             if line2 and i18n.current_lang() == "en" and any(0x3000 <= ord(c) <= 0x9FFF for c in line2):
-                line2_font = self.route_font_cjk
+                line2_font = self.route_font_sub_cjk
             line2_img = line2_font.render(line2, True, line2_color) if line2 else None
             line2_h = line2_img.get_height() if line2_img else 0
 
-            inter_gap = 2 if line2_img else 0
-            content_h = line1_h + inter_gap + line2_h
+            # Line 2 advances by line 1's ASCENT (not its full line box) + a small
+            # fixed gap, so the visual gap between the lines is the same across
+            # locales — leading-heavy fonts (Noto zh_CN) would otherwise push
+            # line 2 far below line 1. Coherent across i18n and the two sizes.
+            inter_gap = 3 if line2_img else 0
+            line2_advance = (line1_ascent + inter_gap) if line2_img else 0
+            content_h = (line2_advance + line2_h) if line2_img else line1_h
             top_pad = max(0, (self.row_height - content_h) // 2)
             line1_y = row_top + top_pad
-            line2_y = line1_y + line1_h + inter_gap
+            line2_y = line1_y + line2_advance
 
             # Blit line 1 (single- or two-pass)
             if line1_name_img is not None:
@@ -302,9 +337,15 @@ class SetupScreen:
             if line2_img is not None:
                 self.screen.blit(line2_img, (text_x + 20, line2_y))
 
+            # Per-row train-model dropdown box (right edge)
+            self._draw_model_box(i, row_top)
+
         # Draw scrollbar if there are more routes than visible
         if len(self.routes) > self.max_visible:
             self._draw_scrollbar()
+
+        # Open dropdown's option list draws last so it overlays neighbor rows.
+        self._draw_open_dropdown_menu()
 
         # Draw the OCR Auto-PA controls band (toggle pill + lead/interval steppers)
         self._draw_auto_pa_band()
@@ -1224,6 +1265,134 @@ class SetupScreen:
             return True
         return False
 
+    def _draw_model_box(self, route_idx: int, row_top: int) -> None:
+        """Draw the collapsed per-row train-model dropdown at the row's right
+        edge and record its hit rect. The expanding option list is drawn
+        separately (after all rows) by ``_draw_open_dropdown_menu``."""
+        # ── tuneable params ──────────────────────────────────────
+        box_h = 44  # fills most of the 50px row so the train icon shows large
+        right_margin = 24  # box right edge sits inside the selection highlight
+        radius = 6
+        icon_h = 38  # train front-view pixel-art icon height
+        icon_pad = 8  # left inset to the icon
+        gap = 8  # icon -> label gap
+        caret_zone = 24  # right width reserved for the divider + caret well
+        right_pad = 8  # label -> caret-zone breathing room
+        caret_hw = 4  # caret half-width
+        # ─────────────────────────────────────────────────────────
+        # box_w DERIVES from content so the widest model label fits in the active
+        # locale's font (ShinGo renders "E235-1000" ~30% wider than HelveticaNeue
+        # — a fixed width clips it). Max icon + label across models so every row's
+        # box is the same width (aligned column).
+        icons = [self._load_train_icon(k, icon_h) for k, _ in model_choices()]
+        max_icon_w = max((ic.get_width() for ic in icons if ic), default=0)
+        max_label_w = max((self.model_font.size(lbl)[0] for _, lbl in model_choices()), default=60)
+        box_w = icon_pad + max_icon_w + gap + max_label_w + caret_zone + right_pad
+        box_x = self.screen.get_width() - right_margin - box_w
+        box_y = row_top + (self.row_height - box_h) // 2
+        box = pygame.Rect(box_x, box_y, box_w, box_h)
+        is_open = self._open_dropdown_idx == route_idx
+        # Folded = chrome-less so the control blends into the row (the colourful
+        # train + label + caret carry it); only the OPEN state materialises a
+        # filled, bordered box with the caret-well divider.
+        if is_open:
+            pygame.draw.rect(self.screen, self.control_dim, box, border_radius=radius)
+            pygame.draw.rect(self.screen, self.dropdown_border, box, width=1, border_radius=radius)
+
+        key = self.routes[route_idx]["model"]
+        text_x = box.x + icon_pad
+        icon = self._load_train_icon(key, icon_h)
+        if icon is not None:
+            self.screen.blit(icon, (box.x + icon_pad, box.centery - icon.get_height() // 2))
+            text_x = box.x + icon_pad + icon.get_width() + gap
+        lbl = self.model_font.render(get_train_model(key).label, True, self.text_color)
+        self.screen.blit(lbl, (text_x, box.centery - lbl.get_height() // 2))
+
+        # Caret (down folded / up open). The caret-well divider only draws with
+        # the materialised open box — a lone divider line on the blended folded
+        # state would float oddly.
+        div_x = box.right - caret_zone
+        if is_open:
+            pygame.draw.line(self.screen, self.dropdown_border, (div_x, box.y + 6), (div_x, box.bottom - 7))
+        cx, cy = (div_x + box.right) // 2, box.centery
+        if is_open:
+            caret = [(cx - caret_hw, cy + 2), (cx + caret_hw, cy + 2), (cx, cy - 3)]
+        else:
+            caret = [(cx - caret_hw, cy - 2), (cx + caret_hw, cy - 2), (cx, cy + 3)]
+        pygame.draw.polygon(self.screen, self.dim_color, caret)
+        self._model_box_rects[route_idx] = box
+
+    def _draw_open_dropdown_menu(self) -> None:
+        """Draw the floating option list for the open dropdown over the route
+        rows (called after the row loop for z-order). Closes the dropdown if
+        its row has scrolled out of the visible list."""
+        self._model_option_rects = {}
+        idx = self._open_dropdown_idx
+        if idx is None:
+            return
+        box = self._model_box_rects.get(idx)
+        if box is None:  # open row scrolled out of view
+            self._open_dropdown_idx = None
+            return
+        item_h = 46  # roomy rows so the train front-view art reads clearly
+        icon_h = 40
+        icon_pad = 8
+        gap = 8
+        choices = model_choices()
+        menu_h = item_h * len(choices)
+        # Flip above the box if dropping below would run past the list area;
+        # small gap so the panel reads as separate from the collapsed box.
+        list_bottom = 70 + self.max_visible * self.row_height
+        menu_y = box.bottom + 2 if box.bottom + 2 + menu_h <= list_bottom else box.top - menu_h - 2
+        menu = pygame.Rect(box.x, menu_y, box.width, menu_h)
+        pygame.draw.rect(self.screen, self.control_bg, menu, border_radius=6)  # panel
+        cur = self.routes[idx]["model"]
+        mouse = pygame.mouse.get_pos()
+        for n, (key, label) in enumerate(choices):
+            item = pygame.Rect(box.x, menu_y + n * item_h, box.width, item_h)
+            # Hover gets the green "active" highlight (matches the route-row
+            # hover); the current value keeps a subtler pill when not hovered.
+            if item.collidepoint(mouse):
+                pygame.draw.rect(self.screen, self.highlight_color, item.inflate(-6, -4), border_radius=4)
+            elif key == cur:
+                pygame.draw.rect(self.screen, self.control_dim, item.inflate(-6, -4), border_radius=4)
+            text_x = item.x + icon_pad
+            icon = self._load_train_icon(key, icon_h)
+            if icon is not None:
+                self.screen.blit(icon, (item.x + icon_pad, item.centery - icon.get_height() // 2))
+                text_x = item.x + icon_pad + icon.get_width() + gap
+            lbl = self.model_font.render(label, True, self.text_color)
+            self.screen.blit(lbl, (text_x, item.centery - lbl.get_height() // 2))
+            self._model_option_rects[(idx, key)] = item
+        pygame.draw.rect(self.screen, self.dropdown_border, menu, width=1, border_radius=6)  # crisp edge last
+
+    def _handle_model_click(self, pos: tuple[int, int]) -> bool:
+        """Dispatch a click to the train-model dropdowns. Returns True if the
+        click was consumed — the caller must then NOT fall through to the
+        route-launch handler."""
+        if self._open_dropdown_idx is not None:
+            # Open menu: an option click selects; any other click just closes it.
+            for (ridx, key), rect in self._model_option_rects.items():
+                if rect.collidepoint(pos):
+                    self.routes[ridx]["model"] = key
+                    self._open_dropdown_idx = None
+                    return True
+            self._open_dropdown_idx = None
+            return True
+        # Collapsed: a click on a row's box opens that dropdown.
+        for ridx, rect in self._model_box_rects.items():
+            if rect.collidepoint(pos):
+                self._open_dropdown_idx = ridx
+                self.selected_idx = ridx
+                return True
+        return False
+
+    def _cycle_model(self, delta: int) -> None:
+        """Cycle the selected row's train model by ``delta`` (keyboard ←/→)."""
+        keys = [k for k, _ in model_choices()]
+        cur = self.routes[self.selected_idx]["model"]
+        self.routes[self.selected_idx]["model"] = keys[(keys.index(cur) + delta) % len(keys)]
+
     def _draw_tutorial_button(self) -> None:
         """Render the "? Tutorial" replay button top-right. Sets
         ``_tutorial_btn_rect`` for the click handler. No-op when
@@ -1298,6 +1467,26 @@ class SetupScreen:
         target_w = int(round(sw * (self._line_icon_h / sh)))
         scaled = pygame.transform.smoothscale(img, (target_w, self._line_icon_h))
         self._line_icon_cache[line_code] = scaled
+        return scaled
+
+    def _load_train_icon(self, model_key: str, height: int) -> pygame.Surface | None:
+        """Load + cache a train front-view icon from data/train_icons/{key}.png,
+        scaled to ``height``. Source art uses magenta (255,0,255) as its
+        transparency key; nearest-neighbour scale keeps the key exact (no
+        blended-edge fringe) and preserves the pixel-art look. Returns None when
+        the file is absent — that model simply renders without an icon."""
+        cache_key = (model_key, height)
+        if cache_key in self._train_icon_cache:
+            return self._train_icon_cache[cache_key]
+        path = project_root() / "data" / "train_icons" / f"{model_key}.png"
+        if not path.exists():
+            self._train_icon_cache[cache_key] = None
+            return None
+        img = pygame.image.load(str(path)).convert()
+        sw, sh = img.get_size()
+        scaled = pygame.transform.scale(img, (round(sw * height / sh), height))
+        scaled.set_colorkey((255, 0, 255))
+        self._train_icon_cache[cache_key] = scaled
         return scaled
 
     def _draw_line_badge(self, x: int, cy: int, line_code: str) -> int:
@@ -1376,6 +1565,7 @@ class SetupScreen:
                 "action": "select",
                 "work_dir": selected["path"],
                 "route_data": route_data,
+                "model": selected["model"],
                 "auto_input": self.auto_input_enabled,
                 "lead_m": self.lead_m,
                 "interval_s": self.interval_s,
@@ -1438,6 +1628,12 @@ class SetupScreen:
                                     pass
                                 continue
 
+                            # Train-model dropdown clicks consume before the
+                            # route-list handler — a click on a row otherwise
+                            # launches the sim immediately.
+                            if self._handle_model_click(event.pos):
+                                continue
+
                             # Check if click is on route list
                             clicked_idx = self._get_route_index_at_pos(event.pos)
                             if clicked_idx is not None:
@@ -1457,17 +1653,31 @@ class SetupScreen:
                         # Motion guard
                         if event.pos != self._last_mouse_pos:
                             self._last_mouse_pos = event.pos
-                            hovered_idx = self._get_route_index_at_pos(event.pos)
-                            if hovered_idx is not None:
-                                self.selected_idx = hovered_idx
+                            # While a model dropdown is open its menu floats over
+                            # the rows — don't let motion re-select the row beneath.
+                            if self._open_dropdown_idx is None:
+                                hovered_idx = self._get_route_index_at_pos(event.pos)
+                                if hovered_idx is not None:
+                                    self.selected_idx = hovered_idx
 
                     elif event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_ESCAPE:
-                            return None
+                            # ESC closes an open dropdown first; only exits setup
+                            # when nothing is open.
+                            if self._open_dropdown_idx is not None:
+                                self._open_dropdown_idx = None
+                            else:
+                                return None
                         elif event.key == pygame.K_UP:
+                            self._open_dropdown_idx = None
                             self.selected_idx = max(0, self.selected_idx - 1)
                         elif event.key == pygame.K_DOWN:
+                            self._open_dropdown_idx = None
                             self.selected_idx = min(len(self.routes) - 1, self.selected_idx + 1)
+                        elif event.key in (pygame.K_LEFT, pygame.K_RIGHT):
+                            # Cycle the selected row's train model (keyboard path;
+                            # the expanding list is the mouse affordance).
+                            self._cycle_model(1 if event.key == pygame.K_RIGHT else -1)
                         elif event.key == pygame.K_RETURN:
                             if self.routes:
                                 selected = self.routes[self.selected_idx]

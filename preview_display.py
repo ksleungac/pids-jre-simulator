@@ -48,9 +48,9 @@ from typing import Optional
 
 import pygame
 
-import app
 from app import PASimulator
 from displays.base import DisplayMode
+from displays.train_models import TRAIN_MODELS, get_train_model
 
 DEFAULT_MOCK_ROUTE = "_mock/main"
 
@@ -58,16 +58,6 @@ MODE_MAP = {
     "kanji": DisplayMode.KANJI,
     "furigana": DisplayMode.FURIGANA,
     "english": DisplayMode.ENGLISH,
-}
-
-# Train-model registry — package paths under displays.train_models. Used by
-# --model to swap the display classes that app.py imports at module-load
-# time. The main app stays on e235_1000 (its top-level import is
-# unchanged); preview rebinds app.UpperDisplay / app.LowerDisplay /
-# app.S_WIDTH / app.S_HEIGHT before instantiating PASimulator.
-MODEL_PACKAGES = {
-    "e235_1000": "displays.train_models.e235_1000",
-    "e235_0": "displays.train_models.e235_0",
 }
 
 
@@ -117,7 +107,7 @@ def parse_args():
     parser.add_argument(
         "--model",
         type=str,
-        choices=list(MODEL_PACKAGES),
+        choices=list(TRAIN_MODELS),
         default="e235_1000",
         help="Train model to render with. Default 'e235_1000' (Yokosuka/Sōbu Rapid). 'e235_0' is the Yamanote variant — same upper LCD minus the train-type cell; lower LCD is interim-reused from e235_1000 pending its dedicated redesign.",
     )
@@ -157,28 +147,17 @@ def main():
     if args.screenshot:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
 
-    # Swap app.py's bound display classes if --model picked something other
-    # than the default e235_1000. Rebinding works because PASimulator looks
-    # up `UpperDisplay` / `LowerDisplay` via app's module globals at call
-    # time, not via captured locals from import time.
-    if args.model != "e235_1000":
-        model_pkg = importlib.import_module(MODEL_PACKAGES[args.model])
-        app.UpperDisplay = model_pkg.UpperDisplay
-        app.LowerDisplay = model_pkg.LowerDisplay
-        app.S_WIDTH = model_pkg.S_WIDTH
-        app.S_HEIGHT = model_pkg.S_HEIGHT
-
     if args.debug_grid:
         # Flip the chosen model's upper-LCD debug-grid toggle. Module-level
-        # flag — must be set BEFORE pygame surfaces start rendering, but
-        # after the module imports cleanly.
-        _upper_lcd_mod = importlib.import_module(f"{MODEL_PACKAGES[args.model]}.upper_lcd")
+        # flag — must be set BEFORE pygame surfaces start rendering. The
+        # upper_lcd module is derived from the model's registered display class.
+        _upper_lcd_mod = importlib.import_module(get_train_model(args.model).upper_cls.__module__)
         _upper_lcd_mod.DEBUG_GRID = True
 
     work_dir = _resolve_work_dir(args.route)
     print(f"[preview] work_dir={work_dir}")
 
-    sim = PASimulator(work_dir, preview=True)
+    sim = PASimulator(work_dir, preview=True, model=args.model)
 
     # Initial position. jump_to_stop lands in STOPPING@target (at_station=True,
     # cnt_pa=0). --pa overrides that into a different prefix state for visual
