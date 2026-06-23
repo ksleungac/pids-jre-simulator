@@ -230,9 +230,15 @@ _TUNEABLES_FIVE_STATION = {
     "a0_halo_w":        1,  # uniform halo thickness (px) on every side of arrow
     # approaching arrow sweep animation — single-chevron cycle: travel A→B, fade, rest, repeat.
     "a0_sweep_dist":   19,  # px the tip travels along heading from A to B
-    "a0_sweep_dur":   1.0,  # seconds for A→B travel (= full-route sweep_duration_s)
+    "a0_sweep_dur":   0.7,  # seconds for A→B travel (= full-route sweep_duration_s)
     "a0_fade_dur":    0.4,  # seconds to fade out at B (= full-route fade_out_s)
-    "a0_rest_gap":    0.3,  # seconds of invisible gap before restart (= full-route rest_s)
+    "a0_rest_gap":    0.2,  # seconds of invisible gap before restart (= full-route rest_s)
+    # approaching arrow sweep EASE curve (the "fast→slow" motion) — tunable so
+    # the feel can be nudged in the editor (prefix "a" → approaching-gated).
+    "a0_ease_out_power":   2.0,  # sweep position: >1 = decelerating (fast at A, slow at B); 1 = linear
+    "a0_fade_in_full_at":  0.5,  # alpha reaches 1.0 when raw sweep_t hits this fraction (decoupled from position)
+    "a0_fade_out_power":   2.0,  # fade-out alpha = 1 - fade_t**this (>1 = slow drop early, fast late)
+    "a0_fade_stagger":    0.3,  # fade-out lead: white halo fades over [0, 1-stagger] of fade_dur, red body over [stagger, 1] (0 = together)
 }
 # fmt: on
 
@@ -1580,6 +1586,11 @@ class JapaneseFiveStationDisplay:
         self.stops = stops
         self.color = route_data.get("color", [116, 193, 30])
         self.contrast_color = route_data.get("contrast_color", [224, 54, 37])
+        # Circular route (Yamanote): stops[0] and stops[-1] are the same station
+        # (the doubled loop terminal). When circular, the 5-station view's
+        # next-stop walk wraps past the terminal instead of dead-ending. Same
+        # idiom as e235_1000.JapaneseDisplay / CircularFullRouteDisplay.
+        self._circular = bool(stops) and stops[0].get("name") == stops[-1].get("name")
         # Bake the band mask once with the route line color (Yamanote green by
         # default). See _bake_band / WIP_calibration_editor.md § "Two-tier".
         self._band = _bake_band(self.color)
@@ -1700,13 +1711,14 @@ class JapaneseFiveStationDisplay:
             # --- end band fill animation ---
 
             t = _TUNEABLES_FIVE_STATION
-            minutes = self._ahead_minutes(state, current_time)
             curr = state.curr_stop
-            for k in range(5):
+            # Index sequence for the up-to-5 markers (curr + 4 ahead; wraps past
+            # the loop terminal on a circular route). Drives both the markers and
+            # the cumulative minutes so they stay aligned.
+            vis = self._visible_stop_indices(curr)
+            minutes = self._ahead_minutes(state, current_time, vis)
+            for k, idx in enumerate(vis):
                 pos = (t[f"m{k}_x"], t[f"m{k}_y"])
-                idx = curr + k
-                if not (0 <= idx < len(self.stops)):
-                    continue
                 stop = self.stops[idx]
                 gpos = (t[f"g{k}_x"], t[f"g{k}_y"])  # badge+name group anchor
                 # Marker on the band first, then the badge + name group.
@@ -1734,14 +1746,15 @@ class JapaneseFiveStationDisplay:
                         miny = min(g[2] for g in glyphs)
                         top = cy + (maxy + miny) / 2.0 - digit_font.get_ascent()
                         self.screen.blit(img, (cx - img.get_width() / 2.0, top))
-                        arr_x, arr_y, arr_alpha = self._compute_five_station_arrow_animation()
+                        arr_x, arr_y, arr_halo_a, arr_body_a = self._compute_five_station_arrow_animation()
                         self._draw_five_station_approaching_arrow(
                             arr_x,
                             arr_y,
                             t["a0_angle"],
                             t["a0_scale"],
                             t["a0_halo_w"],
-                            alpha=arr_alpha,
+                            halo_alpha=arr_halo_a,
+                            body_alpha=arr_body_a,
                         )
                 elif k - 1 < len(minutes):
                     # Digit size = per-station tuneable m<N>_ts (eyeball pass;
@@ -1790,21 +1803,56 @@ class JapaneseFiveStationDisplay:
             elapsed = int((current_time - state.departure_time) / TIME_SCALE)
         return max(1, t - elapsed)
 
-    def _ahead_minutes(self, state, current_time: float) -> List[int]:
-        """Cumulative arrival minutes for the next four stops (E235-1000
-        draw_times accumulation). Base depends on state:
+    def _visible_stop_indices(self, curr: int) -> List[int]:
+        """Indices of the up-to-5 stops the view shows: ``curr`` first, then the
+        next four ahead. On a CIRCULAR route (``self._circular`` — the doubled
+        loop terminal, stops[0].name == stops[-1].name) the walk wraps with
+        modulo + name-dedup so the view keeps extending past the terminal (大崎)
+        instead of dead-ending; the duplicate terminal entry is skipped. On a
+        linear route it simply stops at the last stop. Mirrors
+        CircularFullRouteDisplay._ahead_indices (sta_code dedup there → name
+        dedup here, matching this class's circular-flag idiom)."""
+        n = len(self.stops)
+        if not (0 <= curr < n):
+            return []
+        out = [curr]
+        if self._circular:
+            seen = {self.stops[curr].get("name")}
+            for offset in range(1, 2 * n):
+                idx = (curr + offset) % n
+                name = self.stops[idx].get("name")
+                if name in seen:
+                    continue
+                out.append(idx)
+                seen.add(name)
+                if len(out) >= 5:
+                    break
+        else:
+            for k in range(1, 5):
+                idx = curr + k
+                if idx >= n:
+                    break
+                out.append(idx)
+        return out
+
+    def _ahead_minutes(self, state, current_time: float, vis: List[int]) -> List[int]:
+        """Cumulative arrival minutes for the visible stops ahead of curr
+        (E235-1000 draw_times accumulation). ``vis`` is the index sequence from
+        ``_visible_stop_indices`` (curr first, then up to four ahead, wrapping on
+        a circular route); minutes are computed for ``vis[1:]`` so they stay
+        index-aligned with the markers drawn in show_stops. Base depends on
+        state:
         - APPROACHING curr_stop: base = remaining time to curr_stop
-          (``_first_stop_minutes``); m1 = base + leg(curr→curr+1), etc.
+          (``_first_stop_minutes``); first-ahead = base + its leg, etc.
         - STOPPED at curr_stop: that leg is already travelled, so the chain
-          restarts from 0 — m1 = leg(curr→curr+1) only. Seeding with
-          ``_first_stop_minutes`` here would double-count the completed leg.
-        """
+          restarts from 0 — seeding with ``_first_stop_minutes`` would
+          double-count the completed leg.
+        Each visible stop's own ``time`` is the leg from its predecessor; this
+        holds across the circular wrap because the doubled terminal shares the
+        same leg (大崎→品川 is identical whether 大崎 is stops[0] or stops[-1])."""
         mins: List[int] = []
         cumulative = 0 if state.at_station else self._first_stop_minutes(state, current_time)
-        for k in range(1, 5):
-            idx = state.curr_stop + k
-            if idx >= len(self.stops):
-                break
+        for idx in vis[1:]:
             cumulative += self.stops[idx].get("time", 0)
             mins.append(int(cumulative))
         return mins
@@ -2075,18 +2123,20 @@ class JapaneseFiveStationDisplay:
         top = cy + (maxy + miny) / 2.0 - font.get_ascent()
         self.screen.blit(img, (cx - img.get_width() / 2.0, top))
 
-    def _compute_five_station_arrow_animation(self) -> Tuple[float, float, float]:
+    def _compute_five_station_arrow_animation(self) -> Tuple[float, float, float, float]:
         """Compute sweep animation state for the 5-station approaching arrow.
 
         Single-chevron cycle: travel A→B over sweep_dur, fade out over fade_dur,
         rest for rest_gap, repeat. Timing from pygame.time.get_ticks() so it
         animates even when current_time is frozen (editor / screenshot mode).
 
-        Returns (tip_x, tip_y, alpha) for the current frame.
-          - During sweep:     tip lerps A→B with ease-in; alpha 0→1 then holds 1.
-          - During fade-out:  tip stays at B; alpha 1→0 with ease-out.
-          - During rest:      returns A with alpha=0 (arrow invisible but at A,
-                              ready for next cycle).
+        Returns (tip_x, tip_y, halo_alpha, body_alpha) for the current frame.
+          - During sweep:     tip lerps A→B (ease-out); both alphas 0→1 together.
+          - During fade-out:  tip stays at B; the white halo fades first and the
+                              red body a bit later — halo over [0, 1-stagger] of
+                              fade_dur, body over [stagger, 1] (a0_fade_stagger).
+          - During rest:      returns A with both alphas 0 (invisible, parked at
+                              A, ready for the next cycle).
         """
         t = _TUNEABLES_FIVE_STATION
         a0_x = t["a0_x"]
@@ -2112,30 +2162,30 @@ class JapaneseFiveStationDisplay:
         t_now = pygame.time.get_ticks() / 1000.0
         t_cycle = t_now % cycle_period
 
-        # fmt: off
-        ease_out_power   = 2    # sweep position: fast at A, slow at B (decelerating, matches full-route)
-        fade_in_full_at  = 0.5  # alpha hits 1.0 when raw sweep_t reaches this fraction (decoupled from position)
-        fade_out_power   = 2    # fade-out: 1 - t^2 (matches full-route)
-        # fmt: on
+        # Ease-curve shape — now tunable via _TUNEABLES_FIVE_STATION (editor).
+        ease_out_power = t["a0_ease_out_power"]  # sweep position: fast at A, slow at B (decelerating)
+        fade_in_full_at = t["a0_fade_in_full_at"]  # alpha hits 1.0 when raw sweep_t reaches this fraction
+        fade_out_power = t["a0_fade_out_power"]  # fade-out: 1 - t^power
+        stagger = max(0.0, min(0.95, t["a0_fade_stagger"]))  # body-fade lead behind halo
 
         if t_cycle < sweep_dur:
             sweep_t = t_cycle / sweep_dur
             eased = 1 - (1 - sweep_t) ** ease_out_power
             tip_x = tip_x_A + (tip_x_B - tip_x_A) * eased
             tip_y = tip_y_A + (tip_y_B - tip_y_A) * eased
-            alpha = min(1.0, sweep_t / fade_in_full_at)
-        elif t_cycle < sweep_dur + fade_dur:
+            a = min(1.0, sweep_t / fade_in_full_at)  # fade-in: halo + body together
+            return tip_x, tip_y, a, a
+        if t_cycle < sweep_dur + fade_dur:
             fade_t = (t_cycle - sweep_dur) / fade_dur
-            tip_x = tip_x_B
-            tip_y = tip_y_B
-            alpha = 1.0 - fade_t**fade_out_power
-        else:
-            # Rest phase — arrow invisible, position at A.
-            tip_x = tip_x_A
-            tip_y = tip_y_A
-            alpha = 0.0
-
-        return tip_x, tip_y, alpha
+            span = 1.0 - stagger  # each element's fade occupies this fraction of fade_dur
+            # Halo leads: fades over [0, 1-stagger]. Body lags: fades over [stagger, 1].
+            halo_ft = min(1.0, fade_t / span) if span > 0 else 1.0
+            body_ft = min(1.0, max(0.0, (fade_t - stagger) / span)) if span > 0 else 1.0
+            halo_alpha = 1.0 - halo_ft**fade_out_power
+            body_alpha = 1.0 - body_ft**fade_out_power
+            return tip_x_B, tip_y_B, halo_alpha, body_alpha
+        # Rest phase — arrow invisible, position parked at A.
+        return tip_x_A, tip_y_A, 0.0, 0.0
 
     def _draw_five_station_approaching_arrow(
         self,
@@ -2144,7 +2194,8 @@ class JapaneseFiveStationDisplay:
         angle_deg: float,
         scale: float,
         halo_px: float = 1.0,
-        alpha: float = 1.0,
+        halo_alpha: float = 1.0,
+        body_alpha: float = 1.0,
     ) -> None:
         """Approaching arrow for the 5-station view's slot-0 (APPROACHING state).
 
@@ -2155,9 +2206,12 @@ class JapaneseFiveStationDisplay:
         - ``angle_deg`` rotates every point about ``tip`` after polygon build
           (positive = CCW). The 5-station band runs diagonally so the arrow must
           point up-along-the-band at an arbitrary angle, not just left/right.
-        - ``alpha``     0→1 fade (sweep animation). When < 1.0, draws onto a
-          SRCALPHA surface and blits — same mechanism as
-          CircularFullRouteDisplay._draw_approaching_arrow's faded path.
+        - ``halo_alpha`` / ``body_alpha``  independent 0→1 fades for the white
+          halo and the red body, enabling the staggered fade-out (halo first,
+          body a bit later). When either is < 1.0 the faded path renders the halo
+          and the body onto SEPARATE SRCALPHA surfaces — each scaled by its own
+          alpha via BLEND_RGBA_MULT, halo blitted behind — so they can fade out
+          of step. Both 1.0 → the opaque fast path (single direct draw).
 
         The full-route original uses ``face_left`` for right→left mirroring; here
         we always build right-pointing geometry first then apply the rotation —
@@ -2193,15 +2247,16 @@ class JapaneseFiveStationDisplay:
             (halo_w * math.cos(2 * math.pi * k / halo_stamps), halo_w * math.sin(2 * math.pi * k / halo_stamps)) for k in range(halo_stamps)
         ]
 
-        if alpha >= 1.0:
+        if halo_alpha >= 1.0 and body_alpha >= 1.0:
             for ox, oy in stamp_offsets:
                 draw_aapolygon(self.screen, PASSED_COLOR, [(px + ox, py + oy) for px, py in body_pts])
             draw_aapolygon(self.screen, self.contrast_color, body_pts)
             return
 
-        # Faded path — render halo stamps + body onto a SRCALPHA surface,
-        # scale alpha via BLEND_RGBA_MULT, blit. Mirrors the full-route
-        # CircularFullRouteDisplay._draw_approaching_arrow faded path exactly.
+        # Faded path — halo and body on SEPARATE SRCALPHA surfaces so each fades
+        # on its own alpha (staggered fade-out: halo first, body a bit later).
+        # Halo blitted first (behind); the body overdraws its interior, so only
+        # the visible outer ring fades. Bbox spans the dilated halo extent.
         all_pts = [(px + ox, py + oy) for ox, oy in stamp_offsets for px, py in body_pts] + body_pts
         min_x = int(min(p[0] for p in all_pts)) - 2
         min_y = int(min(p[1] for p in all_pts)) - 2
@@ -2211,15 +2266,20 @@ class JapaneseFiveStationDisplay:
         surf_h = max_y - min_y + 1
         if surf_w <= 0 or surf_h <= 0:
             return
-        surf = pygame.Surface((surf_w, surf_h), pygame.SRCALPHA)
         local_body = [(px - min_x, py - min_y) for px, py in body_pts]
+
+        halo_surf = pygame.Surface((surf_w, surf_h), pygame.SRCALPHA)
         for ox, oy in stamp_offsets:
-            local_stamp = [(px - min_x + ox, py - min_y + oy) for px, py in body_pts]
-            draw_aapolygon(surf, PASSED_COLOR, local_stamp)
-        draw_aapolygon(surf, self.contrast_color, local_body)
-        a = max(0, min(255, int(alpha * 255)))
-        surf.fill((255, 255, 255, a), special_flags=pygame.BLEND_RGBA_MULT)
-        self.screen.blit(surf, (min_x, min_y))
+            draw_aapolygon(halo_surf, PASSED_COLOR, [(px - min_x + ox, py - min_y + oy) for px, py in body_pts])
+        ha = max(0, min(255, int(halo_alpha * 255)))
+        halo_surf.fill((255, 255, 255, ha), special_flags=pygame.BLEND_RGBA_MULT)
+        self.screen.blit(halo_surf, (min_x, min_y))
+
+        body_surf = pygame.Surface((surf_w, surf_h), pygame.SRCALPHA)
+        draw_aapolygon(body_surf, self.contrast_color, local_body)
+        ba = max(0, min(255, int(body_alpha * 255)))
+        body_surf.fill((255, 255, 255, ba), special_flags=pygame.BLEND_RGBA_MULT)
+        self.screen.blit(body_surf, (min_x, min_y))
 
     @staticmethod
     def _offset_convex_poly(points, d: float):

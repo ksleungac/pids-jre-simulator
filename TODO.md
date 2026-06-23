@@ -21,7 +21,7 @@ The OCR auto-PA feature shipped in `feat(auto-input): OCR-driven auto-PA — in-
 ## Display / LCD fidelity
 
 - [ ] **New train models — re-skin work, not re-architecture.** Priority order: E235-0 Yamanote (in progress — see below), then E231-500, then E233 series. Each model lives under `displays/train_models/{model}/`. (CLAUDE.md § "Mental Model — Direction of travel".)
-  - **All E235-0 + calibration-editor work happens on the `feat/calibration-editor` branch**, not master. The sub-items below are tracked here for visibility; their implementation lands on that branch and merges back when stable.
+  - **E235-0 + calibration-editor work now happens on `master`** (the `feat/calibration-editor` branch was FF-merged ~2026-06-20/21 and is dead). Editor *standard* graduation (Phase 2) is still pending — see `WIP_calibration_editor.md § Merge plan`.
   - [x] E235-0 lower LCD — **5-station zoomed view** (replaces inherited 8-station). Shipped 2026-06-15: stopping pentagon + APPROACHING marker (dark-yellow circle, cumulative digit, ring-stamp-halo sweeping chevron) + green band fill-on-switch; owns the EIGHT slot in all modes. Minor visual finetune still pending (below).
   - [x] E235-0 lower LCD — ENGLISH renderer. Fixed 2026-06-15: FULL → Yamanote-circular and EIGHT → 5-station in ENGLISH mode (same-instance override; was leaking e235_1000 linear full-route + 8-station). Station names stay kanji (IRL-correct for the Yamanote route map).
   - [x] E235-0 lower LCD — transfer-info slot integration. Verified + fixed 2026-06-15: `upper_height` parametrized so the upper-LCD boundary matches the other slots (was 13px short); visually verified at Tokyo + Shinjuku.
@@ -109,7 +109,7 @@ Open items surfaced by `/review+fix` that were deferred (not blocking, scope-cre
 
 ### From 2026-06-20 (E235-0 open horseshoe full-route)
 
-- [ ] **`_draw_passed_band` re-derives track geometry inline** — `displays/train_models/e235_0/lower_lcd.py` `OpenRouteFullRouteDisplay._draw_passed_band` (lens 1, info; rule: conventions.md § UI code style "All downstream coordinates derive from those"; first flagged 2026-06-20) — Recomputes `v_outer` / `border_outer` / `straight_right` / `cy`, already derived in `_build_positions` + `_draw_track`. Values are consistent (all from the same `self.*` tuneables) so not a bug, but the gray-band clip rects could desync if a track-geometry formula is later edited in one site only — and this is the riskiest math in the class. Deferred because: not required for correctness + Surgical-Changes at wrap-up. Fix path: factor a shared `_band_geometry()` helper reused by `_build_positions`, `_draw_track`, and `_draw_passed_band`.
+- [ ] **`_draw_passed_band` re-derives track geometry inline** — `displays/train_models/e235_0/lower_lcd.py` `OpenRouteFullRouteDisplay._draw_passed_band` (lens 1, info; rule: conventions.md § UI code style "All downstream coordinates derive from those"; first flagged 2026-06-20; recurred 2026-06-23 vibe-check) — Recomputes `v_outer` / `border_outer` / `straight_right` / `cy`, already derived in `_build_positions` + `_draw_track`. Values are consistent (all from the same `self.*` tuneables) so not a bug, but the gray-band clip rects could desync if a track-geometry formula is later edited in one site only — and this is the riskiest math in the class. Deferred because: not required for correctness + Surgical-Changes at wrap-up. Fix path: factor a shared `_band_geometry()` helper reused by `_build_positions`, `_draw_track`, and `_draw_passed_band`.
 
 ## Closed-off paths (don't re-propose)
 

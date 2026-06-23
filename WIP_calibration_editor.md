@@ -22,7 +22,7 @@ Graduation gate (b) partially proven by the arc; full sign-off still needs the r
 
 2026-06-15 (later): **per-element drag lock** — `K` toggles a lock on the focused element. Locked handles render dimmed (no bright core) and are inert to grabs, so an accidental drag can't be swept into the next Ctrl+S; keyboard nudge of a deliberately-selected row still works (drag is the accident vector, not nudge). **Whole-element** granularity, **persisted** across launches to gitignored `_editor_locks.json` (loaded in `enter_edit_mode`; ids no longer in `_REGISTRY` are dropped on load). Sidebar header shows `[LOCKED — K]`.
 
-2026-06-16 → 06-20: E235-0 display work finished — 5-station inline transfer panel + **open-horseshoe full-route** for non-Yamanote routes (Yamanote racetrack with one cap dropped; replaces the old E235-1000 linear fallback). E235-0 now functionally complete and ship-ready (user: "good looking enough"). *Note:* the Tier-2 mask-PNG arc was never exercised — the 5-station view shipped with direct markers / pentagon; mask-PNG remains an available Tier-2 tool, not a path E235-0 actually took. **Graduation decided 2026-06-20:** graduate BOTH E235-0 and the editor, E235-0 first; concrete sequence in "Merge plan" below. The merge is now a clean fast-forward (master was merged into the branch at `38be6cf`, branch 0 behind origin/master), NOT the heavy cherry-pick the old Port-strategy note assumed. **We are not merging today — plan recorded first.**
+2026-06-16 → 06-20: E235-0 display work finished — 5-station inline transfer panel + **open-horseshoe full-route** for non-Yamanote routes (Yamanote racetrack with one cap dropped; replaces the old E235-1000 linear fallback). E235-0 now functionally complete and ship-ready (user: "good looking enough"). *Note:* the Tier-2 mask-PNG arc was never exercised — the 5-station view shipped with direct markers / pentagon; mask-PNG remains an available Tier-2 tool, not a path E235-0 actually took. **Graduation decided 2026-06-20:** graduate BOTH E235-0 and the editor, E235-0 first; concrete sequence in "Merge plan" below. The merge is now a clean fast-forward (master was merged into the branch at `38be6cf`, branch 0 behind origin/master), NOT the heavy cherry-pick the old Port-strategy note assumed. **Merge since executed (~2026-06-20/21); E235-0 fixes now land on `master` directly — see Merge plan § Status.**
 
 ---
 
@@ -214,20 +214,20 @@ Before the calibration editor concept merges to master as the new standard, all 
 
 5. **New-model skeleton** — **`e235_0` IS the skeleton.** New models are forks (copy-primitives convention), not greenfield, so whatever `e235_0` has wired is what the next model inherits for free. P5 = finish wiring `e235_0`'s last elements (badge, route bar) into `_TUNEABLES_*` + register, so the fork-source is complete. No separate abstract template. **(Decision 2026-06-20: wire now — template-completeness, not visual polish.)**
 
-**Port strategy (updated 2026-06-20).** Branch is a clean **fast-forward** onto master — master was merged in at `38be6cf`, so the branch contains all of origin/master (0 behind). The earlier "2 weeks behind, cherry-pick" plan is obsolete: `git merge --ff-only feat/calibration-editor` from master brings everything atomically, no conflicts. Do NOT split the merge by topic — the 12 commits interleave editor infra and E235-0 display; splitting is risky surgery for zero gain.
+**Port strategy (executed ~2026-06-20/21).** The branch was a clean **fast-forward** onto master — master was merged in at `38be6cf`, so at merge time the branch contained all of origin/master (0 behind). The earlier "2 weeks behind, cherry-pick" plan was obsolete: a single `git merge --ff-only feat/calibration-editor` brought everything atomically, no conflicts, no per-topic split. (Master has since advanced past the merged tip with direct commits — the branch is now behind and dead.)
 
 ---
 
 ## Merge plan (Route A — E235-0 as graduation vehicle)
 
-**Status: recorded 2026-06-20, NOT yet executed. We are not merging today.**
+**Status: Phase 1 DONE (FF-merge executed ~2026-06-20/21). Phase 2 NOT started.** `feat/calibration-editor` (70a86e5) is now an ancestor of master; E235-0 shipped, editor *code* rode along on the FF. Subsequent E235-0 work (open-horseshoe, dropdown) landed directly on master, and **all E235-0 fixes now go on `master`** — the branch is dead (decided 2026-06-23). Phase 2 (editor *standard* graduation) is the remaining work below.
 
-Graduate BOTH (E235-0 + editor), E235-0 first. The git merge is a single clean fast-forward (see Port strategy) — "E235-0 first" sequences the *graduation work* (what becomes canonical), not the merge.
+Graduate BOTH (E235-0 + editor), E235-0 first. The git merge was a single clean fast-forward (see Port strategy) — "E235-0 first" sequences the *graduation work* (what becomes canonical), not the merge.
 
-**Phase 1 — graduate E235-0:**
-1. Smoke-test E235-0 standalone: Yamanote (circular) + a non-Yamanote (horseshoe) + 8-station + transfer, all three modes — prove no editor *runtime* dependency.
-2. Confirm `DISPLAY_E235.md` is self-contained (no WIP-doc refs).
-3. FF-merge `feat/calibration-editor` → master + push. E235-0 ships. The editor *code* rides along (FF is atomic) but its *standard* is not canonical until Phase 2.
+**Phase 1 — graduate E235-0 (DONE):**
+1. ~~Smoke-test E235-0 standalone~~ — done; Yamanote (circular) + horseshoe + transfer all render across modes.
+2. ~~Confirm `DISPLAY_E235.md` is self-contained~~.
+3. ~~FF-merge `feat/calibration-editor` → master + push~~ — done. E235-0 shipped; editor *code* rode along (its *standard* is not canonical until Phase 2).
 
 **Phase 2 — graduate the editor standard:**
 4. **P1 code standard** → `conventions.md § UI code style`: `_TUNEABLES_*` module-level dict + suffix convention + hit-test rect + `_REGISTRY` entry + draw-reads-dict-each-frame. Reconcile with the existing method-local tuneable-block entry — that block is the *predecessor*; the module-level dict is the editor-compatible standard going forward (convert lazily, no eager backfill).
