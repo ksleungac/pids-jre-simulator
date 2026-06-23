@@ -118,7 +118,7 @@ STATION_RECT = pygame.Rect(
 # Region rect derived from tuneable so the calibration editor can nudge
 # position/size in-app. draw_clock syncs CLOCK_RECT from this dict each frame.
 # Pattern pioneer for region-level tuneability — broadcast to PREFIX_RECT /
-# STATION_RECT 2026-05-14; BADGE_RECT / PA_HINT_RECT pending.
+# STATION_RECT 2026-05-14; BADGE_RECT / PA_HINT_RECT 2026-06-23.
 # See WIP_calibration_editor.md § "Region-level tuneability pattern".
 _TUNEABLES_CLOCK_RECT = {
     "clock_x": 573,
@@ -134,9 +134,35 @@ CLOCK_RECT = pygame.Rect(
 )
 # Badge spans both the framed 68×68 square AND the optional code_3 top band
 # (12 px upward extension when present). Sized to the maximum (with-band)
-# extent so clip never amputates the band when code_3 is set.
-BADGE_RECT = pygame.Rect(222, UPPER_HEIGHT - 68 - 12, 68, 68 + 12)
-PA_HINT_RECT = pygame.Rect(S_WIDTH - 20, UPPER_HEIGHT - 20, 20, 20)
+# extent so clip never amputates the band when code_3 is set. Region rect
+# derived from tuneable; _draw_station_code_badge syncs BADGE_RECT each frame
+# and reads badge_x/badge_w from it (framed square height = badge_h minus the
+# code_3 band). See § "Region-level tuneability pattern".
+_TUNEABLES_BADGE_RECT = {
+    "badge_x": 222,
+    "badge_y": 50,
+    "badge_w": 68,
+    "badge_h": 80,
+}
+BADGE_RECT = pygame.Rect(
+    _TUNEABLES_BADGE_RECT["badge_x"],
+    _TUNEABLES_BADGE_RECT["badge_y"],
+    _TUNEABLES_BADGE_RECT["badge_w"],
+    _TUNEABLES_BADGE_RECT["badge_h"],
+)
+# PA-hint square (yellow blink = more PA available). draw() syncs each frame.
+_TUNEABLES_PA_HINT_RECT = {
+    "pa_hint_x": 710,
+    "pa_hint_y": 110,
+    "pa_hint_w": 20,
+    "pa_hint_h": 20,
+}
+PA_HINT_RECT = pygame.Rect(
+    _TUNEABLES_PA_HINT_RECT["pa_hint_x"],
+    _TUNEABLES_PA_HINT_RECT["pa_hint_y"],
+    _TUNEABLES_PA_HINT_RECT["pa_hint_w"],
+    _TUNEABLES_PA_HINT_RECT["pa_hint_h"],
+)
 
 
 # =============================================================================
@@ -661,11 +687,12 @@ class UpperDisplay:
         station_name = self.stops[self.curr_stop].get("name", "")
         code_3 = self.stations.get(station_name, {}).get("code_3", "")
 
+        tr = _TUNEABLES_BADGE_RECT
+        BADGE_RECT.update(tr["badge_x"], tr["badge_y"], tr["badge_w"], tr["badge_h"])
+
         # fmt: off
-        # --- Badge params (adjust freely) ---
-        badge_x = 222  # left edge
-        badge_w = 68  # total width
-        badge_h = 68  # total height (framed JY/03 portion only)
+        # --- Badge params (adjust freely; badge_x / badge_w / badge_h come from
+        #     _TUNEABLES_BADGE_RECT below — nudge badge position/size in editor) ---
         prefix_size = 18  # "JY" letters pt (face fixed to Frutiger in draw_station_code_badge)
         num_size = 22  # station-number pt
         code_3_size = 20  # 3-letter interchange-code pt
@@ -685,6 +712,9 @@ class UpperDisplay:
         # -------------------------------------
         # fmt: on
 
+        badge_x = BADGE_RECT.x  # synced from _TUNEABLES_BADGE_RECT
+        badge_w = BADGE_RECT.width
+        badge_h = BADGE_RECT.height - code_3_band_h  # framed square = rect minus code_3 band
         badge_y = UPPER_HEIGHT - badge_h
 
         # Clip to BADGE_RECT — covers the framed 68×68 square AND the optional
@@ -803,5 +833,7 @@ class UpperDisplay:
                 color = (247, 225, 158) if on else _bg("pa_hint")
             else:
                 color = _bg("pa_hint")
+            tr = _TUNEABLES_PA_HINT_RECT
+            PA_HINT_RECT.update(tr["pa_hint_x"], tr["pa_hint_y"], tr["pa_hint_w"], tr["pa_hint_h"])
             with clip(self.screen, PA_HINT_RECT):
                 pygame.draw.rect(self.screen, color, PA_HINT_RECT)

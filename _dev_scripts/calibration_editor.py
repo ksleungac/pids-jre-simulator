@@ -48,7 +48,10 @@ from app_paths import project_root
 #     "rect_attr": "DEST_RECT",
 #     "dicts": [(module_path, dict_name), ...],
 #     "target": "upper" | "lower",  # which LCD the element lives on
-#                                   # (drives sidebar layout in preview_display).
+#                                   # (drives the left-column render in
+#                                   # preview_display: upper = active-mode
+#                                   # stack; lower = full LCD A. Panel is
+#                                   # always on the right half.)
 # }
 _REGISTRY = {
     "dest": {
@@ -91,6 +94,27 @@ _REGISTRY = {
             ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_STATION_RECT"),
             ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_STATION_KANJI"),
             ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_STATION_ENGLISH"),
+        ],
+    },
+    "badge": {
+        "rect_module": "displays.train_models.e235_0.upper_lcd",
+        "rect_attr": "BADGE_RECT",
+        "target": "upper",
+        "dicts": [
+            # Region-level: position + size of the station-code badge clip rect
+            # (spans the framed square + optional code_3 band). _draw_station_
+            # code_badge syncs BADGE_RECT + reads badge_x/badge_w from this dict.
+            # Internal params (ring/font sizes) stay method-local — convert
+            # lazily per conventions.md § UI code style when next tuned.
+            ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_BADGE_RECT"),
+        ],
+    },
+    "pa_hint": {
+        "rect_module": "displays.train_models.e235_0.upper_lcd",
+        "rect_attr": "PA_HINT_RECT",
+        "target": "upper",
+        "dicts": [
+            ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_PA_HINT_RECT"),
         ],
     },
     "transfer_panel": {
@@ -354,10 +378,10 @@ def _load_locks() -> None:
 def get_focused_target() -> Optional[str]:
     """Return 'upper' / 'lower' for the focused element, or None.
 
-    Drives sidebar layout swap in preview_display._run_edit_loop: lower-LCD
-    elements move sidebar to the right half of the doubled window so the
-    full LCD A (upper + lower) stays visible during tuning. Upper elements
-    keep the default sidebar-below-upper-LCD layout.
+    Drives the left-column render in preview_display._run_edit_loop: lower-LCD
+    elements show the full LCD A (upper + lower); upper-LCD elements show the
+    active mode stacked above a locked-ENGLISH reference copy. The param panel
+    is on the right half in both cases.
     """
     if _focused_element is None:
         return None
@@ -538,35 +562,27 @@ def _cycle_stop(sim, delta: int) -> None:
     _rebuild_param_rows()
 
 
-def draw_overlay(screen, sidebar_layout: str = "below_upper") -> None:
+def draw_overlay(screen) -> None:
     """Indicator on LCD (focused-param visual cue) + sidebar overlay.
 
-    sidebar_layout dispatch:
-      "below_upper" (default) — sidebar spans full window width, sits below
-        UPPER_HEIGHT. Used for upper-LCD element focus (side-by-side LCDs
-        above, sidebar covers the lower-LCD area which isn't being tuned).
-      "right_half" — sidebar occupies the right half of the doubled window
-        (x=S_WIDTH..2*S_WIDTH, full height). Used for lower-LCD element
-        focus so LCD A's full vertical extent (upper + lower) stays visible
-        for tuning. LCD B render is skipped by preview_display in this mode.
+    The param panel always occupies the right half of the doubled window
+    (x=S_WIDTH..2*S_WIDTH, full height), so the left half stays clear for the
+    tuning target: for upper-LCD elements preview_display stacks the active
+    mode above a locked-ENGLISH reference copy there; for lower-LCD elements it
+    shows the full LCD A (upper + lower). The old "sidebar below the upper LCD"
+    layout was dropped — it butted flush against the upper LCD bottom (worse as
+    the upper height grows) and squeezed the panel into a short wide band.
     """
     _ensure_fonts()
     _draw_reference_overlay(screen)
     _draw_focused_indicator(screen)
-    w, h = screen.get_size()
-    from displays.train_models.e235_0 import S_WIDTH as _SW, UPPER_HEIGHT as _UH
+    _, h = screen.get_size()
+    from displays.train_models.e235_0 import S_WIDTH as _SW
 
-    if sidebar_layout == "right_half":
-        sidebar = pygame.Surface((_SW, h), pygame.SRCALPHA)
-        sidebar.fill((20, 20, 30, 240))
-        _draw_sidebar_contents(sidebar)
-        screen.blit(sidebar, (_SW, 0))
-    else:
-        sidebar_top = _UH
-        sidebar = pygame.Surface((w, h - sidebar_top), pygame.SRCALPHA)
-        sidebar.fill((20, 20, 30, 230))
-        _draw_sidebar_contents(sidebar)
-        screen.blit(sidebar, (0, sidebar_top))
+    sidebar = pygame.Surface((_SW, h), pygame.SRCALPHA)
+    sidebar.fill((20, 20, 30, 240))
+    _draw_sidebar_contents(sidebar)
+    screen.blit(sidebar, (_SW, 0))
 
 
 # ── Internals ──────────────────────────────────────────────────────────
@@ -670,16 +686,13 @@ def _on_click(pos, sim) -> bool:
 def _sidebar_local_y(pos) -> Optional[int]:
     """Convert window-coord click pos to sidebar-local y, or None if outside.
 
-    Sidebar position depends on focused element's target (set in _REGISTRY):
-      "upper" → sidebar below upper LCD: (x∈[0,w], y∈[UPPER_HEIGHT,h])
-      "lower" → sidebar right half: (x∈[S_WIDTH,2*S_WIDTH], y∈[0,h])
+    The param panel always occupies the right half of the doubled window
+    (x∈[S_WIDTH, 2*S_WIDTH], full height), so panel-local y equals window y;
+    clicks on the left half (the LCDs) return None.
     """
-    from displays.train_models.e235_0 import S_WIDTH as _SW, UPPER_HEIGHT as _UH
+    from displays.train_models.e235_0 import S_WIDTH as _SW
 
-    target = _REGISTRY[_focused_element].get("target", "upper")
-    if target == "lower":
-        return pos[1] if pos[0] >= _SW else None
-    return (pos[1] - _UH) if pos[1] >= _UH else None
+    return pos[1] if pos[0] >= _SW else None
 
 
 def _resolve_rect(cfg) -> Optional[pygame.Rect]:
@@ -781,14 +794,12 @@ _FOOTER_RESERVE = 28
 
 
 def _sidebar_height() -> int:
-    """Sidebar pixel height = screen height - UPPER_HEIGHT. Read lazily to
-    avoid circular import at module load."""
-    from displays.train_models.e235_0 import UPPER_HEIGHT as _UH
-
+    """Sidebar pixel height = full window height (panel occupies the right
+    half, full height). Read lazily to avoid circular import at module load."""
     surf = pygame.display.get_surface()
     if surf is None:
-        return 360  # safe default; matches S_HEIGHT 480 - UPPER 117 ≈ 363
-    return surf.get_height() - _UH
+        return 420  # safe default ≈ S_HEIGHT
+    return surf.get_height()
 
 
 def _visible_row_count() -> int:

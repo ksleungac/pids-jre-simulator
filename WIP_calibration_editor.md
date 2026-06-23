@@ -229,14 +229,14 @@ Graduate BOTH (E235-0 + editor), E235-0 first. The git merge was a single clean 
 2. ~~Confirm `DISPLAY_E235.md` is self-contained~~.
 3. ~~FF-merge `feat/calibration-editor` → master + push~~ — done. E235-0 shipped; editor *code* rode along (its *standard* is not canonical until Phase 2).
 
-**Phase 2 — graduate the editor standard:**
-4. **P1 code standard** → `conventions.md § UI code style`: `_TUNEABLES_*` module-level dict + suffix convention + hit-test rect + `_REGISTRY` entry + draw-reads-dict-each-frame. Reconcile with the existing method-local tuneable-block entry — that block is the *predecessor*; the module-level dict is the editor-compatible standard going forward (convert lazily, no eager backfill).
-5. **P5 golden template** → finish wiring `e235_0` badge + route bar into `_TUNEABLES_*` + register (decided: wire now). `e235_0` is the fork-source every future model inherits.
-6. **P3 editor on master** → verify `preview_display --edit`'s import of `_dev_scripts/calibration_editor` is lazy/gated (lint `_*/`-import ban + release-build safety).
-7. **P2 skill** → `/calibration-editor`: add-an-element + wire-a-new-model runbook — the "design a new model assumes a working editor" entry point.
-8. **Dissolve this WIP doc** → absorb implementation notes into the skill / `conventions.md` / `DISPLAY_E235.md`, delete `WIP_calibration_editor.md`.
+**Phase 2 — graduate the editor standard (2026-06-23):**
+4. ~~**P1 code standard**~~ **DONE** → `conventions.md § UI code style` gained the "Editor-compatible tuneables: module-level `_TUNEABLES_*` dict" entry (suffix convention + region-rect + register + draw-reads-dict; the method-local block named as predecessor; convert lazily).
+5. **P5 golden template** — **upper DONE, route bar DEFERRED.** Badge + PA-hint wired (`e235_0/upper_lcd.py` `_TUNEABLES_BADGE_RECT` / `_TUNEABLES_PA_HINT_RECT` + registered + smoke-verified). The **route bar (lower full-route track) is deferred to its own task** — it needs editor lower-view dispatch first (its `_TUNEABLES_FULL_ROUTE` element shares the lower-screen region with `five_station`/`transfer_panel` but lives in the *full-route* view, so the editor must disambiguate elements by active `--lower-view` before the route bar is focusable). Tracked in TODO.md.
+6. ~~**P3 editor on master**~~ **DONE (verified)** → `preview_display --edit` imports `calibration_editor` lazily inside `_run_edit_loop` via a `project_root()` path-hack (no static `_*/` import; lint-clean; release-safe — `--edit` is dev-only).
+7. ~~**P2 skill**~~ **DONE** → `.claude/skills/calibration-editor/SKILL.md` (launch + suffix table + add-an-element runbook with the badge/PA-hint worked example + new-model fork runbook + two-tier model + AST caveat). **This skill is now the canonical home for the editor mechanics** — the reference sections above (param-suffix convention, region-rect pattern, per-element dict shape, keybindings) are superseded by it; they remain here only until the route bar lands and this doc dissolves.
+8. **Dissolve this WIP doc** — **BLOCKED on the route bar.** Once the route bar + lower-view dispatch land, absorb any residual notes into the skill / `DISPLAY_E235.md` and delete this file.
 
-**Deferred:** P4 lint gate (post-graduation follow-up → TODO.md).
+**Deferred:** P4 lint gate + the route bar / lower-view dispatch (both → TODO.md).
 
 E233-0 (next model) then forks a fully-proven, already-exercised, editor-native `e235_0` from day one.
 
@@ -244,4 +244,4 @@ E233-0 (next model) then forks a fully-proven, already-exercised, editor-native 
 
 ## Trigger to graduate
 
-This doc deletes at Merge-plan Phase 2 step 8 — once P1 (code standard), P2 (skill), P3 (editor on master), and P5 (`e235_0` fully wired) are on master and the framework story has landed in `conventions.md` + the dedicated skill + `DISPLAY_E235.md`. P4 (lint gate) is deferred and tracked in TODO.md — it does NOT block dissolution; it lands as a post-graduation follow-up.
+This doc deletes at Merge-plan Phase 2 step 8 — once the **route bar + lower-view dispatch** complete P5 (`e235_0` fully wired). P1 (code standard), P2 (skill), P3 (editor on master), and P5-upper are already on master (2026-06-23); the editor-mechanics story has landed in `conventions.md` + the `/calibration-editor` skill. P4 (lint gate) is deferred and tracked in TODO.md — it does NOT block dissolution.

@@ -232,18 +232,21 @@ def _run_edit_loop(sim, overlay_path: Optional[str] = None) -> None:
     Loads `_dev_scripts/calibration_editor.py` via sys.path hack (it's a
     dev-only tool, never imported by production code).
 
-    Two layouts, dispatched per-frame from the focused element's `target`
+    Param panel always occupies the right half; the left half renders the
+    tuning target, dispatched per-frame from the focused element's `target`
     field in calibration_editor._REGISTRY:
 
-      target=upper (default) — side-by-side cross-reference:
+      target=upper (default) — active mode stacked above a locked-ENGLISH copy
+      (cross-reference) so the panel never butts the upper LCD bottom:
         +----------------+----------------+
-        |  UPPER LCD A   |  UPPER LCD B   |
-        |  (active mode) |  (ENGLISH)     |
+        |  UPPER (active)|                |
+        +----------------|   PARAM PANEL  |
+        |  UPPER (EN)    |   (full height)|
+        +----------------|                |
+        |                |                |
         +----------------+----------------+
-        |  PARAM PANEL (spans full width) |
-        +---------------------------------+
 
-      target=lower — single-LCD with sidebar on right half:
+      target=lower — full LCD A (upper + lower) on the left:
         +----------------+----------------+
         |  UPPER LCD A   |                |
         |                |   PARAM PANEL  |
@@ -265,11 +268,14 @@ def _run_edit_loop(sim, overlay_path: Optional[str] = None) -> None:
 
     from constants import FRAME_RATE
 
-    # Window doubled for side-by-side OR sidebar-right; LCD A is left half
-    # in both layouts.
+    # Window doubled: left half = tuning target, right half = param panel.
+    # _STACK_GAP separates the two upper-mode copies (target=upper layout) so
+    # the locked-ENGLISH reference sits clearly below the active mode.
+    _STACK_GAP = 12
     window = pygame.display.set_mode((2 * S_WIDTH, S_HEIGHT))
     lcd_a = window.subsurface((0, 0, S_WIDTH, S_HEIGHT))
-    lcd_b_upper = window.subsurface((S_WIDTH, 0, S_WIDTH, UPPER_HEIGHT))
+    lcd_a_upper = window.subsurface((0, 0, S_WIDTH, UPPER_HEIGHT))
+    lcd_en_upper = window.subsurface((0, UPPER_HEIGHT + _STACK_GAP, S_WIDTH, UPPER_HEIGHT))
 
     # Reference-image overlay (--overlay <path>). Loaded after set_mode so
     # convert_alpha() has a display surface. Toggled in-editor with `O`.
@@ -322,30 +328,30 @@ def _run_edit_loop(sim, overlay_path: Optional[str] = None) -> None:
 
         target = calibration_editor.get_focused_target()
         if target == "lower":
-            # LCD A renders upper + lower; LCD B render skipped (sidebar
-            # overlays the right half). Lower LCD is the tuning target.
+            # Left half = full LCD A (upper + lower); lower LCD is the target.
             _set_upper_screens(lcd_a)
             _set_lower_screens(lcd_a)
             sim.upper.draw(time_text)
             sim.lower.draw(0.0)
-            sidebar_layout = "right_half"
         else:
-            # Side-by-side: LCD A active mode, LCD B locked ENGLISH.
-            _set_upper_screens(lcd_a)
+            # Left half = active mode stacked above a locked-ENGLISH copy.
+            # Clear the column first so the gap + below-stack area stay black
+            # (the two copies only fill their own 0..UPPER_HEIGHT regions).
+            window.fill((0, 0, 0), pygame.Rect(0, 0, S_WIDTH, S_HEIGHT))
+            _set_upper_screens(lcd_a_upper)
             sim.upper.draw(time_text)
             original_mode = sim.upper.mode_cycler.current_mode
-            _set_upper_screens(lcd_b_upper)
+            _set_upper_screens(lcd_en_upper)
             sim.upper.mode_cycler.current_mode = DisplayMode.ENGLISH
             try:
                 sim.upper.draw(time_text)
             finally:
                 sim.upper.mode_cycler.current_mode = original_mode
                 _set_upper_screens(lcd_a)
-            sidebar_layout = "below_upper"
 
-        # Overlay paints panel + indicators on the FULL window so the panel
-        # can land at either layout and indicators reach LCD A's coord system.
-        calibration_editor.draw_overlay(window, sidebar_layout=sidebar_layout)
+        # Overlay paints the right-half panel + focused-element indicators on
+        # the FULL window (indicators reach LCD A's top-left coord system).
+        calibration_editor.draw_overlay(window)
         pygame.display.flip()
 
         for event in pygame.event.get():
