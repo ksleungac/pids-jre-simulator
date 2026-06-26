@@ -196,6 +196,18 @@
     "zh_CN": "有新版本:v{version}"
   },
 
+  "setup.version_label": {
+    "en": "Version",
+    "zh_HK": "版本",
+    "zh_CN": "版本"
+  },
+
+  "setup.new_version_label": {
+    "en": "Update",
+    "zh_HK": "新版本",
+    "zh_CN": "新版本"
+  },
+
   "tutorial.step_header": {
     "en": "Step {n} of {total}",
     "zh_HK": "第 {n}/{total} 步",

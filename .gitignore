@@ -36,6 +36,13 @@ _sta_verify_*.json
 # Promote out of here when an experiment graduates into the standard workflow.
 /_experiments/
 
+# Font-evaluation downloads — full per-locale Ark Pixel sets + PixelMplus etc.,
+# pulled by the font-hunt harnesses (_dev_scripts/_*_eval.py) to compare faces.
+# ~54 MB of re-downloadable OFL/PD binaries; local-only. The SHIPPED chrome fonts
+# live in fonts/ (committed). WIP_setup_redesign.md § Font records what's here +
+# where to re-fetch. Shippable picks graduate to fonts/, not committed from here.
+/_dev_scripts/_fonts_eval/
+
 # OCR calibration sources — full 2560×1440 desktop screenshots used by
 # _dev_scripts/extract_ocr_assets.py to regenerate ocr_templates/. Local-only,
 # only present when re-extracting after the game HUD layout changes. The

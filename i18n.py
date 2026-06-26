@@ -143,6 +143,20 @@ _LANG_CHROME_FONT: dict[str, tuple[str, str]] = {
 }
 # fmt: on
 
+# Per-language PIXEL chrome face — the TIMS-look low-res face (render small, antialias off,
+# nearest-upscale by an integer k; see widgets.draw_lowres_text / draw_lowres_number). Ark Pixel 12px
+# monospaced, OFL-licensed (fonts/ArkPixel-OFL.txt must ship with the .otf — runtime-required, per
+# critical_lessons §2). One weight (pixel fonts have no bold); per-locale like _LANG_CHROME_FONT
+# because Han unification needs separate Traditional/Simplified files (zh_HK ≠ zh_CN — 简 tofus
+# otherwise). IRL TIMS is monospaced, so Latin + numerals also sit in uniform cells.
+# fmt: off
+_LANG_PIXEL_FONT: dict[str, str] = {
+    "en":    "ArkPixel12pxMono-Latin.otf",
+    "zh_HK": "ArkPixel12pxMono-zh_HK.otf",
+    "zh_CN": "ArkPixel12pxMono-zh_CN.otf",
+}
+# fmt: on
+
 _font_cache: dict = {}
 
 
@@ -158,6 +172,18 @@ def font_for_lang(lang: str, size: int, *, bold: bool = False) -> pygame.font.Fo
     own script's font regardless of which row is hovered."""
     regular, bold_fname = _LANG_CHROME_FONT.get(lang, _LANG_CHROME_FONT["en"])
     fname = bold_fname if bold else regular
+    key = (fname, size)
+    if key not in _font_cache:
+        _font_cache[key] = pygame.font.Font(str(project_root() / "fonts" / fname), size)
+    return _font_cache[key]
+
+
+def pixel_font_for_lang(lang: str, size: int) -> pygame.font.Font:
+    """Cached per-language PIXEL chrome face (Ark Pixel mono) at `size` px — the NATIVE render size
+    for widgets.draw_lowres_text / draw_lowres_number, which upscale it by an integer k. One weight
+    (no bold); per-locale like font_for_lang (Han unification). Routes through project_root()/fonts —
+    never SysFont (Chinese-locale crash, 2026-03-14)."""
+    fname = _LANG_PIXEL_FONT.get(lang, _LANG_PIXEL_FONT["en"])
     key = (fname, size)
     if key not in _font_cache:
         _font_cache[key] = pygame.font.Font(str(project_root() / "fonts" / fname), size)

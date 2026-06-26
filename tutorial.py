@@ -23,15 +23,18 @@ import i18n
 from app import AppState, PASimulator
 from app_paths import project_root
 from displays.train_models.e235_1000 import S_HEIGHT, S_WIDTH
+from widgets import _TUNEABLES_TIMS_BUTTON, draw_tims_button, press_transition
 
 # fmt: off
 # ── tuneable params (window / layout) ───────────────────────────────────────
-WINDOW_W, WINDOW_H = 1100, 500
 PROGRESS_H = 64                                   # top progress strip (stepper + labels)
 LCD_X, LCD_Y = 0, PROGRESS_H                      # LCD sub-surface origin
 LCD_W, LCD_H = S_WIDTH, S_HEIGHT                  # LCD = full simulator output
+SIDE_W = 300                                      # step-panel width (narrowed from 370 for a tighter window)
+LCD_SLACK_H = 16                                  # breathing room under the LCD
+WINDOW_W, WINDOW_H = LCD_W + SIDE_W, PROGRESS_H + LCD_H + LCD_SLACK_H   # window = LCD + panel
 PANEL_X, PANEL_Y = LCD_W, PROGRESS_H              # side panel origin
-PANEL_W, PANEL_H = WINDOW_W - LCD_W, WINDOW_H - PROGRESS_H
+PANEL_W, PANEL_H = SIDE_W, WINDOW_H - PROGRESS_H
 
 # Palette — mirrors picker / setup chrome (lifted slate; high luminance contrast).
 BG_COLOR = (62, 68, 80)
@@ -46,7 +49,17 @@ BTN_BORDER = (118, 126, 142)
 PROGRESS_BG = (44, 49, 60)
 LINE_DIM = (76, 84, 100)                          # incomplete progress-line segments
 DOT_FUTURE = (70, 76, 92)                         # fill for not-yet-reached phase dots
+
+# TIMS reskin: chrome buttons render as glossy bevel buttons (widgets.py). The
+# lit/unlit = actionable/not language (shared with the shell tabs) replaces the
+# old green-primary concept — TIMS has no green CTA; the lit button IS the
+# emphasis. A disabled button draws normal then dims under this scrim.
+ARK_NATIVE = 12                                   # native px grid for the pixel face (upscaled by k)
+BTN_DISABLED_SCRIM = (40, 44, 54, 150)            # "unlit" overlay on a non-actionable button
 # fmt: on
+
+# Centered, k=2 pixel label inside the bevel (vs the tabs' wider footprint).
+_TUT_BTN_TUNEABLES = {**_TUNEABLES_TIMS_BUTTON, "text_align": "center", "text_pad": 8, "text_max_k": 2}
 
 
 # ── fonts ───────────────────────────────────────────────────────────────────
@@ -688,7 +701,33 @@ class Tutorial:
         self.running = True
         self.completed = False  # True iff user reached [Done]
 
+        # Embedded mode: when hosted inside another window (the TIMS tutorial
+        # shell) rather than owning the full display. The host drives per-frame
+        # via embed_setup() + render_frame() + process_event() and owns the
+        # clock + display.flip(). _origin is self.screen's topleft in host-window
+        # coords; incoming event/mouse positions are translated by it before
+        # hit-testing. Default (standalone) keeps origin (0,0) → no translation,
+        # behavior unchanged. See tutorial_tims.py.
+        self._embedded = False
+        self._origin = (0, 0)
+
     # ────────────────────────────── lifecycle ────────────────────────────────
+
+    def set_embedded(self, origin: tuple[int, int]) -> None:
+        """Switch to embedded mode for hosting inside another window.
+
+        ``origin`` = self.screen's topleft in host-window coords. The host owns
+        the frame clock + display flip and drives embed_setup() / render_frame()
+        / process_event() itself; it must NOT call run(). Standalone callers
+        never touch this — run() is unaffected.
+        """
+        self._embedded = True
+        self._origin = origin
+
+    def _local_pos(self, pos: tuple[int, int]) -> tuple[int, int]:
+        """Translate a host-window position into self.screen-local coords.
+        Identity when standalone (origin (0,0))."""
+        return (pos[0] - self._origin[0], pos[1] - self._origin[1])
 
     @classmethod
     def assets_ok(cls) -> tuple[bool, str]:
@@ -712,18 +751,23 @@ class Tutorial:
                 return False, f"missing {p}"
         return True, ""
 
-    def run(self) -> bool:
-        """Main tutorial loop. Returns True if user completed [Done]."""
-        # Asset pre-flight: missing route or mp3 → log + bail. Caller sets
-        # oobe_completed=True so the user isn't re-prompted (this is a
-        # no-audio-build scenario; the tutorial isn't recoverable).
+    def embed_setup(self) -> bool:
+        """Asset pre-flight + LCD sub-surface + sim boot + step-1 snapshot,
+        WITHOUT entering the loop. Returns False if assets/sim are unavailable
+        (caller should fall back). Shared by run() and the embedded host so the
+        standalone path stays identical.
+
+        Asset miss → log + False (no-audio build; tutorial isn't recoverable).
+        Caller sets oobe_completed=True so the user isn't re-prompted.
+        """
         ok, msg = self.assets_ok()
         if not ok:
             print(f"[tutorial] assets unavailable, skipping: {msg}")
             return False
 
-        # Set up the window + sub-surfaces. Caller already called set_mode at
-        # 1100×500 — we just allocate the LCD sub-surface for the sim.
+        # The screen surface is already sized 1100×500 (standalone: the window;
+        # embedded: a region sub-surface of the host). Allocate the LCD
+        # sub-surface for the sim relative to it.
         self.lcd_surface = self.screen.subsurface((LCD_X, LCD_Y, LCD_W, LCD_H))
 
         try:
@@ -740,18 +784,34 @@ class Tutorial:
         # Establish the step-1 snapshot so [Back] from step 2 restores the
         # boot state cleanly.
         self._enter_step(1)
+        return True
+
+    def render_frame(self) -> None:
+        """One frame of sim + chrome render onto self.screen. No clock tick, no
+        display flip — the loop owner (run() standalone, or the embedded host)
+        owns those. Shared so both paths render identically."""
+        self._tick_sim()
+        # Draw chrome on top of sim render.
+        self._draw_progress_bar()
+        self._draw_panel()
+        self._update_hover_cursor()
+
+    def embed_teardown(self) -> None:
+        """Host-driven teardown for embedded mode: stop in-flight audio + drop
+        the sim ref. Mirror of run()'s finally-block. Leaves mixer + display
+        alive (the host still owns them)."""
+        self._teardown_sim()
+
+    def run(self) -> bool:
+        """Main tutorial loop (standalone). Returns True if user completed [Done]."""
+        if not self.embed_setup():
+            return False
 
         try:
             while self.running:
                 self.clock.tick(15)
-                self._tick_sim()
-
-                # Draw chrome on top of sim render.
-                self._draw_progress_bar()
-                self._draw_panel()
-                self._update_hover_cursor()
+                self.render_frame()
                 pygame.display.flip()
-
                 self._handle_events()
         finally:
             self._teardown_sim()
@@ -762,7 +822,7 @@ class Tutorial:
         """Pointer-hand cursor when over a clickable progress-bar phase column.
         Surfaces the bar's clickability without an inline hint line — users
         learn the affordance on mouse exploration."""
-        mx, my = pygame.mouse.get_pos()
+        mx, my = self._local_pos(pygame.mouse.get_pos())
         over_phase = any(rect.collidepoint(mx, my) for rect in self._phase_rects)
         cursor = pygame.SYSTEM_CURSOR_HAND if over_phase else pygame.SYSTEM_CURSOR_ARROW
         pygame.mouse.set_cursor(cursor)
@@ -776,30 +836,41 @@ class Tutorial:
         audio (safety/comfort). Everything else is swallowed.
         """
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+            self.process_event(event)
+
+    def process_event(self, event: pygame.event.Event) -> None:
+        """Dispatch a single event. Mouse positions are translated to
+        self.screen-local coords via _local_pos (identity when standalone).
+
+        Standalone: called by _handle_events for every queued event. Embedded:
+        the host forwards interaction events here (it owns QUIT/ESC + its own
+        tab clicks, so those simply set running=False harmlessly if forwarded).
+        """
+        if event.type == pygame.QUIT:
+            self.running = False
+            return
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
                 self.running = False
-                continue
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    self.running = False
-                elif event.key == pygame.K_PAGEDOWN:
-                    self._dispatch_action(ACT_PGDN)
-                elif event.key == pygame.K_PAGEUP:
-                    self._dispatch_action(ACT_PGUP)
-                elif event.key == pygame.K_END and self.sim is not None:
-                    self.sim.audio.pause()
-                continue
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                # Progress-bar phase clicks jump to that step (skip-forward via
-                # skip handlers, or restore-back via snapshot).
-                if self._handle_progress_click(event.pos):
-                    continue
-                # Side panel buttons (Back/Next/Skip) take priority — they sit
-                # entirely inside the panel rect which doesn't overlap the LCD.
-                if self._handle_panel_click(event.pos):
-                    continue
-                # Click in LCD area — only step 7 forwards to the sim's jumper.
-                self._dispatch_action(ACT_CLICK, click_pos=event.pos)
+            elif event.key == pygame.K_PAGEDOWN:
+                self._dispatch_action(ACT_PGDN)
+            elif event.key == pygame.K_PAGEUP:
+                self._dispatch_action(ACT_PGUP)
+            elif event.key == pygame.K_END and self.sim is not None:
+                self.sim.audio.pause()
+            return
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            pos = self._local_pos(event.pos)
+            # Progress-bar phase clicks jump to that step (skip-forward via
+            # skip handlers, or restore-back via snapshot).
+            if self._handle_progress_click(pos):
+                return
+            # Side panel buttons (Back/Next/Skip) take priority — they sit
+            # entirely inside the panel rect which doesn't overlap the LCD.
+            if self._handle_panel_click(pos):
+                return
+            # Click in LCD area — only step 7 forwards to the sim's jumper.
+            self._dispatch_action(ACT_CLICK, click_pos=pos)
 
     def _dispatch_action(self, action: str, *, click_pos: Optional[tuple[int, int]] = None) -> None:
         """Forward an action to the sim if the current step allows it.
@@ -903,15 +974,40 @@ class Tutorial:
         while self.running and self.current_step < target:
             self._skip_step()
 
+    def _panel_step_beat(self, btn_rect: pygame.Rect, label: str) -> None:
+        """Panel-scoped loading beat for an in-tutorial step change: yellow-flash the pressed
+        Next/Back button, then blank ONLY the side panel (the part that changes between steps) before
+        the new step's panel renders. Snappier than the full-screen nav beat — only a sub-region
+        changes, so the LCD + progress strip stay put."""
+        btn_font = i18n.pixel_font_for_lang(i18n.current_lang(), ARK_NATIVE)
+        panel_rect = pygame.Rect(PANEL_X, PANEL_Y, PANEL_W, PANEL_H)
+        # render_frame() renders to self.screen and takes no surface arg; press_transition calls
+        # redraw(surface), so swallow it (surface IS self.screen here).
+        press_transition(
+            self.screen,
+            rect=btn_rect,
+            label=label,
+            font=btn_font,
+            t=_TUT_BTN_TUNEABLES,
+            redraw=lambda _s: self.render_frame(),
+            blank_color=BG_COLOR,
+            blank_rect=panel_rect,
+            pressed_ms=100,
+            blank_ms=280,
+        )
+
     def _handle_panel_click(self, pos: tuple[int, int]) -> bool:
         """Side-panel button dispatch. Returns True if a button was hit
         (caller stops further processing for the click)."""
         if self._btn_rects.get("next") and self._btn_rects["next"].collidepoint(pos):
             if self.predicate_satisfied:
+                next_label = i18n.t("tutorial.btn.done") if self.current_step == len(STEPS) else i18n.t("tutorial.btn.next")
+                self._panel_step_beat(self._btn_rects["next"], next_label)
                 self._advance_step()
             return True
         if self._btn_rects.get("back") and self._btn_rects["back"].collidepoint(pos):
             if self.current_step > 1:
+                self._panel_step_beat(self._btn_rects["back"], i18n.t("tutorial.btn.back"))
                 self._back_step()
             return True
         if self._btn_rects.get("skip_tutorial") and self._btn_rects["skip_tutorial"].collidepoint(pos):
@@ -1060,11 +1156,11 @@ class Tutorial:
         """Render the side panel: step header, body, buttons."""
         # ── tuneable params ──────────────────────────────────────
         panel_pad = 16
-        header_size = 22
-        subtitle_size = 11
-        body_size = 15
+        header_size = 18
+        subtitle_size = 10
+        body_size = 13
         subtitle_gap = 2  # gap between header + subtitle
-        body_gap = 14  # vertical gap between subtitle + body
+        body_gap = 12  # vertical gap between subtitle + body
         body_line_gap = 4
         btn_h = 38
         btn_gap = 8
@@ -1093,11 +1189,9 @@ class Tutorial:
 
         # Buttons — laid out bottom-up first so the action prompt can anchor
         # right above the primary row. On the wrap-up step the skip-tutorial
-        # row isn't rendered, so primary drops to the bottom. Latin + CJK
-        # fonts feed the mixed renderer in _draw_button so zh-HK / zh-CN
-        # button labels (e.g. 下一步) don't tofu under the Helvetica-only path.
-        btn_latin = _font_helv(15, bold=True)
-        btn_cjk = _font_cjk(15, heavy=True)
+        # row isn't rendered, so primary drops to the bottom. TIMS bevel buttons
+        # take one pixel face (mono Ark covers Latin + zh-HK/zh-CN labels).
+        btn_font = i18n.pixel_font_for_lang(i18n.current_lang(), ARK_NATIVE)
         btn_w = PANEL_W - 2 * panel_pad
         bottom_y = PANEL_Y + PANEL_H - panel_pad
         if self.current_step == len(STEPS):
@@ -1244,9 +1338,9 @@ class Tutorial:
         next_rect = pygame.Rect(back_rect.right + btn_gap, primary_row_y, half_w, primary_btn_h)
         self._btn_rects["back"] = back_rect
         self._btn_rects["next"] = next_rect
-        self._draw_button(back_rect, i18n.t("tutorial.btn.back"), btn_latin, btn_cjk, enabled=self.current_step > 1, primary=False)
+        self._draw_button(back_rect, i18n.t("tutorial.btn.back"), btn_font, enabled=self.current_step > 1)
         next_label = i18n.t("tutorial.btn.done") if self.current_step == len(STEPS) else i18n.t("tutorial.btn.next")
-        self._draw_button(next_rect, next_label, btn_latin, btn_cjk, enabled=self.predicate_satisfied, primary=True)
+        self._draw_button(next_rect, next_label, btn_font, enabled=self.predicate_satisfied)
 
         # Skip-tutorial — only on non-wrap-up steps (would be a self-loop on
         # the recap). Skip-step's mechanic is replicated by clicking the next
@@ -1255,27 +1349,17 @@ class Tutorial:
         if self.current_step != len(STEPS):
             skip_tut_rect = pygame.Rect(PANEL_X + panel_pad, skip_tutorial_y, btn_w, btn_h)
             self._btn_rects["skip_tutorial"] = skip_tut_rect
-            self._draw_button(skip_tut_rect, i18n.t("tutorial.btn.skip_tutorial"), btn_latin, btn_cjk, enabled=True, primary=False)
+            self._draw_button(skip_tut_rect, i18n.t("tutorial.btn.skip_tutorial"), btn_font, enabled=True)
 
-    def _draw_button(
-        self, rect: pygame.Rect, label: str, latin_font: pygame.font.Font, cjk_font: pygame.font.Font, *, enabled: bool, primary: bool
-    ) -> None:
+    def _draw_button(self, rect: pygame.Rect, label: str, font: pygame.font.Font, *, enabled: bool) -> None:
+        """TIMS bevel button. Lit (normal) when actionable; dimmed under a scrim
+        when not — the lit/unlit language shared with the shell tabs. No green
+        'primary' state: the lit button is the emphasis."""
+        draw_tims_button(self.screen, rect, label, font=font, t=_TUT_BTN_TUNEABLES, state="normal")
         if not enabled:
-            bg = BTN_BG_DIM
-            fg = DIM_COLOR
-        elif primary:
-            bg = ACCENT_COLOR
-            fg = TEXT_COLOR
-        else:
-            bg = BTN_BG
-            fg = TEXT_COLOR
-        pygame.draw.rect(self.screen, bg, rect, border_radius=6)
-        pygame.draw.rect(self.screen, BTN_BORDER, rect, width=1, border_radius=6)
-        img = _render_mixed(label, latin_font, cjk_font, fg)
-        self.screen.blit(
-            img,
-            (rect.centerx - img.get_width() // 2, rect.centery - img.get_height() // 2),
-        )
+            scrim = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
+            pygame.draw.rect(scrim, BTN_DISABLED_SCRIM, scrim.get_rect(), border_radius=_TUT_BTN_TUNEABLES["corner_radius"])
+            self.screen.blit(scrim, rect.topleft)
 
     def _measure_wrapped_text(self, text: str, latin_font: pygame.font.Font, cjk_font: pygame.font.Font, *, max_w: int, line_gap: int) -> int:
         """Visible height of ``text`` after wrap to ``max_w``. Returns
