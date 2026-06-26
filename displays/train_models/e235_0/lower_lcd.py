@@ -146,15 +146,29 @@ _BAND_MASK_PATH = project_root() / "data" / "e235_0" / "five_station_band.png"
 # grey outline hugging the band edge) is left at its drawn RGB — rendered as-is.
 _BAND_FILL_MIN = 190
 
-# Five-station band fill animation — replays every time the EIGHT slot becomes active.
-_BAND_FILL_DURATION = 2.0  # seconds for the green to sweep from bottom to top
+# Five-station band fill animation — replays every time the EIGHT slot becomes
+# active. The green sweeps along the band's CURVED centerline (bottom → top),
+# with the leading front cut perpendicular to the local tangent, so its edge
+# stays diagonal to the curve at every height (not one global sweep angle). See
+# _build_fill_centerline + the reveal loop in show_stops.
+_BAND_FILL_DURATION = 1.5  # seconds for the green to sweep bottom → top
+# Timing curve: progress = raw_t ** _BAND_FILL_EASE_POWER. 1.0 = linear; > 1 =
+# ease-in (slow start, ACCELERATES toward the top); < 1 = ease-out (fast start,
+# eases into the top).
+_BAND_FILL_EASE_POWER = 2.0
 _BAND_GRAY = (200, 200, 200)  # gray base color shown behind the rising green
-# Sweep direction for the fill animation — degrees (standard math: 0=right, 90=up,
-# negative=downward in screen coords). Default derived from m0→m4 vector in
-# _TUNEABLES_FIVE_STATION: atan2(167-358, 225-459) = atan2(-191,-234) ≈ -141°.
-# Nudge this to align the moving perpendicular front more closely with the band's
-# visible curvature. The fill sweeps from the m0/bottom end toward m4/top.
-_BAND_FILL_ANGLE = -141  # degrees; perpendicular front sweeps along this axis
+# Soft-edge width (px of arc length, trailing behind the moving front) over which
+# the green alpha ramps 0 → 255, so the leading edge reads smooth, not a hard
+# cut. 0 = hard edge; larger = softer / longer fade.
+_BAND_FILL_FEATHER = 18
+# Half-width (px) of the reveal corridor stamped along the centerline. Must
+# exceed the band's widest half-thickness so the green reaches both edges;
+# over-coverage is harmless (clipped by the band PNG's own alpha).
+_BAND_FILL_HALF_WIDTH = 100
+# Centerline densification — Catmull-Rom samples per waypoint segment. Higher =
+# finer arc-length steps = smoother feather gradient + perpendicular front.
+# 40 ≈ 2-3 px steps → the feather still reads smooth without oversampling.
+_BAND_FILL_SAMPLES_PER_SEG = 40
 
 
 def _bake_band(color) -> pygame.Surface:
@@ -1596,6 +1610,13 @@ class JapaneseFiveStationDisplay:
         self._band = _bake_band(self.color)
         # Gray base band — shown below the rising green during the fill animation.
         self._band_gray = _bake_band(_BAND_GRAY)
+        # Precompute the band centerline (the arc-length path the green fill
+        # sweeps along; its leading front follows this curve). See
+        # _build_fill_centerline.
+        self._build_fill_centerline()
+        # Reusable scratch mask for the fill reveal — cleared + restamped each
+        # animation frame (avoids a per-frame full-screen surface allocation).
+        self._fill_reveal = pygame.Surface((S_WIDTH, S_HEIGHT), pygame.SRCALPHA)
 
         # Fill animation state — reset each time the EIGHT slot becomes active.
         # _fill_start: current_time when this reveal began (None = not yet started).
@@ -1619,6 +1640,52 @@ class JapaneseFiveStationDisplay:
         self._tp_line_code = route_data.get("line_code")
         self._tp_transfer_view = route_data.get("transfer_view")
         self._tp_icon_cache: dict = {}
+
+    def _build_fill_centerline(self) -> None:
+        """Densify the band centerline the green fill sweeps along.
+
+        Waypoints = the two band end-caps (retired `_TUNEABLES_ARC` p0/p6 — the
+        band terminations) bracketing the five live marker centres m0..m4. The
+        fill is parameterised by ARC LENGTH along this curve and cuts its front
+        perpendicular to the local tangent, so the leading edge stays diagonal
+        to the band at every height. Stores per-sample point / cumulative arc
+        length / unit-normal arrays + total length, all read each frame in
+        show_stops. Precomputed once (markers are fixed tuneables).
+        """
+        ta = _TUNEABLES_ARC
+        tf = _TUNEABLES_FIVE_STATION
+        waypoints = [
+            (ta["arc_p0_x"], ta["arc_p0_y"]),  # bottom end-cap (below current stop)
+            (tf["m0_x"], tf["m0_y"]),  # current stop
+            (tf["m1_x"], tf["m1_y"]),
+            (tf["m2_x"], tf["m2_y"]),
+            (tf["m3_x"], tf["m3_y"]),
+            (tf["m4_x"], tf["m4_y"]),  # furthest ahead
+            (ta["arc_p6_x"], ta["arc_p6_y"]),  # top end-cap (past furthest)
+        ]
+        # Strokes are unused here (the fill only needs the geometry); pass a
+        # dummy array to satisfy the helper signature and discard its output.
+        pts, _ = _build_catmull_rom_centerline(waypoints, [1.0] * len(waypoints), _BAND_FILL_SAMPLES_PER_SEG)
+        # Cumulative arc length per sample.
+        cum = [0.0]
+        for i in range(1, len(pts)):
+            cum.append(cum[-1] + math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]))
+        # Unit normal per sample (perpendicular to the local tangent).
+        n = len(pts)
+        normals: List[Tuple[float, float]] = []
+        for i in range(n):
+            if i == 0:
+                tx, ty = pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]
+            elif i == n - 1:
+                tx, ty = pts[-1][0] - pts[-2][0], pts[-1][1] - pts[-2][1]
+            else:
+                tx, ty = pts[i + 1][0] - pts[i - 1][0], pts[i + 1][1] - pts[i - 1][1]
+            mag = math.hypot(tx, ty) or 1.0
+            normals.append((-ty / mag, tx / mag))
+        self._fill_path = pts
+        self._fill_cum = cum
+        self._fill_normal = normals
+        self._fill_len = cum[-1] if cum else 0.0
 
     def _font(self, name: str, size: float) -> pygame.font.Font:
         key = (name, max(1, int(round(size))))
@@ -1655,58 +1722,63 @@ class JapaneseFiveStationDisplay:
             elif self._fill_start is None:
                 progress = 1.0
             else:
-                progress = min(1.0, max(0.0, (current_time - self._fill_start) / _BAND_FILL_DURATION))
+                raw_t = min(1.0, max(0.0, (current_time - self._fill_start) / _BAND_FILL_DURATION))
+                progress = raw_t**_BAND_FILL_EASE_POWER  # ease-in: accelerates toward the top
 
             if progress >= 1.0:
                 # Animation complete — blit green band, no gray needed.
                 self.screen.blit(self._band, (0, 0))
             else:
-                # Gray base covers the whole band area; green sweeps along the
-                # band axis from the m0/bottom end toward m4/top.
+                # Gray base covers the whole band; the green reveal is stamped
+                # over it below (the detailed block owns the sweep description).
                 self.screen.blit(self._band_gray, (0, 0))
 
-                # --- Sweep axis and projection range ---
-                # d = unit vector along the band (m0 → m4 direction).
-                rad = math.radians(_BAND_FILL_ANGLE)
-                dx, dy = math.cos(rad), math.sin(rad)
-                # Project the four corners of ARC_RECT onto d to find the
-                # full projection range of the band's bounding box.
-                corners = [
-                    (ARC_RECT.left, ARC_RECT.top),
-                    (ARC_RECT.right, ARC_RECT.top),
-                    (ARC_RECT.right, ARC_RECT.bottom),
-                    (ARC_RECT.left, ARC_RECT.bottom),
-                ]
-                projs = [cx * dx + cy * dy for cx, cy in corners]
-                p_min, p_max = min(projs), max(projs)
-                # front moves from p_min (m0 end) to p_max (m4 end) as progress → 1.
-                front = p_min + progress * (p_max - p_min)
+                # --- Masked reveal (feathered front, follows the band curve) ---
+                # Parameterised by ARC LENGTH along the precomputed centerline
+                # (self._fill_*, built in _build_fill_centerline). Reveal is
+                # stamped as per-segment corridor quads, each perpendicular to
+                # the local tangent — so the leading front stays DIAGONAL to the
+                # curve at every height, not one global angle. Green alpha ramps
+                # 0 → 255 across _BAND_FILL_FEATHER px of arc length trailing the
+                # front, for a smooth edge. The reveal mask is multiplied into a
+                # copy of the green band via BLEND_RGBA_MULT (scales only the
+                # band's alpha; RGB green stays). pygame.draw.polygon writes the
+                # color's alpha directly (no blend) — same as the old hard erase.
+                pts = self._fill_path
+                cum = self._fill_cum
+                nrm = self._fill_normal
+                w = _BAND_FILL_HALF_WIDTH
+                feather = max(1.0, float(_BAND_FILL_FEATHER))
+                front_s = progress * self._fill_len
+                solid = front_s - feather  # ≤ solid: full green; (solid, front_s]: ramp; > front_s: hidden
 
-                # --- Masked reveal ---
-                # Copy the green band, then erase (zero alpha) the half-plane
-                # where projection > front (the not-yet-revealed side).
+                reveal = self._fill_reveal
+                reveal.fill((0, 0, 0, 0))  # clear last frame's stamp
+                prev = None
+                for i in range(len(pts)):
+                    if cum[i] > front_s:
+                        break
+                    if cum[i] <= solid:
+                        a = 255
+                    else:
+                        a = max(0, min(255, int(round(255 * (1.0 - (cum[i] - solid) / feather)))))
+                    if prev is not None:
+                        (ax, ay), (bx, by) = pts[prev], pts[i]
+                        (nax, nay), (nbx, nby) = nrm[prev], nrm[i]
+                        pygame.draw.polygon(
+                            reveal,
+                            (255, 255, 255, a),
+                            [
+                                (ax + nax * w, ay + nay * w),
+                                (ax - nax * w, ay - nay * w),
+                                (bx - nbx * w, by - nby * w),
+                                (bx + nbx * w, by + nby * w),
+                            ],
+                        )
+                    prev = i
+
                 band_copy = self._band.copy()
-                # Build a large quad covering the erase half-plane: extend a
-                # bounding box far past ARC_RECT, split by the front line.
-                big = max(S_WIDTH, S_HEIGHT) * 2
-                # Two points on the front line (perpendicular to d through front):
-                # perp = (-dy, dx) is a unit vector along the front line.
-                perp_x, perp_y = -dy, dx
-                fx = dx * front  # a point on the front line (projection = front)
-                fy = dy * front
-                f0 = (fx + perp_x * big, fy + perp_y * big)
-                f1 = (fx - perp_x * big, fy - perp_y * big)
-                # Two far corners in the erase direction (projection > front).
-                far_x = dx * (p_max + big)
-                far_y = dy * (p_max + big)
-                e0 = (far_x + perp_x * big, far_y + perp_y * big)
-                e1 = (far_x - perp_x * big, far_y - perp_y * big)
-                erase_quad = [f0, f1, e1, e0]
-                # Zero alpha on the erase-side. band_copy is SRCALPHA (from
-                # convert_alpha in _bake_band), so pygame.draw.polygon writes
-                # the color's alpha directly — (255,255,255,0) makes those
-                # pixels fully transparent, revealing only the gray below.
-                pygame.draw.polygon(band_copy, (255, 255, 255, 0), erase_quad)
+                band_copy.blit(reveal, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
                 self.screen.blit(band_copy, (0, 0))
             # --- end band fill animation ---
 
