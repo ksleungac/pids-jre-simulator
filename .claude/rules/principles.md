@@ -88,6 +88,7 @@ Before claiming "X is a bug" or "X works like Y", read the call sites and trace 
 - When documenting per-line / per-instance facts, inspect data file content + run `validate_data.py` before authoring.
 - Before claiming a file/route/dataset doesn't exist, read the domain doc for that area first. Filesystem shape ≠ documented reality. (2026-05-29: claimed no yamanote data after glob missed flat layout; `audio/README.md § JY` documents it explicitly.)
 - A doc's usage example shows one invocation, not the tool's full capability — read the tool before claiming what it can't do.
+- A subagent's factual claim (esp. "X matches / equals Y") is still a claim you're relaying — verify it against primary source before acting; delegating the work doesn't transfer the verification burden. (2026-06-27: a font-research subagent picked Noto **Regular**; the originals were **Thin** → propagated unchecked, user caught the stroke-width regression.)
 
 ### Verify runtime semantics from primary source
 For code whose behavior depends on deployment frame or external runtime (PyInstaller, threading, I/O timing, OS specifics), verify against primary source — not cached impression.
@@ -259,6 +260,9 @@ Before writing a function that "feels generic," grep the codebase for an existin
 - Trigger: function < 20 lines, stdlib-only body, name like `load_*` / `resolve_*` / `_*_root`.
 - `grep -rn "<name-stem>" --include="*.py" .` excluding `.venv/`. If found, extend rather than fork.
 
+### Dispatch independent work to parallel subagents
+When subtasks have no data dependency (separate searches, reads, verifications, asset hunts), fan them out to parallel subagents in ONE message — don't run them sequentially in the main thread. Still verify each subagent's output before acting (cf. § "Verify before claiming"). 2026-06-27: user — *"you need to actively dispatch subagents to do tasks in parallel."*
+
 ---
 
 ## Engineering rigor
@@ -269,6 +273,11 @@ Write the minimum code that solves the problem. No speculative additions.
 **How to apply:**
 - No features beyond what was asked. No abstractions for single-use code. No error handling for impossible scenarios.
 - The test: would a senior engineer call it overcomplicated?
+
+### Reusable code = flexible primitive
+When factoring shared code (helper / utility / chrome layer), design a portable, options-customized interface — keyword options for variants, parameters over hardcoded constants — so it's callable from many sites with different inputs. NOT license for speculative generality (cf. Simplicity First — no abstraction for single-use, no option without a second caller); the flexibility serves reuse you can point to.
+
+**Why:** (2026-06-27) User: *"think about primitive when coding. a portable, using options to customize, flexible interface."* — `chrome.title_row` / `blit_lowres(…, right=)` extracted from 3× copy-paste.
 
 ### Surgical Changes
 Touch only what the task requires. Don't expand edit scope autonomously.

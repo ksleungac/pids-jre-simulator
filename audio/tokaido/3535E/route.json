@@ -4,6 +4,11 @@
     "color": [244, 132, 44],
     "type_color": [244, 132, 44],
     "type": "快速アクティー",
+    "remarks": {
+        "direction": "下り",
+        "through": "",
+        "note": ""
+    },
     "dest": "熱海",
     "stops": [
         {

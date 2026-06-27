@@ -1,11 +1,16 @@
 {
-    "route": "総武快速線・成田線直通",
+    "route": "総武快速線",
     "line_code": "JO",
     "transfer_view": "JO_east",
     "color": [22, 64, 152],
     "contrast_color": [116, 18, 34],
     "type_color": [22, 64, 152],
     "type": "快速",
+    "remarks": {
+        "direction": "下り",
+        "through": "成田線",
+        "note": ""
+    },
     "dest": "成田空港",
     "frames": [
         {"from": "久里浜", "to": "千葉",     "line": "yokosuka_sobu.sobu"},

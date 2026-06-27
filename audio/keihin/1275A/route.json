@@ -1,5 +1,5 @@
 {
-    "route": "京浜東北・根岸線",
+    "route": "京浜東北線",
     "line_code": "JK",
     "transfer_view": "JK_south",
     "color": [
@@ -8,6 +8,11 @@
         209
     ],
     "type": "快速",
+    "remarks": {
+        "direction": "南行",
+        "through": "根岸線",
+        "note": ""
+    },
     "dest": "大船",
     "stops": [
         {

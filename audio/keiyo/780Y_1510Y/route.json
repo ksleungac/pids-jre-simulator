@@ -17,6 +17,11 @@
         0
     ],
     "type": "普通",
+    "remarks": {
+        "direction": "上り",
+        "through": "",
+        "note": ""
+    },
     "dest": "東京",
     "stops": [
         {

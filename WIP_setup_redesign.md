@@ -1,8 +1,9 @@
 # WIP: Setup Screen Redesign (TIMS-style)
 
 In-flight redesign of the setup / home screen to the JR East TIMS cab-console look (glossy
-raised-bevel blue buttons + low-res pixel text). Draft: `_dev_scripts/setup_redesign_draft.py`;
-primitives: `_dev_scripts/button_style_sandbox.py` (+ `_test_button_primitive.py`). This doc holds the
+raised-bevel blue buttons + low-res pixel text). **Live home: the `setup_tims/` production package**
+(promoted 2026-06-27 — see § Promotion); primitives in `widgets.py`. The original drafts
+(`_dev_scripts/setup_redesign_draft.py`, `button_style_sandbox.py`) are historical. This doc holds the
 design + decisions until graduation, then dissolves into canonical homes.
 
 ## EDIT-CONTRACT
@@ -32,22 +33,28 @@ free choice, reconciles with `DEBUG_PANEL_HEIGHT` at graduation). Draft:
 `setup_redesign_draft._render_topband`. Mirrors the real TIMS top register; everything **except station
 names is i18n** (develop/preview in **zh_HK**).
 
-Layout, left→right:
-- **Left column (small, crisp k=1)** — green katakana notification + the OCR **state**: segment
-  `from → to` (station names, JP) · inferred Layer-3 state word · played `N/M`. **Badge (Layer-2 raw
-  read: STOPPED/MOVING/PASSING/UNKNOWN) is grouped HERE with the state.**
+Layout, left→right. **All three left rows bottom-align to the SAME row baselines as the readout** so the
+state column and the speed column line up row-for-row.
+- **Left column (small, crisp k=1)**, 3 rows: (0) **green katakana notification — persistent on every
+  scenario** (`ツウコク　ジョウホウ` = 通告情報, matched to `tims_002`, full-width word gap); (1) segment
+  `from → to` (station names, JP); (2) inferred Layer-3 state word · played `N/M` · **badge (Layer-2 raw
+  read) FOLDED onto this line**, dim (NO confidence colour). **Per-line font:** station names → JP face
+  (`pixel_font_for_lang("en", …)` = NotoSansJP); localized chrome → the ACTIVE locale face (TC/SC) — fixes
+  the zh_CN tofu (the TC face lacks Simplified-only glyphs).
 - **Centre readout cell** (right-aligned, between separators) — speed limit / speed / **distance
-  (ALWAYS metres** — OCR reads m; finer than rounded km). **Wide TIMS numerals** (`draw_lowres_number`).
-  Speed limit is **plain until it CHANGES, then flashes cyan a few seconds and settles** (change cue,
-  not a permanent highlight).
+  (ALWAYS metres** — OCR reads m; finer than rounded km). **Fat full-width (全角) numerals** (digits on a
+  monospace cell, separators/units half-width), ink **bottom-aligned to the row baselines**. Speed limit
+  is **plain until it CHANGES, then flashes cyan a few seconds and settles** (change cue); the cyan block
+  **hugs the number ink**, not the font's tall leading box.
 - **Message strips (centre-right)** — the original TIMS **two dim bars** = message displays. House the
   OCR **fire event**, **stopping-position** reading, **re-aligning** signal, paused/frozen-OCR, etc.
-  **Message text = bright YELLOW, flashing, auto-clears after a while** (per IRL recollection — to
-  confirm against reference).
-- **Right control cluster** — `[pause] [save-record] [home]`, **uniform square** TIMS buttons (all
-  content-sized to the home label). Home always rightmost (return-to-home, persistent). Pause +
-  save-record are the migrated debug-panel controls (save-record = the old Report / driving-record
-  download).
+  **Message text = bright YELLOW, flashing, auto-clears after a while** — the auto-played fire chip's ~3 s
+  expiry lives in `_band_vals`; other strips clear when their condition ends.
+- **Right control cluster** — `[pause] [save-record] [home]`, **uniform square** TIMS buttons. Sized to
+  the **worst-case label across ALL locales** (so en/zh_HK/zh_CN don't jump size); the box px is **frozen
+  and decoupled from the label px** (label can grow without the box growing). Cluster **hugs the top-right
+  corner**. Home always rightmost (return-to-home, persistent). Pause + save-record are the migrated
+  debug-panel controls (save-record = the old Report / driving-record download).
 
 **OCR-panel migration — grand-check decisions (vs old `auto_input/driver.py draw_debug_panel`):**
 - **Confidence colour DROPPED** (the green/yellow/red OCR-score tint) — too debug for the public band.
@@ -69,81 +76,76 @@ photos → can hit the fidelity bar) rather than reskin an invented screen, but 
 `route.json`** (no per-line bespoke logic). Diagram list = the diagrams a route's data supports;
 **destinations + train types are fixed** (from the data). Reference: `tims-route-selection.jpg`.
 
-## Font decision — Ark Pixel 12px MONOSPACED, per-locale, ONE build
-- **IRL TIMS is monospaced**, so the whole chrome uses the **monospaced** Ark build (latin / zh_hk /
-  zh_cn), dispatched per-locale via `i18n.pixel_font_for_lang(lang, native)` (sibling of
-  `font_for_lang`). CJK is full-width either way; mono also gives Latin + numerals uniform TIMS cells.
-  Numerals go through `draw_lowres_number` (see recipe below), NOT full-width forms.
-- **TIMS numeral recipe (REUSABLE — version, train numbers, diagram codes, clocks):** `draw_lowres_number`
-  — each glyph **trimmed to its ink** (drops the cell side-bearings) + an **explicit gap**, with digit
-  **width (`xscale`) and gap independent**. TIMS digits read **wider than half-width but not full-width**;
-  `xscale` widens, `gap` spaces (may be negative). *Rejected: full-width forms (U+FFxx) + whole-render
-  squeeze — full-width centers each digit in a fat em cell, and squeezing scales the GAP down with the
-  glyph so it never closes. Trimming removes the side-bearings outright, which is the real fix.*
-- **NOT a single face** — Han-unification needs per-locale files. *Supersedes the "single face" claim
-  in `TODO.md` (reconcile at graduation step 6).*
-- **MS Gothic = the gold-standard look, but NON-SHIPPABLE** (reference bar only, confirmed 2026-06-26):
-  Microsoft system font, non-redistributable (license) AND JIS-only (no Simplified — tofus 简; Ark
-  resolves Simplified). **Why it wins = embedded bitmap STRIKES** (EBDT/EBLC): it ships ~13 hand-tuned
-  bitmaps, one per px **10–22** (crisp + size-growing detail at each), then smooth outline from 23px up.
-  Ark has ZERO strikes — a single 12px outline design — so 14–22px is the 12px shape RESCALED with no
-  added strokes, and supersampling can't add detail never drawn. So "Ark looks worse than MS Gothic" is
-  STRUCTURAL: the whole 16–22px band (readout @18, button labels @16) gets strike-detail Ark physically
-  can't produce. The free-font goal is therefore a **multi-strike bitmap face**, not just "more kanji."
-- **Pixel detail is bounded by the DESIGN GRID, not the render size** (*supersedes the earlier "crisp at
-  k=2 / keep small" framing AND the `conventions.md` "k=2 ceiling" rule — revise at graduation*). Per
-  Motoya (real embedded JP fonts = hand-designed bitmaps, a **separate design per dot-grid** 12/16/24…,
-  pure bitmap / **no AA**, legibility from per-grid craft): a 12px grid physically can't hold complex-
-  kanji detail, and **nearest-upscaling (k≥2) goes chunky/squary while supersampling can't ADD detail
-  the 12px source never had.** Ref: `motoyafont.jp/embedded-font/bitmap.html` (parked in `TODO.md`).
-- **Render rule LOCKED:** max **display size ≤ 24px** (maybe 20). Small status → **crisp** (native px,
-  AA off, **no upscale**). Anything bigger → **supersample DOWN** (render at a high native AA-on,
-  smoothscale to target — "hi native, **sub-1 k**"; k0.5 vs k0.25 is a visual wash). **Never nearest-
-  upscale.** 12px Ark renders kanji legibly when crisp — the perceived "detail loss" was mostly upscale
-  chunkiness, which the cap + supersample fix.
-- **Integer-k size constraint — the recurring band-tuning wall (2026-06-25):** crisp pixel renders
-  ONLY at integer ×12 native — **12px = 1px stroke, 24px = 2px stroke**, nothing between. So every "a
-  bit bigger / smaller" nudge (14/16px buttons, an 18px number) forces ONE of two looks: **sub-grid**
-  (render the 12-grid OTF at an off-grid native, AA off → blocky, strokes read too heavy small) OR
-  **supersample** (high native AA-on → smoothscale DOWN → smooth, proportional, but NOT crisp-pixel).
-  Applied this session: **speed-readout numbers → supersampled to 18px** (`READOUT_NUM_H` /
-  `READOUT_NUM_SS_NATIVE` + `_draw_number_ss`; user rejected the native-9×2 sub-grid as "pixelated,
-  strokes too wide"); **band-button labels → native-16 sub-grid** (`BAND_BTN_TEXT_NATIVE`, mild
-  unevenness, accepted). The readout went smooth, the version number stayed crisp — they no longer
-  match exactly, by necessity. **This is the strongest argument for the font-family swap below:** a
-  face designed at MORE dot-grids (or a finer one) yields more crisp sizes and cuts the supersample
-  reliance — i.e. the "free font for download" question is really "which font frees us from 12/24."
-- **16px-Ark dead-end (CORRECTED):** the 16px Ark build is **missing the kanji** — only ~78 of 6,355
-  JIS kanji (≈1.2%), so the tofu was genuine `.notdef`, NOT a pygame render bug. (My earlier
-  `metrics`-based check was fooled: `font.metrics(ch)` returns the `.notdef` box's metrics, so non-None
-  ≠ glyph present — the RENDER is the truth.) More kanji detail needs a *different family*, not a bigger
-  Ark grid.
-- OFL-licensed (shippable). Eval dir: `_dev_scripts/_fonts_eval/` (12px mono shipped; 12px prop + 16px
-  prop + PixelMplus10/12 present). Font investigation harnesses: `_dev_scripts/_ark_size_eval.py`
-  (size×multiplier), `_ark_detail_eval.py` (12 vs 16 grid), `_font_check.py` (glyph-coverage / tofu
-  probe), `_pixelmplus_eval.py` (coverage + detail vs Ark), `_msgothic_eval.py` + `_msgothic_sizes.py`
-  (MS-Gothic strike walk / reference benchmark). **Strike-vs-outline probe:** render AA-ON on an OPAQUE
-  bg + count unique colours (2 = bitmap strike, >2 = outline greys); AA-without-bg hides coverage in
-  ALPHA so RGB falsely reads 2.
-- **Detail-upgrade path (font research #1+#2, 2026-06-25):** real TIMS green status is an *unnamed
-  proprietary embedded bitmap* — nothing to cite (that absence IS the finding). **Prefer TTF (glyf)
-  over OTF (CFF) for pygame/SDL_ttf**; `pygame.freetype` is the escape hatch for CFF/BDF/PCF. Ranked
-  free substitutes (all bundlable, full JIS L1+2 kanji, TTF unless noted):
-  1. **JF Dot – Shinonome / jiskan16** (`jikasei.me/font/jf-dotfont/` → 404, use Wayback; public-domain
-     set: Shinonome / jiskan16**s** / k12x10 / K14) — **TRY FIRST**. Real bitmap STRIKES at 12/14/16px
-     (jiskan16 = the free analog of MS Gothic's 16px kanji strike) — the multi-strike property is the
-     thing Ark/PixelMplus lack. JIS-only, so realistic split = jiskan16 for the always-Japanese station
-     names + Ark stays for per-locale chrome labels (zh_CN). Raw set is BDF/PCF → convert to TTF or load
-     via `pygame.freetype`. Benchmark it in `_msgothic_sizes.py` against MS Gothic @12/14/16.
-  2. **PixelMplus12/10** (`github.com/itouhiro/PixelMplus`) — **TESTED 2026-06-26 → REJECTED as a swap.**
-     LATERAL detail vs Ark (both 12px grids, no win); single grid per file (12 or 10), NOT multi-strike;
-     JA-only (zh_HK 97.3% — tofus 錄; zh_CN 61.5%), so can't serve the per-locale chrome. On disk at
-     `_fonts_eval/PixelMplus-20130602/` if a crisp-20px JA-only element ever wants the 10px grid ×2.
-  3. **Cubic 11** (`github.com/ACh-K/Cubic-11`) / **Galmuri 11** (`github.com/quiple/galmuri`) — most
-     detail-per-grid (11px) but single grid; Cubic targets Big5 so spot-check JIS kanji, Galmuri
-     guarantees full JIS X 0208. Reject Misaki / k12x8 (less detail than Ark 12px).
-  Aside — real in-car LCD (E235, Hitachi) = **UD Shin Go + Helvetica** [community-attributed]; free
-  recipe = BIZ UDGothic / Noto Sans JP. **Motoya is automotive (車載), NOT rail.**
+**Route-name basic form + through-service deferral (2026-06-27).** The selection boxes show only the
+**basic line name** — route.json `route` was stripped to the primary line, dropping the through-service /
+combined secondary: 上野東京ライン・常磐線直通→常磐線, 総武快速線・成田線直通→総武快速線, 京浜東北・根岸線→京浜東北線,
+埼京線・川越線→埼京線, 中央線快速電車→中央線快速 (the already-basic lines — 南武線 / 山手線 / 京葉線 / 東海道線 /
+高崎線 — unchanged). **This `route` field is also the LCD upper-display route name (`app.py`), so the LCD
+shows the basic form now too.** DEFERRED: proper **direct-connect / through-service (直通) mapping** — the
+combined names encode real through-running (Negishi / Narita / Kawagoe / Jōban-via-Ueno-Tōkyō); to be
+mapped out after the user samples IRL PIDS behaviour. Side-effect: lines with >1 diagram now share a box
+label (train type was dropped from the box) → selection-screen disambiguation is its own open item.
+
+**Start-station grid excludes passing stations (2026-06-27).** The station picker lists only stopping
+stations — passing stations (empty `pa`, no `sta` / `time`) are filtered via the documented predicate
+(`DATA_FORMAT.md § Skipping Stations`); the picker maps the filtered selection back to the full stop
+index (`stop_idxs`) on return.
+
+## PA-setting page (C07AA — 案内設定) (2026-06-27)
+Reached after route / diagram / station selection. Screen code **C07AA**. Mirrors IRL
+`tims_pa_setting_done.png` but adapted to this app's manual-first model.
+- **自動放送始発起動 = a LAUNCH ACTION, not a toggle.** Pressing it arms OCR auto-PA and goes
+  **straight to the live LCD**. There is no persistent on/off switch on this page.
+- **Manual mode = the default un-armed launch (起動).** Launching without arming OCR starts the live
+  LCD in manual (PageDown-driven) mode — the existing behaviour.
+- **OCR tuning lives behind a separate 自動放送設定 button** (lead distance / interval + the consent
+  step), NOT inline — keeps the launch page a clean go-button.
+- **"Train type display" = the train MODEL / LCD skin**, per-route. The user may pick a model that
+  doesn't match the route's IRL series (out-of-spec is best-effort). Wired via the per-route
+  train-model dropdown (see 2026-06-21 selection work).
+
+## Font decision — Noto Sans (per-locale), AA-OFF native, no upscale  [LOCKED 2026-06-27]
+**Core insight that resolves the whole multi-session font hunt:** the TIMS / embedded-system "pixel
+text" look is simply an ordinary outline font rendered with **anti-aliasing OFF** — NOT a pixel font,
+NOT embedded bitmap strikes, NOT nearest-upscaling. Render a normal gothic AA-off at the native display
+px and it reads as crisp single-stroke. Everything below follows from that one fact.
+
+- **Font = Noto Sans, per-locale: JP / TC / SC** (`NotoSansJP` / `NotoSansTC` / `NotoSansSC`, OFL,
+  shippable). JP serves station names (always Japanese) + Latin/JP chrome; TC = zh_HK chrome; SC =
+  zh_CN chrome. JP **Han-unifies / tofus** Chinese (proven: JP renders 选报动线 as identical `.notdef`
+  boxes — uniform ink across distinct chars is the tell), so the siblings are required — same 3-file
+  per-locale structure the old Ark build used. User picked Noto Sans JP by eye over BIZ UDGothic / M+ 1
+  Code / MS Gothic.
+- **Render = native ×1, AA OFF, NO upscaling.** Nearest-upscale (×2) was tried and rejected — it
+  thickens the stroke (16×2 reads heavier than native 32). Render Noto AA-off at the raw display px,
+  full stop.
+- **Size envelope ≤ ~36–40px native.** Above ~40px the outline thickens past the single-stroke look;
+  below that, every size reads clean. Chrome text lives in a ≤~40px envelope. (The giant TIMS
+  train-number readout is OUT of scope — user won't build it.) Nothing upscales to grow.
+- **Numerals = full-width (全角) numeric chars + half-width (半角) unit letters.** Per TIMS (`tims_002`
+  top-center): digits AND numeric separators (`:` clock, `.` decimal) are wide full-width glyphs on a
+  MONOSPACE cell; unit letters (`km/h`, `km`) are narrow half-width Latin. So the speed `3` is
+  intentionally much wider than `km/h` — that's the 全角/半角 convention, **not a bug**. Noto's default
+  full-width cell is too wide → pack digits+separators onto `cell = max digit ink + gap` (gap tunable,
+  may be negative), glyph ink centered; unit letters render natural inline. **Ported into the draft band
+  readout** (`setup_redesign_draft._tims_digit_cell` cached + `_draw_number_ss`, AA-off); helper origin
+  `_dev_scripts/_noto_numbers.py tims_number`. Shared `widgets.draw_lowres_number` NOT yet on it.
+- **Rejected (one-liners):** MS Gothic = best look but NON-SHIPPABLE (MS license + JIS-only → tofus
+  zh_CN); system-load is legal but presence-not-guaranteed + still needs a zh_CN fallback — not worth
+  it. Ark Pixel = disliked glyph shapes (the trigger to abandon the pixel-font path). The entire
+  "multi-strike bitmap pixel font" hunt (jiskan16 / Shinonome / PixelMplus) is **MOOT** — the look is
+  AA-off, no special font needed.
+- **Weight = Thin, shipped as Subset OTF (2026-06-27).** The original look was Noto **Thin** (not
+  Regular — a Regular swap visibly thickened the stroke; user caught it). Ships as the small static
+  **Subset OTF** files (`NotoSans{JP,SC,TC}.otf`, `-Thin` weight), NOT the heavy ~39MB variable fonts —
+  so no `/build` subsetting step is needed for the chrome fonts. `.otf` keeps the `.otf`-only
+  convention intact (the earlier `.ttf` carve-out plan is moot).
+- **Supersedes:** the Ark "single-face / 12px monospaced" decision; the `conventions.md` **k=2 ceiling**
+  rule; the "supersample-down / max ≤24px" lock; the `TODO.md` single-face claim; the
+  `draw_lowres_text` / `lowres_fit_k` / `draw_lowres_number` nearest-upscale + trim-ink premise.
+  Reconcile all at graduation step 6. Eval harnesses (dev): `_noto_size_ladder.py` (native size sweep),
+  `_noto_numbers.py` (numeral packer), `_gothic_compare.py` (font shortlist), `_noto_locale_check.py`
+  (per-locale coverage); fonts in `_dev_scripts/_fonts_eval/`.
 
 ## Tutorial screen (reached from the Tutorial card)
 - **Window-in-window master-detail.** LEFT: a column of vertically-stacked TIMS buttons (one per
@@ -169,13 +171,43 @@ photos → can hit the fidelity bar) rather than reskin an invented screen, but 
   beat** first → **~0.5 s blank** loading beat → repaint (in the new language, for a lang switch). One
   shared transition wrapper, reused everywhere.
 
-## Primitives (GRADUATED to `widgets.py`; `button_style_sandbox.py` is now a thin preview)
-- `draw_lowres_text(..., align, pad)` — render at native px (antialias off) + nearest-upscale by the
-  largest integer k that fits. `align`: `"justify"` (両端揃え) / `"center"` (tight-pack, centered).
-  `pad`: margin inset, decoupled from inter-char gap.
-- `lowres_fit_k(...)` — the k `draw_lowres_text` would pick (pin a row to uniform size via the min).
-- `draw_tims_button` / `tims_button_size` — bevel + delegates label; reads `text_align` / `text_pad`
-  from the tuneable.
+## Primitives (in `widgets.py`; `button_style_sandbox.py` is a thin preview)
+- **AA-OFF NATIVE, no upscale (2026-06-27).** Callers load the font at the DISPLAY px (via `i18n`) and
+  pass `max_k=1` / `k=1`; the k-upscale machinery is now dormant (renders native). (k-machinery left in
+  place; simplify at graduation.)
+- **Systematic vertical layout via `_ink_vbox(font, label)` → `(ink_top, ink_h)`.** The ONE reference
+  for all chrome vertical positioning (replaces ad-hoc per-element nudges): line stacking + box height
+  use `ink_h` (not `font.get_height()` — Noto's tall leading would balloon inter-line gaps past the
+  tight char spacing), and glyphs blit at `line_ink_top - ink_top*k` so they keep their natural
+  baseline. Result: `line_gap` is the TRUE visual gap, boxes hug the text, single lines center on
+  their ink (no leading-induced 'pushed down' / box-too-short clipping), and mixed kanji/digit/latin
+  on one line baseline-align. **Follow-up:** `draw_lowres_number` is NOT yet on this model — the
+  version tag bridges it by rendering the number to a temp + ink-centering against the word's band
+  (`_render_version_tag`); harmonize `draw_lowres_number` onto `_ink_vbox` to drop that bridge.
+- `draw_lowres_text(..., align, pad)` — render AA-off at the font's native px; `align` justify/center;
+  `pad` margin inset decoupled from inter-char gap.
+- `draw_lowres_number` — TIMS numerals, AA-off native (trim-ink + gap). NOTE: the user-approved style is
+  full-width digits (全角) + half-width units (半角). The **draft band readout now uses a fat full-width
+  packer** (`setup_redesign_draft._tims_digit_cell` / `_draw_number_ss`); the shared `widgets.draw_lowres_number`
+  (version tag only) is STILL trim-ink — harmonize it onto the full-width packer + `_ink_vbox` model.
+- `draw_tims_button` / `tims_button_size` — bevel + delegates label; reads `text_align` / `text_pad`.
+
+## Promotion to setup_tims/ package (2026-06-27)
+The three drafts graduated into a **production package `setup_tims/`** (per `/third-man` — a package,
+not a monolith), running **side-by-side with the legacy `setup.py`** (not replacing it yet):
+- `band.py` — persistent OCR status band + screen dims (`SCREEN_W/H`, `BAND_H`, `BG_COLOR`).
+- `chrome.py` — **shared reuse layer**: `title_row` (was copy-pasted 3×) + `blit_lowres` (promoted
+  from the band-private `_blit_lowres`).
+- `home.py` — page-1 menu (split out of the band monolith).
+- `pa_setting.py` (C07AA), `route_select.py` (C07AB/AC/AF) — the PA-setting + picker pages.
+- `__init__.py` — package API. Dev launcher: `_dev_scripts/preview_setup_tims.py --screen home|pa|route`.
+
+**Launch bridge (P1, DEFERRED — not yet wired into `main.py`).** `route_select.run_on` returns a lossy
+dict `{route, start, start_name, pattern_no}`; `PASimulator` finalizes internally via
+`route_loader.finalize_route`. Two carry-forward obligations (logged in TODO § Deferred review
+findings): the start index is resolved against `variants[0]` and must be re-resolved against the
+chosen variant at launch; the per-module `ACTIVE_LANG` globals should collapse to a single
+`i18n._current_lang` source.
 
 ## Graduation plan
 **Steps 1–4 DONE (2026-06-24):** 3 mono Ark `.otf` + OFL → `fonts/`; `i18n.pixel_font_for_lang`
@@ -185,10 +217,59 @@ rewired; linters green. (Refinement vs the original plan: fonts route through `i
 `widgets._font`.)
 
 **Remaining:**
-5. **Wire `setup.py`** — but REDIRECTED: build the **tutorial screen first** (reskin `tutorial.py`
-   inner chrome to TIMS + wrap in the tab-shell + add the OCR-auto-PA tab), then the home menu, then
-   the Tutorial-card flash + simplified OOBE in `main.py`. Real i18n strings (`translations_app.json`),
-   not draft placeholders. `main.py SETUP_SIZE` → the taller own-window size.
-6. **Codify as this doc dissolves** — `conventions.md` (pixel = small-size aesthetic; TIMS chrome =
-   monospaced Ark; the `draw_lowres_number` trim-ink numeral recipe; the `widgets.py` boundary +
-   font-via-i18n); fix the `TODO.md` single-face claim.
+5. **Wire `main.py` to launch the `setup_tims/` flow** (the chrome is already built — § Promotion).
+   Remaining: the **launch bridge** (lossy dict → `finalize_route` → `PASimulator`, manual mode first),
+   the **tutorial screen** (reskin `tutorial.py` inner chrome to TIMS + tab-shell + OCR-auto-PA tab),
+   the Tutorial-card flash + simplified OOBE, real i18n strings (`translations_app.json`) over draft
+   placeholders, and `main.py SETUP_SIZE` → the taller own-window size.
+6. **Codify as this doc dissolves** — `conventions.md` (TIMS chrome = Noto, AA-OFF native, no upscale,
+   ink-based line height; the full-width/half-width numeral convention; the `widgets.py` boundary +
+   font-via-i18n); DROP the now-stale Ark / k=2-ceiling / supersample / trim-ink rules; fix the
+   `TODO.md` single-face claim.
+
+## Integration progress — Noto swap (2026-06-27)
+**DONE this session:** Noto decision LOCKED (§ Font decision) + wired into the DRAFT (`setup_redesign_draft.py`)
++ `i18n` + `widgets.py`, AA-off native. Main-setup preview renders clean (`_setup_noto.png`) — user: "looks so good."
+- `i18n._LANG_PIXEL_FONT` → `NotoSans{JP,SC,TC}.otf` (Subset OTF Thin, in `fonts/` + `NotoSans-OFL.txt`).
+- `widgets.py`: ink-based line height (`_ink_line_h`) so `line_gap` is the true visual gap + boxes hug text;
+  k-machinery dormant (callers pass k=1 → native).
+- Draft: per-element native px — CHROME 22, band-button 16, SMALL split into NOTIF 11 (green notif) /
+  STATE 16 (OCR state + badge); readout supersample → AA-off native; version word+number re-aligned
+  under the ink model.
+
+**OPEN — tuning (user is visual judge):**
+- Message-strip vertical position (`STRIP_Y1`) — ambiguous ("dimmed grey too close to band top"); nudged to 15, needs the user's eye.
+- Numeral style — readout + version still trim-ink; port the full-width(全角)/half-width(半角) `tims_number` look.
+- Final px / sizes — left-col (`NOTIF_NATIVE`/`STATE_NATIVE`), squares (`HOME_TEXT_MARGIN`/`LANG_TEXT_MARGIN`), line gaps.
+
+**RESOLVED — shippability (2026-06-27):**
+- **`.otf`, not `.ttf`** — switched to the Subset **OTF** Thin files, so the `check_fonts.py` `.ttf` ban + the `.otf`-only convention both hold with no carve-out.
+- **Size** — Subset OTF Thin files are small; no `/build` subsetting needed for the chrome fonts.
+- **Noto OFL** — `fonts/NotoSans-OFL.txt` ships alongside (critical_lessons §2).
+
+**NEXT:** finish draft tuning → wire `setup.py` (step 5) → reconcile widgets.py k-machinery + the conventions/TODO codification (step 6).
+
+## Integration progress — OCR band refinement (2026-06-27, cont.)
+Iterated `_render_topband` against the OCR mock scenarios via `_dev_scripts/preview_band_ocr.py` (wires the
+draft band to `preview_debug_panel`'s status dicts; `1-6` scenario, `L` locale, `P` pause).
+
+**DONE (all in the DRAFT + dev preview):**
+- **Fat full-width numerals ported** into the readout (`_tims_digit_cell` / `_draw_number_ss`) — closes the
+  "port the 全角/半角 numeral style" OPEN item for the draft. Shared `widgets.draw_lowres_number` still trim-ink.
+- **zh_CN tofu fixed** — per-line band fonts (station names → JP face; localized chrome → active-locale TC/SC);
+  numbers/units locale-independent. Was hardcoding the TC face everywhere.
+- **Green notif** matched to `tims_002` (`ツウコク　ジョウホウ`, full-width gap), now persistent on all scenarios.
+- **Badge folded** onto the state line (`state · played · badge`, dim); boot/placeholder unified to the live
+  layout. The wider folded line forced the readout + message strips to shift right.
+- **Columns aligned** — left state rows share the readout's row baselines; readout values bottom-align; cyan
+  limit block hugs the number ink.
+- **Control cluster** — uniform squares across locales (worst-case-label sizing); box px frozen + decoupled
+  from the label px so text grows without the box growing; cluster hugs the corner.
+- **Message auto-clear** — preview stamps the fire ts at scenario-entry (not every frame), so the chip flashes
+  its ~3 s window then clears; re-press the scenario key to re-arm.
+
+**OPEN:**
+- **en control label at its size ceiling** — `Back Home` at the current label px exactly fills the box (≈0 margin,
+  touches the bevel); zh comfortable. Shorten the en label or dial the label px back if en matters.
+- **`widgets.draw_lowres_number`** still trim-ink (version tag) — harmonize onto the full-width packer + `_ink_vbox`.
+- Final px / positions remain the user's visual call.

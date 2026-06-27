@@ -1,5 +1,5 @@
 {
-    "route": "埼京線・川越線",
+    "route": "埼京線",
     "line_code": "JA",
     "transfer_view": "JA_north",
     "color": [
@@ -8,6 +8,11 @@
         87
     ],
     "type": "快速",
+    "remarks": {
+        "direction": "下り",
+        "through": "川越線",
+        "note": ""
+    },
     "dest": "川越",
     "stops": [
         {

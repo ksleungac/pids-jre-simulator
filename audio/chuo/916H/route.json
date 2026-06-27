@@ -1,5 +1,5 @@
 {
-    "route": "中央線快速電車",
+    "route": "中央線快速",
     "line_code": "JC",
     "color": [
         233,
@@ -12,6 +12,11 @@
         0
     ],
     "type": "中央特快",
+    "remarks": {
+        "direction": "上り",
+        "through": "",
+        "note": ""
+    },
     "type_color": [
         45,
         0,

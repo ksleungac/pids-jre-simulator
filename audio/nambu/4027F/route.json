@@ -3,6 +3,11 @@
     "line_code": "JN",
     "color": [255, 212, 0],
     "type": "快速",
+    "remarks": {
+        "direction": "下り",
+        "through": "",
+        "note": ""
+    },
     "type_color": [206, 0, 0],
     "dest": "立川",
     "stops": [

@@ -1,8 +1,13 @@
 {
-    "route": "上野東京ライン・常磐線直通",
+    "route": "常磐線",
     "line_code": "JJ",
     "color": [80, 76, 253],
     "type": "快速",
+    "remarks": {
+        "direction": "下り",
+        "through": "上野東京ライン",
+        "note": ""
+    },
     "dest": "土浦",
     "stops": [
         {

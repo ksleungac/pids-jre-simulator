@@ -3,6 +3,11 @@
     "line_code": "JT",
     "color": [244, 132, 44],
     "type": "普通",
+    "remarks": {
+        "direction": "下り",
+        "through": "",
+        "note": ""
+    },
     "dest": "熱海",
     "stops": [
         {

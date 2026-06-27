@@ -143,17 +143,20 @@ _LANG_CHROME_FONT: dict[str, tuple[str, str]] = {
 }
 # fmt: on
 
-# Per-language PIXEL chrome face — the TIMS-look low-res face (render small, antialias off,
-# nearest-upscale by an integer k; see widgets.draw_lowres_text / draw_lowres_number). Ark Pixel 12px
-# monospaced, OFL-licensed (fonts/ArkPixel-OFL.txt must ship with the .otf — runtime-required, per
-# critical_lessons §2). One weight (pixel fonts have no bold); per-locale like _LANG_CHROME_FONT
-# because Han unification needs separate Traditional/Simplified files (zh_HK ≠ zh_CN — 简 tofus
-# otherwise). IRL TIMS is monospaced, so Latin + numerals also sit in uniform cells.
+# Per-language TIMS chrome face — Noto Sans, rendered ANTIALIAS OFF at the native display px, NO
+# upscale. The TIMS/embedded "pixel text" look is just an ordinary outline font with AA off (not a
+# pixel font, not bitmap strikes, not upscaling). See WIP_setup_redesign.md § Font decision (LOCKED
+# 2026-06-27). Per-locale because Noto Sans JP Han-unifies / tofus Chinese (zh_HK = Traditional,
+# zh_CN = Simplified); JP also serves station names + Latin/EN chrome. OFL — Noto's license must ship
+# alongside the .otf (runtime-required, per critical_lessons §2); see fonts/NotoSans-OFL.txt. Faces
+# are the Noto Sans Subset OTF (notofonts/noto-cjk Sans2.004, THIN weight — matches the prior
+# NotoSans*-Thin.ttf the UI was tuned against); CFF outlines render identically to those TTFs with
+# AA off, and .otf satisfies the fonts/ .otf-only rule.
 # fmt: off
 _LANG_PIXEL_FONT: dict[str, str] = {
-    "en":    "ArkPixel12pxMono-Latin.otf",
-    "zh_HK": "ArkPixel12pxMono-zh_HK.otf",
-    "zh_CN": "ArkPixel12pxMono-zh_CN.otf",
+    "en":    "NotoSansJP.otf",
+    "zh_HK": "NotoSansTC.otf",
+    "zh_CN": "NotoSansSC.otf",
 }
 # fmt: on
 
@@ -179,10 +182,10 @@ def font_for_lang(lang: str, size: int, *, bold: bool = False) -> pygame.font.Fo
 
 
 def pixel_font_for_lang(lang: str, size: int) -> pygame.font.Font:
-    """Cached per-language PIXEL chrome face (Ark Pixel mono) at `size` px — the NATIVE render size
-    for widgets.draw_lowres_text / draw_lowres_number, which upscale it by an integer k. One weight
-    (no bold); per-locale like font_for_lang (Han unification). Routes through project_root()/fonts —
-    never SysFont (Chinese-locale crash, 2026-03-14)."""
+    """Cached per-language TIMS chrome face (Noto Sans, per-locale) at `size` px — the DISPLAY size,
+    rendered antialias-OFF with NO upscale (widgets.draw_lowres_text). One weight (no bold); per-locale
+    like font_for_lang (Han unification). Routes through project_root()/fonts — never SysFont
+    (Chinese-locale crash, 2026-03-14)."""
     fname = _LANG_PIXEL_FONT.get(lang, _LANG_PIXEL_FONT["en"])
     key = (fname, size)
     if key not in _font_cache:

@@ -5,8 +5,8 @@ The train LCD displays are NOT chrome — they own their own faces and primitive
 2026-06-24: chrome widgets and LCD primitives stay separate — they share pygame, not primitives.)
 
 Two collaborating primitive families:
-  * draw_lowres_text / draw_lowres_text_highlight / draw_lowres_number / lowres_text_size /
-    lowres_number_size / lowres_fit_k — the low-res pixel-text face: render a glyph at its NATIVE px
+  * draw_lowres_text / draw_lowres_text_fat / draw_lowres_text_highlight / draw_lowres_number /
+    lowres_text_size / lowres_number_size / lowres_fit_k — the low-res pixel-text face: render a glyph at its NATIVE px
     (antialias OFF) then nearest-upscale by an integer k (the 'embedded-bitmap / MS-Word-zoomed-tiny'
     look). STANDALONE — no button knowledge. _highlight adds a cyan marker block behind the text.
   * draw_tims_button / tims_button_size — the glossy raised bevel; it hands its inner rect to the text
@@ -131,6 +131,39 @@ def _bezel_ring(w, h, bright, dark, radius, transition, bias):
     return _rounded_clip(surf, radius)
 
 
+_ink_vbox_cache: dict = {}
+
+
+def _ink_vbox(font, label):
+    """(ink_top, ink_h): the vertical INK extent within the font's full-height render, unioned across
+    the label's glyphs. The ONE vertical-layout reference for all chrome text/number primitives, so
+    alignment is systematic, not per-call:
+      * Line stacking + box sizing use `ink_h` (NOT font.get_height(), which bakes in tall leading) —
+        AA-off CJK lines pack tight instead of leading-spaced.
+      * Glyphs blit at `line_ink_top - ink_top*k`, i.e. shifted by the SAME `ink_top` — so they keep
+        their natural baseline (mixed kanji / digit / latin on one line baseline-align) AND a single
+        line centers on its ink (no leading-induced 'pushed down').
+    Falls back to the full font box for an all-blank label. Cached per (font, label)."""
+    key = (id(font), label)
+    v = _ink_vbox_cache.get(key)
+    if v is None:
+        top = bot = None
+        for ch in set(label):
+            if ch not in "\n ":
+                bb = font.render(ch, False, (255, 255, 255)).get_bounding_rect()
+                if bb.h:
+                    top = bb.y if top is None else min(top, bb.y)
+                    bot = bb.y + bb.h if bot is None else max(bot, bb.y + bb.h)
+        v = (0, font.get_height()) if top is None else (top, bot - top)
+        _ink_vbox_cache[key] = v
+    return v
+
+
+def _ink_line_h(font, label):
+    """Ink line height — see _ink_vbox."""
+    return _ink_vbox(font, label)[1]
+
+
 def lowres_fit_k(label, area, font, max_k=2, line_gap=1, pad=0):
     """The integer pixel-multiplier draw_lowres_text would pick for `label` in `area` (same fit math,
     single source of truth). Use it to pin a ROW of elements to ONE uniform size: compute the k each
@@ -141,13 +174,13 @@ def lowres_fit_k(label, area, font, max_k=2, line_gap=1, pad=0):
         area = area.inflate(-2 * pad, -2 * pad)
     lines = label.split("\n")
     n = len(lines)
-    gh = font.get_height()
+    gh = _ink_line_h(font, label)  # ink height, not font leading
     dense_w0 = max((sum(font.size(ch)[0] for ch in ln) for ln in lines), default=1)
     avail_h = area.h - line_gap * (n - 1)
     return max(1, min(max_k, avail_h // max(1, gh * n), area.w // max(1, dense_w0)))
 
 
-def draw_lowres_text(surface, label, area, font, color, max_k=2, line_gap=1, align="justify", pad=0):
+def draw_lowres_text(surface, label, area, font, color, max_k=2, line_gap=1, align="justify", pad=0, slots=None):
     """STANDALONE low-res pixel-text primitive — the cross-cutting TIMS chrome text face, reused
     app-wide EXCEPT the train LCD displays. Knows nothing about buttons.
 
@@ -174,7 +207,7 @@ def draw_lowres_text(surface, label, area, font, color, max_k=2, line_gap=1, ali
         area = area.inflate(-2 * pad, -2 * pad)  # lay out inside the margin
     lines = label.split("\n")
     n = len(lines)
-    gh = font.get_height()
+    ink_top, gh = _ink_vbox(font, label)  # ink box: gh = ink height; ink_top = ink offset in the glyph
 
     def raw_w(line):
         return sum(font.size(ch)[0] for ch in line)
@@ -192,7 +225,10 @@ def draw_lowres_text(surface, label, area, font, color, max_k=2, line_gap=1, ali
     total_h = line_h * n + line_gap * (n - 1)
     y = area.centery - total_h // 2
     prev_clip = surface.get_clip()
-    surface.set_clip(area)
+    # Clip horizontally STRICT (the never-spill hardening) but give 1px vertical slack: float bevel widths
+    # truncate through draw_tims_button's Rect math, leaving the text area ~1px shorter than the ink, which
+    # would otherwise shave a top stroke (e.g. 設). The 1px lands in the bevel/v-pad margin — invisible.
+    surface.set_clip(area.inflate(0, 2))
 
     def _glyph(ch):
         g = font.render(ch, False, color)  # antialias OFF -> aliased pixels
@@ -208,8 +244,26 @@ def draw_lowres_text(surface, label, area, font, color, max_k=2, line_gap=1, ali
                 lw = sum(g.get_width() for g in glyphs)  # tight line width (no inter-char gap)
                 x = area.centerx - lw // 2
                 for g in glyphs:
-                    surface.blit(g, (round(x), y + (line_h - g.get_height()) // 2))
+                    surface.blit(g, (round(x), round(y - ink_top * k)))  # land ink at line-ink-top; natural baseline
                     x += g.get_width()
+            y += line_h + line_gap
+    elif align == "slots" and slots:
+        # Distribute each line's chars across the `slots`-wide grid, CAPPING the inter-char gap at ONE
+        # slot so a short name doesn't fly to opposite edges. When the even (両端揃え) spread stays within
+        # 1 slot, chars fill edge-to-edge (3 in a 5-slot box → slots 1·3·5); when it would exceed 1 slot
+        # the gap is capped and the chars left-anchor at 1-slot pitch (2 in a 4-slot box → slots 1·3). A
+        # label wider than the grid is hx-squeezed (above) so the gap collapses to a tight fill.
+        slot_w = area.w / slots
+        for line in lines:
+            if line:
+                glyphs = [_glyph(ch) for ch in line]
+                ink = sum(g.get_width() for g in glyphs)
+                m = len(glyphs)
+                gap = min((area.w - ink) / (m - 1), slot_w) if m > 1 else 0.0
+                x = area.left if m > 1 else area.centerx - ink / 2
+                for g in glyphs:
+                    surface.blit(g, (round(x), round(y - ink_top * k)))
+                    x += g.get_width() + gap
             y += line_h + line_gap
     else:
         wi = max(range(n), key=lambda i: raw_w(lines[i]))
@@ -220,17 +274,34 @@ def draw_lowres_text(surface, label, area, font, color, max_k=2, line_gap=1, ali
                 x = area.left + gap
                 for ch in line:
                     g = _glyph(ch)
-                    surface.blit(g, (round(x), y + (line_h - g.get_height()) // 2))
+                    surface.blit(g, (round(x), round(y - ink_top * k)))  # land ink at line-ink-top; natural baseline
                     x += g.get_width() + gap
             y += line_h + line_gap
     surface.set_clip(prev_clip)
+
+
+def draw_lowres_text_fat(surface, label, pos, font, color, *, xscale=1.4, k=1, line_gap=1):
+    """X-STRETCHED TIMS heading — the 'fat' TIMS title look. JR's TIMS register stretches headings
+    HORIZONTALLY: the glyphs read WIDE, not bold (NOT thicker strokes). Renders `label` AA-off at the
+    font's native px (draw_lowres_text, tight-centered) to a temp, then scales its WIDTH by `xscale`
+    (height unchanged, non-smooth scale → stays aliased) so each glyph widens. Drawn flush at top-left
+    `pos`; returns the (w, h) drawn (= native_w × xscale, native_h). `xscale` is the stretch knob
+    (1.0 = none). The WIDE member of the low-res text family — stretches a whole run incl. CJK, distinct
+    from draw_lowres_number's per-digit xscale."""
+    w, h = lowres_text_size(label, font, k, line_gap)
+    tmp = pygame.Surface((max(1, w), max(1, h)), pygame.SRCALPHA)
+    draw_lowres_text(tmp, label, pygame.Rect(0, 0, w, h), font, color, max_k=k, line_gap=line_gap, align="center")
+    sw = max(1, round(w * xscale))
+    wide = pygame.transform.scale(tmp, (sw, h)) if sw != w else tmp
+    surface.blit(wide, pos)
+    return sw, h
 
 
 def lowres_text_size(label, font, k=2, line_gap=1):
     """Pixel-text footprint (w, h) at multiplier `k` — for content-deriving a box that fits it."""
     lines = label.split("\n")
     n = len(lines)
-    gh = font.get_height()
+    gh = _ink_line_h(font, label)  # ink height, not font leading — box hugs the glyphs
     w = max((sum(font.size(ch)[0] for ch in ln) for ln in lines), default=1) * k
     h = gh * k * n + line_gap * (n - 1)
     return w, h
@@ -404,8 +475,23 @@ def draw_tims_button(surface, rect, label="", font=None, t=_TUNEABLES_TIMS_BUTTO
         align = t.get("text_align", "justify")
         if align == "center":
             text_area, text_pad = face_rect, t.get("text_pad", 0)
+        elif align == "slots":
+            # the slot grid is the face inset by h_pad (so slot_w == one full-width char) + v_pad
+            text_area = pygame.Rect(face_rect.x + t["h_pad"], face_rect.y + t["v_pad"], face_rect.w - 2 * t["h_pad"], face_rect.h - 2 * t["v_pad"])
+            text_pad = 0
         else:
             text_area = pygame.Rect(face_rect.x, face_rect.y + t["v_pad"], face_rect.w, face_rect.h - 2 * t["v_pad"])
             text_pad = 0
         if label and font is not None and text_area.w > 0 and text_area.h > 0:
-            draw_lowres_text(surface, label, text_area, font, ink, max_k=t["text_max_k"], line_gap=t["line_gap"], align=align, pad=text_pad)
+            draw_lowres_text(
+                surface,
+                label,
+                text_area,
+                font,
+                ink,
+                max_k=t["text_max_k"],
+                line_gap=t["line_gap"],
+                align=align,
+                pad=text_pad,
+                slots=t.get("text_slots"),
+            )

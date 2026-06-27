@@ -14,6 +14,11 @@
         5
     ],
     "type": "内回り",
+    "remarks": {
+        "direction": "内回り",
+        "through": "",
+        "note": ""
+    },
     "dest": "品川･東京",
     "stops": [
         {

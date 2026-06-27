@@ -7,6 +7,11 @@
         44
     ],
     "type": "快速アーバン",
+    "remarks": {
+        "direction": "下り",
+        "through": "",
+        "note": ""
+    },
     "dest": "高崎",
     "stops": [
         {
