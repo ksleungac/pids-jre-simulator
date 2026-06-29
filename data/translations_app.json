@@ -396,5 +396,34 @@
   "panel.speed": { "en": "speed:", "zh_HK": "時速：", "zh_CN": "时速：" },
   "panel.limit": { "en": "limit:", "zh_HK": "限速：", "zh_CN": "限速：" },
   "panel.distance": { "en": "distance:", "zh_HK": "距離：", "zh_CN": "距离：" },
-  "panel.stop_offset": { "en": "stop offset:", "zh_HK": "停車位置：", "zh_CN": "停车位置：" }
+  "panel.stop_offset": { "en": "stop offset:", "zh_HK": "停車位置：", "zh_CN": "停车位置：" },
+
+  "_comment_setup_tims": "TIMS setup chrome (setup_tims/ package): home menu, PA-setting (C07AA), route picker (C07AB/AC/AF), status band. Screen codes + the JP summary-table field labels stay fixed Japanese (not i18n). zh_CN reviewed by user 2026-06-28.",
+
+  "setup_tims.action.pa_setup": { "en": "PA Setup", "zh_HK": "報站設定", "zh_CN": "报站设置" },
+  "setup_tims.action.tutorial": { "en": "Tutorial", "zh_HK": "教學", "zh_CN": "教程" },
+  "setup_tims.action.settings": { "en": "Settings", "zh_HK": "設定", "zh_CN": "设定" },
+  "setup_tims.action.record": { "en": "Driving Record", "zh_HK": "行車記錄", "zh_CN": "行车记录" },
+
+  "setup_tims.route_select.heading": { "en": "Select Route", "zh_HK": "路線選擇", "zh_CN": "路线选择" },
+  "setup_tims.station_select.heading": { "en": "Start Station", "zh_HK": "始發站選擇", "zh_CN": "始发站选择" },
+  "setup_tims.diagram_select.heading": { "en": "Run Pattern", "zh_HK": "字軌選擇", "zh_CN": "交路选择" },
+  "setup_tims.model_select.heading": { "en": "Select Model", "zh_HK": "列車型號選擇", "zh_CN": "列车型号选择" },
+  "setup_tims.pa_setting.select_route": { "en": "Select Route", "zh_HK": "選擇路綫", "zh_CN": "选择路线" },
+  "setup_tims.pa_setting.model": { "en": "Train Model", "zh_HK": "列車型號", "zh_CN": "列车型号" },
+
+  "setup_tims.back": { "en": "Back", "zh_HK": "返回", "zh_CN": "返回" },
+  "setup_tims.set": { "en": "Set", "zh_HK": "設定", "zh_CN": "设定" },
+  "setup_tims.confirm": { "en": "Confirm", "zh_HK": "確認", "zh_CN": "确认" },
+
+  "setup_tims.col.no": { "en": "No.", "zh_HK": "編號", "zh_CN": "编号" },
+  "setup_tims.col.type": { "en": "Type", "zh_HK": "列車種別", "zh_CN": "列车种别" },
+  "setup_tims.col.remark": { "en": "Remarks", "zh_HK": "備註", "zh_CN": "备注" },
+
+  "setup_tims.hdr.from_to": { "en": "From / To", "zh_HK": "始發・終着站", "zh_CN": "始发・终到站" },
+  "setup_tims.hdr.line": { "en": "(Line)", "zh_HK": "(路線名)", "zh_CN": "(路线名)" },
+
+  "setup_tims.band.home": { "en": "Back\nHome", "zh_HK": "返回\n主頁", "zh_CN": "返回\n主页" },
+  "setup_tims.band.pause": { "en": "Pause", "zh_HK": "暫停", "zh_CN": "暂停" },
+  "setup_tims.band.save": { "en": "Save\nRec", "zh_HK": "儲存\n記錄", "zh_CN": "保存\n记录" }
 }

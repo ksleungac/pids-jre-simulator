@@ -100,9 +100,30 @@ Reached after route / diagram / station selection. Screen code **C07AA**. Mirror
   LCD in manual (PageDown-driven) mode — the existing behaviour.
 - **OCR tuning lives behind a separate 自動放送設定 button** (lead distance / interval + the consent
   step), NOT inline — keeps the launch page a clean go-button.
-- **"Train type display" = the train MODEL / LCD skin**, per-route. The user may pick a model that
-  doesn't match the route's IRL series (out-of-spec is best-effort). Wired via the per-route
-  train-model dropdown (see 2026-06-21 selection work).
+- **"Train type display" = the train MODEL / LCD skin**, per-route — realized as the **列車型號** model
+  picker (§ "Model picker"). Legacy `setup.py` does it via the per-route dropdown (2026-06-21);
+  `setup_tims` via the X00AA 番台選択 screen. Out-of-spec model picks are allowed (best-effort).
+- **Bottom button row (2026-06-28):** 確認 (manual launch) and 列車型號 share one y (`BTN_ROW_Y`); the area
+  BELOW is reserved for the coming OCR-choice buttons (自動放送始発起動 / 自動放送設定).
+
+## Model picker (X00AA — 番台選択 / 列車型號) (2026-06-28)
+Reached from C07AA's **列車型號** button (the IRL 番線 platform slot, repurposed — we removed the real 番線,
+no platform model). Mirrors IRL `tims_bandai_choice.png`.
+- **Grid = built models (selectable) + grayed roadmap models.** Built come from the train-model registry
+  (`model_choices()`, blue); grayed ones are a small hardcoded list (`model_select._GRAYED`: E231-500,
+  E233-0/1000/5000) shown DISABLED — per the reference, unavailable 番台 are dimmed, not hidden. Ordered by
+  series number: E231 → E233 → E235 (built last).
+- **2-line staggered buttons:** series 系 (`E235系`) line 1 hugs LEFT, sub-series 番台 (`1000番台`) line 2 hugs
+  RIGHT, chars spaced (justify). Designations are FIXED across locales (Latin + 系/番台), parsed by splitting
+  the registry label (`E235-1000` → `E235` / `1000`).
+- **No confirm / no back button** (per the reference): clicking a model commits it; band Home / ESC return.
+  The **current model FLASHES** lit↔normal (active = last user pick this run, else the route default).
+- **Grayed = silver palette** (`_GRAY_T`), not a dark scrim — see conventions.md § UI code style.
+- **Override is session-persistent:** `pa_setting._model_override` (set on pick) overrides the route default
+  in `_build_config`, surviving route changes within one app run. `model_select.run_on(screen, current)`
+  returns the chosen key / None (ESC) / "home".
+- OPEN: whether to DISPLAY the current model on C07AA (recommended yes — compact, by the 列車型號 button —
+  awaiting user go).
 
 ## Font decision — Noto Sans (per-locale), AA-OFF native, no upscale  [LOCKED 2026-06-27]
 **Core insight that resolves the whole multi-session font hunt:** the TIMS / embedded-system "pixel
@@ -202,12 +223,15 @@ not a monolith), running **side-by-side with the legacy `setup.py`** (not replac
 - `pa_setting.py` (C07AA), `route_select.py` (C07AB/AC/AF) — the PA-setting + picker pages.
 - `__init__.py` — package API. Dev launcher: `_dev_scripts/preview_setup_tims.py --screen home|pa|route`.
 
-**Launch bridge (P1, DEFERRED — not yet wired into `main.py`).** `route_select.run_on` returns a lossy
-dict `{route, start, start_name, pattern_no}`; `PASimulator` finalizes internally via
-`route_loader.finalize_route`. Two carry-forward obligations (logged in TODO § Deferred review
-findings): the start index is resolved against `variants[0]` and must be re-resolved against the
-chosen variant at launch; the per-module `ACTIVE_LANG` globals should collapse to a single
-`i18n._current_lang` source.
+**Launch bridge — DONE (manual mode, 2026-06-28).** `main.py --tims` launches the `setup_tims` flow
+side-by-side with the legacy `setup.py` (no flag → classic path, untouched; `--tims` avoids regressing
+OCR-auto-PA since OCR-launch isn't wired yet). Flow: `setup_tims.run(screen)` (re-exported from `home`)
+runs the home menu → 報站設定 → `pa_setting` → **確認/起動** → `pa_setting._build_config` returns a config
+shaped like `setup.SetupScreen.run()` (`action`/`work_dir`/`route_data`/`model`/`start_idx`), bubbled up
+through `home.run`; `main.py` builds `PASimulator` + `jump_to_stop(start_idx)`. `route_select` variants now
+carry `path` (→`work_dir`) + `model`. Start is resolved by NAME against the committed variant (closed the
+v0-index carry-forward). STILL open: per-module `ACTIVE_LANG` → single `i18n._current_lang` (deferred);
+OCR-launch (the 自動放送設定 page + consent).
 
 ## Graduation plan
 **Steps 1–4 DONE (2026-06-24):** 3 mono Ark `.otf` + OFL → `fonts/`; `i18n.pixel_font_for_lang`
@@ -217,11 +241,12 @@ rewired; linters green. (Refinement vs the original plan: fonts route through `i
 `widgets._font`.)
 
 **Remaining:**
-5. **Wire `main.py` to launch the `setup_tims/` flow** (the chrome is already built — § Promotion).
-   Remaining: the **launch bridge** (lossy dict → `finalize_route` → `PASimulator`, manual mode first),
-   the **tutorial screen** (reskin `tutorial.py` inner chrome to TIMS + tab-shell + OCR-auto-PA tab),
-   the Tutorial-card flash + simplified OOBE, real i18n strings (`translations_app.json`) over draft
-   placeholders, and `main.py SETUP_SIZE` → the taller own-window size.
+5. **Wire `main.py` to launch the `setup_tims/` flow.** DONE: the launch bridge (`--tims`, manual mode —
+   see § "Launch bridge"); real i18n strings (`translations_app.json`, zh_CN user-confirmed) replacing the
+   draft `*_BY_LANG` dicts; the model picker (§ "Model picker"); `--tims` sets its own 730×610 window.
+   STILL remaining: the **tutorial screen** (reskin `tutorial.py` inner chrome to TIMS + tab-shell +
+   OCR-auto-PA tab), the Tutorial-card flash + simplified OOBE, OCR-launch (自動放送設定 page + consent),
+   flip `--tims` to default once at parity.
 6. **Codify as this doc dissolves** — `conventions.md` (TIMS chrome = Noto, AA-OFF native, no upscale,
    ink-based line height; the full-width/half-width numeral convention; the `widgets.py` boundary +
    font-via-i18n); DROP the now-stale Ark / k=2-ceiling / supersample / trim-ink rules; fix the

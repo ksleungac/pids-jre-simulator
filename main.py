@@ -41,6 +41,16 @@ def _run_tutorial(screen_size: tuple[int, int]) -> bool:
 
 def main():
     """Main entry point for the PA Simulator."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Japanese Train PA Simulator")
+    parser.add_argument(
+        "--tims",
+        action="store_true",
+        help="Launch the TIMS-console setup flow (setup_tims) instead of the classic setup screen (manual mode only)",
+    )
+    args = parser.parse_args()
+
     # Initialize pygame for the setup screen
     pygame.init()
     pygame.mixer.init()
@@ -84,36 +94,47 @@ def main():
         settings["oobe_completed"] = True
         i18n.save_settings(settings)
 
-    # Run setup screen to select route. The "? Tutorial" replay button shows
-    # only when oobe_completed=True (it's a re-run affordance, not a first-run
-    # gate). Loop in case the user clicks it: run tutorial, return to setup.
-    # OCR Auto-PA toggle is always available on the setup screen. It stays
-    # opt-in: enabling goes through the pill, which fires the consent
-    # disclaimer and persists to settings["auto_input"]. Default OFF — OCR
-    # never starts without the user's explicit consent.
-    setup = SetupScreen(
-        screen,
-        show_tutorial_button=settings.get("oobe_completed", False),
-    )
-    audio_dir = os.path.join(BASE_DIR, "audio")
-    setup.scan_routes(audio_dir)
+    if args.tims:
+        # TIMS-console setup flow (setup_tims), own-window 730×610. MANUAL launch only — OCR arming (the
+        # 自動放送設定 page) isn't wired yet, so the classic setup.py keeps the OCR-auto-PA path. Lazy import:
+        # only the --tims path pulls the package in.
+        from setup_tims import run as run_tims
 
-    while True:
-        config = setup.run()
+        pygame.display.set_mode((730, 610))
+        pygame.display.set_caption("PA Simulator")
+        config = run_tims(pygame.display.get_surface())
         if config is None:
             print("No route selected. Exiting.")
             pygame.quit()
             return
-        action = config.get("action")
-        if action == "run_tutorial":
-            _run_tutorial(SETUP_SIZE)
-            continue  # re-show setup
-        if action == "select":
-            break
-        # Unknown action: defensive bail.
-        print(f"Unknown setup action: {action!r}. Exiting.")
-        pygame.quit()
-        return
+    else:
+        # Classic setup screen. The "? Tutorial" replay button shows only when oobe_completed=True (a
+        # re-run affordance, not a first-run gate). Loop in case the user clicks it: run tutorial, return
+        # to setup. OCR Auto-PA toggle stays opt-in: the pill fires the consent disclaimer and persists to
+        # settings["auto_input"]. Default OFF — OCR never starts without the user's explicit consent.
+        setup = SetupScreen(
+            screen,
+            show_tutorial_button=settings.get("oobe_completed", False),
+        )
+        audio_dir = os.path.join(BASE_DIR, "audio")
+        setup.scan_routes(audio_dir)
+
+        while True:
+            config = setup.run()
+            if config is None:
+                print("No route selected. Exiting.")
+                pygame.quit()
+                return
+            action = config.get("action")
+            if action == "run_tutorial":
+                _run_tutorial(SETUP_SIZE)
+                continue  # re-show setup
+            if action == "select":
+                break
+            # Unknown action: defensive bail.
+            print(f"Unknown setup action: {action!r}. Exiting.")
+            pygame.quit()
+            return
 
     # Clean up setup screen
     pygame.display.quit()
@@ -123,6 +144,9 @@ def main():
     driver = None
     try:
         sim = PASimulator(config["work_dir"], config["route_data"], auto_input=auto_input, model=config.get("model"))
+        start_idx = config.get("start_idx")
+        if start_idx:  # setup_tims start-station selection → land there (classic setup has no start_idx)
+            sim.jump_to_stop(start_idx)
         if auto_input:
             from auto_input import AutoDriver
 

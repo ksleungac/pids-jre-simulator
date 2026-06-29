@@ -263,6 +263,8 @@ Before writing a function that "feels generic," grep the codebase for an existin
 ### Dispatch independent work to parallel subagents
 When subtasks have no data dependency (separate searches, reads, verifications, asset hunts), fan them out to parallel subagents in ONE message — don't run them sequentially in the main thread. Still verify each subagent's output before acting (cf. § "Verify before claiming"). 2026-06-27: user — *"you need to actively dispatch subagents to do tasks in parallel."*
 
+**Scope: read-only fan-out + self-contained research/doc — NOT cross-file code surgery.** A subagent is safe where its output is reviewable in one read (searches, codebase mapping, a contained doc edit). The main thread drives anything that rewires code across call sites / multiple files: a subagent's "looks done" self-check (grep says zero refs, imports OK) gives false confidence on mechanical edits. 2026-06-28: an i18n subagent deleted per-module label dicts but left ~26 dangling refs across 5 modules + broke button calls, then reported "imports + render OK" (imports pass because Python doesn't run function bodies at import) — reverted, redone inline. User: *"subagents doesn't seem to be good idea, breaking things."*
+
 ---
 
 ## Engineering rigor

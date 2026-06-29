@@ -90,17 +90,16 @@ _LANG_TUNEABLES = {
     # bevel was trimmed (-10%), the exact-cancel tipped under the k=2 threshold.
 }
 
-# Big-button chrome per language: [labels]. Placeholder translations for the draft; real strings come
-# from translations_app.json at graduation. ACTION_IDS parallels each label list (stable hit keys —
-# only "tutorial" + "route" are wired; the rest are inert placeholders).
+# Big-button chrome: ACTION_IDS = stable hit keys (only "route" + "tutorial" are wired; settings/record
+# are inert placeholders). ACTION_KEYS parallels them — the i18n labels (translations_app.json). Leftmost
+# card = 報站設定 (PA setup; the route → diagram → station flow), keyed "route" but labelled action.pa_setup.
 ACTION_IDS = ["route", "tutorial", "settings", "record"]
-# Single-line labels (no wrap) — the cards are wide enough to hold them at k=2. Leftmost = 報站設定
-# (PA setup; the route → diagram → station flow). ACTION_IDS keeps "route" as the leftmost hit key.
-ACTIONS_BY_LANG = {
-    "en": ["PA Setup", "Tutorial", "Settings", "Driving Record"],
-    "zh_HK": ["報站設定", "教學", "設定", "行車記錄"],
-    "zh_CN": ["报站设置", "教程", "设置", "行车记录"],
-}
+ACTION_KEYS = [
+    "setup_tims.action.pa_setup",
+    "setup_tims.action.tutorial",
+    "setup_tims.action.settings",
+    "setup_tims.action.record",
+]
 
 # Version tag — i18n "Version" word + "054" bottom-left: no 'v', no dots, no colon. The numerals are
 # drawn by draw_lowres_number (NOT full-width forms): each digit trimmed to ink + an explicit small
@@ -214,7 +213,7 @@ def render_menu(surf):
 
     # ── four big action buttons: side by side, centered both axes ────────────────
     action_font = pixel_font(ACTIVE_LANG)
-    actions = ACTIONS_BY_LANG[ACTIVE_LANG]
+    actions = [i18n.t(k) for k in ACTION_KEYS]
     # pin every action button to ONE text size: the densest label sets k, the rest cap to it
     at = _ACTION_TUNEABLES
     a_bevel = 2 * at["outer_border_w"] + at["bezel_lip_w"] + at["bezel_shadow_w"]
@@ -244,37 +243,31 @@ def _launch_tutorial():
 
 
 def _launch_pa_setting():
-    """Open the PA-setting page (案内設定) — same-size window — run it until the user returns (its band
-    Home / ESC), then hand control back. Local import of the sibling screen — it's only needed on
-    click, so it stays out of module-load (no top-level coupling between the screens)."""
+    """Open the PA-setting page (案内設定) — same-size window — run it until the user returns (band Home /
+    ESC) or launches (確認/起動). Returns the launch config dict on 起動, else None. Local import of the
+    sibling screen — only needed on click, so it stays out of module-load (no top-level coupling)."""
     from . import pa_setting
 
     pa_setting.ACTIVE_LANG = ACTIVE_LANG  # carry the menu's UI language into the page
     screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
     pygame.display.set_caption("TIMS PA setting (draft)")
-    pa_setting.run_on(screen)
+    return pa_setting.run_on(screen)
 
 
-def run_interactive():
-    """Clickable menu preview: click a language knob to switch the UI language; click the 報站設定 or
-    Tutorial card to enter that screen (ESC / band Home returns here); click the flashing version tag
-    to open the release page. Other cards are inert (placeholders, per the page-1 plan)."""
+def run(screen):
+    """Production menu loop on an EXISTING ``screen``. Returns a LAUNCH CONFIG dict when the user commits
+    a route and 起動s in the PA-setting flow (bubbled up from pa_setting.run_on); None on quit / ESC. The
+    caller owns the pygame lifecycle (does NOT pygame.quit() here — main.py hands off to PASimulator)."""
     global ACTIVE_LANG
-    pygame.init()
-    pygame.font.init()
-    i18n.init(ACTIVE_LANG)
-    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
-    pygame.display.set_caption("TIMS home menu (draft)")
     clock = pygame.time.Clock()
     action_rects, action_font, action_t, hint_rect, lang_rects = render_menu(screen)
-    running = True
-    while running:
+    while True:
         clock.tick(30)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
+                return None
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                running = False
+                return None
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 # version tag (flashing) → release page
                 if hint_rect is not None and hint_rect.collidepoint(event.pos):
@@ -307,7 +300,7 @@ def run_interactive():
                     press_transition(
                         screen,
                         rect=rect,
-                        label=ACTIONS_BY_LANG[ACTIVE_LANG][i],
+                        label=i18n.t(ACTION_KEYS[i]),
                         font=action_font,
                         t=action_t,
                         redraw=lambda s: render_menu(s),
@@ -317,13 +310,31 @@ def run_interactive():
                         blank_ms=450 if is_nav else 0,
                     )
                     if is_nav:
-                        _launch_pa_setting() if aid == "route" else _launch_tutorial()
+                        if aid == "route":
+                            cfg = _launch_pa_setting()
+                            if isinstance(cfg, dict):
+                                return cfg  # 起動 committed → bubble the launch config up to main.py
+                        else:
+                            _launch_tutorial()
                         # the sub-screen owned the display — restore the menu window + caption.
                         screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
-                        pygame.display.set_caption("TIMS home menu (draft)")
+                        pygame.display.set_caption("TIMS home menu")
                     break
         action_rects, action_font, action_t, hint_rect, lang_rects = render_menu(screen)
         pygame.display.flip()
+
+
+def run_interactive():
+    """Dev preview wrapper: init pygame + the own-window, run the menu loop, print the launch config it
+    returns. Production goes through ``run(screen)`` (main.py owns the window + the PASimulator hand-off)."""
+    global ACTIVE_LANG
+    pygame.init()
+    pygame.font.init()
+    i18n.init(ACTIVE_LANG)
+    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
+    pygame.display.set_caption("TIMS home menu (draft)")
+    cfg = run(screen)
+    print(f"launch config → {cfg}")
     pygame.quit()
 
 

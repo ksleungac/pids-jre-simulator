@@ -107,10 +107,13 @@ def current_lang() -> str:
     return _current_lang
 
 
-def t(key: str, **fmt) -> str:
-    """Return the localized string for `key`. EN fallback, then key itself."""
+def t(key: str, *, lang: str | None = None, **fmt) -> str:
+    """Return the localized string for `key`, in `lang` (default: the active
+    language). EN fallback, then key itself. `lang=` lets a caller measure a
+    key across all locales (e.g. worst-case button sizing) without disturbing
+    the active language."""
     entry = _translations.get(key) or {}
-    text = entry.get(_current_lang) or entry.get(DEFAULT_LANG) or key
+    text = entry.get(lang or _current_lang) or entry.get(DEFAULT_LANG) or key
     if fmt:
         try:
             return text.format(**fmt)

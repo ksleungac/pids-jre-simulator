@@ -130,13 +130,9 @@ BAND_BTN_TEXT_NATIVE = 20              # band-button LABEL render px — bigger 
 # ──────────────────────────────────────────────────────────────────────────────
 # fmt: on
 
-# Band's rightmost button is ALWAYS return-to-home (persistent across screens). Label per UI language
-# (draft constant; becomes an i18n key at graduation).
-HOME_BY_LANG = {"en": "Back\nHome", "zh_HK": "返回\n主頁", "zh_CN": "返回\n主页"}
-# Persistent band controls left of home (OCR debug-panel controls migrating onto the band): pause the
-# auto-driver + save the driving record. Same TIMS button primitive, uniform with the home square.
-PAUSE_BY_LANG = {"en": "Pause", "zh_HK": "暫停", "zh_CN": "暂停"}
-SAVE_BY_LANG = {"en": "Save\nRec", "zh_HK": "儲存\n記錄", "zh_CN": "保存\n记录"}
+# Band buttons (labels in translations_app.json — keys setup_tims.band.home / .pause / .save): rightmost
+# = return-to-home (persistent across screens); left of it the migrated OCR-panel controls — pause the
+# auto-driver + save the driving record. Same TIMS button primitive, uniform squares.
 _BAND_BTN_TUNEABLES = {
     **_TUNEABLES_TIMS_BUTTON,
     "text_align": "center",
@@ -364,14 +360,15 @@ def _render_topband(surf, status=None, sim_state=None, stops=None, *, force_flas
     btn_font = i18n.pixel_font_for_lang(ACTIVE_LANG, BAND_BTN_TEXT_NATIVE)  # band control-button labels
 
     # right-edge control cluster: [pause][save][home], uniform squares (all sized to the home label).
-    home_label = HOME_BY_LANG[ACTIVE_LANG]
+    home_label = i18n.t("setup_tims.band.home")
     t = _BAND_BTN_TUNEABLES
     bevel = 2 * t["outer_border_w"] + t["bezel_lip_w"] + t["bezel_shadow_w"]
     # Uniform squares, locale-INDEPENDENT: size to the worst-case control label across ALL locales, so
     # the [pause][save][home] cluster is identical in en / zh_HK / zh_CN (per-locale sizing made it jump).
     worst = 0
-    for _d in (HOME_BY_LANG, PAUSE_BY_LANG, SAVE_BY_LANG):
-        for _loc, _lab in _d.items():
+    for _key in ("setup_tims.band.home", "setup_tims.band.pause", "setup_tims.band.save"):
+        for _loc in i18n.SUPPORTED_LANGS:
+            _lab = i18n.t(_key, lang=_loc)
             _lw, _lh = lowres_text_size(_lab, i18n.pixel_font_for_lang(_loc, BAND_BTN_BOX_NATIVE), BAND_BTN_BOX_K, t["line_gap"])
             worst = max(worst, _lw, _lh)
     btn_sz = int(worst + 2 * HOME_TEXT_MARGIN + bevel)
@@ -435,7 +432,7 @@ def _render_topband(surf, status=None, sim_state=None, stops=None, *, force_flas
             _, th = lowres_text_size(text, cjk, MSG_K, 0)
             chrome.blit_lowres(surf, text, MSG_X + MSG_PAD_X, sy + (STRIP_H - th) // 2, cjk, _MSG_YELLOW, MSG_K)
 
-    draw_tims_button(surf, pause_rect, PAUSE_BY_LANG[ACTIVE_LANG], font=btn_font, t=t, state="pressed" if vals["paused"] else "normal")
-    draw_tims_button(surf, save_rect, SAVE_BY_LANG[ACTIVE_LANG], font=btn_font, t=t)
+    draw_tims_button(surf, pause_rect, i18n.t("setup_tims.band.pause"), font=btn_font, t=t, state="pressed" if vals["paused"] else "normal")
+    draw_tims_button(surf, save_rect, i18n.t("setup_tims.band.save"), font=btn_font, t=t)
     draw_tims_button(surf, home_rect, home_label, font=btn_font, t=t)
     return {"home": home_rect, "save": save_rect, "pause": pause_rect}

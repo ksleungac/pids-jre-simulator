@@ -12,10 +12,11 @@ Modules:
   pa_setting.py   案内設定 (C07AA) PA-setting page
   route_select.py route / start-station / run-pattern picker (C07AB/AC/AF)
 
-The production entry that returns a launch-config dict (``run(screen) -> config``,
-shaped like ``setup.SetupScreen.run()``) lands in the manual-launch wiring phase.
-For now the package holds the screens + shared chrome; preview them via
-``_dev_scripts/preview_setup_tims.py``.
+Production entry: ``run(screen) -> config | None`` (re-exported from ``home``) runs the home menu on an
+existing display and returns a launch-config dict shaped like ``setup.SetupScreen.run()`` (action /
+work_dir / route_data / model / start_idx) when the user commits a route and 起動s, else None. main.py
+calls it behind ``--tims``. Preview the screens standalone via ``_dev_scripts/preview_setup_tims.py``.
 """
 
 from .band import BAND_H, BG_COLOR, SCREEN_H, SCREEN_W  # noqa: F401
+from .home import run  # noqa: F401

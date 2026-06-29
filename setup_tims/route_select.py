@@ -31,6 +31,7 @@ import pygame
 
 import i18n
 from app_paths import project_root
+from displays.train_models import resolve_model_key
 from widgets import (
     _TUNEABLES_TIMS_BUTTON,
     draw_tims_button,
@@ -90,42 +91,29 @@ PAGE_IND_COLOR     = (210, 218, 228)      # "1/2" page indicator (near-white, ab
 SCREENS = {
     "route": {
         "code": "C07AB",
-        "heading": {"en": "Select Route", "zh_HK": "路線選擇", "zh_CN": "路线选择"},
+        "heading_key": "setup_tims.route_select.heading",
         "align": "slots",  # fixed-slot distribution: 3-char names spread to slots 1·3·5 of the 6-slot grid
         "std_chars": BOX_STD_CHARS,  # fixed-width boxes (long names squeeze) — names vary 3..13 chars
     },
     "station": {
         "code": "C07AC",
-        "heading": {"en": "Start Station", "zh_HK": "始發站選擇", "zh_CN": "始发站选择"},
+        "heading_key": "setup_tims.station_select.heading",
         "align": "slots",  # fixed 4-slot grid: 2-char station names land at slots 1·3 (gap capped at 1 slot)
         "std_chars": STATION_STD_CHARS,  # standard 4-char width; longer names (武蔵溝ノ口) squeeze to fit
     },
     # C07AF 運用パターン選択 — NOT a grid: a twin-table (No. | 列車種別 | 備考) run-pattern picker.
-    # zh_HK confirmed (字軌選擇); en / zh_CN are best-effort placeholders (map zh_HK first per request).
     "diagram": {
         "code": "C07AF",
-        "heading": {"en": "Run Pattern", "zh_HK": "字軌選擇", "zh_CN": "运用模式选择"},
+        "heading_key": "setup_tims.diagram_select.heading",
     },
 }
 
-BACK_BY_LANG = {"en": "Back", "zh_HK": "返回", "zh_CN": "返回"}
-SET_BY_LANG = {"en": "Set", "zh_HK": "設定", "zh_CN": "设定"}
-# NOTE: 案内設定 shortcut label — the button is HIDDEN for now (user: "no idea what that is for").
-# Kept (label + GUIDE_GAP) so restoring is a one-liner: re-add the draw in the bottom-bar block of
-# _render_diagram (left cluster, back_rect.right + GUIDE_GAP), the "guide" hit in _run_diagram, and the
+# Chrome labels (返回 / 設定 / column headers / recap labels) come from translations_app.json via i18n.t
+# — keys setup_tims.back / .set / .col.{no,type,remark} / .hdr.{from_to,line}.
+# NOTE: 案内設定 shortcut — the HIDDEN 報站設定 button (user: "no idea what that is for"). Restoring is a
+# one-liner: re-add the draw in _render_diagram's bottom bar (left cluster, back_rect.right + GUIDE_GAP)
+# with label=i18n.t("setup_tims.action.pa_setup"), the "guide" hit in _run_diagram, and the
 # res3 == "guide" → return None branch in run_on.
-GUIDE_BY_LANG = {"en": "PA Setup", "zh_HK": "報站設定", "zh_CN": "报站设置"}
-
-# C07AF column headers + the recap-box row labels. zh_HK primary; en/zh_CN best-effort for now.
-COL_HEADERS = {
-    "no": {"en": "No.", "zh_HK": "編號", "zh_CN": "编号"},
-    "type": {"en": "Type", "zh_HK": "列車種別", "zh_CN": "列车种别"},
-    "remark": {"en": "Remarks", "zh_HK": "備註", "zh_CN": "备注"},
-}
-HDR_LABELS = {
-    "from_to": {"en": "From / To", "zh_HK": "始發・終着站", "zh_CN": "始发・终着站"},
-    "line": {"en": "(Line)", "zh_HK": "(路線名)", "zh_CN": "(路线名)"},
-}
 
 # grid-box button tuneables — tighter padding than the default action button; AA-off native (k=1).
 # `text_align` is overridden per screen (center for routes, justify for stations).
@@ -202,7 +190,8 @@ def load_routes():
     """Scan audio/**/route.json → a list of route dicts (samples setup.SetupScreen.scan_routes, kept lean
     + dependency-free so the draft doesn't pull update_check / pygame display setup from setup.py).
 
-    Each dict: name (line, e.g. 南武線) / diagram (4027F) / type (快速) / dest / start / end / stops (names)."""
+    Each dict: path (route folder = work_dir) / name (line, e.g. 南武線) / diagram (4027F) / type (快速) /
+    model (resolved train-model key) / dest / start / end / stops (names). path + model feed the launch bridge."""
     base = project_root() / "audio"
     routes = []
     for root, _, files in os.walk(base):
@@ -224,9 +213,11 @@ def load_routes():
         stop_idxs = [i for i, s in enumerate(stops_raw) if ("time" in s) or s.get("pa") or s.get("sta")]
         routes.append(
             {
+                "path": root,  # route folder → PASimulator work_dir (launch bridge)
                 "name": d.get("route", "?"),
                 "diagram": diagram,
                 "type": d.get("type", ""),
+                "model": resolve_model_key(d.get("model")),  # default train model for this route (route.json optional)
                 "remarks": d.get("remarks") or {},  # 備考 kv: {direction, through, note} — composed for display by _compose_remark
                 "dest": d.get("dest", "").replace("\n", ""),
                 "start": stops[0] if stops else "",
@@ -324,7 +315,7 @@ def _render_grid(surf, screen_key, labels, box_font, box_w, box_h, *, selected_i
     band_hits = band._render_topband(surf)  # persistent black status band across the top
 
     # title row: code + cyan heading (shared chrome recipe — bottom-aligned, x-stretched)
-    chrome.title_row(surf, cfg["code"], cfg["heading"][ACTIVE_LANG], ACTIVE_LANG)
+    chrome.title_row(surf, cfg["code"], i18n.t(cfg["heading_key"]), ACTIVE_LANG)
 
     # button grid — only this page's slice (column-major, ROWS_PER_COL items per column)
     box_t = {**_BOX_T_BASE, "text_align": cfg["align"], "text_slots": cfg["std_chars"]}
@@ -347,12 +338,12 @@ def _render_grid(surf, screen_key, labels, box_font, box_w, box_h, *, selected_i
 
     # bottom bar — 返回 (back) left (+5px); 設定 (set) right-anchored (+5px); ▲/▼ page cluster LEFT of 設定
     bar_y = SCREEN_H - BAR_Y_FROM_BOTTOM
-    _, bh = tims_button_size(BACK_BY_LANG[ACTIVE_LANG], btn_font, _BAR_T)
-    sw, sh = tims_button_size(SET_BY_LANG[ACTIVE_LANG], btn_font, _BAR_T)
+    _, bh = tims_button_size(i18n.t("setup_tims.back"), btn_font, _BAR_T)
+    sw, sh = tims_button_size(i18n.t("setup_tims.set"), btn_font, _BAR_T)
     sw += BAR_BTN_PAD_W  # 設定: content + pad
     bw = sw + BACK_EXTRA_W  # 返回: 8px wider than 設定
     back_rect = pygame.Rect(BACK_X, bar_y, bw, bh)
-    draw_tims_button(surf, back_rect, BACK_BY_LANG[ACTIVE_LANG], font=btn_font, t=_BAR_T, state="normal")
+    draw_tims_button(surf, back_rect, i18n.t("setup_tims.back"), font=btn_font, t=_BAR_T, state="normal")
 
     # 設定 stays anchored at the right edge; the ▲/▼ cluster appears to its LEFT, only when paging
     conf_rect = pygame.Rect(SCREEN_W - CONFIRM_RIGHT_PAD - sw, bar_y, sw, sh)
@@ -369,7 +360,7 @@ def _render_grid(surf, screen_key, labels, box_font, box_w, box_h, *, selected_i
         chrome.blit_lowres(surf, ind, (up_rect.x + down_rect.right - iw) // 2, bar_y - ih - 4, ind_font, PAGE_IND_COLOR, 1)
 
     conf_state = "waiting" if (selected_idx is not None and flash_on) else "normal"
-    draw_tims_button(surf, conf_rect, SET_BY_LANG[ACTIVE_LANG], font=btn_font, t=_BAR_T, state=conf_state)
+    draw_tims_button(surf, conf_rect, i18n.t("setup_tims.set"), font=btn_font, t=_BAR_T, state=conf_state)
 
     return {"boxes": box_rects, "back": back_rect, "confirm": conf_rect, "up": up_rect, "down": down_rect, "home": band_hits["home"], "pages": pages}
 
@@ -417,7 +408,7 @@ def _run_grid(screen, screen_key, labels, *, preselect=None):
                     press_transition(
                         screen,
                         rect=hits["home"],
-                        label=band.HOME_BY_LANG[band.ACTIVE_LANG],
+                        label=i18n.t("setup_tims.band.home"),
                         font=home_font,
                         t=band._BAND_BTN_TUNEABLES,
                         redraw=frame,
@@ -430,7 +421,7 @@ def _run_grid(screen, screen_key, labels, *, preselect=None):
                     press_transition(
                         screen,
                         rect=hits["back"],
-                        label=BACK_BY_LANG[ACTIVE_LANG],
+                        label=i18n.t("setup_tims.back"),
                         font=btn_font,
                         t=_BAR_T,
                         redraw=frame,
@@ -443,7 +434,7 @@ def _run_grid(screen, screen_key, labels, *, preselect=None):
                     press_transition(
                         screen,
                         rect=hits["confirm"],
-                        label=SET_BY_LANG[ACTIVE_LANG],
+                        label=i18n.t("setup_tims.set"),
                         font=btn_font,
                         t=_BAR_T,
                         redraw=frame,
@@ -593,7 +584,7 @@ def _render_diagram(surf, route_name, start_name, end_name, variants, *, selecte
     band_hits = band._render_topband(surf)
 
     # title row — shared chrome recipe (fat code + cyan heading, bottom-aligned)
-    chrome.title_row(surf, cfg["code"], cfg["heading"][ACTIVE_LANG], ACTIVE_LANG)
+    chrome.title_row(surf, cfg["code"], i18n.t(cfg["heading_key"]), ACTIVE_LANG)
 
     # black panel behind the recap box + tables (slate only on the title row + bottom bar)
     panel = pygame.Rect(0, PANEL_TOP, SCREEN_W, (SCREEN_H - BAR_Y_FROM_BOTTOM - PANEL_BOTTOM_GAP) - PANEL_TOP)
@@ -607,7 +598,7 @@ def _render_diagram(surf, route_name, start_name, end_name, variants, *, selecte
     pygame.draw.rect(surf, HDR_BORDER_COLOR, box, 1)
     # column-split hugs the WIDEST row-name label (+HDR_LABEL_PAD_R), mirroring how 川崎 hugs on the value side
     lab_w = max(
-        lowres_text_size(HDR_LABELS["from_to"][ACTIVE_LANG], lab_font, 1, 0)[0], lowres_text_size(HDR_LABELS["line"][ACTIVE_LANG], lab_font, 1, 0)[0]
+        lowres_text_size(i18n.t("setup_tims.hdr.from_to"), lab_font, 1, 0)[0], lowres_text_size(i18n.t("setup_tims.hdr.line"), lab_font, 1, 0)[0]
     )
     split_x = HDR_X + HDR_PAD_X + lab_w + HDR_LABEL_PAD_R
     lab_cell_w, val_cell_w = split_x - HDR_X, box.right - split_x
@@ -615,12 +606,12 @@ def _render_diagram(surf, route_name, start_name, end_name, variants, *, selecte
     # row 0 — 始發・終着站 | start → end (station-name chars letter-spaced). HDR_PAD_Y lifts the rows
     # off the top/bottom borders without touching the row-to-row spacing (still HDR_ROW_H apart).
     row0_y = HDR_Y + HDR_PAD_Y
-    _cell_text(surf, HDR_LABELS["from_to"][ACTIVE_LANG], lab_font, HDR_LABEL_COLOR, pygame.Rect(HDR_X, row0_y, lab_cell_w, HDR_ROW_H), align="left")
+    _cell_text(surf, i18n.t("setup_tims.hdr.from_to"), lab_font, HDR_LABEL_COLOR, pygame.Rect(HDR_X, row0_y, lab_cell_w, HDR_ROW_H), align="left")
     _draw_from_to(surf, start_name, end_name, val_font, HDR_VALUE_COLOR, pygame.Rect(split_x, row0_y, val_cell_w, HDR_ROW_H))
     # row 1 — (路線名) | (line). The (路線名) LABEL is centered in the label cell (per reference); the
     # line value stays left-aligned like the station row above it.
     ly1 = row0_y + HDR_ROW_H
-    _cell_text(surf, HDR_LABELS["line"][ACTIVE_LANG], lab_font, HDR_LABEL_COLOR, pygame.Rect(HDR_X, ly1, lab_cell_w, HDR_ROW_H), align="center")
+    _cell_text(surf, i18n.t("setup_tims.hdr.line"), lab_font, HDR_LABEL_COLOR, pygame.Rect(HDR_X, ly1, lab_cell_w, HDR_ROW_H), align="center")
     _cell_text(surf, f"（{route_name}）", val_font, HDR_VALUE_COLOR, pygame.Rect(split_x, ly1, val_cell_w, HDR_ROW_H), align="left")
 
     # twin pattern tables — No. | 列車種別 | 備考, filled column-major (left table, then right)
@@ -641,11 +632,11 @@ def _render_diagram(surf, route_name, start_name, end_name, variants, *, selecte
         for r in range(1, ROWS_PER_TABLE):
             ry = TBL_Y + TBL_HEADER_H + r * TBL_ROW_H
             pygame.draw.line(surf, GRID_COLOR, (tx, ry), (tbl.right, ry), 1)
-        _cell_text(surf, COL_HEADERS["no"][ACTIVE_LANG], hdr_font, TBL_HDR_TXT_COLOR, pygame.Rect(tx, TBL_Y, COL_NO_W, TBL_HEADER_H))
-        _cell_text(surf, COL_HEADERS["type"][ACTIVE_LANG], hdr_font, TBL_HDR_TXT_COLOR, pygame.Rect(cx1, TBL_Y, COL_TYPE_W, TBL_HEADER_H))
+        _cell_text(surf, i18n.t("setup_tims.col.no"), hdr_font, TBL_HDR_TXT_COLOR, pygame.Rect(tx, TBL_Y, COL_NO_W, TBL_HEADER_H))
+        _cell_text(surf, i18n.t("setup_tims.col.type"), hdr_font, TBL_HDR_TXT_COLOR, pygame.Rect(cx1, TBL_Y, COL_TYPE_W, TBL_HEADER_H))
         _cell_text(
             surf,
-            COL_HEADERS["remark"][ACTIVE_LANG],
+            i18n.t("setup_tims.col.remark"),
             hdr_font,
             TBL_HDR_TXT_COLOR,
             pygame.Rect(cx2, TBL_Y, col_remark_w, TBL_HEADER_H),
@@ -671,16 +662,16 @@ def _render_diagram(surf, route_name, start_name, end_name, variants, *, selecte
             )
 
     # bottom bar — 戻る left · 設定 right-anchored (flashes white when a No. is picked). The 案内設定
-    # shortcut is HIDDEN for now (user: "no idea what that is for") — see GUIDE_BY_LANG note to restore.
+    # shortcut is HIDDEN for now (user: "no idea what that is for") — see the 案内設定-shortcut note up top.
     bar_y = SCREEN_H - BAR_Y_FROM_BOTTOM
-    _, bh = tims_button_size(BACK_BY_LANG[ACTIVE_LANG], btn_font, _BAR_T)
-    sw, _ = tims_button_size(SET_BY_LANG[ACTIVE_LANG], btn_font, _BAR_T)
+    _, bh = tims_button_size(i18n.t("setup_tims.back"), btn_font, _BAR_T)
+    sw, _ = tims_button_size(i18n.t("setup_tims.set"), btn_font, _BAR_T)
     sw += BAR_BTN_PAD_W
     back_rect = pygame.Rect(BACK_X, bar_y, sw + BACK_EXTRA_W, bh)
-    draw_tims_button(surf, back_rect, BACK_BY_LANG[ACTIVE_LANG], font=btn_font, t=_BAR_T, state="normal")
+    draw_tims_button(surf, back_rect, i18n.t("setup_tims.back"), font=btn_font, t=_BAR_T, state="normal")
     conf_rect = pygame.Rect(SCREEN_W - CONFIRM_RIGHT_PAD - sw, bar_y, sw, bh)
     conf_state = "waiting" if (selected_idx is not None and flash_on) else "normal"
-    draw_tims_button(surf, conf_rect, SET_BY_LANG[ACTIVE_LANG], font=btn_font, t=_BAR_T, state=conf_state)
+    draw_tims_button(surf, conf_rect, i18n.t("setup_tims.set"), font=btn_font, t=_BAR_T, state=conf_state)
 
     return {"nos": no_rects, "back": back_rect, "confirm": conf_rect, "home": band_hits["home"]}
 
@@ -720,7 +711,7 @@ def _run_diagram(screen, route_name, start_name, end_name, variants, *, preselec
                     press_transition(
                         screen,
                         rect=hits["home"],
-                        label=band.HOME_BY_LANG[band.ACTIVE_LANG],
+                        label=i18n.t("setup_tims.band.home"),
                         font=home_font,
                         t=band._BAND_BTN_TUNEABLES,
                         redraw=frame,
@@ -733,7 +724,7 @@ def _run_diagram(screen, route_name, start_name, end_name, variants, *, preselec
                     press_transition(
                         screen,
                         rect=hits["back"],
-                        label=BACK_BY_LANG[ACTIVE_LANG],
+                        label=i18n.t("setup_tims.back"),
                         font=btn_font,
                         t=_BAR_T,
                         redraw=frame,
@@ -746,7 +737,7 @@ def _run_diagram(screen, route_name, start_name, end_name, variants, *, preselec
                     press_transition(
                         screen,
                         rect=hits["confirm"],
-                        label=SET_BY_LANG[ACTIVE_LANG],
+                        label=i18n.t("setup_tims.set"),
                         font=btn_font,
                         t=_BAR_T,
                         redraw=frame,

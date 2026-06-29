@@ -16,10 +16,14 @@ Preview:   uv run _dev_scripts/preview_setup_tims.py --screen pa   (L = cycle lo
 Static:    uv run _dev_scripts/preview_setup_tims.py --screen pa --screenshot pa_setting.png
 """
 
+import json
+import os
+
 import pygame
 
 import i18n
 from app_paths import project_root
+from displays.train_models import DEFAULT_MODEL_KEY
 from widgets import (
     _TUNEABLES_TIMS_BUTTON,
     draw_lowres_text_fat,
@@ -69,14 +73,14 @@ ROW_VALUE_COLOR    = (236, 241, 246)
 CELL_PAD_X         = 2                    # text hugs the column line (1–2px gap)
 
 CONFIRM_W          = 96                  # confirm width (1.2× the earlier 80)
-CONFIRM_GAP_X      = 24                  # gap to the RIGHT of the table (confirm sits right-of + below)
-CONFIRM_DROP_Y     = 100                 # push the confirm button down from the table-bottom baseline
+CONFIRM_GAP_X      = 24                  # gap to the RIGHT of the table (confirm sits right of the table)
+BTN_ROW_Y          = 392                 # SHARED y for 確認 + 列車型號 (a button row below the table); the coming
+# OCR-choice buttons (自動放送始発起動 / 自動放送設定) reserve the area BELOW it
 # ──────────────────────────────────────────────────────────────────────────────
 # fmt: on
 
-TITLE_BY_LANG = {"en": "PA Setup", "zh_HK": "報站設定", "zh_CN": "报站设置"}
-SELECT_BY_LANG = {"en": "Select Route", "zh_HK": "選擇路綫", "zh_CN": "选择路线"}
-CONFIRM_BY_LANG = {"en": "Confirm", "zh_HK": "確認", "zh_CN": "确认"}
+# Chrome labels come from translations_app.json via i18n.t — keys setup_tims.action.pa_setup (title) /
+# setup_tims.pa_setting.select_route / setup_tims.confirm.
 
 # Summary-table row LABELS re-use the Japanese TIMS presentation (real TIMS renders these in Japanese):
 # rows 1-3 mirror the reference, row 4 simplified to 月台 (no platform model), row 5 = 備考. Rendered in
@@ -85,13 +89,16 @@ CONFIRM_BY_LANG = {"en": "Confirm", "zh_HK": "確認", "zh_CN": "确认"}
 ROW_LABELS = ["路線名", "列車種別", "始発・終着駅", "月台", "備注"]
 ROW_VALUES = ["", "", "", "", ""]
 PATTERN_NO = None  # run-pattern No. (字軌選擇) → shown as "(00x)" under the big A; None until a commit
+_committed = None  # raw route_select.run_on result for the committed route — drives the 起動 launch config
+_model_override = None  # last user-picked train model (列車型號 picker); session-persistent, overrides the route default
 
 
 def _apply_selection(result):
     """Fill the summary-table VALUES from a route_select commit ({"route": <variant dict>, "start": <stop
     idx>}). Row 3 = CHOSEN start stop → route terminal (始発・終着駅); row 5 = the composed 備考 (direction
-    / through-service from the run-pattern page); platform (月台) has no model, stays blank."""
-    global ROW_VALUES, PATTERN_NO
+    / through-service from the run-pattern page); platform (月台) has no model, stays blank. Stashes the
+    raw result in `_committed` so 確認/起動 can build the launch config from it."""
+    global ROW_VALUES, PATTERN_NO, _committed
     from . import route_select  # lazy (sibling) — reuse its remark composer
 
     route = result["route"]
@@ -102,6 +109,29 @@ def _apply_selection(result):
     remark = route_select._compose_remark(route["name"], route.get("remarks"))
     ROW_VALUES = [route["name"], route["type"], f"{start_name} → {route['end']}", "", remark]
     PATTERN_NO = result.get("pattern_no")
+    _committed = result
+
+
+def _build_config(result):
+    """Bridge a committed route_select result → a launch config shaped like setup.SetupScreen.run()
+    (action / work_dir / route_data / model), MANUAL mode (auto_input False — OCR arming waits for the
+    自動放送設定 page). `start_idx` = the chosen start stop resolved by NAME against the committed
+    variant's own stops (variant-agnostic — variants can carry different stop lists; this closes the
+    deferred v0-index finding). main.py jumps the sim to start_idx before run()."""
+    route = result["route"]
+    with open(os.path.join(route["path"], "route.json"), encoding="utf-8") as f:
+        route_data = json.load(f)
+    stops = route.get("stops", [])
+    start_name = result.get("start_name") or ""
+    start_idx = stops.index(start_name) if start_name in stops else 0
+    return {
+        "action": "select",
+        "work_dir": route["path"],
+        "route_data": route_data,
+        "model": _model_override or route["model"],
+        "auto_input": False,
+        "start_idx": start_idx,
+    }
 
 
 # Button tuneable: JUSTIFY (両端揃え) — the label spreads across the full face with EQUAL outer margins
@@ -125,7 +155,7 @@ def render(surf):
     band_hits = band._render_topband(surf)  # persistent black status band across the top
 
     # title row: screen-code + cyan heading (shared chrome recipe — bottom-aligned, x-stretched)
-    chrome.title_row(surf, SCREEN_CODE, TITLE_BY_LANG[ACTIVE_LANG], ACTIVE_LANG)
+    chrome.title_row(surf, SCREEN_CODE, i18n.t("setup_tims.action.pa_setup"), ACTIVE_LANG)
 
     btn_font = i18n.pixel_font_for_lang(ACTIVE_LANG, BTN_NATIVE)
 
@@ -142,7 +172,7 @@ def render(surf):
     bg = grid.inflate(2 * TABLE_BG_PAD, 2 * TABLE_BG_PAD)  # dark background extends beyond the grid
 
     # 選擇路綫 button — centered, SELECT_GAP_ABOVE above the visible table (the dark-bg top)
-    sel_label = SELECT_BY_LANG[ACTIVE_LANG]
+    sel_label = i18n.t("setup_tims.pa_setting.select_route")
     sw, sh = _button_size(sel_label, btn_font)
     sel_rect = pygame.Rect((SCREEN_W - sw) // 2, bg.top - SELECT_GAP_ABOVE - sh, sw, sh)
     draw_tims_button(surf, sel_rect, sel_label, font=btn_font, t=_BTN_TUNEABLES)
@@ -178,19 +208,27 @@ def render(surf):
     pygame.draw.rect(surf, TABLE_BORDER, grid, TABLE_BORDER_W)  # 1px outline around the GRID — black bg shows OUTSIDE it
 
     # 確認 button — narrow, to the RIGHT of the visible table + dropped down (right-of + below, not under)
-    conf_label = CONFIRM_BY_LANG[ACTIVE_LANG]
+    conf_label = i18n.t("setup_tims.confirm")
     _, conf_h = _button_size(conf_label, btn_font)
-    conf_rect = pygame.Rect(bg.right + CONFIRM_GAP_X, grid.bottom - conf_h + CONFIRM_DROP_Y, CONFIRM_W, conf_h)
+    conf_rect = pygame.Rect(bg.right + CONFIRM_GAP_X, BTN_ROW_Y, CONFIRM_W, conf_h)
     draw_tims_button(surf, conf_rect, conf_label, font=btn_font, t=_BTN_TUNEABLES)
 
-    return {"select": sel_rect, "confirm": conf_rect, "home": band_hits["home"]}
+    # 列車型號 button — the IRL 番線 slot, repurposed: centered on the shared button row → opens the model
+    # picker. Same y as 確認 (BTN_ROW_Y); the area below this row is reserved for the coming OCR-choice buttons.
+    model_label = i18n.t("setup_tims.pa_setting.model")
+    mw, mh = _button_size(model_label, btn_font)
+    model_rect = pygame.Rect((SCREEN_W - mw) // 2, BTN_ROW_Y, mw, mh)
+    draw_tims_button(surf, model_rect, model_label, font=btn_font, t=_BTN_TUNEABLES)
+
+    return {"select": sel_rect, "confirm": conf_rect, "model": model_rect, "home": band_hits["home"]}
 
 
 def run_on(screen):
-    """Run the PA-setting page on an EXISTING display ``screen`` until the user returns (band Home, or
-    ESC), then hand control back to the caller. This is the entry the home menu's 報站設定 card calls.
-    Home/select/confirm get the shared TIMS press beat; Home adds the loading beat (a navigational
-    return). select / confirm are placeholders for now (press flash, no nav)."""
+    """Run the PA-setting page on an EXISTING display ``screen`` until the user launches or returns.
+    Entry the home menu's 報站設定 card calls. Returns the LAUNCH CONFIG dict (action/work_dir/route_data/
+    model/start_idx) when 確認/起動 is pressed with a route committed; None on band Home / ESC (back to the
+    menu). Home/select/confirm get the shared TIMS press beat; Home adds the loading beat."""
+    global _model_override
     clock = pygame.time.Clock()
     btn_font = i18n.pixel_font_for_lang(ACTIVE_LANG, BTN_NATIVE)
     home_font = i18n.pixel_font_for_lang(band.ACTIVE_LANG, band.BAND_BTN_TEXT_NATIVE)
@@ -210,7 +248,7 @@ def run_on(screen):
                     press_transition(
                         screen,
                         rect=hits["home"],
-                        label=band.HOME_BY_LANG[band.ACTIVE_LANG],
+                        label=i18n.t("setup_tims.band.home"),
                         font=home_font,
                         t=band._BAND_BTN_TUNEABLES,
                         redraw=lambda s: render(s),
@@ -224,7 +262,7 @@ def run_on(screen):
                     press_transition(
                         screen,
                         rect=hits["select"],
-                        label=SELECT_BY_LANG[ACTIVE_LANG],
+                        label=i18n.t("setup_tims.pa_setting.select_route"),
                         font=btn_font,
                         t=_BTN_TUNEABLES,
                         redraw=lambda s: render(s),
@@ -242,17 +280,41 @@ def run_on(screen):
                         _apply_selection(result)
                     # result is None → user backed out of the picker; stay on this page
                 elif hits["confirm"].collidepoint(event.pos):
-                    # placeholder: momentary press flash, no navigation yet (commit TBD)
+                    # 確認 = manual launch (起動): once a route is committed, build the config + bubble it up.
                     press_transition(
                         screen,
                         rect=hits["confirm"],
-                        label=CONFIRM_BY_LANG[ACTIVE_LANG],
+                        label=i18n.t("setup_tims.confirm"),
                         font=btn_font,
                         t=_BTN_TUNEABLES,
                         redraw=lambda s: render(s),
                         blank_color=BG_COLOR,
                         blank_ms=0,
                     )
+                    if _committed is not None:
+                        return _build_config(_committed)
+                elif hits["model"].collidepoint(event.pos):  # 列車型號 → model picker (X00AA)
+                    press_transition(
+                        screen,
+                        rect=hits["model"],
+                        label=i18n.t("setup_tims.pa_setting.model"),
+                        font=btn_font,
+                        t=_BTN_TUNEABLES,
+                        redraw=lambda s: render(s),
+                        blank_color=BG_COLOR,
+                        blank_ms=450,
+                        blank_rect=pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H),
+                    )
+                    from . import model_select  # local import (sibling)
+
+                    model_select.ACTIVE_LANG = ACTIVE_LANG
+                    current = _model_override or (_committed["route"]["model"] if _committed else DEFAULT_MODEL_KEY)
+                    res = model_select.run_on(screen, current)
+                    if res == "home":  # band Home deep in the picker → bubble to the menu
+                        running = False
+                    elif res is not None:  # a model key chosen → set the session override (persists this run)
+                        _model_override = res
+                    # res None → backed out; model unchanged
 
 
 _LANGS = ("en", "zh_HK", "zh_CN")
