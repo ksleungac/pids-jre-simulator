@@ -15,9 +15,9 @@ import sys
 
 sys.path.insert(0, ".")
 
-from setup_tims import home, pa_setting, route_select  # noqa: E402
+from setup_tims import home, pa_setting, route_select, model_select  # noqa: E402
 
-_SCREENS = {"home": home, "pa": pa_setting, "route": route_select}
+_SCREENS = {"home": home, "pa": pa_setting, "route": route_select, "model": model_select}
 
 
 def main():

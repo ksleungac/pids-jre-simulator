@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>JRSN badge generator (throwaway)</title>
+<!--
+  Exact reproduction of Wikipedia Template:JRSN, expanded.
+  Edit LINE / COLOR / NUMBERS below, open in a browser, then either
+  screenshot a badge or DevTools right-click element -> "Capture node screenshot".
+  size = total outer badge size in px (border included). Bigger = higher-res capture.
+-->
+<body style="background:#ffffff; font-family:Arial, Helvetica, sans-serif; padding:24px;">
+<script>
+  const LINE    = "JY";          // line code
+  const COLOR   = "#9ACD32";     // Ja-rail-color for that line (JY = this green)
+  const SIZE    = 300;           // outer badge size in px
+  const NUMBERS = [16, 17, 18, 19, 20];  // station numbers to render
+
+  const box  = SIZE * 4 / 5;     // inner white square
+  const bord = SIZE / 10;        // border thickness
+  const font = SIZE * 3 / 10;    // "JY" font size (number is 160% of this)
+
+  document.write(NUMBERS.map(n => `
+    <div style="display:inline-block; vertical-align:middle; margin:16px;
+                border:${bord}px solid ${COLOR}; border-radius:10%;
+                height:${box}px; width:${box}px; line-height:125%;
+                background:White; text-align:center; font-weight:Bold;
+                font-size:${font}px;">
+      <span style="color:black">${LINE}</span><br>
+      <span style="font-size:160%; color:black">${n}</span>
+    </div>`).join(""));
+</script>
+</body>
