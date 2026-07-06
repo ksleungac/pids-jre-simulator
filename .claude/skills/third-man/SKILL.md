@@ -29,6 +29,8 @@ Two pathways, both supported:
 
 A third pathway is via `/session-recap` Step 0: when claude self-detects friction at recap time, claude writes a behavioral self-observation and hands it to a third-man (in fair-researcher / doctor mode) to validate patterns + dedup against existing principles.md entries before any codification lands. This is not interpretation-deadlock recovery — it's pattern validation — but uses the same brief-assembly + neutrality discipline.
 
+A fourth pathway is a **design-proposal consult** (user-triggered): the user hands claude's own design/architecture proposal to a fresh agent for an independent take + industrial-practice check, weighed against the project's own conventions — *before* building. Same neutrality discipline (quote the user's words, state claude's proposal third-person, list the real files incl. the project's style rules). The task block asks for endorse/adjust/redirect + a concrete build order rather than the interpretation-mismatch structure. First use 2026-07-06 (the TIMS chrome style warehouse — the third-man killed an over-engineered screen registry + `preset()` helper and caught that the palette had already drifted).
+
 ## Instructions when invoked
 
 ### Step 1 — assemble the brief

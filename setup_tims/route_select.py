@@ -34,6 +34,7 @@ from app_paths import project_root
 from displays.train_models import resolve_model_key
 from widgets import (
     _TUNEABLES_TIMS_BUTTON,
+    draw_lowres_text,
     draw_tims_button,
     lowres_text_size,
     press_transition,
@@ -79,7 +80,7 @@ FLASH_MS           = 420                  # 設定 white-flash half-period (whit
 ARROW_W            = 64                   # ▲/▼ page-button width (wider than tall; height tracks 設定)
 ARROW_GAP          = 8                    # gap between the ▲ and ▼ page buttons
 SET_ARROW_GAP      = 16                   # gap between the ▲/▼ page cluster and 設定 (arrows sit LEFT of 設定)
-PAGE_IND_COLOR     = (210, 218, 228)      # "1/2" page indicator (near-white, above the arrows)
+PAGE_IND_COLOR     = chrome.CODE_INK      # "1/2" page indicator (near-white, above the arrows)
 
 # table-population: when 始發站選擇 commits, these row VALUES flow back to the 案内設定 summary table
 # (parallels pa_setting.ROW_LABELS = 路線名 / 列車種別 / 始発・終着駅 / 月台 / 備注).
@@ -128,7 +129,7 @@ _BOX_T_BASE = {
 }
 # bar-button tuneables (返回 / 設定 / ▲▼) — justify spread; v_pad gives the bar buttons real height
 # (v_pad=0 rendered them too short — height was just the label + bevel).
-_BAR_T = {**_TUNEABLES_TIMS_BUTTON, "text_align": "justify", "v_pad": 14, "text_max_k": 1, "nominal_k": 1, "line_gap": 3}
+_BAR_T = chrome.BTN_BAR
 # No.-cell select button (small blue square inside the table's No. column) — centered digit, k=1 native.
 _NO_T = {**_TUNEABLES_TIMS_BUTTON, "text_align": "center", "text_pad": 0, "text_max_k": 1, "nominal_k": 1, "min_w": 0}
 
@@ -136,7 +137,7 @@ _NO_T = {**_TUNEABLES_TIMS_BUTTON, "text_align": "center", "text_pad": 0, "text_
 # ── C07AF 運用パターン選択 (run-pattern / diagram) layout tuneables ───────────────
 # black PANEL behind the recap box + tables (the table area is black, not slate — runs from just below
 # the title down to the bottom bar). Title + bottom bar stay on the slate bg, like the other screens.
-PANEL_COLOR        = (8, 10, 14)         # near-black (same as the status band)
+PANEL_COLOR        = chrome.PANEL_BG         # near-black (same as the status band)
 PANEL_TOP          = 118                 # panel top — just below the title row
 PANEL_BOTTOM_GAP   = 12                  # panel bottom sits this far ABOVE the bottom bar
 
@@ -150,9 +151,9 @@ HDR_LABEL_PAD_R    = 4                     # gap from the row-name label text to
 HDR_ARROW_PAD      = "　　"                # full-width padding flanking the → in start → end (wider gap)
 HDR_NAME_LETTER_SP = 0.8                  # letter-spacing WITHIN a station name (fraction of a full-width advance)
 HDR_NATIVE         = 18                   # recap text px
-HDR_BORDER_COLOR   = (150, 162, 176)      # box border + divider
+HDR_BORDER_COLOR   = chrome.GRID      # box border + divider
 HDR_LABEL_COLOR    = (198, 208, 220)      # label ink (dimmer)
-HDR_VALUE_COLOR    = (236, 241, 246)      # value ink (bright)
+HDR_VALUE_COLOR    = chrome.INK      # value ink (bright)
 HDR_PAD_X          = 4                    # recap label / value hug from the cell's left border (small gap)
 HDR_PAD_Y          = 2                    # inner top/bottom padding (text ↔ horizontal borders); does NOT change inter-row spacing
 HDR_VAL_PAD_X      = 4                     # start-station hugs the column-split line (small inset for the value side)
@@ -167,9 +168,9 @@ TBL_ROW_H          = 44                   # data row height
 ROWS_PER_TABLE     = 5                    # 5 rows per table → 10 pattern slots (matches the reference)
 COL_NO_W           = 46                   # No. column (holds the small blue select button)
 COL_TYPE_W         = 108                  # 列車種別 (train-type) column
-GRID_COLOR         = (150, 162, 176)      # table gridlines (light on slate)
+GRID_COLOR         = chrome.GRID      # table gridlines (light on slate)
 TBL_HDR_TXT_COLOR  = (208, 218, 230)      # column-title ink
-TBL_CELL_TXT_COLOR = (236, 241, 246)      # cell ink (type / remarks)
+TBL_CELL_TXT_COLOR = chrome.INK      # cell ink (type / remarks)
 TBL_NATIVE         = 18                   # table cell + column-header text px
 TBL_REMARK_PAD_X   = 4                    # 備考 value left inset — hugs the column-split line (like 川崎 in the recap)
 NO_BTN_INSET_X     = 3                    # No.-button inset within its cell (x) — small margin so the cell border shows
@@ -341,12 +342,12 @@ def _render_grid(surf, screen_key, labels, box_font, box_w, box_h, *, selected_i
     _, bh = tims_button_size(i18n.t("setup_tims.back"), btn_font, _BAR_T)
     sw, sh = tims_button_size(i18n.t("setup_tims.set"), btn_font, _BAR_T)
     sw += BAR_BTN_PAD_W  # 設定: content + pad
-    bw = sw + BACK_EXTRA_W  # 返回: 8px wider than 設定
+    bw = sw + BACK_EXTRA_W  # shared bar-button width — 設定 matches 返回 (grouped = same size)
     back_rect = pygame.Rect(BACK_X, bar_y, bw, bh)
     draw_tims_button(surf, back_rect, i18n.t("setup_tims.back"), font=btn_font, t=_BAR_T, state="normal")
 
     # 設定 stays anchored at the right edge; the ▲/▼ cluster appears to its LEFT, only when paging
-    conf_rect = pygame.Rect(SCREEN_W - CONFIRM_RIGHT_PAD - sw, bar_y, sw, sh)
+    conf_rect = pygame.Rect(SCREEN_W - CONFIRM_RIGHT_PAD - bw, bar_y, bw, sh)  # 設定 same width as 返回
     up_rect = down_rect = None
     if pages > 1:
         down_rect = pygame.Rect(conf_rect.x - SET_ARROW_GAP - ARROW_W, bar_y, ARROW_W, sh)
@@ -511,9 +512,12 @@ def _cell_text(surf, text, font, color, cell, *, align="center"):
             chrome.blit_lowres(surf, ch, int(round(x)), y, font, color, 1)
             x += w + gap
         return
-    tw, _ = lowres_text_size(text, font, 1, 0)
-    x = cell.x + HDR_PAD_X if align == "left" else cell.x + (cell.w - tw) // 2
-    chrome.blit_lowres(surf, text, x, y, font, color, 1)
+    if align == "left":
+        chrome.blit_lowres(surf, text, cell.x + HDR_PAD_X, y, font, color, 1)
+        return
+    # center — via draw_lowres_text so an over-wide value (a 6–7 char 種別 like 快速アクティー) COMPRESSES
+    # horizontally to fit the cell instead of spilling into the next column; short values render natural.
+    draw_lowres_text(surf, text, cell, font, color, max_k=1, line_gap=0, align="center")
 
 
 def _draw_from_to(surf, start, end, font, color, cell):
@@ -651,7 +655,17 @@ def _render_diagram(surf, route_name, start_name, end_name, variants, *, selecte
             no_rect = pygame.Rect(tx + NO_BTN_INSET_X, ry + NO_BTN_INSET_Y, COL_NO_W - 2 * NO_BTN_INSET_X, TBL_ROW_H - 2 * NO_BTN_INSET_Y)
             draw_tims_button(surf, no_rect, str(gi + 1), font=no_font, t=_NO_T, state="pressed" if gi == selected_idx else "normal")
             no_rects.append((gi, no_rect))
-            _cell_text(surf, v.get("type", ""), cell_font, TBL_CELL_TXT_COLOR, pygame.Rect(cx1, ry, COL_TYPE_W, TBL_ROW_H), align="distribute")
+            vtype = v.get("type", "")
+            # 2–3 char types (快速 / 各停) spread to fill the cell (the JR look); a 4+ char type (通勤快速
+            # 特別快速 …) already fills it, so distributing reads as 'split' — cram it natural instead.
+            _cell_text(
+                surf,
+                vtype,
+                cell_font,
+                TBL_CELL_TXT_COLOR,
+                pygame.Rect(cx1, ry, COL_TYPE_W, TBL_ROW_H),
+                align="center" if len(vtype) >= 4 else "distribute",
+            )
             _marquee_cell(
                 surf,
                 _compose_remark(route_name, v.get("remarks")),
@@ -667,9 +681,10 @@ def _render_diagram(surf, route_name, start_name, end_name, variants, *, selecte
     _, bh = tims_button_size(i18n.t("setup_tims.back"), btn_font, _BAR_T)
     sw, _ = tims_button_size(i18n.t("setup_tims.set"), btn_font, _BAR_T)
     sw += BAR_BTN_PAD_W
-    back_rect = pygame.Rect(BACK_X, bar_y, sw + BACK_EXTRA_W, bh)
+    bw = sw + BACK_EXTRA_W  # shared bar-button width — 設定 matches 返回 (grouped = same size)
+    back_rect = pygame.Rect(BACK_X, bar_y, bw, bh)
     draw_tims_button(surf, back_rect, i18n.t("setup_tims.back"), font=btn_font, t=_BAR_T, state="normal")
-    conf_rect = pygame.Rect(SCREEN_W - CONFIRM_RIGHT_PAD - sw, bar_y, sw, bh)
+    conf_rect = pygame.Rect(SCREEN_W - CONFIRM_RIGHT_PAD - bw, bar_y, bw, bh)  # 設定 same width as 返回
     conf_state = "waiting" if (selected_idx is not None and flash_on) else "normal"
     draw_tims_button(surf, conf_rect, i18n.t("setup_tims.set"), font=btn_font, t=_BAR_T, state=conf_state)
 
@@ -785,10 +800,17 @@ def run_on(screen):
             if res2 is None:
                 back_to_route = True  # 戻る → re-enter the route screen (picked route stays highlighted)
                 break
+            if res2 != sel_start:
+                sel_var = None  # different start station → the diagram list changes; drop the stale pattern pick
             sel_start = res2
             start_name = station_labels[sel_start] if 0 <= sel_start < len(station_labels) else ""
+            # C07AF shows ONLY diagrams (variants) that STOP at the chosen start station — a variant that
+            # passes through / doesn't serve it is hidden. v0 always stops here (the station grid is built
+            # from v0's stopping list), so ≥1 variant always remains.
+            shown = [v for v in variants if start_name in (v["stops"][i] for i in v["stop_idxs"])]
             while True:
-                res3 = _run_diagram(screen, name, start_name, end_name, variants, preselect=sel_var)
+                pre = sel_var if (sel_var is not None and sel_var < len(shown)) else None
+                res3 = _run_diagram(screen, name, start_name, end_name, shown, preselect=pre)
                 if res3 == "home":
                     return "home"
                 if res3 is None:
@@ -797,7 +819,7 @@ def run_on(screen):
                 # Carry the RESOLVED start name (variant-agnostic). `start` stays the variants[0]-space
                 # full index for the eventual launch bridge to re-resolve against the chosen variant —
                 # variants can have different stop lists, so the index isn't trustworthy cross-variant.
-                return {"route": variants[res3], "start": stop_idxs[sel_start], "start_name": start_name, "pattern_no": res3 + 1}
+                return {"route": shown[res3], "start": stop_idxs[sel_start], "start_name": start_name, "pattern_no": res3 + 1}
 
 
 # ── standalone preview ────────────────────────────────────────────────────────

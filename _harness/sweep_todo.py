@@ -58,8 +58,10 @@ def get_recent_commits(days=14):
         ["git", "log", f"--since={since}", "--oneline"],
         capture_output=True,
         text=True,
+        encoding="utf-8",  # git log carries kanji commit subjects; Windows pipe default cp1252 crashes
+        errors="replace",
     )
-    if result.returncode != 0:
+    if result.returncode != 0 or result.stdout is None:
         return []
     return [line.strip() for line in result.stdout.strip().splitlines() if line.strip()]
 

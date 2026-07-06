@@ -41,7 +41,7 @@ def pixel_font_small(lang):
 SCREEN_W, SCREEN_H = 730, 610          # setup is its OWN window — taller than the 420 LCD-sized
                                        # one (main.py SETUP_SIZE); height is a free knob. 610 keeps
                                        # the 2/3-height buttons clear of the top-corner lang strip.
-BG_COLOR           = (62, 68, 80)      # current SetupScreen bg (mirror reality; tunable)
+BG_COLOR           = chrome.BG      # current SetupScreen bg (mirror reality; tunable)
 ACTIVE_LANG        = "zh_HK"           # UI language shown on the band (synced from the active screen)
 
 # persistent TIMS status band (top strip, full width). SAME band concept as the running app's OCR
@@ -50,7 +50,7 @@ ACTIVE_LANG        = "zh_HK"           # UI language shown on the band (synced f
 # DEBUG_PANEL_HEIGHT when the band graduates. The readout cell is a PLACEHOLDER swapped for live OCR
 # fields ("might not be clock") — don't chase TIMS-clock fidelity. Rightmost button = ALWAYS home.
 BAND_H             = 68                # shorter band (rows sit on an 8 / 26 / 44 grid)
-BAND_COLOR         = (8, 10, 14)       # near-black strip
+BAND_COLOR         = chrome.PANEL_BG       # near-black strip
 
 # LEFT column — green notification + OCR state (segment + inferred state), stacked, SMALL. Station
 # names ONLY ever surface here, so k=1 keeps the dense left column from crowding the band (the real
@@ -58,12 +58,12 @@ BAND_COLOR         = (8, 10, 14)       # near-black strip
 LEFT_X             = 12
 NOTIF_TEXT         = "ツウコク　ジョウホウ"  # green notif — tims_002 通告情報, full-width gap between words
 NOTIF_NATIVE       = 11                # green notif px — SMALLER (least-important line)
-NOTIF_COLOR        = (54, 230, 64)     # TIMS dot-matrix green
+NOTIF_COLOR        = chrome.GREEN     # TIMS dot-matrix green
 STATE_SEG          = "立川 → 川崎"       # OCR segment from -> to (placeholder; live OCR later)
 STATE_INFO         = "巡航中 · 2/3"      # inferred state . played count (placeholder)
 STATE_NATIVE       = 16                # OCR state + badge px — LARGER (primary band info)
-STATE_INK          = (236, 241, 246)
-STATE_SUB          = (150, 162, 174)   # dimmer secondary line
+STATE_INK          = chrome.INK
+STATE_SUB          = chrome.DIM   # dimmer secondary line
 
 # CENTER readout cell — speed limit / speed / distance (OCR placeholders), right-aligned between
 # separators. The LIMIT is ALWAYS cyan (steady highlight block); on CHANGE it FLASHES (blinks cyan↔
@@ -73,9 +73,9 @@ STATE_SUB          = (150, 162, 174)   # dimmer secondary line
 CELL_X             = 222               # readout cell left edge — right of the (now wider) folded left column
 CELL_W             = 120
 CELL_PAD           = 8
-SEP_COLOR          = (120, 132, 144)   # vertical separators flanking the cell
+SEP_COLOR          = chrome.FRAME   # vertical separators flanking the cell
 SEP_W              = 2
-CELL_INK           = (236, 241, 246)   # the number ink (bright)
+CELL_INK           = chrome.INK   # the number ink (bright)
 CELL_UNIT_INK      = (130, 144, 156)   # unit (km/h, m) ink — DIMMER than the number, not so bright
 READOUT_NUM_H       = 18            # number rendered HEIGHT (px). SUPERSAMPLED (drawn big AA-on, scaled
                                     # DOWN) so this in-between size reads SMOOTH, not blocky — the pixel
@@ -273,19 +273,22 @@ def _band_vals(status, sim_state, stops):
     None → standalone placeholders (home-menu preview). Encodes the OCR-panel migration decisions:
     badge grouped with the state (left column), NO confidence colour, events → the yellow strips."""
     if not status:
+        # Setup stage: OCR is NOT running yet → the NO-READINGS state. Only the green notif hint shows;
+        # no segment, no speed / limit / distance readings (dim '--'), no fire/stop messages, no cyan or
+        # yellow flashing. Applies to EVERY setup_tims screen (all pre-OCR). The live-status branch below
+        # drives the real readings once auto_input feeds a status dict.
         return {
             "left": [
                 (NOTIF_TEXT, NOTIF_COLOR, NOTIF_NATIVE, "name"),
-                (STATE_SEG, STATE_INK, STATE_NATIVE, "name"),
-                (f"{STATE_INFO} · MOVING", STATE_SUB, STATE_NATIVE, "chrome"),
             ],
-            "limit": (LIMIT_NUM, LIMIT_UNIT),
-            "speed": (SPEED_NUM, SPEED_UNIT),
-            "dist": (DIST_NUM, DIST_UNIT),
-            "limit_changed": PREVIEW_LIMIT_CHANGED,
+            "limit": ("--", LIMIT_UNIT),
+            "speed": ("--", SPEED_UNIT),
+            "dist": ("--", DIST_UNIT),
+            "limit_changed": False,
             "over_limit": False,
-            "msgs": [MSG_FIRE_TEXT, MSG_STOP_TEXT],
+            "msgs": [],
             "paused": False,
+            "no_readings": True,
         }
     curr = sim_state.curr_stop if sim_state else 0
     n = len(stops or [])
@@ -394,6 +397,8 @@ def _render_topband(surf, status=None, sim_state=None, stops=None, *, force_flas
     pygame.draw.line(surf, SEP_COLOR, (CELL_X + CELL_W, 8), (CELL_X + CELL_W, BAND_H - 8), SEP_W)
     rx = CELL_X + CELL_W - CELL_PAD
     ticks = pygame.time.get_ticks()
+    no_rd = vals.get("no_readings", False)  # setup stage: dim '--' placeholders, no highlight/flash
+    rd_ink = STATE_SUB if no_rd else CELL_INK
     # LIMIT carries the highlight block (only the limit value, NOT the whole column):
     #   * over speed   → the block FLASHES RED (warning), light ink.
     #   * just changed → BLINKS cyan↔plain, then settles to steady cyan.
@@ -414,12 +419,12 @@ def _render_topband(surf, status=None, sim_state=None, stops=None, *, force_flas
             hl_ink=OVER_LIMIT_INK if red_on else HINT_INK_COLOR,
         )
     else:
-        limit_hl = True
+        limit_hl = not no_rd  # no cyan highlight at the no-readings stage
         if vals["limit_changed"]:
             limit_hl = force_flash_on or (ticks // LIMIT_FLASH_MS) % 2 == 0
-        _blit_readout(surf, *vals["limit"], rx, LIMIT_Y, num_font, unit_font, CELL_INK, CELL_UNIT_INK, highlight=limit_hl)
-    _blit_readout(surf, *vals["speed"], rx, SPEED_Y, num_font, unit_font, CELL_INK, CELL_UNIT_INK)
-    _blit_readout(surf, *vals["dist"], rx, DIST_Y, num_font, unit_font, CELL_INK, CELL_UNIT_INK)
+        _blit_readout(surf, *vals["limit"], rx, LIMIT_Y, num_font, unit_font, rd_ink, CELL_UNIT_INK, highlight=limit_hl)
+    _blit_readout(surf, *vals["speed"], rx, SPEED_Y, num_font, unit_font, rd_ink, CELL_UNIT_INK)
+    _blit_readout(surf, *vals["dist"], rx, DIST_Y, num_font, unit_font, rd_ink, CELL_UNIT_INK)
 
     # MESSAGE strips: two dim bars; active messages render BRIGHT YELLOW + FLASH (auto-clear when none)
     msg_w = pause_rect.left - MSG_GAP_R - MSG_X

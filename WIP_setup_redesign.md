@@ -69,6 +69,11 @@ state column and the speed column line up row-for-row.
   Implements badge-with-state, yellow flashing/auto-clearing message strips, pause-lights-when-paused.
   Still placeholder-ish: i18n state words (draft `_STATE_WORDS`), limit cyan-flash-on-change (only fires
   in placeholder mode), exact yellow/flash timing.
+- **Setup-stage = NO-READINGS state (2026-07-06).** Every setup_tims page is pre-OCR, so the placeholder
+  (`status=None`) shows the band EMPTIED of readings: green 通告情報 hint ONLY in the left column (segment +
+  state lines dropped), dim `--` for limit/speed/dist (no cyan highlight), empty message strips, no cyan/
+  yellow flashing. Live-looking readings before OCR runs are dishonest. Only the placeholder VALUES changed
+  (`no_readings` flag on `_band_vals`); the readings-render code is untouched (the live-status branch drives it).
 
 ## Route selection flow (confirmed)
 **route → diagram → pick station.** Mimic the **real TIMS route-selection screens** (we have reference
@@ -91,6 +96,17 @@ stations — passing stations (empty `pa`, no `sta` / `time`) are filtered via t
 (`DATA_FORMAT.md § Skipping Stations`); the picker maps the filtered selection back to the full stop
 index (`stop_idxs`) on return.
 
+**Diagram list filters by chosen start station (2026-07-06).** Flow is route → **station → diagram** (C07AF).
+The C07AF variant table shows ONLY diagrams that STOP at the picked start station — a variant that passes
+through / doesn't serve it is hidden (`shown = [v for v in variants if start_name in v's stopping stations]`).
+The station grid is built from `variants[0]`'s stops, so v0 always stops there → the list is never empty.
+Changing the start station resets the pattern pick (`sel_var`).
+
+**種別 (train type) column cell layout (2026-07-06).** Data has 2–7 char types. 2–3 char (快速 / 内回り) →
+distribute (JR spread-to-fill); 4 char (中央特快 / 各駅停車) → cram natural (distributing reads as 'split');
+5+ char (快速アーバン / 快速アクティー) → compress-to-fit via `draw_lowres_text` (auto hx-squeeze + clip, no
+spill into 備考). `_cell_text` center path routes through `draw_lowres_text` for the overflow safety.
+
 ## PA-setting page (C07AA — 案内設定) (2026-06-27)
 Reached after route / diagram / station selection. Screen code **C07AA**. Mirrors IRL
 `tims_pa_setting_done.png` but adapted to this app's manual-first model.
@@ -103,8 +119,16 @@ Reached after route / diagram / station selection. Screen code **C07AA**. Mirror
 - **"Train type display" = the train MODEL / LCD skin**, per-route — realized as the **列車型號** model
   picker (§ "Model picker"). Legacy `setup.py` does it via the per-route dropdown (2026-06-21);
   `setup_tims` via the X00AA 番台選択 screen. Out-of-spec model picks are allowed (best-effort).
-- **Bottom button row (2026-06-28):** 確認 (manual launch) and 列車型號 share one y (`BTN_ROW_Y`); the area
-  BELOW is reserved for the coming OCR-choice buttons (自動放送始発起動 / 自動放送設定).
+- **Bottom OCR launch cluster (built 2026-07-06):** the reserved area is now the OCR launch cluster — 3
+  EQUAL bevel buttons, 1-over-2, right-aligned, in a white **L-notch frame that follows the button
+  silhouette** (empty top-left cut out): `OCR自動報站起動` (top) / `手動報站起動` + `OCR自動報站設定` (bottom row),
+  2-line mode/action labels, `chrome.BTN_LABEL` center-natural. `手動報站起動` REPLACED the old `確認` (it IS the
+  manual launch); `列車型號` sits on the cluster's row2 line, left-aligned, and is now the SAME size + font as
+  the cluster buttons (`bw × bh`, `OCR_BTN_NATIVE`) so the whole bottom row reads as one uniform button group.
+- **OCR buttons WIRED (2026-07-06):** `OCR自動報站起動` → consent gate (§ OCR consent) → launch config with
+  `auto_input=True`; `手動報站起動` → manual launch config; `OCR自動報站設定` → settings page DIRECTLY (no consent).
+  KNOWN ISSUE: OCR launch crashes in the live `sim.run()` loop (auto_input debug-panel render likely; init/
+  start/dxcam verified clean headless) — needs the traceback.
 
 ## Model picker (X00AA — 番台選択 / 列車型號) (2026-06-28)
 Reached from C07AA's **列車型號** button (the IRL 番線 platform slot, repurposed — we removed the real 番線,
@@ -212,6 +236,53 @@ px and it reads as crisp single-stroke. Everything below follows from that one f
   packer** (`setup_redesign_draft._tims_digit_cell` / `_draw_number_ss`); the shared `widgets.draw_lowres_number`
   (version tag only) is STILL trim-ink — harmonize it onto the full-width packer + `_ink_vbox` model.
 - `draw_tims_button` / `tims_button_size` — bevel + delegates label; reads `text_align` / `text_pad`.
+
+## TIMS chrome style warehouse (BUILT 2026-07-06 — canonical: `conventions.md § UI code style`)
+**DONE:** `setup_tims/chrome.py` now holds the shared PALETTE + button presets (`BTN_BAR`/`BTN_LABEL`/
+`BTN_ACTION`/`BTN_STEP`) + `FONT_PX`; all setup_tims screens migrated (colors→tokens, recurring button
+dicts→presets), fixing 3 real color drifts. Revised from the plan below: palette went **big-bang** (drift
+was already shipped, so lazy would leave it forked); buttons/fonts stay lazy. Screen registry + `preset()`
+helper **dropped** as over-engineered (`/third-man`). STILL LOCAL (lazy): `_LANG_TUNEABLES` / `_BAND_BTN_TUNEABLES`
+/ `_NO_T` / `_BOX_T_BASE` / `_GRAY_T`, one-off colors, `FONT_PX` adoption. Original plan (historical):
+
+The standard TIMS chrome vocabulary is re-authored per screen module — button tuneables (`_BAR_T` /
+`_FOOT_T` / `_BTN_TUNEABLES` / `_ACTION_TUNEABLES` / `_LANG_TUNEABLES` / `_BOX_T_*`, six near-identical
+`{**_TUNEABLES_TIMS_BUTTON, …}` dicts), palette (`BG` / `PANEL_BG` / `INK` / cyan / amber / dim), font
+sizes, and per-screen `C07xx` code + title-key literals. Consolidate into ONE warehouse so screens
+COMPOSE, not re-derive. **Home: `setup_tims/chrome.py`** (already the shared layer — `title_row` /
+`blit_lowres`). `widgets.py` keeps the PRIMITIVES (`draw_tims_button`, base `_TUNEABLES_TIMS_BUTTON`,
+`tims_button_size` — how to draw); `chrome.py` holds the STYLE VOCABULARY (which style):
+- **Button presets by ROLE** (not page — per conventions "name by cause"): `bar` (justify, v_pad14 —
+  2-char 返回/設定/取消/明白), `label` (center-natural — crammed page buttons), `action` (home cards),
+  `lang` (knobs), `box` (route/station grid), `stepper`. Plus `preset(name, **overrides)` for per-site tweaks.
+- **Palette**: `BG` / `PANEL_BG` / `FRAME` / `INK` / `CYAN` / `AMBER` / `DIM` / `GREY` (disabled).
+- **Font sizes by role**: `title` / `heading` / `body` / `cap` / `button`.
+- **Screen registry**: `SCREENS = {key: (code, title_i18n_key)}` — `chrome.title(surf, key, lang)` looks up
+  the `C07xx` code + title key; per-module code/title literals stop scattering.
+
+Migration: **LAZY** — a module adopts the warehouse when next touched; `ocr_setting` = the reference
+consumer. NOT a big-bang cross-file sweep (that's how the model_select i18n subagent broke things,
+2026-06-28). Graduates to `conventions.md § UI code style` once built.
+
+## OCR consent + settings screen — `ocr_setting.py` (2026-07-06)
+New TIMS screen for the OCR auto-PA feature, ported from legacy `setup.py _draw_ocr_disclaimer_panel` +
+the lead/interval steppers. Two views:
+- **CONSENT** — full-page (NO popup), gothic AA-off: scrollable **FULL tutorial** (ported whole from legacy,
+  2026-07-06 — nothing cut): how-it-works two-column + game screenshot (pulsing amber HUD box), the animated
+  4-step 截圖→比對→推斷→報站 flow strip (each box populated: HUD crop / distance-cell + cycling digit templates /
+  `v×t→d` formula / animated PgDn key), the trigger-timings **journey diagram** (Fuji/skyline/Tokyo Tower/
+  stations + animated Suica train A→B + dep/appr/arr glow markers), then terms. Illustration primitives copied
+  verbatim; text routes through the TIMS pixel face + chrome tokens. Footer `取消` / `明白` BOTH right, `明白`
+  GREY-locked (silver palette) until scrolled to the bottom, then FLASHES. Panel↔button↔screen-bottom = equal
+  `FOOTER_MARGIN` gaps. Body/caption px = 17/15, title 20.
+- **SETTINGS** — 提前距離 / 間隔 steppers (`[−] value [+]`, fat TIMS numerals), `settings.json` lead_m/interval_s.
+- **Consent SPLIT from settings (2026-07-06).** Consent = a ONE-TIME GATE (`ensure_consent` → persists
+  `settings.json "ocr_consent"`) in front of the **LAUNCH only** (`OCR自動報站起動`); the **`OCR自動報站設定`
+  button opens the settings page DIRECTLY, no gate** (pressing "settings" and getting a consent read wrong).
+  Consent is later read-only from the home Tutorials button (`run_consent(read_only=True)`).
+  `ocr_launch_extras()` supplies the auto_input launch fields (`auto_input=True` + lead_m / interval_s).
+- STILL OPEN: caption `capture_interval` wording ("every 5s capture in-game HUD") is an i18n change awaiting
+  zh_CN confirm; the read-only Tutorials-button entry (needs the tutorial screen).
 
 ## Promotion to setup_tims/ package (2026-06-27)
 The three drafts graduated into a **production package `setup_tims/`** (per `/third-man` — a package,

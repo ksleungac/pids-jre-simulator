@@ -25,7 +25,6 @@ import i18n
 from app_paths import project_root
 from displays.train_models import DEFAULT_MODEL_KEY
 from widgets import (
-    _TUNEABLES_TIMS_BUTTON,
     draw_lowres_text_fat,
     draw_tims_button,
     lowres_text_size,
@@ -56,26 +55,39 @@ TABLE_Y            = 232                   # dropped a bit — reserves space ab
 A_COL_W            = 54                   # big consist 'A' column (spans all rows, one tall cell)
 VALUE_COL_W        = 380                  # value column width (−20 — table a touch less wide)
 ROW_H              = 26                   # tight — close to one text height
-TABLE_BG           = (8, 10, 14)          # near-black interior (TIMS table)
-TABLE_BORDER       = (120, 132, 144)      # slate grid lines
+TABLE_BG           = chrome.PANEL_BG          # near-black interior (TIMS table)
+TABLE_BORDER       = chrome.FRAME      # slate grid lines
 TABLE_BORDER_W     = 1                    # thin INTERNAL grid lines (column / row dividers)
 TABLE_BG_PAD       = 5                    # black background extends 5px OUTSIDE the table grid (all sides)
 A_NATIVE           = 52                   # big consist letter px
 A_XSCALE           = 1.4                  # 'A' uses the same x-stretched fat variant as the title
-A_COLOR            = (236, 241, 246)      # white — same as the table text
+A_COLOR            = chrome.INK      # white — same as the table text
 PATTERN_NO_NATIVE  = 16                   # operation-No. "(00x)" px — shown UNDER the big A after a commit
 PATTERN_NO_GAP     = 3                    # gap below the A's ink bottom to the (00x)
-PATTERN_NO_COLOR   = (236, 241, 246)      # white — same as the A
+PATTERN_NO_COLOR   = chrome.INK      # white — same as the A
 ROW_LABEL_NATIVE   = 18                   # Japanese row labels px (+2 — fills the tight row)
-ROW_LABEL_COLOR    = (236, 241, 246)
+ROW_LABEL_COLOR    = chrome.INK
 ROW_VALUE_NATIVE   = 20                   # Japanese values (station / line names) px
-ROW_VALUE_COLOR    = (236, 241, 246)
+ROW_VALUE_COLOR    = chrome.INK
 CELL_PAD_X         = 2                    # text hugs the column line (1–2px gap)
 
-CONFIRM_W          = 96                  # confirm width (1.2× the earlier 80)
-CONFIRM_GAP_X      = 24                  # gap to the RIGHT of the table (confirm sits right of the table)
-BTN_ROW_Y          = 392                 # SHARED y for 確認 + 列車型號 (a button row below the table); the coming
-# OCR-choice buttons (自動放送始発起動 / 自動放送設定) reserve the area BELOW it
+# OCR launch cluster (bottom-right) — mirrors IRL tims_pa_setting_done.png: a 1-over-2 button group
+# inside a thin white frame, right-aligned. All THREE buttons are EQUAL width + height (sized to the
+# worst-case label; shorter labels just justify wider). Labels are 2-line (mode line / action line).
+# zh_HK draft strings — chrome is i18n, so these move into translations_app.json once the design +
+# zh_CN wording settle. 手動報站起動 = the manual (PageDown) launch — replaces the old 確認 button.
+OCR_LAUNCH_LABEL   = "OCR自動\n報站起動"   # TOP (right-aligned): arms OCR auto-PA → straight to the live LCD
+OCR_MANUAL_LABEL   = "手動\n報站起動"       # bottom-LEFT: manual launch
+OCR_SETTING_LABEL  = "OCR自動\n報站設定"   # bottom-RIGHT: opens the OCR settings / consent page
+OCR_BTN_NATIVE     = 18                  # cluster label render px — LOCKED (readable, compact; page BTN_NATIVE=20)
+OCR_BTN_MARGIN_X   = 12                  # cluster button horizontal padding (label ↔ bevel)
+OCR_BTN_MARGIN_Y   = 5                   # cluster button VERTICAL padding — small = short buttons
+OCR_CLUSTER_RIGHT  = SCREEN_W - 22       # cluster's right edge (margin off the window right)
+OCR_CLUSTER_BOTTOM = SCREEN_H - 22       # cluster's bottom edge (margin off the window bottom)
+OCR_BTN_GAP        = 1                   # gap between the 3 buttons (rows + columns) — near-flush
+OCR_BOX_PAD        = 5                   # white frame inset around the 3 buttons (hugs close to the bevels)
+OCR_BOX_COLOR      = chrome.GRID     # thin slate-white frame — follows the button silhouette (L-notch)
+OCR_BOX_W          = 1                   # frame outline width
 # ──────────────────────────────────────────────────────────────────────────────
 # fmt: on
 
@@ -112,19 +124,20 @@ def _apply_selection(result):
     _committed = result
 
 
-def _build_config(result):
+def _build_config(result, ocr=False):
     """Bridge a committed route_select result → a launch config shaped like setup.SetupScreen.run()
-    (action / work_dir / route_data / model), MANUAL mode (auto_input False — OCR arming waits for the
-    自動放送設定 page). `start_idx` = the chosen start stop resolved by NAME against the committed
-    variant's own stops (variant-agnostic — variants can carry different stop lists; this closes the
-    deferred v0-index finding). main.py jumps the sim to start_idx before run()."""
+    (action / work_dir / route_data / model). `start_idx` = the chosen start stop resolved by NAME
+    against the committed variant's own stops (variant-agnostic — variants can carry different stop
+    lists; this closes the deferred v0-index finding). main.py jumps the sim to start_idx before run().
+    `ocr=True` (OCR自動報站起動) merges the auto_input launch fields (auto_input=True + lead_m /
+    interval_s from the 自動放送設定 page); default = MANUAL (auto_input False)."""
     route = result["route"]
     with open(os.path.join(route["path"], "route.json"), encoding="utf-8") as f:
         route_data = json.load(f)
     stops = route.get("stops", [])
     start_name = result.get("start_name") or ""
     start_idx = stops.index(start_name) if start_name in stops else 0
-    return {
+    cfg = {
         "action": "select",
         "work_dir": route["path"],
         "route_data": route_data,
@@ -132,12 +145,15 @@ def _build_config(result):
         "auto_input": False,
         "start_idx": start_idx,
     }
+    if ocr:
+        from . import ocr_setting
+
+        cfg.update(ocr_setting.ocr_launch_extras())  # auto_input=True + lead_m / interval_s (fresh from settings)
+    return cfg
 
 
-# Button tuneable: JUSTIFY (両端揃え) — the label spreads across the full face with EQUAL outer margins
-# + inter-char gaps (the TIMS look: a wide button's 2-char label gets equal space left / middle / right).
-# v_pad=0 so justify uses the full face height (the box already holds its margin via BTN_MARGIN); AA-off.
-_BTN_TUNEABLES = {**_TUNEABLES_TIMS_BUTTON, "text_align": "justify", "v_pad": 0, "text_max_k": 1, "line_gap": 3}
+# Page buttons use the shared LABEL preset (center/natural, crammed 1-by-1, v_pad=0) — chrome.BTN_LABEL.
+_BTN_TUNEABLES = chrome.BTN_LABEL
 
 
 def _button_size(label, font):
@@ -149,7 +165,8 @@ def _button_size(label, font):
 
 
 def render(surf):
-    """Draw the PA-setting page onto ``surf``; returns {"select"/"confirm": rect} hit-rects."""
+    """Draw the PA-setting page onto ``surf``; returns hit-rects
+    {"select", "model", "home", "ocr_launch", "manual", "ocr_setting"}."""
     surf.fill(BG_COLOR)
     band.ACTIVE_LANG = ACTIVE_LANG
     band_hits = band._render_topband(surf)  # persistent black status band across the top
@@ -207,30 +224,64 @@ def render(surf):
         chrome.blit_lowres(surf, no_text, TABLE_X + (A_COL_W - nw) // 2, a_y + ah + PATTERN_NO_GAP, no_font, PATTERN_NO_COLOR, 1)
     pygame.draw.rect(surf, TABLE_BORDER, grid, TABLE_BORDER_W)  # 1px outline around the GRID — black bg shows OUTSIDE it
 
-    # 確認 button — narrow, to the RIGHT of the visible table + dropped down (right-of + below, not under)
-    conf_label = i18n.t("setup_tims.confirm")
-    _, conf_h = _button_size(conf_label, btn_font)
-    conf_rect = pygame.Rect(bg.right + CONFIRM_GAP_X, BTN_ROW_Y, CONFIRM_W, conf_h)
-    draw_tims_button(surf, conf_rect, conf_label, font=btn_font, t=_BTN_TUNEABLES)
+    # OCR launch cluster GEOMETRY (bottom-right) — 1-over-2, right-aligned, EQUAL-size buttons. Computed
+    # BEFORE 列車型號 so that button can align to the cluster's bottom row (row2). Uniform size =
+    # worst-case content size across the 3 labels (shorter labels center inside).
+    ocr_font = i18n.pixel_font_for_lang(ACTIVE_LANG, OCR_BTN_NATIVE)
+    lg = _BTN_TUNEABLES["line_gap"]
+    _lbl_sz = [lowres_text_size(l, ocr_font, 1, lg) for l in (OCR_LAUNCH_LABEL, OCR_MANUAL_LABEL, OCR_SETTING_LABEL)]
+    _bevel = 2 * _BTN_TUNEABLES["outer_border_w"] + _BTN_TUNEABLES["bezel_lip_w"] + _BTN_TUNEABLES["bezel_shadow_w"]
+    bw = max(w for w, _ in _lbl_sz) + 2 * OCR_BTN_MARGIN_X + _bevel  # equal width (worst-case label)
+    bh = max(h for _, h in _lbl_sz) + 2 * OCR_BTN_MARGIN_Y + _bevel  # equal height — MARGIN_Y keeps it short
+    br_x = OCR_CLUSTER_RIGHT - OCR_BOX_PAD - bw  # bottom-right button x (top button shares it)
+    bl_x = br_x - OCR_BTN_GAP - bw  # bottom-left button x
+    row2_y = OCR_CLUSTER_BOTTOM - OCR_BOX_PAD - bh  # bottom row y
+    row1_y = row2_y - OCR_BTN_GAP - bh  # top row y (above bottom-right = right-aligned)
+    launch_rect = pygame.Rect(br_x, row1_y, bw, bh)
+    manual_rect = pygame.Rect(bl_x, row2_y, bw, bh)
+    setting_rect = pygame.Rect(br_x, row2_y, bw, bh)
 
-    # 列車型號 button — the IRL 番線 slot, repurposed: centered on the shared button row → opens the model
-    # picker. Same y as 確認 (BTN_ROW_Y); the area below this row is reserved for the coming OCR-choice buttons.
+    # 列車型號 button — IRL 番線 slot repurposed → model picker. SAME size + font as the OCR cluster
+    # buttons (bw × bh, OCR_BTN_NATIVE) so the whole bottom row reads as ONE uniform button group;
+    # LEFT-aligned under the table, sharing the cluster's bottom-row y (row2).
     model_label = i18n.t("setup_tims.pa_setting.model")
-    mw, mh = _button_size(model_label, btn_font)
-    model_rect = pygame.Rect((SCREEN_W - mw) // 2, BTN_ROW_Y, mw, mh)
-    draw_tims_button(surf, model_rect, model_label, font=btn_font, t=_BTN_TUNEABLES)
+    model_rect = pygame.Rect(TABLE_X, row2_y, bw, bh)
+    draw_tims_button(surf, model_rect, model_label, font=ocr_font, t=_BTN_TUNEABLES)
 
-    return {"select": sel_rect, "confirm": conf_rect, "model": model_rect, "home": band_hits["home"]}
+    # cluster white frame (L-notch, follows the silhouette — empty top-left cut out) + the 3 buttons
+    p = OCR_BOX_PAD
+    frame_pts = [
+        (br_x - p, row1_y - p),  # top button: top-left
+        (br_x + bw + p, row1_y - p),  # top button: top-right
+        (br_x + bw + p, row2_y + bh + p),  # right column: bottom-right
+        (bl_x - p, row2_y + bh + p),  # bottom row: bottom-left
+        (bl_x - p, row2_y - p),  # bottom-left button: top-left
+        (br_x - p, row2_y - p),  # notch: back in to the right column's left edge
+    ]
+    pygame.draw.polygon(surf, OCR_BOX_COLOR, frame_pts, OCR_BOX_W)
+    draw_tims_button(surf, launch_rect, OCR_LAUNCH_LABEL, font=ocr_font, t=_BTN_TUNEABLES)
+    draw_tims_button(surf, manual_rect, OCR_MANUAL_LABEL, font=ocr_font, t=_BTN_TUNEABLES)
+    draw_tims_button(surf, setting_rect, OCR_SETTING_LABEL, font=ocr_font, t=_BTN_TUNEABLES)
+
+    return {
+        "select": sel_rect,
+        "model": model_rect,
+        "home": band_hits["home"],
+        "ocr_launch": launch_rect,
+        "manual": manual_rect,
+        "ocr_setting": setting_rect,
+    }
 
 
 def run_on(screen):
     """Run the PA-setting page on an EXISTING display ``screen`` until the user launches or returns.
     Entry the home menu's 報站設定 card calls. Returns the LAUNCH CONFIG dict (action/work_dir/route_data/
-    model/start_idx) when 確認/起動 is pressed with a route committed; None on band Home / ESC (back to the
+    model/start_idx) when 手動報站起動 is pressed with a route committed; None on band Home / ESC (back to the
     menu). Home/select/confirm get the shared TIMS press beat; Home adds the loading beat."""
     global _model_override
     clock = pygame.time.Clock()
     btn_font = i18n.pixel_font_for_lang(ACTIVE_LANG, BTN_NATIVE)
+    ocr_font = i18n.pixel_font_for_lang(ACTIVE_LANG, OCR_BTN_NATIVE)  # smaller cluster face (press beats)
     home_font = i18n.pixel_font_for_lang(band.ACTIVE_LANG, band.BAND_BTN_TEXT_NATIVE)
     running = True
     while running:
@@ -279,13 +330,13 @@ def run_on(screen):
                     elif isinstance(result, dict):  # 設定 committed a route + start stop → fill the summary table
                         _apply_selection(result)
                     # result is None → user backed out of the picker; stay on this page
-                elif hits["confirm"].collidepoint(event.pos):
-                    # 確認 = manual launch (起動): once a route is committed, build the config + bubble it up.
+                elif hits["manual"].collidepoint(event.pos):
+                    # 手動報站起動 = manual launch (起動): once a route is committed, build config + bubble up.
                     press_transition(
                         screen,
-                        rect=hits["confirm"],
-                        label=i18n.t("setup_tims.confirm"),
-                        font=btn_font,
+                        rect=hits["manual"],
+                        label=OCR_MANUAL_LABEL,
+                        font=ocr_font,
                         t=_BTN_TUNEABLES,
                         redraw=lambda s: render(s),
                         blank_color=BG_COLOR,
@@ -293,12 +344,49 @@ def run_on(screen):
                     )
                     if _committed is not None:
                         return _build_config(_committed)
+                elif hits["ocr_launch"].collidepoint(event.pos):
+                    # OCR自動報站起動 = OCR auto-PA launch. Needs a committed route + one-time consent
+                    # (自動放送設定 page); on both, build the launch config with auto_input=True.
+                    press_transition(
+                        screen,
+                        rect=hits["ocr_launch"],
+                        label=OCR_LAUNCH_LABEL,
+                        font=ocr_font,
+                        t=_BTN_TUNEABLES,
+                        redraw=lambda s: render(s),
+                        blank_color=BG_COLOR,
+                        blank_ms=0,
+                    )
+                    from . import ocr_setting
+
+                    ocr_setting.ACTIVE_LANG = ACTIVE_LANG
+                    if _committed is not None and ocr_setting.ensure_consent(screen):
+                        return _build_config(_committed, ocr=True)
+                elif hits["ocr_setting"].collidepoint(event.pos):
+                    # OCR自動報站設定 = settings steppers (lead / interval) — DIRECT, no consent gate.
+                    # Consent is a LAUNCH-time gate only (自動放送起動); the settings button just opens
+                    # the page (load beat like 選擇路綫 / 列車型號).
+                    press_transition(
+                        screen,
+                        rect=hits["ocr_setting"],
+                        label=OCR_SETTING_LABEL,
+                        font=ocr_font,
+                        t=_BTN_TUNEABLES,
+                        redraw=lambda s: render(s),
+                        blank_color=BG_COLOR,
+                        blank_ms=450,
+                        blank_rect=pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H),
+                    )
+                    from . import ocr_setting
+
+                    ocr_setting.ACTIVE_LANG = ACTIVE_LANG
+                    ocr_setting.run_settings(screen)
                 elif hits["model"].collidepoint(event.pos):  # 列車型號 → model picker (X00AA)
                     press_transition(
                         screen,
                         rect=hits["model"],
                         label=i18n.t("setup_tims.pa_setting.model"),
-                        font=btn_font,
+                        font=ocr_font,
                         t=_BTN_TUNEABLES,
                         redraw=lambda s: render(s),
                         blank_color=BG_COLOR,

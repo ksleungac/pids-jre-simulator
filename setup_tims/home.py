@@ -32,6 +32,7 @@ from widgets import (
 )
 
 from . import band
+from . import chrome
 from .band import BAND_H, BG_COLOR, SCREEN_H, SCREEN_W
 
 # TIMS chrome face = Noto Sans, per-locale, AA-OFF at native px, NO upscale (WIP § Font decision).
@@ -76,7 +77,7 @@ LANGS = [
 
 # Action-button tuneables: tight-centered label (no inter-char gap) held off the bevel by text_pad —
 # same center mode as the knobs, just a bigger pad + the fill-to-fit k.
-_ACTION_TUNEABLES = {**_TUNEABLES_TIMS_BUTTON, "text_align": "center", "text_pad": 12, "text_max_k": 1}
+_ACTION_TUNEABLES = chrome.BTN_ACTION
 
 # Language-button tuneables: tight-centered label with a margin — drawn straight by draw_tims_button
 # (the primitive owns align/pad).

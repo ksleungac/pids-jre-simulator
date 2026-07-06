@@ -9,7 +9,37 @@ here once so the chrome reads identical across pages and tunes in one place.
 import pygame
 
 import i18n
-from widgets import draw_lowres_text, draw_lowres_text_fat, lowres_text_size
+from widgets import _TUNEABLES_TIMS_BUTTON, draw_lowres_text, draw_lowres_text_fat, lowres_text_size
+
+# fmt: off
+# ── TIMS palette — the SINGLE SOURCE for chrome colors (design tokens). Screens reference these
+#    instead of re-declaring literals, which had DRIFTED: near-black as (8,10,14) vs (10,13,18); bright
+#    ink as (236,241,246) vs (232,238,245); light-slate as (150,162,176) vs (150,164,178). Only shared
+#    color VALUES live here — layout geometry (positions/sizes) stays per-module (conventions § Data layout).
+BG          = (62, 68, 80)      # screen background (slate)
+PANEL_BG    = (8, 10, 14)       # near-black panel / table / band-strip interior
+FRAME       = (120, 132, 144)   # slate frame / border / separator
+GRID        = (150, 162, 176)   # lighter slate — gridlines / thin accents / L-notch frame
+INK         = (236, 241, 246)   # bright white text
+DIM         = (150, 162, 174)   # dimmer secondary text
+CYAN        = (84, 214, 226)    # TIMS cyan heading (title_row)
+CODE_INK    = (210, 218, 228)   # near-white screen code / page indicator
+AMBER       = (232, 184, 64)    # caution / caption
+GREEN       = (54, 230, 64)     # dot-matrix notification green
+
+# ── TIMS button presets — ONE draw_tims_button primitive, named ROLE variants (plain dicts, so the
+#    per-screen `{**PRESET, "text_align": …}` spread still works). Hoisted from per-screen copies that
+#    had duplicated verbatim (route_select._BAR_T ≡ ocr_setting._FOOT_T, etc.). One-off / model-specific
+#    dicts (lang knobs, grayed tiles, slot-grid boxes) stay local — only the recurring roles live here.
+_B = _TUNEABLES_TIMS_BUTTON
+BTN_BAR    = {**_B, "text_align": "justify", "v_pad": 14, "text_max_k": 1, "nominal_k": 1, "line_gap": 3}  # bottom-bar 2-char (返回/設定/取消/明白)
+BTN_LABEL  = {**_B, "text_align": "center", "v_pad": 0, "text_max_k": 1, "line_gap": 3}                    # crammed page buttons (natural, 1-by-1)
+BTN_ACTION = {**_B, "text_align": "center", "text_pad": 12, "text_max_k": 1}                               # home action cards
+BTN_STEP   = {**_B, "text_align": "center", "v_pad": 4, "text_max_k": 1, "min_w": 0}                       # steppers / number chips
+
+# ── standard chrome font px by ROLE (recurring sizes only; genuine per-screen one-offs stay local)
+FONT_PX = {"title": 24, "heading": 16, "body": 16, "cap": 13, "button": 20}
+# fmt: on
 
 
 def blit_lowres(surf, text, x, y, font, color, k, *, right=False):
