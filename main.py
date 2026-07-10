@@ -16,6 +16,9 @@ from language_picker import LanguagePicker
 from setup import SetupScreen
 from app import PASimulator
 
+SETUP_SIZE = (730, 420)  # classic setup / language-picker / OOBE window
+TIMS_SIZE = (730, 610)  # TIMS-console setup flow window (taller)
+
 
 def _run_tutorial(screen_size: tuple[int, int]) -> bool:
     """Resize the display to the tutorial's 1100×500 window, run it, then
@@ -37,6 +40,65 @@ def _run_tutorial(screen_size: tuple[int, int]) -> bool:
         # Restore the setup screen's size so SetupScreen draws into the right surface.
         pygame.display.set_mode(screen_size)
     return completed
+
+
+def _run_setup(args, settings, base_dir):
+    """Show the setup flow (TIMS or classic) and return a launch config, or None to exit. Owns its own
+    display creation so it can be re-entered after a drive returns Home (band Home button)."""
+    if args.tims:
+        # TIMS-console setup flow (setup_tims), own-window 730×610. Lazy import: only --tims pulls it in.
+        from setup_tims import run as run_tims
+
+        pygame.display.set_mode(TIMS_SIZE)
+        pygame.display.set_caption("PA Simulator")
+        return run_tims(pygame.display.get_surface())
+    # Classic setup screen. The "? Tutorial" replay button shows only when oobe_completed=True (a re-run
+    # affordance, not a first-run gate). Loop in case the user clicks it: run tutorial, return to setup.
+    screen = pygame.display.set_mode(SETUP_SIZE)
+    pygame.display.set_caption("PA Simulator")
+    setup = SetupScreen(screen, show_tutorial_button=settings.get("oobe_completed", False))
+    setup.scan_routes(os.path.join(base_dir, "audio"))
+    while True:
+        config = setup.run()
+        if config is None:
+            return None
+        action = config.get("action")
+        if action == "run_tutorial":
+            _run_tutorial(SETUP_SIZE)
+            continue
+        if action == "select":
+            return config
+        print(f"Unknown setup action: {action!r}. Exiting.")
+        return None
+
+
+def _run_drive(config):
+    """Construct + run the simulator for one drive. Returns "home" (band Home → return to the setup
+    screen) or "quit" (window close / ESC → full app exit). Stops the auto-driver thread on the way out."""
+    auto_input = config.get("auto_input", False)
+    driver = None
+    action = "quit"
+    try:
+        sim = PASimulator(config["work_dir"], config["route_data"], auto_input=auto_input, model=config.get("model"))
+        start_idx = config.get("start_idx")
+        if start_idx:  # setup_tims start-station selection → land there (classic setup has no start_idx)
+            sim.jump_to_stop(start_idx)
+        if auto_input:
+            from auto_input import AutoDriver
+
+            driver = AutoDriver(sim, lead_m=config.get("lead_m", 900), interval_s=config.get("interval_s", 5))
+            sim.auto_driver = driver  # exposes pause toggle to the band click handler
+            driver.start()
+        action = sim.run() or "quit"
+    except Exception as e:
+        print(f"Error running simulator: {e}")
+        import traceback
+
+        traceback.print_exc()
+    finally:
+        if driver is not None:
+            driver.stop()
+    return action
 
 
 def main():
@@ -65,7 +127,6 @@ def main():
     BASE_DIR = str(project_root())
 
     # Create screen for setup (also reused by the first-run language picker)
-    SETUP_SIZE = (730, 420)
     screen = pygame.display.set_mode(SETUP_SIZE)
     pygame.display.set_caption("PA Simulator")
 
@@ -85,84 +146,31 @@ def main():
         i18n.save_settings(settings)
     i18n.init(lang)
 
-    # First-run OOBE tutorial. Runs once after the language picker, before
-    # setup. Set ``oobe_completed=True`` regardless of how the tutorial
-    # finished (Done / Skip / asset-missing) so we don't re-prompt on next
-    # launch — a "replay" affordance lives on the setup screen.
-    if not settings.get("oobe_completed"):
+    # First-run OOBE tutorial (CLASSIC setup only). Runs once after the language picker, before setup.
+    # Set ``oobe_completed=True`` regardless of how the tutorial finished (Done / Skip / asset-missing)
+    # so we don't re-prompt on next launch — a "replay" affordance lives on the setup screen.
+    # The TIMS flow (--tims) does its OWN OOBE: the 教學 card flashes until the first visit (home._mark_oobe_done
+    # persists the flag), so skip the forced fullscreen tutorial there.
+    if not args.tims and not settings.get("oobe_completed"):
         _run_tutorial(SETUP_SIZE)
         settings["oobe_completed"] = True
         i18n.save_settings(settings)
 
-    if args.tims:
-        # TIMS-console setup flow (setup_tims), own-window 730×610. MANUAL launch only — OCR arming (the
-        # 自動放送設定 page) isn't wired yet, so the classic setup.py keeps the OCR-auto-PA path. Lazy import:
-        # only the --tims path pulls the package in.
-        from setup_tims import run as run_tims
-
-        pygame.display.set_mode((730, 610))
-        pygame.display.set_caption("PA Simulator")
-        config = run_tims(pygame.display.get_surface())
+    # Setup ↔ drive loop. A drive's band Home button returns here to re-pick a route (run() → "home");
+    # window close / ESC ends the drive with "quit" and exits. OCR Auto-PA stays opt-in inside setup.
+    while True:
+        config = _run_setup(args, settings, BASE_DIR)
         if config is None:
             print("No route selected. Exiting.")
             pygame.quit()
             return
-    else:
-        # Classic setup screen. The "? Tutorial" replay button shows only when oobe_completed=True (a
-        # re-run affordance, not a first-run gate). Loop in case the user clicks it: run tutorial, return
-        # to setup. OCR Auto-PA toggle stays opt-in: the pill fires the consent disclaimer and persists to
-        # settings["auto_input"]. Default OFF — OCR never starts without the user's explicit consent.
-        setup = SetupScreen(
-            screen,
-            show_tutorial_button=settings.get("oobe_completed", False),
-        )
-        audio_dir = os.path.join(BASE_DIR, "audio")
-        setup.scan_routes(audio_dir)
-
-        while True:
-            config = setup.run()
-            if config is None:
-                print("No route selected. Exiting.")
-                pygame.quit()
-                return
-            action = config.get("action")
-            if action == "run_tutorial":
-                _run_tutorial(SETUP_SIZE)
-                continue  # re-show setup
-            if action == "select":
-                break
-            # Unknown action: defensive bail.
-            print(f"Unknown setup action: {action!r}. Exiting.")
-            pygame.quit()
-            return
-
-    # Clean up setup screen
-    pygame.display.quit()
-
-    # Start simulator with selected configuration
-    auto_input = config.get("auto_input", False)
-    driver = None
-    try:
-        sim = PASimulator(config["work_dir"], config["route_data"], auto_input=auto_input, model=config.get("model"))
-        start_idx = config.get("start_idx")
-        if start_idx:  # setup_tims start-station selection → land there (classic setup has no start_idx)
-            sim.jump_to_stop(start_idx)
-        if auto_input:
-            from auto_input import AutoDriver
-
-            driver = AutoDriver(sim, lead_m=config.get("lead_m", 900), interval_s=config.get("interval_s", 5))
-            sim.auto_driver = driver  # exposes pause toggle to debug-panel click handler
-            driver.start()
-        sim.run()
-    except Exception as e:
-        print(f"Error running simulator: {e}")
-        import traceback
-
-        traceback.print_exc()
-    finally:
-        if driver is not None:
-            driver.stop()
-        pygame.quit()
+        # Tear down the setup window before the drive builds its own (taller, panel-carved) window.
+        pygame.display.quit()
+        action = _run_drive(config)
+        if action != "home":
+            break  # "quit" → full exit; anything else is defensive
+        # "home": pygame / fonts / mixer are still alive (drive did display.quit only) → re-show setup.
+    pygame.quit()
 
 
 if __name__ == "__main__":

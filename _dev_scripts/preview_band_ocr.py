@@ -1,6 +1,6 @@
 """DEV preview — the persistent TIMS top band driven by the OCR debug-panel mock scenarios.
 
-Wires `setup_tims.band._render_topband` (status-driven) to the SAME mock `status` dicts that
+Wires `status_band.render` (status-driven) to the SAME mock `status` dicts that
 `preview_debug_panel.py` feeds the old `draw_debug_panel`, so the band can be iterated against
 realistic OCR states (boot / stopped / approaching / paused / fire). Lives under `_dev_scripts/`
 because it reuses `preview_debug_panel`'s mock OCR states — a dev-only fixture.
@@ -22,12 +22,13 @@ sys.path.insert(0, ".")
 
 import i18n  # noqa: E402
 from app_paths import project_root  # noqa: E402
-from setup_tims import band  # noqa: E402  (production package — dev → prod import is allowed)
+import status_band as band  # noqa: E402  (root module — the live OCR panel; dev preview reuses it)
+from setup_tims import dims  # noqa: E402  (setup-window dims — for the preview width)
 from preview_debug_panel import _STOPS, _MockState, _scenarios  # noqa: E402  (reuse the mock OCR states)
 
 _LANGS = ("en", "zh_HK", "zh_CN")
 FOOTER_H = 96
-W = band.SCREEN_W  # 730 — band spans the full app width
+W = dims.SCREEN_W  # 730 — preview the band at the full app width
 
 
 def _footer(surf, font, label, paused, lang):
@@ -52,7 +53,7 @@ def _live(status, paused, fire_ts):
 
 def _draw(window, footer_font, scenarios, idx, paused, lang, fire_ts):
     label, status, mock_state = scenarios[idx]
-    hits = band._render_topband(window.subsurface((0, 0, W, band.BAND_H)), _live(status, paused, fire_ts), mock_state, _STOPS)
+    hits = band.render(window.subsurface((0, 0, W, band.BAND_H)), _live(status, paused, fire_ts), mock_state, _STOPS)
     _footer(window.subsurface((0, band.BAND_H, W, FOOTER_H)), footer_font, label, paused, lang)
     return hits
 
@@ -87,7 +88,7 @@ def _save_montage(path, scenarios, label_font):
     for i, (label, status, mock_state) in enumerate(scenarios):
         y = i * row_h
         sc_paused = bool(status.get("paused")) if status else False
-        band._render_topband(surf.subsurface((0, y, W, band.BAND_H)), _live(status, sc_paused, time.time()), mock_state, _STOPS, force_flash_on=True)
+        band.render(surf.subsurface((0, y, W, band.BAND_H)), _live(status, sc_paused, time.time()), mock_state, _STOPS, force_flash_on=True)
         surf.blit(label_font.render(label, True, (205, 205, 210)), (12, y + band.BAND_H + 5))
     out = str(project_root() / path)
     pygame.image.save(surf, out)

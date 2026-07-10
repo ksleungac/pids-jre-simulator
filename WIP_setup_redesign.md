@@ -25,13 +25,16 @@ design + decisions until graduation, then dissolves into canonical homes.
   `v` / dots / colon), TIMS off-white.
 - Later: page 2 + page nav (not designed yet).
 
-## Persistent top band (= the OCR debug panel)
-Full-width (730px = main-app / setup width) near-black status strip, **persistent across all screens**
-(home, route-selection, …). It IS the OCR debug panel — the running app already carves a 730×
-`DEBUG_PANEL_HEIGHT` top strip when auto-input is on; this band graduates into that (draft height is a
-free choice, reconciles with `DEBUG_PANEL_HEIGHT` at graduation). Draft:
-`setup_redesign_draft._render_topband`. Mirrors the real TIMS top register; everything **except station
-names is i18n** (develop/preview in **zh_HK**).
+## Persistent top band (= the OCR debug panel) — GRADUATED to `status_band.py` (root), wired live
+Full-width near-black status strip, **persistent across all setup screens** AND the live in-drive OCR
+panel. It IS the OCR debug panel — promoted from the draft to **`status_band.py` at project root**
+(`render(surf, status, sim_state, stops)`), shared by `setup_tims` (status=None → placeholder) + `app.py`
+(live `auto_input_status`). Width = `surf.get_width()`; `constants.DEBUG_PANEL_HEIGHT` re-exports
+`status_band.BAND_H` (single source). Shared palette/chrome lives in `tims_chrome.py` (root); the
+setup-window dims (SCREEN_W/H) in `setup_tims/dims.py`. The [pause][save][home] cluster is click-wired in
+`app.py` (`_handle_band_click`): **home = stop PA + return to the setup screen** (`run()` → "home" →
+main.py setup↔drive loop), save = drive report (`auto_input.generate_report`), pause = auto-driver pause.
+Mirrors the real TIMS top register; everything **except station names is i18n** (develop/preview in zh_HK).
 
 Layout, left→right. **All three left rows bottom-align to the SAME row baselines as the readout** so the
 state column and the speed column line up row-for-row.
@@ -63,7 +66,7 @@ state column and the speed column line up row-for-row.
 - Likely-dropped debug detail: `badge_diff`, raw `_score` numbers, the literal "OCR" label.
 - Carried: pause, save-record(Report), inferred state, segment, played `N/M`, speed, limit, distance,
   stopping position, auto-played fire chip.
-- **DONE:** `_render_topband` is **status-driven** (`status` / `sim_state` / `stops`, auto_input shape)
+- **DONE:** `status_band.render` is **status-driven** (`status` / `sim_state` / `stops`, auto_input shape)
   + wired into `_dev_scripts/preview_band_ocr.py` (reuses `preview_debug_panel`'s mock scenarios; under
   `_dev_scripts/` so it may import the draft band — a root preview would trip the `_*/`-import linter).
   Implements badge-with-state, yellow flashing/auto-clearing message strips, pause-lights-when-paused.
@@ -127,8 +130,12 @@ Reached after route / diagram / station selection. Screen code **C07AA**. Mirror
   the cluster buttons (`bw × bh`, `OCR_BTN_NATIVE`) so the whole bottom row reads as one uniform button group.
 - **OCR buttons WIRED (2026-07-06):** `OCR自動報站起動` → consent gate (§ OCR consent) → launch config with
   `auto_input=True`; `手動報站起動` → manual launch config; `OCR自動報站設定` → settings page DIRECTLY (no consent).
-  KNOWN ISSUE: OCR launch crashes in the live `sim.run()` loop (auto_input debug-panel render likely; init/
-  start/dxcam verified clean headless) — needs the traceback.
+  **The old "OCR launch crashes in sim.run()" issue was in the RETIRED `auto_input.draw_debug_panel` path;
+  the live drive now renders the graduated `status_band.render` (app.py `_render_panel`), verified crash-free
+  across frames headless with the live status dict (2026-07-11). Resolved.**
+- **Current model shown in the C07AA table (2026-07-11):** the blank IRL 月台/platform row is repurposed to a
+  `列車型號` row showing the model in effect (override > route default > global default, e.g. `E235-1000`), drawn
+  dynamically from `_current_model_label()`. No IRL TIMS reference for this — a temporary home; revisit placement.
 
 ## Model picker (X00AA — 番台選択 / 列車型號) (2026-06-28)
 Reached from C07AA's **列車型號** button (the IRL 番線 platform slot, repurposed — we removed the real 番線,
@@ -146,8 +153,8 @@ no platform model). Mirrors IRL `tims_bandai_choice.png`.
 - **Override is session-persistent:** `pa_setting._model_override` (set on pick) overrides the route default
   in `_build_config`, surviving route changes within one app run. `model_select.run_on(screen, current)`
   returns the chosen key / None (ESC) / "home".
-- OPEN: whether to DISPLAY the current model on C07AA (recommended yes — compact, by the 列車型號 button —
-  awaiting user go).
+- DONE (2026-07-11): the current model is DISPLAYED on C07AA — as the `列車型號` table row (see § PA-setting),
+  not by the button. Temporary placement (no IRL reference); may relocate later.
 
 ## Font decision — Noto Sans (per-locale), AA-OFF native, no upscale  [LOCKED 2026-06-27]
 **Core insight that resolves the whole multi-session font hunt:** the TIMS / embedded-system "pixel
@@ -192,23 +199,37 @@ px and it reads as crisp single-stroke. Everything below follows from that one f
   `_noto_numbers.py` (numeral packer), `_gothic_compare.py` (font shortlist), `_noto_locale_check.py`
   (per-locale coverage); fonts in `_dev_scripts/_fonts_eval/`.
 
-## Tutorial screen (reached from the Tutorial card)
-- **Window-in-window master-detail.** LEFT: a column of vertically-stacked TIMS buttons (one per
-  feature tutorial), **4-char label on ONE line**. RIGHT: a recessed detail region that hosts the
-  selected tutorial. Pressing a left button switches which tutorial the region shows. Two features
-  today: **normal usage** + **OCR auto-PA** (more later).
-- **Active-tab indicator = lit vs unlit**, NOT yellow (yellow stays reserved for PRESSED). The
-  selected tab renders lit (normal blue); the others dim under a dark scrim ("unlit"). This is the
-  selected-vs-pressed resolution for a persistent tab selector.
-- **Path (a) — reuse the interactive walkthrough.** The "normal usage" tutorial reuses the EXISTING
-  `tutorial.py` interactive walkthrough (live 730×420 LCD + progress stepper + step side-panel), so the
-  detail region IS that ~1100×500 layout and the tab column slots to its left → a **wide window
-  (~1298×588)**. The inner tutorial chrome (progress / LCD / step panel) gets **reskinned to TIMS
-  fonts + buttons**. "OCR auto-PA" becomes a NEW walkthrough built the same way. (Rejected: a simpler
-  reskinned info panel — drops the hands-on press-cycle, which is the whole point.)
-- **OOBE shift** (see Page-1 Tutorial card): no more forced first-run launch; the card flashes until
-  first clicked.
-- Draft: `_dev_scripts/tutorial_redesign_draft.py` (shell + real-proportion block-out).
+## Tutorial screen (reached from the Tutorial card) — BUILT 2026-07-10/11
+**Design landed differently from the tab-shell plan below** (rejected mid-build: the wide ~1298×588
+master-detail window was awkward in the 730-wide band frame). Actual shape:
+- **A selection MENU, then the tutorial** (`setup_tims/tutorial_select.py`, C07AD). The 教學 card opens
+  `教學選擇` — a centered column of TIMS bevel buttons, one per feature tutorial (基本操作 / OCR自動報站).
+  Clicking one enters it DIRECTLY (no 設定 confirm — click commits, like model_select); 返回 / band Home
+  return. This replaces the persistent LEFT tab-column + lit/unlit tab indicator (no tab selector at all).
+- **基本操作 = the legacy `tutorial.py` walkthrough, reskinned + vertical-fit** (`setup_tims/tutorial_basic.py`).
+  `BasicTutorial(Tutorial)` SUBCLASSES the legacy tutorial and inherits the ENTIRE step machine (event
+  dispatch, press-cycle, progress-jump, click-to-jump, predicates, ActionFlow, skip handlers, per-step
+  text) UNCHANGED — overriding ONLY layout methods to REFLOW the wide (LCD-left + 300px panel-right)
+  layout VERTICALLY into the 730 band window: band → title (+ audio seek bar in the header) → live LCD
+  (native 730×420, unscaled so click-to-jump math survives) → labeled progress strip → step panel. Full
+  interactivity preserved. `tutorial.py` itself is LEFT INTACT (only the earlier font/AA/palette/button
+  reskin). The step-8 recap flattens its keycap list to fit; "press this button" prompts are the button
+  FLASH (waiting-state), not a text line.
+- **OCR自動報站 tutorial = the OCR consent view in read-only mode** (`ocr_setting.run_consent(read_only=True)`)
+  — the full how-it-works walkthrough with no accept gate.
+- **Beats:** page-entry load beat, yellow press beat on Back/Next/Skip, band-Home load beat. Band Home
+  bubbles STRAIGHT to the home menu (past the select page), consistent with every other page (§ Band Home).
+- **OOBE shift** (see Page-1 Tutorial card): no forced first-run launch; the 教學 card flashes
+  (normal↔waiting) until the first visit, which persists `oobe_completed` (`home._mark_oobe_done`). DONE
+  2026-07-11 — `main.py` skips the forced fullscreen tutorial under `--tims`.
+- Superseded draft: `_dev_scripts/tutorial_redesign_draft.py` (the tab-shell block-out; historical).
+
+### Band Home = straight home + load beat, EVERY page (2026-07-11)
+Every setup_tims page's band Home button returns to the HOME MENU (not one level up) with a yellow press +
+loading beat. Deep pages return the sentinel `"home"`, which parents bubble up (`route_select`/`model_select`
+→ `pa_setting` → home; `tutorial_basic` → `tutorial_select` → home). `ocr_setting` (both views) was the last
+holdout — added the beat + `"home"` return; `ensure_consent` splits the `"home"` bubble from its truthy
+accept path (else a band-Home return reads as consent-accepted).
 
 ## Press / transition model
 - **Yellow = pressed** (momentary feedback), never a persistent selected state.
@@ -238,7 +259,8 @@ px and it reads as crisp single-stroke. Everything below follows from that one f
 - `draw_tims_button` / `tims_button_size` — bevel + delegates label; reads `text_align` / `text_pad`.
 
 ## TIMS chrome style warehouse (BUILT 2026-07-06 — canonical: `conventions.md § UI code style`)
-**DONE:** `setup_tims/chrome.py` now holds the shared PALETTE + button presets (`BTN_BAR`/`BTN_LABEL`/
+**DONE:** `tims_chrome.py` (project root — promoted from `setup_tims/chrome.py` when the band graduated to
+`status_band.py`) holds the shared PALETTE + button presets (`BTN_BAR`/`BTN_LABEL`/
 `BTN_ACTION`/`BTN_STEP`) + `FONT_PX`; all setup_tims screens migrated (colors→tokens, recurring button
 dicts→presets), fixing 3 real color drifts. Revised from the plan below: palette went **big-bang** (drift
 was already shipped, so lazy would leave it forked); buttons/fonts stay lazy. Screen registry + `preset()`
@@ -279,10 +301,13 @@ the lead/interval steppers. Two views:
 - **Consent SPLIT from settings (2026-07-06).** Consent = a ONE-TIME GATE (`ensure_consent` → persists
   `settings.json "ocr_consent"`) in front of the **LAUNCH only** (`OCR自動報站起動`); the **`OCR自動報站設定`
   button opens the settings page DIRECTLY, no gate** (pressing "settings" and getting a consent read wrong).
-  Consent is later read-only from the home Tutorials button (`run_consent(read_only=True)`).
+  Consent is read-only from the 教學 → OCR自動報站 tutorial (`run_consent(read_only=True)`) — WIRED 2026-07-11
+  (§ Tutorial screen). Band Home there beats + bubbles straight home; the scroll-to-accept hint moved OUT of
+  the scroll box onto the fixed footer row (2026-07-11) — it was at the END of the scroll content, so "scroll
+  to accept" only appeared once already scrolled there.
   `ocr_launch_extras()` supplies the auto_input launch fields (`auto_input=True` + lead_m / interval_s).
 - STILL OPEN: caption `capture_interval` wording ("every 5s capture in-game HUD") is an i18n change awaiting
-  zh_CN confirm; the read-only Tutorials-button entry (needs the tutorial screen).
+  zh_CN confirm.
 
 ## Promotion to setup_tims/ package (2026-06-27)
 The three drafts graduated into a **production package `setup_tims/`** (per `/third-man` — a package,
@@ -315,9 +340,15 @@ rewired; linters green. (Refinement vs the original plan: fonts route through `i
 5. **Wire `main.py` to launch the `setup_tims/` flow.** DONE: the launch bridge (`--tims`, manual mode —
    see § "Launch bridge"); real i18n strings (`translations_app.json`, zh_CN user-confirmed) replacing the
    draft `*_BY_LANG` dicts; the model picker (§ "Model picker"); `--tims` sets its own 730×610 window.
-   STILL remaining: the **tutorial screen** (reskin `tutorial.py` inner chrome to TIMS + tab-shell +
-   OCR-auto-PA tab), the Tutorial-card flash + simplified OOBE, OCR-launch (自動放送設定 page + consent),
-   flip `--tims` to default once at parity.
+   DONE 2026-07-10/11: the **tutorial screen** (select-menu + vertical reskin — § Tutorial screen); the
+   **Tutorial-card flash + simplified OOBE** (`main.py` skips the forced fullscreen tutorial under `--tims`);
+   **OCR-launch** (自動放送設定 page + consent — the old crash was the retired debug panel, now on the graduated
+   band); the **model shown on C07AA**; **band Home → straight home + beat on every page**.
+   STILL remaining: **flip `--tims` to default once at parity** (the last gate — a shipping decision); the
+   game-pairing OOBE screenshots (user provides); the deferred through-service / EN-data items.
+   **Setup-redesign feature parity with the classic `setup.py` is now reached** (audited 2026-07-11: route
+   select + start station + model pick + OCR consent/settings/launch + update hint + language + launch config,
+   which also adds `start_idx`; only classic-only keyboard nav is intentionally dropped for the console style).
 6. **Codify as this doc dissolves** — `conventions.md` (TIMS chrome = Noto, AA-OFF native, no upscale,
    ink-based line height; the full-width/half-width numeral convention; the `widgets.py` boundary +
    font-via-i18n); DROP the now-stale Ark / k=2-ceiling / supersample / trim-ink rules; fix the
@@ -346,7 +377,7 @@ rewired; linters green. (Refinement vs the original plan: fonts route through `i
 **NEXT:** finish draft tuning → wire `setup.py` (step 5) → reconcile widgets.py k-machinery + the conventions/TODO codification (step 6).
 
 ## Integration progress — OCR band refinement (2026-06-27, cont.)
-Iterated `_render_topband` against the OCR mock scenarios via `_dev_scripts/preview_band_ocr.py` (wires the
+Iterated `status_band.render` against the OCR mock scenarios via `_dev_scripts/preview_band_ocr.py` (wires the
 draft band to `preview_debug_panel`'s status dicts; `1-6` scenario, `L` locale, `P` pause).
 
 **DONE (all in the DRAFT + dev preview):**

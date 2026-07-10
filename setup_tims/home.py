@@ -31,9 +31,10 @@ from widgets import (
     press_transition,
 )
 
-from . import band
-from . import chrome
-from .band import BAND_H, BG_COLOR, SCREEN_H, SCREEN_W
+import status_band as band
+import tims_chrome as chrome
+from status_band import BAND_H
+from .dims import BG_COLOR, SCREEN_H, SCREEN_W
 
 # TIMS chrome face = Noto Sans, per-locale, AA-OFF at native px, NO upscale (WIP § Font decision).
 # CHROME = big chrome labels (lang knobs / action cards / version). Resolved via i18n.pixel_font_for_lang.
@@ -41,9 +42,27 @@ CHROME_NATIVE = 22  # big chrome labels — render Noto AA-off at this px (<=40 
 
 ACTIVE_LANG = "zh_HK"  # UI language shown — drives the pressed knob + big-button chrome
 
+# OOBE hook: while a first-run user hasn't visited the tutorial, the 教學 card FLASHES (normal↔waiting,
+# NOT yellow — yellow is reserved for PRESSED) to hint a click. Replaces the old forced first-run
+# fullscreen tutorial. Set from settings at run() start; cleared + persisted the moment the card is
+# clicked (flip on ENTERING). White "waiting" flash = the same "actionable" idiom as the OK/Next flashes.
+OOBE_PENDING = False
+OOBE_FLASH_MS = 500  # half-period of the card flash
+
 
 def pixel_font(lang):
     return i18n.pixel_font_for_lang(lang, CHROME_NATIVE)
+
+
+def _mark_oobe_done():
+    """Stop the 教學-card flash and persist oobe_completed=True (idempotent). Called on the first
+    tutorial-card click — the OOBE is 'complete' once the user has been guided into the tutorial."""
+    global OOBE_PENDING
+    OOBE_PENDING = False
+    s = i18n.load_settings()
+    if not s.get("oobe_completed"):
+        s["oobe_completed"] = True
+        i18n.save_settings(s)
 
 
 # fmt: off
@@ -168,7 +187,7 @@ def render_menu(surf):
     keyed by lang code."""
     surf.fill(BG_COLOR)
     band.ACTIVE_LANG = ACTIVE_LANG  # carry the UI language onto the shared band
-    band._render_topband(surf)  # persistent black status band across the top
+    band.render(surf)  # persistent black status band across the top
 
     # ── version tag, bottom-left. NORMAL: i18n "Version" word + "054" TIMS numerals. When a newer
     #    release exists the tag ALTERNATES (blink) with a SAME-STYLE hint — i18n update word + the new
@@ -225,22 +244,27 @@ def render_menu(surf):
     big_x0 = (SCREEN_W - big_row_w) // 2
     big_y = (SCREEN_H - BIG_H) // 2
     action_rects = {}
+    oobe_flash = OOBE_PENDING and (pygame.time.get_ticks() // OOBE_FLASH_MS) % 2 == 0
     for i, label in enumerate(actions):
         x = big_x0 + i * (BIG_W + BIG_GAP)
         rect = pygame.Rect(x, big_y, BIG_W, BIG_H)
-        draw_tims_button(surf, rect, label, font=action_font, t=at)
+        # OOBE: flash the 教學 card (normal↔waiting) until the first visit, to pull a new user in
+        state = "waiting" if (oobe_flash and ACTION_IDS[i] == "tutorial") else "normal"
+        draw_tims_button(surf, rect, label, font=action_font, t=at, state=state)
         action_rects[ACTION_IDS[i]] = rect
     return action_rects, action_font, at, hint_rect, lang_rects
 
 
 def _launch_tutorial():
-    """Open the green TIMS tutorial screen (resizes the display to its window), run it to
-    ESC/close, then hand control back so the menu loop can restore its own size."""
-    from tutorial_tims import WINDOW_SIZE, TimsTutorial
+    """Open the tutorial-selection page (教學選擇) — a menu of feature tutorials; clicking one enters it
+    directly. Same-size band window; runs until the user returns (返回 / band Home / ESC), then hands
+    control back so the menu loop restores its own window."""
+    from . import tutorial_select
 
-    screen = pygame.display.set_mode(WINDOW_SIZE)
-    pygame.display.set_caption("TIMS tutorial (green build)")
-    TimsTutorial(screen).run()
+    tutorial_select.ACTIVE_LANG = ACTIVE_LANG  # carry the menu's UI language into the page
+    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
+    pygame.display.set_caption("TIMS tutorial select")
+    tutorial_select.run_on(screen)
 
 
 def _launch_pa_setting():
@@ -259,7 +283,8 @@ def run(screen):
     """Production menu loop on an EXISTING ``screen``. Returns a LAUNCH CONFIG dict when the user commits
     a route and 起動s in the PA-setting flow (bubbled up from pa_setting.run_on); None on quit / ESC. The
     caller owns the pygame lifecycle (does NOT pygame.quit() here — main.py hands off to PASimulator)."""
-    global ACTIVE_LANG
+    global ACTIVE_LANG, OOBE_PENDING
+    OOBE_PENDING = not i18n.load_settings().get("oobe_completed", False)  # first-run → flash 教學 until visited
     clock = pygame.time.Clock()
     action_rects, action_font, action_t, hint_rect, lang_rects = render_menu(screen)
     while True:
@@ -316,6 +341,8 @@ def run(screen):
                             if isinstance(cfg, dict):
                                 return cfg  # 起動 committed → bubble the launch config up to main.py
                         else:
+                            if OOBE_PENDING:  # first tutorial visit → stop the flash + persist (flip on ENTERING)
+                                _mark_oobe_done()
                             _launch_tutorial()
                         # the sub-screen owned the display — restore the menu window + caption.
                         screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))

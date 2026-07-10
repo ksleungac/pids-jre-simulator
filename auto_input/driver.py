@@ -423,8 +423,25 @@ def _render_report_async(log_path: Path) -> None:
         print(f"[Drive recorder] Report generation failed: {e}")
 
 
+def generate_report(sim) -> None:
+    """Kick off async HTML drive-report generation from the sim's live JSONL log. The migrated
+    Report control — called by the status band's Save button (app.py). No-op (with a note) when no
+    drive log is open yet."""
+    log_path = getattr(sim, "drive_log_path", None)
+    if log_path is None:
+        print("[Drive recorder] No drive log open yet — wait for the AutoDriver to capture some samples.")
+        return
+    print(f"[Drive recorder] Generating report from {log_path.name} ...")
+    threading.Thread(target=_render_report_async, args=(log_path,), daemon=True).start()
+
+
+# NOTE: draw_debug_panel + handle_panel_click are SUPERSEDED for the live path — app.py now renders the
+# shared TIMS status band (status_band.render) and dispatches its clicks itself (_handle_band_click).
+# These two are retained ONLY for the legacy dev preview harness (preview_debug_panel.py /
+# _dev_scripts/preview_panel.py, which also host the mock OCR fixtures the band preview reuses). Don't
+# flag as dead; remove when those preview tools are retired.
 def handle_panel_click(sim, pos: tuple[int, int]) -> bool:
-    """Dispatch a MOUSEBUTTONDOWN that landed inside the debug panel.
+    """Dispatch a MOUSEBUTTONDOWN that landed inside the debug panel. LEGACY dev-preview only (see NOTE).
 
     Returns True if a button absorbed the click (caller can stop propagating).
     """
@@ -803,6 +820,11 @@ class AutoDriver:
     # lead bump (see LONG_APPROACH_PA_SEC). Probed once from audio headers on
     # thread start; empty until then. Looked up per-cycle by _lead_for.
     _long_approach: set = field(default_factory=set, init=False)
+    # DXGI camera created in _run; released in stop() so a re-entered drive (band Home →
+    # setup → new AutoDriver) rebuilds a FRESH duplicator. dxcam.create() returns the stale
+    # cached singleton for a (device, output, backend) tuple UNLESS the prior instance is
+    # is_released — so releasing on teardown is what lets the next drive's OCR arm at all.
+    _camera: Optional["dxcam.DXCamera"] = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         self._detector = _Detector(arrival_lead_m=self.lead_m)
@@ -845,6 +867,15 @@ class AutoDriver:
         if self._thread is not None:
             self._thread.join(timeout=2.0)
             self._thread = None
+        # Release the DXGI camera (idempotent) so the next drive rebuilds a fresh duplicator —
+        # without this, dxcam.create() hands back the stale cached singleton and OCR never arms
+        # on any drive after the first. Runs after the join, so the capture thread is dead.
+        if self._camera is not None:
+            try:
+                self._camera.release()
+            except Exception as e:
+                print(f"[AutoDriver] camera release failed: {e}")
+            self._camera = None
 
     def _run(self) -> None:
         print("[AutoDriver] Initializing dxcam...")
@@ -852,6 +883,7 @@ class AutoDriver:
         if camera is None:
             print("[AutoDriver] dxcam.create() returned None — DXGI capture unavailable. Auto-driver disabled.")
             return
+        self._camera = camera  # tracked so stop() can release it (see the _camera field note)
         # Resolution gate. HUD bboxes scale per ResolutionProfile; templates
         # reused across resolutions via NN-resize in compare(). Probe desktop
         # dims → PROFILES.get((w,h)) → fail loud if unsupported so user sees

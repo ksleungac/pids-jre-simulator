@@ -25,6 +25,8 @@ from app_paths import project_root
 from displays.train_models.e235_1000 import S_HEIGHT, S_WIDTH
 from widgets import _TUNEABLES_TIMS_BUTTON, draw_tims_button, press_transition
 
+import tims_chrome as chrome  # shared TIMS palette + button-preset warehouse (root module)
+
 # fmt: off
 # ── tuneable params (window / layout) ───────────────────────────────────────
 PROGRESS_H = 64                                   # top progress strip (stepper + labels)
@@ -36,17 +38,19 @@ WINDOW_W, WINDOW_H = LCD_W + SIDE_W, PROGRESS_H + LCD_H + LCD_SLACK_H   # window
 PANEL_X, PANEL_Y = LCD_W, PROGRESS_H              # side panel origin
 PANEL_W, PANEL_H = SIDE_W, WINDOW_H - PROGRESS_H
 
-# Palette — mirrors picker / setup chrome (lifted slate; high luminance contrast).
-BG_COLOR = (62, 68, 80)
-PANEL_BG = (54, 60, 72)                           # slightly darker than window bg
-TEXT_COLOR = (240, 242, 248)
-DIM_COLOR = (175, 182, 195)
+# Palette — TIMS chrome tokens (aligned with the OCR tutorial + setup_tims screens via tims_chrome).
+# Backgrounds + ink route through the warehouse; the accent/progress hues stay local for now (a
+# separate "drop the green" pass, since TIMS has no green CTA — the lit button carries emphasis).
+BG_COLOR = chrome.BG                               # slate window background
+PANEL_BG = chrome.PANEL_BG                         # near-black side panel — matches the OCR reading panel
+TEXT_COLOR = chrome.INK                            # bright white body ink
+DIM_COLOR = chrome.DIM                             # dim secondary text
 ACCENT_COLOR = (96, 168, 84)                      # completed phase / primary button
 ACCENT_BRIGHT = (132, 212, 110)                   # current-step outer ring
 BTN_BG = (88, 96, 112)
 BTN_BG_DIM = (70, 76, 90)
 BTN_BORDER = (118, 126, 142)
-PROGRESS_BG = (44, 49, 60)
+PROGRESS_BG = chrome.PANEL_BG                      # near-black top strip — matches the status band
 LINE_DIM = (76, 84, 100)                          # incomplete progress-line segments
 DOT_FUTURE = (70, 76, 92)                         # fill for not-yet-reached phase dots
 
@@ -54,12 +58,12 @@ DOT_FUTURE = (70, 76, 92)                         # fill for not-yet-reached pha
 # lit/unlit = actionable/not language (shared with the shell tabs) replaces the
 # old green-primary concept — TIMS has no green CTA; the lit button IS the
 # emphasis. A disabled button draws normal then dims under this scrim.
-ARK_NATIVE = 12                                   # native px grid for the pixel face (upscaled by k)
+BTN_NATIVE = chrome.FONT_PX["button"]             # warehouse button-label px (Noto AA-off native, k=1)
 BTN_DISABLED_SCRIM = (40, 44, 54, 150)            # "unlit" overlay on a non-actionable button
 # fmt: on
 
-# Centered, k=2 pixel label inside the bevel (vs the tabs' wider footprint).
-_TUT_BTN_TUNEABLES = {**_TUNEABLES_TIMS_BUTTON, "text_align": "center", "text_pad": 8, "text_max_k": 2}
+# Panel buttons use the shared warehouse preset (center-natural label, AA-off native k=1).
+_TUT_BTN_TUNEABLES = chrome.BTN_LABEL
 
 
 # ── fonts ───────────────────────────────────────────────────────────────────
@@ -74,52 +78,27 @@ _TUT_BTN_TUNEABLES = {**_TUNEABLES_TIMS_BUTTON, "text_align": "center", "text_pa
 # and baseline-aligns the runs.
 
 
+# TIMS reskin step 1 — TYPEFACE swap only. All three chrome-font helpers now route through the
+# per-locale Noto Sans face (i18n.pixel_font_for_lang), the SAME face the OCR tutorial + every
+# setup_tims screen use. The old bold/medium/heavy weight kwargs are accepted-but-ignored: the TIMS
+# chrome face is single-weight (Subset OTF Thin); emphasis comes from colour/lit-state, not weight.
+# AA, palette, buttons, and layout are intentionally untouched at this step — this is fonts only, so
+# the fit (Noto's taller leading vs Helvetica) can be judged before any structural refit.
 def _font_helv(size: int, *, bold: bool = False, medium: bool = False) -> pygame.font.Font:
-    """Cached HelveticaNeue from the bundled OTFs. ``medium`` picks the Medium
-    weight (used for body); ``bold`` picks Bold (headers, button labels);
-    default is Roman (light reading weight)."""
-    if bold:
-        fname = "HelveticaNeue-Bold.otf"
-    elif medium:
-        fname = "HelveticaNeue-Medium.otf"
-    else:
-        fname = "HelveticaNeue-Roman.otf"
-    key = ("helv", fname, size)
-    cached = _FONT_CACHE.get(key)
-    if cached is None:
-        cached = pygame.font.Font(str(project_root() / "fonts" / fname), size)
-        _FONT_CACHE[key] = cached
-    return cached
+    """Latin chrome face → NotoSansJP (locale-independent Latin; the OCR tutorial's "en" face)."""
+    return i18n.pixel_font_for_lang("en", size)
 
 
 def _font_shingo(size: int, *, heavy: bool = False) -> pygame.font.Font:
-    """Cached ShinGoPr6N for embedded Japanese glyphs."""
-    fname = "ShinGoPr6N-Heavy.otf" if heavy else "ShinGoPr6N-Medium.otf"
-    key = ("shingo", fname, size)
-    cached = _FONT_CACHE.get(key)
-    if cached is None:
-        cached = pygame.font.Font(str(project_root() / "fonts" / fname), size)
-        _FONT_CACHE[key] = cached
-    return cached
+    """Embedded-Japanese face → NotoSansJP (renders the JP kanji/kana on the panel, 国府津 / 鴨宮)."""
+    return i18n.pixel_font_for_lang("en", size)
 
 
 def _font_cjk(size: int, *, heavy: bool = False) -> pygame.font.Font:
-    """Language-aware CJK font for chrome rendering — bundled OTFs only.
-
-    zh_CN routes to Noto Sans CJK SC (always Bold — Regular reads thinner
-    than ShinGoPr6N Medium at the same point size, and body text needs
-    strokes thick enough to scan). ShinGoPr6N is built from Japanese JIS
-    and tofus Simplified-only glyphs (开, 进, 这).
-
-    Other languages keep ShinGoPr6N: Japanese forms render correctly for
-    embedded JP kanji on the LCD line (国府津, 鴨宮); Traditional Chinese
-    (zh-HK) chars overlap with JIS so render fine."""
-    if i18n.current_lang() == "zh_CN":
-        return i18n.font_for_lang("zh_CN", size, bold=True)
-    return _font_shingo(size, heavy=heavy)
-
-
-_FONT_CACHE: dict = {}
+    """Language-aware CJK chrome face → the active locale's Noto sibling (en→JP, zh_HK→TC, zh_CN→SC),
+    matching how the OCR tutorial resolves localized chrome. Replaces the ShinGoPr6N / Noto-SC split
+    (ShinGo tofu'd Simplified-only glyphs); the per-locale Noto face covers each script natively."""
+    return i18n.pixel_font_for_lang(i18n.current_lang(), size)
 
 
 def _is_cjk(ch: str) -> bool:
@@ -288,11 +267,11 @@ def _render_label_script(text: str, latin_font: pygame.font.Font, cjk_font: pyga
     pass the right effective-ascent to line-alignment when embedding the
     label into a chip."""
     if not text:
-        return latin_font.render("", True, color), latin_font.get_ascent()
+        return latin_font.render("", False, color), latin_font.get_ascent()
     parts: list[tuple[pygame.Surface, int]] = []
     for kind, seg in _split_script(text):
         f = cjk_font if kind == RUN_CJK else latin_font
-        parts.append((f.render(seg, True, color), f.get_ascent()))
+        parts.append((f.render(seg, False, color), f.get_ascent()))
     total_w = sum(s.get_width() for s, _ in parts)
     max_h = max(s.get_height() for s, _ in parts)
     max_ascent = max(a for _, a in parts)
@@ -310,16 +289,16 @@ def _render_mixed(text: str, latin_font: pygame.font.Font, cjk_font: pygame.font
     composite horizontally, baseline-aligned via ascent.
     """
     if not text:
-        return latin_font.render("", True, color)
+        return latin_font.render("", False, color)
     rendered: list[tuple[pygame.Surface, int]] = []  # (surface, ascent_for_alignment)
     for kind, seg in _split_runs(text):
         if kind in (RUN_KEYCAP, RUN_BUTTON):
             cap, cap_ascent = _render_keycap(seg, latin_font, cjk_font, kind=kind)
             rendered.append((cap, cap_ascent))
         elif kind == RUN_CJK:
-            rendered.append((cjk_font.render(seg, True, color), cjk_font.get_ascent()))
+            rendered.append((cjk_font.render(seg, False, color), cjk_font.get_ascent()))
         else:
-            rendered.append((latin_font.render(seg, True, color), latin_font.get_ascent()))
+            rendered.append((latin_font.render(seg, False, color), latin_font.get_ascent()))
     total_w = sum(s.get_width() for s, _ in rendered)
     max_h = max(s.get_height() for s, _ in rendered)
     max_ascent = max(a for _, a in rendered)
@@ -979,7 +958,7 @@ class Tutorial:
         Next/Back button, then blank ONLY the side panel (the part that changes between steps) before
         the new step's panel renders. Snappier than the full-screen nav beat — only a sub-region
         changes, so the LCD + progress strip stay put."""
-        btn_font = i18n.pixel_font_for_lang(i18n.current_lang(), ARK_NATIVE)
+        btn_font = i18n.pixel_font_for_lang(i18n.current_lang(), BTN_NATIVE)
         panel_rect = pygame.Rect(PANEL_X, PANEL_Y, PANEL_W, PANEL_H)
         # render_frame() renders to self.screen and takes no surface arg; press_transition calls
         # redraw(surface), so swallow it (surface IS self.screen here).
@@ -1138,7 +1117,7 @@ class Tutorial:
                 label_color = DIM_COLOR
 
             pygame.draw.circle(self.screen, fill, (cx, circle_y), circle_r)
-            num_img = num_font.render(str(i + 1), True, num_color)
+            num_img = num_font.render(str(i + 1), False, num_color)
             self.screen.blit(num_img, (cx - num_img.get_width() // 2, circle_y - num_img.get_height() // 2))
 
             label_img = _render_mixed(i18n.t(key), label_font, label_cjk, label_color)
@@ -1191,7 +1170,7 @@ class Tutorial:
         # right above the primary row. On the wrap-up step the skip-tutorial
         # row isn't rendered, so primary drops to the bottom. TIMS bevel buttons
         # take one pixel face (mono Ark covers Latin + zh-HK/zh-CN labels).
-        btn_font = i18n.pixel_font_for_lang(i18n.current_lang(), ARK_NATIVE)
+        btn_font = i18n.pixel_font_for_lang(i18n.current_lang(), BTN_NATIVE)
         btn_w = PANEL_W - 2 * panel_pad
         bottom_y = PANEL_Y + PANEL_H - panel_pad
         if self.current_step == len(STEPS):
@@ -1288,8 +1267,8 @@ class Tutorial:
                         pygame.Rect(seek_rect.x, seek_rect.y, fill_w, seek_rect.h),
                         border_radius=3,
                     )
-                elapsed_img = time_font.render(_fmt_time(pos), True, DIM_COLOR)
-                total_img = time_font.render(_fmt_time(dur), True, DIM_COLOR)
+                elapsed_img = time_font.render(_fmt_time(pos), False, DIM_COLOR)
+                total_img = time_font.render(_fmt_time(dur), False, DIM_COLOR)
                 self.screen.blit(elapsed_img, (seek_rect.x, seek_rect.bottom + label_gap))
                 self.screen.blit(total_img, (seek_rect.right - total_img.get_width(), seek_rect.bottom + label_gap))
 

@@ -27,15 +27,17 @@ import i18n
 from app_paths import project_root
 from widgets import draw_lowres_number, draw_tims_button, lowres_text_size, press_transition, tims_button_size
 
-from . import band, chrome
+import status_band as band
+import tims_chrome as chrome
+from . import dims
 
 ACTIVE_LANG = "zh_HK"  # develop/preview in zh_HK (chrome is i18n)
 OK_LABEL = "明白"  # accept button (zh_HK draft → i18n later); 2-char, justify-split like other pages' 返回/設定
 
 # fmt: off
 # ── layout tuneables ──────────────────────────────────────────────────────────
-SCREEN_W, SCREEN_H = band.SCREEN_W, band.SCREEN_H
-BG_COLOR           = band.BG_COLOR
+SCREEN_W, SCREEN_H = dims.SCREEN_W, dims.SCREEN_H
+BG_COLOR           = dims.BG_COLOR
 
 CONSENT_CODE       = "C07AG"              # screen code (placeholder — droppable / correct to real TIMS)
 SETTINGS_CODE      = "C07AH"
@@ -208,9 +210,7 @@ def _build_content(w):
     bullets("setup.ocr_disclaimer.consent")
     y += 2
     bullets("setup.ocr_disclaimer.privacy")
-    y += 4
-    chrome.blit_lowres(surf, i18n.t("setup.ocr_disclaimer.scroll_hint"), x, y, cap_font, DIM, 1)
-    y += lowres_text_size("永", cap_font, 1, 0)[1] + CONTENT_PAD
+    y += 4 + CONTENT_PAD  # bottom padding — the scroll-to-accept hint moved OUT of the scroll box (see render_consent)
 
     return surf, y
 
@@ -669,7 +669,7 @@ def render_consent(screen, scroll_y, read_only=False):
     (from Tutorials) the footer shows a single 返回 and there's no accept gate."""
     screen.fill(BG_COLOR)
     band.ACTIVE_LANG = ACTIVE_LANG
-    band_hits = band._render_topband(screen)
+    band_hits = band.render(screen)
     chrome.title_row(screen, CONSENT_CODE, i18n.t("setup.ocr_disclaimer.title"), ACTIVE_LANG)
 
     # Footer button height drives the panel bottom, so the gap panel→button and button→screen-bottom
@@ -707,6 +707,11 @@ def render_consent(screen, scroll_y, read_only=False):
     ok_rect = pygame.Rect(SCREEN_W - PANEL_X - ow, fy, ow, oh)
     cancel_rect = pygame.Rect(ok_rect.left - 10 - cw, fy, cw, ch)  # both hug the right (IRL 取消/設定 pair)
     draw_tims_button(screen, cancel_rect, i18n.t("setup.ocr_disclaimer.cancel"), font=btn_font, t=_FOOT_T)
+    if not ok_ready:  # scroll-to-accept hint — OUTSIDE the scroll box (footer-left), always visible while the OK gate is locked
+        hint_font = i18n.pixel_font_for_lang(ACTIVE_LANG, CAP_NATIVE)
+        hint = i18n.t("setup.ocr_disclaimer.scroll_hint")
+        hh = lowres_text_size(hint, hint_font, 1, 0)[1]
+        chrome.blit_lowres(screen, hint, PANEL_X, fy + (foot_h - hh) // 2, hint_font, AMBER, 1)
     if ok_ready:  # reached the bottom → flash lit↔normal to hint the user can proceed
         lit = (pygame.time.get_ticks() // 450) % 2 == 0
         draw_tims_button(screen, ok_rect, OK_LABEL, font=btn_font, t=_FOOT_T, state="waiting" if lit else "normal")
@@ -716,7 +721,8 @@ def render_consent(screen, scroll_y, read_only=False):
 
 
 def run_consent(screen, read_only=False):
-    """Run the consent view. Returns True if accepted (or read_only closed), False if cancelled/Home."""
+    """Run the consent view. Returns True if accepted (or read_only OK-closed), "home" if the band Home
+    button was pressed (caller bubbles the return all the way to the home menu), False if cancelled/ESC."""
     clock = pygame.time.Clock()
     scroll_y = 0
     while True:
@@ -732,8 +738,19 @@ def run_consent(screen, read_only=False):
             elif event.type == pygame.MOUSEWHEEL:
                 scroll_y = max(0, min(scroll_y - event.y * 40, max_scroll))
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if band_hits["home"].collidepoint(event.pos):
-                    return False
+                if band_hits["home"].collidepoint(event.pos):  # band Home → press + load beat → bubble home
+                    press_transition(
+                        screen,
+                        rect=band_hits["home"],
+                        label=i18n.t("setup_tims.band.home"),
+                        font=i18n.pixel_font_for_lang(ACTIVE_LANG, band.BAND_BTN_TEXT_NATIVE),
+                        t=band._BAND_BTN_TUNEABLES,
+                        redraw=lambda s: render_consent(s, scroll_y, read_only),
+                        blank_color=BG_COLOR,
+                        blank_ms=450,
+                        blank_rect=pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H),
+                    )
+                    return "home"
                 if read_only and ok_rect.collidepoint(event.pos):
                     return True
                 if not read_only and cancel_rect.collidepoint(event.pos):
@@ -792,7 +809,7 @@ def render_settings(screen):
     """Draw the OCR settings (steppers) view; return hit-rects."""
     screen.fill(BG_COLOR)
     band.ACTIVE_LANG = ACTIVE_LANG
-    band_hits = band._render_topband(screen)
+    band_hits = band.render(screen)
     chrome.title_row(screen, SETTINGS_CODE, "OCR自動報站設定", ACTIVE_LANG)  # zh_HK draft title → i18n later
 
     y = band.BAND_H + 90
@@ -815,7 +832,8 @@ def render_settings(screen):
 
 
 def run_settings(screen):
-    """Run the OCR settings (steppers) view until Back / Home. Persists on exit."""
+    """Run the OCR settings (steppers) view until Back / Home. Persists on exit. Returns "home" on band
+    Home (caller bubbles to the home menu), None on Back / ESC (back one level to the pa-setting page)."""
     global _lead_m, _interval_s
     _load_state()
     clock = pygame.time.Clock()
@@ -832,9 +850,23 @@ def run_settings(screen):
                 _save_state()
                 return
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if hits["home"].collidepoint(event.pos) or hits["back"].collidepoint(event.pos):
+                if hits["home"].collidepoint(event.pos):  # band Home → press + load beat → bubble home
+                    press_transition(
+                        screen,
+                        rect=hits["home"],
+                        label=i18n.t("setup_tims.band.home"),
+                        font=i18n.pixel_font_for_lang(ACTIVE_LANG, band.BAND_BTN_TEXT_NATIVE),
+                        t=band._BAND_BTN_TUNEABLES,
+                        redraw=lambda s: render_settings(s),
+                        blank_color=BG_COLOR,
+                        blank_ms=450,
+                        blank_rect=pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H),
+                    )
                     _save_state()
-                    return
+                    return "home"
+                elif hits["back"].collidepoint(event.pos):  # 戻る → back one level (to pa-setting), no bubble
+                    _save_state()
+                    return None
                 elif hits["lead_minus"].collidepoint(event.pos):
                     _lead_m = max(_LEAD_MIN, _lead_m - _LEAD_STEP)
                 elif hits["lead_plus"].collidepoint(event.pos):
@@ -852,10 +884,17 @@ def consent_given():
 
 def ensure_consent(screen):
     """The gate the pa-setting OCR buttons call. If consent already given → True immediately. Else show
-    the consent view; on accept, persist ocr_consent=True and return True; on cancel/Home return False."""
+    the consent view; on accept, persist ocr_consent=True and return True; band Home returns "home" (the
+    caller bubbles the return to the home menu); cancel/ESC returns False.
+
+    NOTE: "home" is truthy — callers MUST test it explicitly BEFORE any `if ensure_consent(...):`
+    truthy check, else a band-Home return is mis-read as consent-accepted."""
     if consent_given():
         return True
-    if run_consent(screen, read_only=False):
+    res = run_consent(screen, read_only=False)
+    if res == "home":
+        return "home"
+    if res:
         s = i18n.load_settings()
         s["ocr_consent"] = True
         i18n.save_settings(s)

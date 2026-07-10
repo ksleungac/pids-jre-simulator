@@ -14,6 +14,8 @@ from constants import DEBUG_PANEL_HEIGHT, FRAME_RATE, KEY_REPEAT_DELAY, TIME_SCA
 from audio import AudioPlayer
 from displays.train_models import get_train_model
 from displays.utils import draw_text
+import i18n
+import status_band
 
 
 class AppState:
@@ -219,6 +221,14 @@ class PASimulator:
 
         self.running = True
 
+        # How run() exits: "quit" (window close / ESC → full app exit) or "home" (band Home
+        # pressed → stop PA + return to the setup screen). main.py reads the return of run().
+        self.exit_action: str = "quit"
+
+        # {home/save/pause: Rect} from the status band's last render — the run-loop click handler
+        # hit-tests against these. Empty until the first _render_panel (boot draw sets it).
+        self._band_hits: dict = {}
+
         # Set by an external auto-input driver (auto_input.AutoDriver running in a
         # background thread) to request a PA fire from the main thread. The input
         # loop checks this alongside keyboard.is_pressed("page down") and resets
@@ -394,31 +404,49 @@ class PASimulator:
                     and self.debug_surface is not None
                     and event.pos[1] < self.debug_surface.get_height()
                 ):
-                    # Click landed inside the debug panel area — forward to the
-                    # auto-input panel's click dispatcher (handles the Report
-                    # button + any future panel-resident widgets).
-                    from auto_input import handle_panel_click  # local import: defer dxcam pull
-
-                    handle_panel_click(self, event.pos)
+                    # Click inside the status band → its control cluster (pause / save / home).
+                    self._handle_band_click(event.pos)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     # Click below the debug panel (or anywhere when no panel)
                     # — try click-to-jump on the lower LCD.
                     self._handle_lcd_click(event.pos)
 
-        self.cleanup()
+        # "home" keeps pygame/font/mixer alive so main.py can re-enter setup; "quit" tears it all down.
+        self.cleanup(full_quit=(self.exit_action != "home"))
+        return self.exit_action
 
     def _render_panel(self) -> None:
-        """Hand the debug sub-surface to the auto-input subsystem for rendering.
+        """Hand the debug sub-surface to the TIMS status band for rendering.
 
-        PASimulator owns the window allocation; the auto_input module owns all
-        panel rendering logic, layout, fonts, and color choices. The simulator
-        is a render target, nothing more. No-op when auto_input is off.
+        PASimulator owns the window allocation; ``status_band`` owns all panel
+        rendering (layout, fonts, colors) — same hand-off contract the old
+        ``auto_input.draw_debug_panel`` had, now the shared band. The band's
+        returned {home/save/pause} hit-rects are stashed for the run-loop click
+        handler. No-op when auto_input is off.
         """
         if not self.auto_input or self.debug_surface is None:
             return
-        from auto_input import draw_debug_panel  # local import: avoid pulling dxcam when auto_input=False
+        status_band.ACTIVE_LANG = i18n.current_lang()  # band chrome follows the user's UI language
+        self._band_hits = status_band.render(self.debug_surface, status=self.auto_input_status, sim_state=self.state, stops=self.stops)
 
-        draw_debug_panel(self.debug_surface, self.auto_input_status, self.state, self.stops)
+    def _handle_band_click(self, pos) -> None:
+        """Dispatch a click inside the status band's control cluster (hit-rects from the last render):
+        Pause toggles the auto-driver, Save generates the drive report, Home stops PA + returns to the
+        setup screen (run() exits "home" → main.py re-shows setup)."""
+        hits = self._band_hits
+        home, pause, save = hits.get("home"), hits.get("pause"), hits.get("save")
+        if home is not None and home.collidepoint(pos):
+            self.exit_action = "home"
+            self.running = False
+        elif pause is not None and pause.collidepoint(pos):
+            driver = self.auto_driver
+            if driver is not None:
+                driver.paused = not driver.paused
+                print(f"[AutoDriver] {'paused' if driver.paused else 'resumed'} via band button")
+        elif save is not None and save.collidepoint(pos):
+            from auto_input import generate_report  # local import: defer dxcam pull
+
+            generate_report(self)
 
     # ──────────────────────────── input handling ────────────────────────────
     def _click_target(self, lcd_x: int, lcd_y: int) -> Optional[int]:
@@ -832,11 +860,16 @@ class PASimulator:
             self.state.curr_stop, self.state.cnt_pa, at_station=self.state.at_station, cnt_pa_at_station=self.state.cnt_pa_at_station
         )
 
-    def cleanup(self) -> None:
-        """Clean up resources."""
+    def cleanup(self, full_quit: bool = True) -> None:
+        """Clean up resources. ``full_quit`` True → pygame.quit() (full app exit). False → tear down
+        only the drive window (pygame.display.quit()), keeping pygame / fonts / mixer alive so the
+        caller can re-enter the setup screen (the band Home path)."""
         if hasattr(self, "audio"):
             self.audio.cleanup()
-        pygame.quit()
+        if full_quit:
+            pygame.quit()
+        else:
+            pygame.display.quit()
 
     def small_size(self) -> None:
         """Switch to small window mode."""

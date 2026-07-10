@@ -23,7 +23,7 @@ import pygame
 
 import i18n
 from app_paths import project_root
-from displays.train_models import DEFAULT_MODEL_KEY
+from displays.train_models import DEFAULT_MODEL_KEY, model_choices
 from widgets import (
     draw_lowres_text_fat,
     draw_tims_button,
@@ -31,14 +31,16 @@ from widgets import (
     press_transition,
 )
 
-from . import band, chrome
+import status_band as band
+import tims_chrome as chrome
+from . import dims
 
 ACTIVE_LANG = "zh_HK"  # develop/preview in zh_HK (chrome is i18n; station/line names stay JP)
 
 # fmt: off
 # ── layout tuneables (all derived coords flow from these) ─────────────────────
-SCREEN_W, SCREEN_H = band.SCREEN_W, band.SCREEN_H   # 730×610 — same own-window size as the home menu
-BG_COLOR           = band.BG_COLOR                  # mirror the menu bg
+SCREEN_W, SCREEN_H = dims.SCREEN_W, dims.SCREEN_H   # 730×610 — same own-window size as the home menu
+BG_COLOR           = dims.BG_COLOR                  # mirror the menu bg
 
 # title row (below the band): screen-code + cyan heading — drawn by chrome.title_row (shared recipe).
 SCREEN_CODE        = "C07AA"             # real TIMS code for 案内設定 (kept for fidelity; droppable)
@@ -95,14 +97,24 @@ OCR_BOX_W          = 1                   # frame outline width
 # setup_tims.pa_setting.select_route / setup_tims.confirm.
 
 # Summary-table row LABELS re-use the Japanese TIMS presentation (real TIMS renders these in Japanese):
-# rows 1-3 mirror the reference, row 4 simplified to 月台 (no platform model), row 5 = 備考. Rendered in
-# the JP face, locale-independent. VALUES are Japanese route/station names, EMPTY until a route is
-# picked (item 5) — 選擇路綫 populates them from route.json.
-ROW_LABELS = ["路線名", "列車種別", "始発・終着駅", "月台", "備注"]
+# rows 1-3 mirror the reference, row 5 = 備考. Rendered in the JP face, locale-independent. VALUES are
+# Japanese route/station names, EMPTY until a route is picked — 選擇路綫 populates them from route.json.
+# Row 4 (IRL 月台/platform, always blank here — no platform model) is REPURPOSED to show 列車型號 (the
+# picked train model / LCD skin) — no IRL TIMS reference for this, a temporary home (drawn dynamically
+# in render() from _current_model_label(), not stored in ROW_VALUES). Revisit the placement later.
+MODEL_ROW = 3  # table row index that shows the current train model (the repurposed 月台 slot)
+ROW_LABELS = ["路線名", "列車種別", "始発・終着駅", "列車型號", "備注"]
 ROW_VALUES = ["", "", "", "", ""]
 PATTERN_NO = None  # run-pattern No. (字軌選擇) → shown as "(00x)" under the big A; None until a commit
 _committed = None  # raw route_select.run_on result for the committed route — drives the 起動 launch config
 _model_override = None  # last user-picked train model (列車型號 picker); session-persistent, overrides the route default
+
+
+def _current_model_label():
+    """Designation of the model in effect (override > committed route's default > global default), e.g.
+    'E235-1000' — shown in the 列車型號 table row so the pick is visible without re-opening the picker."""
+    key = _model_override or (_committed["route"]["model"] if _committed else DEFAULT_MODEL_KEY)
+    return dict(model_choices()).get(key, key)
 
 
 def _apply_selection(result):
@@ -169,7 +181,7 @@ def render(surf):
     {"select", "model", "home", "ocr_launch", "manual", "ocr_setting"}."""
     surf.fill(BG_COLOR)
     band.ACTIVE_LANG = ACTIVE_LANG
-    band_hits = band._render_topband(surf)  # persistent black status band across the top
+    band_hits = band.render(surf)  # persistent black status band across the top
 
     # title row: screen-code + cyan heading (shared chrome recipe — bottom-aligned, x-stretched)
     chrome.title_row(surf, SCREEN_CODE, i18n.t("setup_tims.action.pa_setup"), ACTIVE_LANG)
@@ -207,7 +219,7 @@ def render(surf):
             pygame.draw.line(surf, TABLE_BORDER, (label_x, ry), (TABLE_X + table_w, ry), 1)
         _, lh = lowres_text_size(label, label_font, 1, 0)
         chrome.blit_lowres(surf, label, label_x + CELL_PAD_X, ry + (ROW_H - lh) // 2, label_font, ROW_LABEL_COLOR, 1)
-        value = ROW_VALUES[i]
+        value = _current_model_label() if i == MODEL_ROW else ROW_VALUES[i]  # model row is dynamic, not stored
         if value:
             _, vh = lowres_text_size(value, value_font, 1, 0)
             chrome.blit_lowres(surf, value, value_x + CELL_PAD_X, ry + (ROW_H - vh) // 2, value_font, ROW_VALUE_COLOR, 1)
@@ -360,8 +372,12 @@ def run_on(screen):
                     from . import ocr_setting
 
                     ocr_setting.ACTIVE_LANG = ACTIVE_LANG
-                    if _committed is not None and ocr_setting.ensure_consent(screen):
-                        return _build_config(_committed, ocr=True)
+                    if _committed is not None:
+                        res = ocr_setting.ensure_consent(screen)
+                        if res == "home":  # band Home in the consent gate → bubble to the menu
+                            running = False
+                        elif res:  # consent given → build the OCR launch config
+                            return _build_config(_committed, ocr=True)
                 elif hits["ocr_setting"].collidepoint(event.pos):
                     # OCR自動報站設定 = settings steppers (lead / interval) — DIRECT, no consent gate.
                     # Consent is a LAUNCH-time gate only (自動放送起動); the settings button just opens
@@ -380,7 +396,8 @@ def run_on(screen):
                     from . import ocr_setting
 
                     ocr_setting.ACTIVE_LANG = ACTIVE_LANG
-                    ocr_setting.run_settings(screen)
+                    if ocr_setting.run_settings(screen) == "home":  # band Home in settings → bubble to the menu
+                        running = False
                 elif hits["model"].collidepoint(event.pos):  # 列車型號 → model picker (X00AA)
                     press_transition(
                         screen,

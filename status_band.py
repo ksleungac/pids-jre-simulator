@@ -1,10 +1,14 @@
-"""Persistent TIMS status band — the near-black top strip shared across every setup_tims
-screen (home menu / 案内設定 / route + run-pattern picker). Mirrors the running app's OCR
-debug panel (app.py carves a 730 × DEBUG_PANEL_HEIGHT strip when auto_input is on); driven
-off a live OCR `status` dict when given, else standalone placeholders.
+"""Persistent TIMS status band — the near-black top strip.
 
-Also owns the shared screen dimensions (SCREEN_W / SCREEN_H / BAND_H / BG_COLOR) every page
-imports, since the band is the one chrome element on all of them.
+Two callers, one module (lives at project root so both import DOWN into it):
+  * the ``setup_tims`` screens render it as persistent chrome across the setup flow
+    (``status=None`` → the placeholder no-readings mode);
+  * the live in-drive app (``app.py::PASimulator._render_panel``) renders it as the
+    OCR debug panel, feeding a live ``auto_input.driver`` status dict.
+
+It IS the OCR debug panel — promoted from ``setup_tims/band.py`` when the live
+wiring landed. Width is taken from the caller's surface (``surf.get_width()``); the
+setup-window dims (SCREEN_W/H) live in ``setup_tims/dims.py`` — never a band concept.
 
   * LEFT         — OCR state, SMALL k=1: segment · inferred·played · BADGE.
   * CENTER       — readout cell: speed limit / speed / distance(m), WIDE numerals.
@@ -17,6 +21,7 @@ import time
 import pygame
 
 import i18n
+import tims_chrome as chrome  # shared palette + low-res text blit (chrome.blit_lowres)
 from widgets import (
     _TUNEABLES_TIMS_BUTTON,
     HINT_CYAN_COLOR,
@@ -24,8 +29,6 @@ from widgets import (
     draw_tims_button,
     lowres_text_size,
 )
-
-from . import chrome  # shared low-res text blit (chrome.blit_lowres)
 
 # TIMS band face = Noto Sans, per-locale, AA-OFF at native px, NO upscale (WIP § Font decision).
 # SMALL = the dense band left-column + message strips. Resolved via i18n.pixel_font_for_lang.
@@ -37,18 +40,12 @@ def pixel_font_small(lang):
 
 
 # fmt: off
-# ── page-1 layout tuneables (all derived coords flow from these) ──────────────
-SCREEN_W, SCREEN_H = 730, 610          # setup is its OWN window — taller than the 420 LCD-sized
-                                       # one (main.py SETUP_SIZE); height is a free knob. 610 keeps
-                                       # the 2/3-height buttons clear of the top-corner lang strip.
-BG_COLOR           = chrome.BG      # current SetupScreen bg (mirror reality; tunable)
+# ── band layout tuneables (all derived coords flow from these) ────────────────
 ACTIVE_LANG        = "zh_HK"           # UI language shown on the band (synced from the active screen)
 
-# persistent TIMS status band (top strip, full width). SAME band concept as the running app's OCR
-# debug panel (app.py carves a 730 × DEBUG_PANEL_HEIGHT top strip when auto_input is on) — previewed
-# here so it reads as persistent chrome. Height is a draft choice for now; it reconciles with
-# DEBUG_PANEL_HEIGHT when the band graduates. The readout cell is a PLACEHOLDER swapped for live OCR
-# fields ("might not be clock") — don't chase TIMS-clock fidelity. Rightmost button = ALWAYS home.
+# persistent TIMS status band (top strip, full width). Height reconciled with the live window carve
+# (constants.DEBUG_PANEL_HEIGHT is DERIVED from BAND_H). The readout cell is a PLACEHOLDER swapped for
+# live OCR fields ("might not be clock") — don't chase TIMS-clock fidelity. Rightmost button = ALWAYS home.
 BAND_H             = 68                # shorter band (rows sit on an 8 / 26 / 44 grid)
 BAND_COLOR         = chrome.PANEL_BG       # near-black strip
 
@@ -242,7 +239,7 @@ _MSG_YELLOW = (250, 228, 70)  # TIMS message-display yellow (strips flash this, 
 
 # The band reads the SAME i18n strings the live OCR debug panel uses (auto_input/driver.py:
 # _STATE_KEY / _FIRE_KEY → data/translations_app.json `panel.*`). Mirrored here (local const, not
-# imported — keeps the draft off the heavy cv2/numpy driver module). i18n.t() resolves to the active
+# imported — keeps the band off the heavy cv2/numpy driver module). i18n.t() resolves to the active
 # UI language (zh_HK in the preview).
 #   The Layer-2 BADGE is the deliberate exception: shown as its RAW canonical token (STOPPED / MOVING
 #   / PASSING), NOT localized. It's the raw OCR template-match read, and a localized badge collides
@@ -263,11 +260,9 @@ _FIRE_KEYS = {
 }
 
 
-# NOTE: the live-status branch below (status != None) is dormant scaffolding — every current caller
-# (home / pa_setting / route_select) passes status=None, so only the `if not status` placeholder
-# branch runs today. It's reserved for the production OCR wiring (auto_input.driver feeds the real
-# status dict); kept here so the band lights up with real OCR fields the moment that caller lands.
-# Don't flag as dead.
+# NOTE: the live-status branch below (status != None) is exercised by the live in-drive app
+# (app.py::_render_panel feeds the auto_input.driver status dict). The setup_tims callers pass
+# status=None → only the placeholder branch runs there. Don't flag either branch as dead.
 def _band_vals(status, sim_state, stops):
     """Map a live OCR `status` dict (auto_input.driver shape) onto the band's display fields. `status`
     None → standalone placeholders (home-menu preview). Encodes the OCR-panel migration decisions:
@@ -342,11 +337,11 @@ def _band_vals(status, sim_state, stops):
     }
 
 
-def _render_topband(surf, status=None, sim_state=None, stops=None, *, force_flash_on=False):
+def render(surf, status=None, sim_state=None, stops=None, *, force_flash_on=False):
     """Persistent TIMS status band across the top. Drives off a live OCR `status` dict (auto_input
     shape: badge / inferred_state / segment_start_stop / speed / speed_limit / distance /
     stopping_offset_cm / last_fire / reentry_pending / paused, + `sim_state.curr_stop/cnt_pa` + `stops`
-    names) when given; else standalone placeholders.
+    names) when given; else standalone placeholders. Band width = `surf.get_width()`.
       * LEFT         — OCR state, SMALL k=1: segment · inferred·played · BADGE (Layer-2, grouped here).
       * CENTER       — readout cell: speed limit / speed / distance(m), WIDE numerals. Limit flashes
                        cyan on CHANGE (placeholder mode only for now).
@@ -357,8 +352,9 @@ def _render_topband(surf, status=None, sim_state=None, stops=None, *, force_flas
     `force_flash_on` pins the limit-flash + message-strip blink to their ON phase (for a STATIC
     montage render — otherwise both depend on `get_ticks` and a frozen frame may catch them dark).
     Returns {"home"/"save"/"pause": rect} hit-rects."""
+    width = surf.get_width()
     vals = _band_vals(status, sim_state, stops)
-    pygame.draw.rect(surf, BAND_COLOR, (0, 0, SCREEN_W, BAND_H))
+    pygame.draw.rect(surf, BAND_COLOR, (0, 0, width, BAND_H))
     cjk = pixel_font_small(ACTIVE_LANG)  # small dense band face for the localized msg strips, AA-off native
     btn_font = i18n.pixel_font_for_lang(ACTIVE_LANG, BAND_BTN_TEXT_NATIVE)  # band control-button labels
 
@@ -376,7 +372,7 @@ def _render_topband(surf, status=None, sim_state=None, stops=None, *, force_flas
             worst = max(worst, _lw, _lh)
     btn_sz = int(worst + 2 * HOME_TEXT_MARGIN + bevel)
     btn_top = (BAND_H - btn_sz) // 2
-    home_rect = pygame.Rect(SCREEN_W - btn_sz - HOME_MARGIN, btn_top, btn_sz, btn_sz)
+    home_rect = pygame.Rect(width - btn_sz - HOME_MARGIN, btn_top, btn_sz, btn_sz)
     save_rect = pygame.Rect(home_rect.left - BAND_BTN_GAP - btn_sz, btn_top, btn_sz, btn_sz)
     pause_rect = pygame.Rect(save_rect.left - BAND_BTN_GAP - btn_sz, btn_top, btn_sz, btn_sz)
 

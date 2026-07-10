@@ -147,6 +147,14 @@ When the user asks for a design decision that's claude's to drive, recommend ONE
 - Answer reachable from loaded context → commit. Recommendation + one-line reason.
 - Two genuinely equivalent options → pick one, name the tradeoff, let user override.
 
+### Don't gate cheap verification behind a question
+After a visible change, if launching the app / preview lets the user verify, just launch it (background) as part of reporting — don't ask "want me to launch?".
+
+**Why:** The launch is cheap + reversible; a permission question adds a pointless round-trip. Examples:
+- (2026-07-11) User: *"next time don't ask such question, just launch it for me."* — after repeated "want me to launch the preview?" prompts.
+
+**How to apply:** Change made + a preview/run path exists → launch it while reporting. Still gate genuinely irreversible / outward-facing actions.
+
 ### Ground reasoning in the user's stated terms
 When working through user-stated logic, reason strictly in the vocabulary and frame the user used. Don't import adjacent context unless the user invoked it.
 

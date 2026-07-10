@@ -17,9 +17,16 @@ sys.stdout.reconfigure(encoding="utf-8")  # Windows console is cp1252; the debug
 
 sys.path.insert(0, ".")
 
-from setup_tims import home, pa_setting, route_select, model_select, ocr_setting  # noqa: E402
+from setup_tims import home, pa_setting, route_select, model_select, ocr_setting, tutorial_select, tutorial_basic  # noqa: E402
 
-_SCREENS = {"home": home, "pa": pa_setting, "route": route_select, "model": model_select}
+_SCREENS = {
+    "home": home,
+    "pa": pa_setting,
+    "route": route_select,
+    "model": model_select,
+    "tutorial": tutorial_select,
+    "basic": tutorial_basic,
+}
 # ocr_setting hosts two sub-views selected by a `view` arg (consent gate vs the steppers settings).
 _OCR_VIEWS = {"consent": "consent", "ocrset": "settings"}
 

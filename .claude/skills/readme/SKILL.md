@@ -94,6 +94,10 @@ The yellow-square hint is framed as "play them before arriving at the station", 
 - "人手按" is natural HK/Cantonese-influenced phrasing for "manually press"; fine to use in zh-HK only
 - "班次" for a train diagram/service (HK railway term); zh-CN uses "车次"
 
+### 6. Punctuation — zh-HK is full-width
+
+zh-HK strings use full-width punctuation — comma is `，` (U+FF0C), NOT half-width `,`. Applies to app-chrome i18n (`data/translations_app.json`) as well as the READMEs. **Don't bulk-convert zh-CN**: asked 2026-07-11 whether to switch both or zh-HK only, the user chose **zh-HK only** — leave zh-CN as authored.
+
 ## Terminology baseline
 
 Keep this list updated whenever a new term is coined. Translate once, reuse everywhere.

@@ -41,14 +41,16 @@ from widgets import (
     tims_button_size,
 )
 
-from . import band, chrome
+import status_band as band
+import tims_chrome as chrome
+from . import dims
 
 ACTIVE_LANG = "zh_HK"  # develop/preview in zh_HK (chrome is i18n; route/station names stay Japanese)
 
 # fmt: off
 # ── layout tuneables (all derived coords flow from these) ─────────────────────
-SCREEN_W, SCREEN_H = band.SCREEN_W, band.SCREEN_H   # 730×610 — same own-window size as the rest of the chrome
-BG_COLOR           = band.BG_COLOR                  # slate, mirror the menu / pa-setting bg
+SCREEN_W, SCREEN_H = dims.SCREEN_W, dims.SCREEN_H   # 730×610 — same own-window size as the rest of the chrome
+BG_COLOR           = dims.BG_COLOR                  # slate, mirror the menu / pa-setting bg
 
 # title row (below the band): screen-code + cyan heading — drawn by chrome.title_row (shared recipe).
 
@@ -145,7 +147,7 @@ PANEL_BOTTOM_GAP   = 12                  # panel bottom sits this far ABOVE the 
 # holds both labels stacked, right cell both values stacked.
 HDR_X              = 16
 HDR_Y              = 130                  # recap-box top (below the title row)
-HDR_W              = int(0.70 * (SCREEN_W - 2 * 16))  # recap box = 0.7 of content width, LEFT-aligned (tables below stay full width)
+HDR_W              = int(0.70 * (SCREEN_W - 2 * HDR_X))  # recap box = 0.7 of content width, LEFT-aligned (tables below stay full width)
 HDR_ROW_H          = 20                   # each recap row (tighter — rows 1 & 2 closer)
 HDR_LABEL_PAD_R    = 4                     # gap from the row-name label text to the column-split line (hugs it, like 川崎 on the value side)
 HDR_ARROW_PAD      = "　　"                # full-width padding flanking the → in start → end (wider gap)
@@ -313,7 +315,7 @@ def _render_grid(surf, screen_key, labels, box_font, box_w, box_h, *, selected_i
     cfg = SCREENS[screen_key]
     surf.fill(BG_COLOR)
     band.ACTIVE_LANG = ACTIVE_LANG
-    band_hits = band._render_topband(surf)  # persistent black status band across the top
+    band_hits = band.render(surf)  # persistent black status band across the top
 
     # title row: code + cyan heading (shared chrome recipe — bottom-aligned, x-stretched)
     chrome.title_row(surf, cfg["code"], i18n.t(cfg["heading_key"]), ACTIVE_LANG)
@@ -585,7 +587,7 @@ def _render_diagram(surf, route_name, start_name, end_name, variants, *, selecte
     cfg = SCREENS["diagram"]
     surf.fill(BG_COLOR)
     band.ACTIVE_LANG = ACTIVE_LANG
-    band_hits = band._render_topband(surf)
+    band_hits = band.render(surf)
 
     # title row — shared chrome recipe (fat code + cyan heading, bottom-aligned)
     chrome.title_row(surf, cfg["code"], i18n.t(cfg["heading_key"]), ACTIVE_LANG)

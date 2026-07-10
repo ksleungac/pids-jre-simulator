@@ -413,38 +413,21 @@ Speed/departure logic unchanged — speed = own-train and badge-independent.
 
 ## Debug panel (in-process integration only)
 
-When OCR Auto-PA enabled at setup screen, `PASimulator` allocates extra `DEBUG_PANEL_HEIGHT = 80` row above LCD via pygame sub-surfaces. Window becomes 730×500 instead of 730×420; LCD code **completely unchanged** because it gets sub-surface positioned at `(0, 80)` and thinks it's drawing to a regular 730×420 screen.
+When OCR Auto-PA enabled at setup screen, `PASimulator` allocates an extra `DEBUG_PANEL_HEIGHT` row above the LCD via pygame sub-surfaces. LCD code **completely unchanged** — it gets a sub-surface positioned at `(0, DEBUG_PANEL_HEIGHT)` and thinks it's drawing to a regular LCD-sized screen.
 
-**Strict separation per user requirement:** panel render logic lives entirely in `auto_input/driver.py` (function `draw_debug_panel`). `app.py`'s `_render_panel()` helper just hands sub-surface to auto-input module. Simulator **doesn't know** how panel renders — colors, layout, fonts, text — all owned by `auto_input/driver.py`. Zero `displays/` imports in panel render code.
+**The panel IS the shared TIMS status band** (`status_band.render`, project root — the same band the `setup_tims` setup flow draws). `DEBUG_PANEL_HEIGHT` is re-exported from `status_band.BAND_H` (single source; the band owns its height). `app.py::_render_panel` feeds the band the live `auto_input_status` dict + stashes its returned `{home/save/pause}` hit-rects for the run-loop click handler (`_handle_band_click`: home stops PA + returns to setup, save = drive report, pause = auto-driver pause).
 
-Panel and LCD never overlap render areas. Panel uses its own background color `_PANEL_BG = (18, 22, 28)` (visually distinct from LCD's `DARK_BG`).
+**Strict separation still holds:** `app.py` just hands the band a sub-surface + the status dict and knows nothing about layout / fonts / colors — only the render module moved (was `auto_input/driver.py::draw_debug_panel`, now `status_band.py`). `draw_debug_panel` (the old 3-line panel) + `handle_panel_click` are retained **legacy dev-preview only** (they host the mock fixtures the band preview reuses).
 
 ### Layout
 
-3 lines, font ShinGoPr6N-Medium @ 14pt (loaded lazily, supports both Latin + CJK so station names in state line render correctly):
+The live panel's layout (left OCR-state column / centre speed·limit·distance readout / message strips / [pause][save][home] cluster) lives in `status_band.py` + [WIP_setup_redesign.md § "Persistent top band"](../WIP_setup_redesign.md). It reads the status-dict fields below. The OCR-panel migration DROPPED the old confidence-colour tint (green/yellow/orange OCR-score) — too debug for the public band; the raw Layer-2 badge folds onto the state line instead.
 
-```
-[AUTO-INPUT]   badge: MOVING (d=3.2)
-spd:  73 km/h    dst:  850m   cnt_pa=1  dep✓  arr·
-state: between 錦糸町 → 新小岩  (curr_stop=4)
-```
-
-Confidence color encoding:
-
-| Color | Meaning |
-|---|---|
-| **Green** | OCR score ≥ 0.90; badge diff ≤ 5 |
-| **Yellow** | 0.75–0.90; diff 5–15 |
-| **Orange** | < 0.75; diff > 15 |
-| **Gray** | None / OCR FAIL |
-
-`dep✓ arr·` flags reflect `auto_input_status["departure_observed"]` and `auto_input_status["arrival_observed"]` — per-segment observed flags reset on `BADGE_STOPPED→MOVING` transitions.
-
-State line uses simulator's `state.curr_stop` + captured `segment_start_stop` to display "between A → B" or "stopped at A".
+The historical 3-line `draw_debug_panel` layout (ShinGoPr6N @ 14pt, `dep✓ arr·` flags, confidence colours) survives only in that legacy function for the dev preview.
 
 ### Width adaptivity
 
-Panel uses whatever surface width the caller provides (`PASimulator` allocates the sub-surface at `S_WIDTH` from the active train model). When future train models with different LCD widths are added, panel follows automatically.
+The band takes its width from the caller's surface (`surf.get_width()`); `PASimulator` allocates the sub-surface at `S_WIDTH` from the active train model, so the band follows future train models with different LCD widths automatically.
 
 ### Status dict (single-writer / single-reader, atomic dict assignment)
 
@@ -531,13 +514,14 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 | Path | Role |
 |---|---|
 | `auto_input/` | Package — public surface re-exports `AutoDriver`, `draw_debug_panel`, `handle_panel_click` from `__init__.py`. Internal submodules below. |
-| `auto_input/driver.py` | **Primary** — `AutoDriver` class (in-process daemon thread) + `draw_debug_panel()` (panel render) + `_Detector` state machine + `handle_panel_click()` dispatcher (in-panel buttons, currently the Report download). All auto-input logic lives here. |
+| `auto_input/driver.py` | **Primary** — `AutoDriver` class (in-process daemon thread) + `_Detector` state machine + `generate_report()` (drive-report trigger, called by the band Save button). All auto-input logic lives here. `draw_debug_panel()` + `handle_panel_click()` are LEGACY (old 3-line panel, dev-preview only — the live panel is `status_band.render`). |
+| `status_band.py` | **Live OCR panel** (project root) — `render(surf, status, sim_state, stops)` draws the shared TIMS status band from the `auto_input_status` dict; returns `{home/save/pause}` hit-rects. `BAND_H` = the panel height (re-exported as `constants.DEBUG_PANEL_HEIGHT`). Shared with the `setup_tims` setup flow. |
 | `auto_input/hud_layout.py` | HUD + cell bbox constants for 2560×1440 (canonical desktop coords + region-cut derived coords) |
 | `auto_input/ocr.py` | OCR pipeline + badge classifier; runnable for offline validation (`uv run python -m auto_input.ocr`) |
 | `main.py` | Reads `auto_input` / `lead_m` / `interval_s` from setup-screen config dict. Spawns `AutoDriver` when `auto_input=True` and passes same flag to `PASimulator`. |
 | `setup.py` | OCR Auto-PA toggle pill + Lead/Interval steppers under route list. `_handle_band_click` updates state; selected route's Enter returns config dict including auto-input fields. |
-| `app.py` | `PASimulator`: allocates debug sub-surface in `_init_pygame`; `pending_next_pa` flag checked alongside keyboard in `_handle_input_main`; `auto_input_status` dict written by AutoDriver, read by `_render_panel()` which delegates to `auto_input.draw_debug_panel`. `MOUSEBUTTONDOWN` events landing in panel area get forwarded to `auto_input.handle_panel_click`. `drive_log_path` attribute stashes live JSONL path so Report button can find it. **No panel rendering logic lives in app.py.** |
-| `constants.py` | `DEBUG_PANEL_HEIGHT = 80` |
+| `app.py` | `PASimulator`: allocates debug sub-surface in `_init_pygame`; `pending_next_pa` flag checked alongside keyboard in `_handle_input_main`; `auto_input_status` dict written by AutoDriver, read by `_render_panel()` which delegates to `status_band.render`. `MOUSEBUTTONDOWN` events in the panel area go to `_handle_band_click` (band's home/save/pause rects). `drive_log_path` attribute stashes live JSONL path so the report can find it. `run()` returns `"home"`/`"quit"`; band Home → return to setup. **No panel rendering logic lives in app.py.** |
+| `constants.py` | `DEBUG_PANEL_HEIGHT` — re-exported from `status_band.BAND_H` (single source; the band owns its height). |
 | `_dev_scripts/capture_game.py` | Standalone observation/debug script (separate process, synthetic keystrokes, optional `--route` flag for PA-count check) |
 | `_dev_scripts/test_dxcam.py` | Diagnostic — full-desktop dxcam capture + brightness check |
 | `ocr_templates/digits/*.png` | **Runtime input** — 10 pre-extracted digit glyphs (~20×30 binary PNGs). Loaded by `build_templates()`. Reused at all resolutions via NN-resize. Committed. |

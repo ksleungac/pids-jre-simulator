@@ -8,6 +8,6 @@ calibration extractor) — see auto_input/README.md § Files for the breakdown.
 Architecture / pipeline / state-machine details: auto_input/README.md.
 """
 
-from .driver import AutoDriver, draw_debug_panel, handle_panel_click
+from .driver import AutoDriver, draw_debug_panel, generate_report, handle_panel_click
 
-__all__ = ["AutoDriver", "draw_debug_panel", "handle_panel_click"]
+__all__ = ["AutoDriver", "draw_debug_panel", "generate_report", "handle_panel_click"]

@@ -17,12 +17,14 @@ from app_paths import project_root
 from displays.train_models import DEFAULT_MODEL_KEY, model_choices
 from widgets import _TUNEABLES_TIMS_BUTTON, draw_lowres_text, draw_tims_button, press_transition
 
-from . import band, chrome
+import status_band as band
+import tims_chrome as chrome
+from . import dims
 
 ACTIVE_LANG = "zh_HK"
 
-SCREEN_W, SCREEN_H = band.SCREEN_W, band.SCREEN_H
-BG_COLOR = band.BG_COLOR
+SCREEN_W, SCREEN_H = dims.SCREEN_W, dims.SCREEN_H
+BG_COLOR = dims.BG_COLOR
 SCREEN_CODE = "X00AA"  # mirrors the IRL 番台選択 register code (droppable, kept for fidelity)
 
 # Roadmap models NOT yet in the registry — shown GRAYED so the family reads complete (per the reference,
@@ -113,7 +115,7 @@ def render(surf, current_key, flash_on=False):
     (current_key) BLINKS lit↔normal via flash_on; grayed (unbuilt) entries are excluded from the hits."""
     surf.fill(BG_COLOR)
     band.ACTIVE_LANG = ACTIVE_LANG
-    band_hits = band._render_topband(surf)
+    band_hits = band.render(surf)
     chrome.title_row(surf, SCREEN_CODE, i18n.t("setup_tims.model_select.heading"), ACTIVE_LANG)
 
     entries = _entries()

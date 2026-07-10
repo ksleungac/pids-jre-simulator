@@ -1,9 +1,15 @@
-"""Shared TIMS-screen chrome — the bits every setup_tims page draws identically.
+"""Shared TIMS chrome — the design tokens + bits every TIMS surface draws identically.
 
-Currently the title row (fat screen-code + cyan heading, bottom-aligned on one
-baseline) + its tuneables. Each page (案内設定 C07AA / route grid C07AB / start
-station C07AC / run-pattern C07AF) drew this recipe verbatim before; it lives
-here once so the chrome reads identical across pages and tunes in one place.
+Lives at project root (peer of ``widgets.py``) because it's shared by BOTH the
+``setup_tims`` setup flow AND the live in-drive status band (``status_band.py``,
+rendered from core ``app.py``). ``widgets.py`` holds the PRIMITIVES (how to draw a
+button / low-res text); this holds the STYLE VOCABULARY (which palette, which
+button role, which font px). Promoted from ``setup_tims/chrome.py`` when the band
+graduated into the live OCR panel.
+
+Holds the title row (fat screen-code + cyan heading, bottom-aligned on one
+baseline) + its tuneables, the shared PALETTE, button role-presets, and the
+low-res text blit.
 """
 
 import pygame
