@@ -44,7 +44,7 @@ LCD_W, LCD_H    = S_WIDTH, S_HEIGHT    # 730×420 native (NO rescale → click-t
 # progress strip sits BETWEEN the LCD and the instructions (full width, so 8 phase labels fit).
 LCD_TOP         = 100                  # LCD top — gap title→LCD equals the band→title gap (both 5px, symmetric header)
 PROG_GAP_TOP    = 4                    # gap LCD → progress strip
-PROG_STRIP_H    = 48                   # labeled progress strip height (dots + phase labels)
+PROG_STRIP_H    = 62                   # labeled progress strip height (dots + up to 2 wrapped label lines)
 PANEL_GAP       = 0                    # progress strip + panel are FLUSH (one continuous near-black block)
 PANEL_H         = 150                  # step-panel height (heading + body; action conveyed by button flash)
 BOTTOM_MARGIN   = 0                    # panel runs to the window bottom (no slate strip)
@@ -58,6 +58,8 @@ SCREEN_H        = PANEL_Y + PANEL_H + BOTTOM_MARGIN
 PROG_PAD_X      = 24                   # strip side padding
 PROG_DOT_R      = 7                    # phase-dot radius
 PROG_LABEL_PX   = 15                   # phase-label px (8 across 730)
+PROG_LABEL_GAP  = 8                    # min px between adjacent labels → wrap threshold (col spacing − this)
+PROG_LINE_GAP   = 2                    # gap between a label's two wrapped lines (EN wraps; CJK stays 1 line)
 DOT_DONE        = (54, 214, 226)       # completed / current — TIMS cyan (green dropped)
 DOT_FUTURE      = (108, 118, 134)      # not-yet-reached
 LINE_DONE       = (54, 160, 172)       # completed connector
@@ -290,6 +292,38 @@ class BasicTutorial(Tutorial):
             pygame.draw.rect(self.screen, SEEK_FILL_COLOR, pygame.Rect(bar_left, bar_y, fill_w, SEEK_H), border_radius=3)
         chrome.blit_lowres(self.screen, total_s, right_x, label_y, lf, chrome.DIM, 1, right=True)
 
+    @staticmethod
+    def _wrap_phase_label(lbl, font, max_w):
+        """Wrap a phase label to <=2 lines that each fit max_w. Breaks on spaces AND hyphens (so
+        'Pre-departure' can split); a single unsplittable token (a short CJK label) stays on one line.
+        EN labels ('Departure melody', 'Stopped at next station') overflow the ~97px column at one line
+        and wrap; the compact CJK labels pass straight through."""
+        if lowres_text_size(lbl, font, 1, 0)[0] <= max_w:
+            return [lbl]
+        atoms = []
+        for word in lbl.split(" "):
+            parts = word.split("-")
+            for j, p in enumerate(parts):
+                atoms.append(p + ("-" if j < len(parts) - 1 else ""))
+        if len(atoms) == 1:
+            return [lbl]  # unsplittable (e.g. a long CJK run) — leave as one line
+
+        def _join(seq):
+            s = ""
+            for a in seq:
+                if s and not s.endswith("-"):  # no space after a hyphen break (keeps 'Pre-departure')
+                    s += " "
+                s += a
+            return s
+
+        best = None  # 2-line split that minimizes the wider line
+        for cut in range(1, len(atoms)):
+            l1, l2 = _join(atoms[:cut]), _join(atoms[cut:])
+            w = max(lowres_text_size(l1, font, 1, 0)[0], lowres_text_size(l2, font, 1, 0)[0])
+            if best is None or w < best[0]:
+                best = (w, [l1, l2])
+        return best[1]
+
     def _draw_progress_v(self):
         """Full-width labeled progress strip between the LCD and the panel; populates self._phase_rects
         (one click column per phase) so the inherited progress-jump handler works unchanged."""
@@ -310,10 +344,14 @@ class BasicTutorial(Tutorial):
             pygame.draw.circle(surf, DOT_DONE if done else DOT_FUTURE, (xs[i], dot_y), PROG_DOT_R)
             if i == active:
                 pygame.draw.circle(surf, chrome.INK, (xs[i], dot_y), PROG_DOT_R + 3, 2)
-            lbl = i18n.t(key)
-            lw = lowres_text_size(lbl, lf, 1, 0)[0]
-            lx = min(max(xs[i] - lw // 2, 2), SCREEN_W - lw - 2)
-            chrome.blit_lowres(surf, lbl, lx, dot_y + PROG_DOT_R + 5, lf, chrome.INK if done else chrome.DIM, 1)
+            color = chrome.INK if done else chrome.DIM
+            lines = self._wrap_phase_label(i18n.t(key), lf, spacing - PROG_LABEL_GAP)
+            line_h = lowres_text_size("Ag", lf, 1, 0)[1]
+            ly0 = dot_y + PROG_DOT_R + 5
+            for li, line in enumerate(lines):
+                lw = lowres_text_size(line, lf, 1, 0)[0]
+                lx = min(max(xs[i] - lw // 2, 2), SCREEN_W - lw - 2)
+                chrome.blit_lowres(surf, line, lx, ly0 + li * (line_h + PROG_LINE_GAP), lf, color, 1)
             col_left = max(0, xs[i] - spacing // 2)
             col_right = min(SCREEN_W, xs[i] + spacing // 2)
             self._phase_rects.append(pygame.Rect(col_left, PROG_Y, col_right - col_left, PROG_STRIP_H))

@@ -44,8 +44,9 @@ ACTIVE_LANG = "zh_HK"  # UI language shown — drives the pressed knob + big-but
 
 # OOBE hook: while a first-run user hasn't visited the tutorial, the 教學 card FLASHES (normal↔waiting,
 # NOT yellow — yellow is reserved for PRESSED) to hint a click. Replaces the old forced first-run
-# fullscreen tutorial. Set from settings at run() start; cleared + persisted the moment the card is
-# clicked (flip on ENTERING). White "waiting" flash = the same "actionable" idiom as the OK/Next flashes.
+# fullscreen tutorial. Set from settings at run() start; the flash is CARRIED ON to the 基本操作 button on
+# the tutorial-select page (home 教學 → 基本操作 → the walkthrough) and only cleared + persisted when the
+# basic tutorial is ENTERED. White "waiting" flash = the same "actionable" idiom as the OK/Next flashes.
 OOBE_PENDING = False
 OOBE_FLASH_MS = 500  # half-period of the card flash
 
@@ -55,8 +56,9 @@ def pixel_font(lang):
 
 
 def _mark_oobe_done():
-    """Stop the 教學-card flash and persist oobe_completed=True (idempotent). Called on the first
-    tutorial-card click — the OOBE is 'complete' once the user has been guided into the tutorial."""
+    """Stop the 教學-card flash and persist oobe_completed=True (idempotent). Called when the user first
+    ENTERS the basic-usage tutorial (from the select page) — the flash guides home 教學 → 基本操作 → the
+    walkthrough, so the OOBE only completes at the walkthrough, not on the intermediate card click."""
     global OOBE_PENDING
     OOBE_PENDING = False
     s = i18n.load_settings()
@@ -138,11 +140,6 @@ VERSION_COLOR = (200, 214, 211)
 # Production reads update_check.get_update() (wired in main.py + setup.py); click the tag → release.
 HINT_BLINK_MS = 550  # half-period: each state shown for 550ms before flipping
 HINT_PAD_X, HINT_PAD_Y = 6, 3  # cyan block inset around the hint text
-# DRAFT ONLY: force the flash on so it's visible in dev — update_check.get_update() no-ops when
-# unfrozen (app_version() is None). Graduation to setup.py DROPS this: prod flashes iff get_update()
-# is truthy. The fake tuple stands in for what the worker thread would stash.
-PREVIEW_FORCE_HINT = True
-PREVIEW_UPDATE = ("0.6.0", f"https://github.com/{update_check._REPO}/releases/latest")
 
 
 def _version_tag_rect(word, digits):
@@ -194,9 +191,7 @@ def render_menu(surf):
     #    version's numerals ("060") under a cyan highlight block (the TIMS 設定完了 idiom). Both the
     #    text AND colour change, but the hint keeps the version-tag look (word + TIMS numerals). ──
     ver_digits = VERSION.replace(".", "")
-    info = update_check.get_update()
-    if info is None and PREVIEW_FORCE_HINT:
-        info = PREVIEW_UPDATE
+    info = update_check.get_update()  # real check: (new_version, url) iff a strictly-newer release exists, else None
     show_hint = info is not None and (pygame.time.get_ticks() // HINT_BLINK_MS) % 2 == 0
     if show_hint:
         _render_version_tag(surf, i18n.t("setup.new_version_label"), info[0].replace(".", ""), text_color=HINT_INK_COLOR, highlight=True)
@@ -262,6 +257,7 @@ def _launch_tutorial():
     from . import tutorial_select
 
     tutorial_select.ACTIVE_LANG = ACTIVE_LANG  # carry the menu's UI language into the page
+    tutorial_select.OOBE_PENDING = OOBE_PENDING  # carry the OOBE flash on to the 基本操作 button
     screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
     pygame.display.set_caption("TIMS tutorial select")
     tutorial_select.run_on(screen)
@@ -297,7 +293,7 @@ def run(screen):
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 # version tag (flashing) → release page
                 if hint_rect is not None and hint_rect.collidepoint(event.pos):
-                    info = update_check.get_update() or (PREVIEW_UPDATE if PREVIEW_FORCE_HINT else None)
+                    info = update_check.get_update()
                     if info:
                         webbrowser.open(info[1])
                     continue
@@ -341,8 +337,8 @@ def run(screen):
                             if isinstance(cfg, dict):
                                 return cfg  # 起動 committed → bubble the launch config up to main.py
                         else:
-                            if OOBE_PENDING:  # first tutorial visit → stop the flash + persist (flip on ENTERING)
-                                _mark_oobe_done()
+                            # OOBE flip is deferred to the basic-tutorial entry (in tutorial_select), so the
+                            # flash keeps guiding home 教學 → 基本操作 → the walkthrough.
                             _launch_tutorial()
                         # the sub-screen owned the display — restore the menu window + caption.
                         screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))

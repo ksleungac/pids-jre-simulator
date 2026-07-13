@@ -85,7 +85,7 @@ SET_ARROW_GAP      = 16                   # gap between the ▲/▼ page cluster
 PAGE_IND_COLOR     = chrome.CODE_INK      # "1/2" page indicator (near-white, above the arrows)
 
 # table-population: when 始發站選擇 commits, these row VALUES flow back to the 案内設定 summary table
-# (parallels pa_setting.ROW_LABELS = 路線名 / 列車種別 / 始発・終着駅 / 月台 / 備注).
+# (whose LABELS are pa_setting.ROW_LABEL_KEYS — localized field.route/type/from_to/model/remark).
 # ──────────────────────────────────────────────────────────────────────────────
 # fmt: on
 

@@ -53,11 +53,9 @@ BAND_COLOR         = chrome.PANEL_BG       # near-black strip
 # names ONLY ever surface here, so k=1 keeps the dense left column from crowding the band (the real
 # TIMS left column is small dense text — a k=2 segment would dominate the strip).
 LEFT_X             = 12
-NOTIF_TEXT         = "ツウコク　ジョウホウ"  # green notif — tims_002 通告情報, full-width gap between words
+NOTIF_TEXT         = "ツウコク　ジョウホウ"  # green notif — tims_002 通告情報, full-width gap. INTENDED fixed-JP (a real TIMS system label, like station names) — NOT an i18n miss; don't localize (user 2026-07-11)
 NOTIF_NATIVE       = 11                # green notif px — SMALLER (least-important line)
 NOTIF_COLOR        = chrome.GREEN     # TIMS dot-matrix green
-STATE_SEG          = "立川 → 川崎"       # OCR segment from -> to (placeholder; live OCR later)
-STATE_INFO         = "巡航中 · 2/3"      # inferred state . played count (placeholder)
 STATE_NATIVE       = 16                # OCR state + badge px — LARGER (primary band info)
 STATE_INK          = chrome.INK
 STATE_SUB          = chrome.DIM   # dimmer secondary line
@@ -66,7 +64,7 @@ STATE_SUB          = chrome.DIM   # dimmer secondary line
 # separators. The LIMIT is ALWAYS cyan (steady highlight block); on CHANGE it FLASHES (blinks cyan↔
 # plain) for a few seconds, then settles back to STEADY cyan — cyan is the resting state, the flash
 # is the change cue. If SPEED exceeds the LIMIT the whole cell BACKGROUND flashes RED (over-speed
-# warning). DRAFT models "changed" with a toggle; prod drives both off live OCR deltas.
+# warning). Both the change-flash and over-speed are driven off live OCR deltas.
 CELL_X             = 222               # readout cell left edge — right of the (now wider) folded left column
 CELL_W             = 120
 CELL_PAD           = 8
@@ -85,18 +83,14 @@ READOUT_UNIT_NATIVE = 13            # unit native (≈13px) — a touch larger t
 READOUT_DIGIT_XSCALE = 1.3          # WIDE TIMS numerals: widen each digit, independent of the gap
 READOUT_DIGIT_GAP    = 2            # px between digits at the rendered size
 READOUT_UNIT_GAP     = 4            # gap between the number and its unit (km/h, m)
-LIMIT_NUM          = "75"             # speed LIMIT (OCR) — top of cell
-LIMIT_UNIT         = "km/h"
-SPEED_NUM          = "0"              # current speed (OCR)
+LIMIT_UNIT         = "km/h"           # units for the '--' no-readings display (live values carry their own)
 SPEED_UNIT         = "km/h"
-DIST_NUM           = "1200"           # distance to next (OCR) — ALWAYS meters (OCR reads m; finer
-DIST_UNIT          = "m"             # granularity than rounded km = better observability)
+DIST_UNIT          = "m"              # distance is ALWAYS metres (OCR reads m; finer than rounded km)
 LIMIT_Y            = 18                # BAND ROW BASELINES — shared by readout AND left state column (rows line up); ink bottom-aligns here
 SPEED_Y            = 39
 DIST_Y             = 60
 LIMIT_PAD_X        = 3                 # cyan limit block inset (x) — tight (hugs ink)
 LIMIT_PAD_Y        = 1
-PREVIEW_LIMIT_CHANGED = True           # DRAFT: force the on-change cyan BLINK so it's visible in dev
 LIMIT_FLASH_MS     = 400               # half-period of the change blink (cyan↔plain, then steady cyan)
 OVER_LIMIT_BG      = (190, 30, 34)     # over-speed warning: the LIMIT block flashes this red (not the cell)
 OVER_LIMIT_INK     = (245, 240, 240)   # light ink on the red block (dark cyan-ink would vanish on red)
@@ -115,8 +109,6 @@ STRIP_INK          = (210, 222, 230)
 MSG_K              = 1
 MSG_FLASH_MS       = 450               # message-display flash half-period (bright yellow, auto-clears)
 MSG_PAD_X          = 6                 # text inset inside a strip
-MSG_FIRE_TEXT      = "次駅 自動再生"      # OCR fire event (placeholder)
-MSG_STOP_TEXT      = "停止位置 +1.2 m"   # stopping-position reading (placeholder)
 
 BAND_BTN_GAP       = 6                 # gap between the right-edge control buttons (pause/save/home)
 HOME_MARGIN        = 4                 # rightmost band button = "return to home" — small margin = cluster hugs the corner

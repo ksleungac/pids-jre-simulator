@@ -25,6 +25,12 @@ from .dims import BG_COLOR, SCREEN_H, SCREEN_W
 ACTIVE_LANG = "zh_HK"  # UI language (carried in from the home menu; chrome is i18n)
 SCREEN_CODE = "C07AD"  # placeholder register code (droppable, kept for TIMS fidelity — like the siblings)
 
+# OOBE hook (continued from home): while a first-run user hasn't reached the basic tutorial, the 基本操作
+# button FLASHES (normal↔waiting) to keep pulling them in — the same flash that lit the home 教學 card.
+# home carries its OOBE_PENDING onto this global before run_on; entering 基本操作 clears + persists it.
+OOBE_PENDING = False
+OOBE_FLASH_MS = 500  # half-period of the button flash (matches home's card flash)
+
 # fmt: off
 # ── layout tuneables (all derived coords flow from these) ─────────────────────
 BTN_NATIVE   = 22          # tutorial-button label px (AA-off native)
@@ -80,10 +86,13 @@ def render(surf):
     # centered column of tutorial buttons
     btn_font = i18n.pixel_font_for_lang(ACTIVE_LANG, BTN_NATIVE)
     x0 = (SCREEN_W - BTN_W) // 2
+    oobe_flash = OOBE_PENDING and (pygame.time.get_ticks() // OOBE_FLASH_MS) % 2 == 0
     hits = []
     for i, (key, label_key) in enumerate(TUTORIALS):
         rect = pygame.Rect(x0, GRID_TOP + i * (BTN_H + BTN_GAP), BTN_W, BTN_H)
-        draw_tims_button(surf, rect, i18n.t(label_key), font=btn_font, t=_BTN_T, state="normal")
+        # OOBE: flash the 基本操作 button (normal↔waiting) until the first visit — continues home's card flash
+        state = "waiting" if (oobe_flash and key == "basic") else "normal"
+        draw_tims_button(surf, rect, i18n.t(label_key), font=btn_font, t=_BTN_T, state=state)
         hits.append((key, rect))
 
     # 返回 (back) bottom-left — returns to the home menu (same as band Home / ESC)
@@ -99,7 +108,7 @@ def run_on(screen):
     """Run the tutorial-selection page until the user returns to the menu (返回 / band Home / ESC). A
     tutorial click enters that tutorial, then loops back here. Returns None (nothing to bubble up — the
     tutorials are terminal views, not config builders)."""
-    global ACTIVE_LANG
+    global ACTIVE_LANG, OOBE_PENDING
     clock = pygame.time.Clock()
     below_band = pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H)  # load-beat scope (band persists)
 
@@ -159,6 +168,11 @@ def run_on(screen):
                             blank_ms=450,
                             blank_rect=below_band,
                         )
+                        if key == "basic" and OOBE_PENDING:  # first basic-tutorial entry → OOBE complete
+                            from . import home
+
+                            home._mark_oobe_done()  # persists oobe_completed + stops home's card flash
+                            OOBE_PENDING = False  # stop this page's 基本操作 flash on return
                         signal = _open_tutorial(screen, key)
                         if signal == "home":
                             return None  # tutorial's band Home = jump straight home, PAST this menu

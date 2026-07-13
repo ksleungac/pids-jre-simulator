@@ -98,6 +98,10 @@ The yellow-square hint is framed as "play them before arriving at the station", 
 
 zh-HK strings use full-width punctuation — comma is `，` (U+FF0C), NOT half-width `,`. Applies to app-chrome i18n (`data/translations_app.json`) as well as the READMEs. **Don't bulk-convert zh-CN**: asked 2026-07-11 whether to switch both or zh-HK only, the user chose **zh-HK only** — leave zh-CN as authored.
 
+### 7. TIMS / IRL-mirroring chrome — zh-HK may hug the Japanese kanji
+
+For TIMS-console chrome that mirrors real IRL Japanese labels (the C07AA summary-table field labels, screen headings), the zh-HK translation may stay CLOSE to the source Japanese kanji — HK readers handle the kanji, and hugging the source preserves the console fidelity. zh-CN still gets proper Simplified. Convert JP-only chars (`駅`→`站`); keep shared kanji as-is (`路線名` / `列車種別` / `始發・終着站`). Action VERBS use native Chinese, NOT the Japanese kanji form: `啟動` / `启动` (start), never `起動`. 2026-07-11: TIMS summary-table labels localized (chose the (b) "zh-hk can stick close to JP terms" option) + OCR launch-cluster verbs corrected to "proper chinese". Distinct from #1 (native-Chinese-not-literal-EN) — this is a deliberate carve-out for JP-mirroring console chrome, where staying near the kanji is the goal.
+
 ## Terminology baseline
 
 Keep this list updated whenever a new term is coined. Translate once, reuse everywhere.

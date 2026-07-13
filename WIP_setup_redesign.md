@@ -341,12 +341,25 @@ rewired; linters green. (Refinement vs the original plan: fonts route through `i
    see § "Launch bridge"); real i18n strings (`translations_app.json`, zh_CN user-confirmed) replacing the
    draft `*_BY_LANG` dicts; the model picker (§ "Model picker"); `--tims` sets its own 730×610 window.
    DONE 2026-07-10/11: the **tutorial screen** (select-menu + vertical reskin — § Tutorial screen); the
-   **Tutorial-card flash + simplified OOBE** (`main.py` skips the forced fullscreen tutorial under `--tims`);
+   **Tutorial-card flash + simplified OOBE** (`main.py` skips the forced fullscreen tutorial in the TIMS flow);
    **OCR-launch** (自動放送設定 page + consent — the old crash was the retired debug panel, now on the graduated
    band); the **model shown on C07AA**; **band Home → straight home + beat on every page**.
-   STILL remaining: **flip `--tims` to default once at parity** (the last gate — a shipping decision); the
-   game-pairing OOBE screenshots (user provides); the deferred through-service / EN-data items.
-   **Setup-redesign feature parity with the classic `setup.py` is now reached** (audited 2026-07-11: route
+   DONE 2026-07-11 (the FLIP + i18n graduation): **`--tims` is now the DEFAULT flow** — `main.py --classic`
+   opts back into the legacy setup; the forced-fullscreen OOBE gate moved to the `--classic` branch. The
+   **OOBE 教學-flash now carries onto the 2nd-page 基本操作 button** (`tutorial_select.OOBE_PENDING`), and the
+   flip to `oobe_completed` is deferred to BASIC-TUTORIAL entry (so the flash guides home 教學 → 基本操作 →
+   the walkthrough). The **version update-hint is now REAL** — dropped the `PREVIEW_FORCE_HINT`/`PREVIEW_UPDATE`
+   stub; flashes iff `update_check.get_update()` returns a newer release (matches classic `setup.py`).
+   **Remaining i18n graduation swept** — the last hardcoded zh_HK draft strings (C07AA summary-table field
+   labels + OCR launch-cluster + consent accept button + settings-page title) moved into `translations_app.json`
+   (`setup_tims.pa_setting.field.*` / `.ocr_launch` / `.manual_launch` / `.ocr_settings` / `.ocr_settings.heading`
+   / `setup.ocr_disclaimer.accept`), resolved at render; the table `label_font` follows the active locale so
+   zh_CN Simplified glyphs render (was pinned to the JP face). The **tutorial progress-strip labels wrap to
+   ≤2 lines** so long EN phase names stop overlapping (see `conventions.md § UI code style`).
+   STILL remaining: the full **final-check pass** (real manual + OCR launch into a live drive; live
+   language-switch on the PA page) — a shipping gate, not new code; the game-pairing OOBE screenshots (user
+   provides); the deferred through-service / EN-data items.
+   **Setup-redesign feature parity with the classic `setup.py` is reached** (audited 2026-07-11: route
    select + start station + model pick + OCR consent/settings/launch + update hint + language + launch config,
    which also adds `start_idx`; only classic-only keyboard nav is intentionally dropped for the console style).
 6. **Codify as this doc dissolves** — `conventions.md` (TIMS chrome = Noto, AA-OFF native, no upscale,

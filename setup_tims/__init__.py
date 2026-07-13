@@ -18,7 +18,8 @@ Modules:
 Production entry: ``run(screen) -> config | None`` (re-exported from ``home``) runs the home menu on an
 existing display and returns a launch-config dict shaped like ``setup.SetupScreen.run()`` (action /
 work_dir / route_data / model / start_idx) when the user commits a route and 起動s, else None. main.py
-calls it behind ``--tims``. Preview the screens standalone via ``_dev_scripts/preview_setup_tims.py``.
+calls it by default (``--classic`` opts back into the legacy setup). Preview the screens standalone via
+``_dev_scripts/preview_setup_tims.py``.
 """
 
 from status_band import BAND_H  # noqa: F401

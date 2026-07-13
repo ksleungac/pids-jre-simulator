@@ -75,12 +75,12 @@ CELL_PAD_X         = 2                    # text hugs the column line (1–2px g
 
 # OCR launch cluster (bottom-right) — mirrors IRL tims_pa_setting_done.png: a 1-over-2 button group
 # inside a thin white frame, right-aligned. All THREE buttons are EQUAL width + height (sized to the
-# worst-case label; shorter labels just justify wider). Labels are 2-line (mode line / action line).
-# zh_HK draft strings — chrome is i18n, so these move into translations_app.json once the design +
-# zh_CN wording settle. 手動報站起動 = the manual (PageDown) launch — replaces the old 確認 button.
-OCR_LAUNCH_LABEL   = "OCR自動\n報站起動"   # TOP (right-aligned): arms OCR auto-PA → straight to the live LCD
-OCR_MANUAL_LABEL   = "手動\n報站起動"       # bottom-LEFT: manual launch
-OCR_SETTING_LABEL  = "OCR自動\n報站設定"   # bottom-RIGHT: opens the OCR settings / consent page
+# worst-case label; shorter labels just justify wider). Labels are 2-line (mode line / action line),
+# localized via i18n (keys below) — resolved at render, so they re-flow on a locale switch. The manual
+# button (手動報站起動) is the manual (PageDown) launch — it replaced the old 確認 button.
+OCR_LAUNCH_KEY = "setup_tims.pa_setting.ocr_launch"  # TOP (right): arms OCR auto-PA → straight to the live LCD
+OCR_MANUAL_KEY = "setup_tims.pa_setting.manual_launch"  # bottom-LEFT: manual launch
+OCR_SETTING_KEY = "setup_tims.pa_setting.ocr_settings"  # bottom-RIGHT: opens the OCR settings / consent page
 OCR_BTN_NATIVE     = 18                  # cluster label render px — LOCKED (readable, compact; page BTN_NATIVE=20)
 OCR_BTN_MARGIN_X   = 12                  # cluster button horizontal padding (label ↔ bevel)
 OCR_BTN_MARGIN_Y   = 5                   # cluster button VERTICAL padding — small = short buttons
@@ -96,14 +96,20 @@ OCR_BOX_W          = 1                   # frame outline width
 # Chrome labels come from translations_app.json via i18n.t — keys setup_tims.action.pa_setup (title) /
 # setup_tims.pa_setting.select_route / setup_tims.confirm.
 
-# Summary-table row LABELS re-use the Japanese TIMS presentation (real TIMS renders these in Japanese):
-# rows 1-3 mirror the reference, row 5 = 備考. Rendered in the JP face, locale-independent. VALUES are
-# Japanese route/station names, EMPTY until a route is picked — 選擇路綫 populates them from route.json.
-# Row 4 (IRL 月台/platform, always blank here — no platform model) is REPURPOSED to show 列車型號 (the
-# picked train model / LCD skin) — no IRL TIMS reference for this, a temporary home (drawn dynamically
-# in render() from _current_model_label(), not stored in ROW_VALUES). Revisit the placement later.
+# Summary-table row LABELS mirror the IRL TIMS field labels but are now LOCALIZED via i18n (keys below),
+# resolved at render so they re-flow on a locale switch — zh_HK hugs the JP kanji, zh_CN is Simplified.
+# VALUES stay Japanese route/station names, EMPTY until a route is picked — 選擇路綫 populates them from
+# route.json. Row 4 (IRL 月台/platform, always blank here — no platform model) is REPURPOSED to show the
+# picked train model / LCD skin — no IRL TIMS reference for this, a temporary home (drawn dynamically in
+# render() from _current_model_label(), not stored in ROW_VALUES). Revisit the placement later.
 MODEL_ROW = 3  # table row index that shows the current train model (the repurposed 月台 slot)
-ROW_LABELS = ["路線名", "列車種別", "始発・終着駅", "列車型號", "備注"]
+ROW_LABEL_KEYS = [
+    "setup_tims.pa_setting.field.route",
+    "setup_tims.pa_setting.field.type",
+    "setup_tims.pa_setting.field.from_to",
+    "setup_tims.pa_setting.field.model",
+    "setup_tims.pa_setting.field.remark",
+]
 ROW_VALUES = ["", "", "", "", ""]
 PATTERN_NO = None  # run-pattern No. (字軌選擇) → shown as "(00x)" under the big A; None until a commit
 _committed = None  # raw route_select.run_on result for the committed route — drives the 起動 launch config
@@ -189,12 +195,13 @@ def render(surf):
     btn_font = i18n.pixel_font_for_lang(ACTIVE_LANG, BTN_NATIVE)
 
     # ── table geometry first (so the select button can sit above the VISIBLE table = the dark bg) ──
-    # Label column width DERIVES from the widest label (始発・終着駅, row 3) so column 2 hugs row 3's text.
-    labels = ROW_LABELS
+    # Label column width DERIVES from the widest RESOLVED label in the active locale (line 204) so the
+    # label column hugs its text — the widest row varies by locale now that labels are localized.
+    labels = [i18n.t(k) for k in ROW_LABEL_KEYS]  # localized field labels (re-resolve on locale switch)
     n = len(labels)
     table_h = n * ROW_H
-    label_font = i18n.pixel_font_for_lang("en", ROW_LABEL_NATIVE)  # "en"=NotoSansJP — Japanese labels
-    value_font = i18n.pixel_font_for_lang("en", ROW_VALUE_NATIVE)  # "en"=NotoSansJP — Japanese values
+    label_font = i18n.pixel_font_for_lang(ACTIVE_LANG, ROW_LABEL_NATIVE)  # active-locale face (labels localize now)
+    value_font = i18n.pixel_font_for_lang("en", ROW_VALUE_NATIVE)  # "en"=NotoSansJP — values are JP proper nouns
     label_col_w = max(lowres_text_size(l, label_font, 1, 0)[0] for l in labels) + 2 * CELL_PAD_X
     table_w = A_COL_W + label_col_w + VALUE_COL_W
     grid = pygame.Rect(TABLE_X, TABLE_Y, table_w, table_h)
@@ -240,8 +247,9 @@ def render(surf):
     # BEFORE 列車型號 so that button can align to the cluster's bottom row (row2). Uniform size =
     # worst-case content size across the 3 labels (shorter labels center inside).
     ocr_font = i18n.pixel_font_for_lang(ACTIVE_LANG, OCR_BTN_NATIVE)
+    ocr_launch_label, ocr_manual_label, ocr_setting_label = (i18n.t(OCR_LAUNCH_KEY), i18n.t(OCR_MANUAL_KEY), i18n.t(OCR_SETTING_KEY))
     lg = _BTN_TUNEABLES["line_gap"]
-    _lbl_sz = [lowres_text_size(l, ocr_font, 1, lg) for l in (OCR_LAUNCH_LABEL, OCR_MANUAL_LABEL, OCR_SETTING_LABEL)]
+    _lbl_sz = [lowres_text_size(l, ocr_font, 1, lg) for l in (ocr_launch_label, ocr_manual_label, ocr_setting_label)]
     _bevel = 2 * _BTN_TUNEABLES["outer_border_w"] + _BTN_TUNEABLES["bezel_lip_w"] + _BTN_TUNEABLES["bezel_shadow_w"]
     bw = max(w for w, _ in _lbl_sz) + 2 * OCR_BTN_MARGIN_X + _bevel  # equal width (worst-case label)
     bh = max(h for _, h in _lbl_sz) + 2 * OCR_BTN_MARGIN_Y + _bevel  # equal height — MARGIN_Y keeps it short
@@ -271,9 +279,9 @@ def render(surf):
         (br_x - p, row2_y - p),  # notch: back in to the right column's left edge
     ]
     pygame.draw.polygon(surf, OCR_BOX_COLOR, frame_pts, OCR_BOX_W)
-    draw_tims_button(surf, launch_rect, OCR_LAUNCH_LABEL, font=ocr_font, t=_BTN_TUNEABLES)
-    draw_tims_button(surf, manual_rect, OCR_MANUAL_LABEL, font=ocr_font, t=_BTN_TUNEABLES)
-    draw_tims_button(surf, setting_rect, OCR_SETTING_LABEL, font=ocr_font, t=_BTN_TUNEABLES)
+    draw_tims_button(surf, launch_rect, ocr_launch_label, font=ocr_font, t=_BTN_TUNEABLES)
+    draw_tims_button(surf, manual_rect, ocr_manual_label, font=ocr_font, t=_BTN_TUNEABLES)
+    draw_tims_button(surf, setting_rect, ocr_setting_label, font=ocr_font, t=_BTN_TUNEABLES)
 
     return {
         "select": sel_rect,
@@ -347,7 +355,7 @@ def run_on(screen):
                     press_transition(
                         screen,
                         rect=hits["manual"],
-                        label=OCR_MANUAL_LABEL,
+                        label=i18n.t(OCR_MANUAL_KEY),
                         font=ocr_font,
                         t=_BTN_TUNEABLES,
                         redraw=lambda s: render(s),
@@ -362,7 +370,7 @@ def run_on(screen):
                     press_transition(
                         screen,
                         rect=hits["ocr_launch"],
-                        label=OCR_LAUNCH_LABEL,
+                        label=i18n.t(OCR_LAUNCH_KEY),
                         font=ocr_font,
                         t=_BTN_TUNEABLES,
                         redraw=lambda s: render(s),
@@ -385,7 +393,7 @@ def run_on(screen):
                     press_transition(
                         screen,
                         rect=hits["ocr_setting"],
-                        label=OCR_SETTING_LABEL,
+                        label=i18n.t(OCR_SETTING_KEY),
                         font=ocr_font,
                         t=_BTN_TUNEABLES,
                         redraw=lambda s: render(s),

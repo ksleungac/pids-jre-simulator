@@ -45,8 +45,8 @@ def _run_tutorial(screen_size: tuple[int, int]) -> bool:
 def _run_setup(args, settings, base_dir):
     """Show the setup flow (TIMS or classic) and return a launch config, or None to exit. Owns its own
     display creation so it can be re-entered after a drive returns Home (band Home button)."""
-    if args.tims:
-        # TIMS-console setup flow (setup_tims), own-window 730×610. Lazy import: only --tims pulls it in.
+    if not args.classic:
+        # TIMS-console setup flow (setup_tims), own-window 730×610 — now the DEFAULT flow.
         from setup_tims import run as run_tims
 
         pygame.display.set_mode(TIMS_SIZE)
@@ -107,9 +107,9 @@ def main():
 
     parser = argparse.ArgumentParser(description="Japanese Train PA Simulator")
     parser.add_argument(
-        "--tims",
+        "--classic",
         action="store_true",
-        help="Launch the TIMS-console setup flow (setup_tims) instead of the classic setup screen (manual mode only)",
+        help="Launch the classic setup screen instead of the default TIMS-console setup flow (setup_tims)",
     )
     args = parser.parse_args()
 
@@ -149,9 +149,9 @@ def main():
     # First-run OOBE tutorial (CLASSIC setup only). Runs once after the language picker, before setup.
     # Set ``oobe_completed=True`` regardless of how the tutorial finished (Done / Skip / asset-missing)
     # so we don't re-prompt on next launch — a "replay" affordance lives on the setup screen.
-    # The TIMS flow (--tims) does its OWN OOBE: the 教學 card flashes until the first visit (home._mark_oobe_done
-    # persists the flag), so skip the forced fullscreen tutorial there.
-    if not args.tims and not settings.get("oobe_completed"):
+    # The TIMS flow (default) does its OWN OOBE: the 教學 card flashes until the first visit (home._mark_oobe_done
+    # persists the flag), so skip the forced fullscreen tutorial there — only the classic path runs it.
+    if args.classic and not settings.get("oobe_completed"):
         _run_tutorial(SETUP_SIZE)
         settings["oobe_completed"] = True
         i18n.save_settings(settings)

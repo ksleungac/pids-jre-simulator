@@ -32,7 +32,7 @@ import tims_chrome as chrome
 from . import dims
 
 ACTIVE_LANG = "zh_HK"  # develop/preview in zh_HK (chrome is i18n)
-OK_LABEL = "明白"  # accept button (zh_HK draft → i18n later); 2-char, justify-split like other pages' 返回/設定
+OK_KEY = "setup.ocr_disclaimer.accept"  # accept button label key; 2-char justify-split like other pages' 返回/設定
 
 # fmt: off
 # ── layout tuneables ──────────────────────────────────────────────────────────
@@ -675,7 +675,7 @@ def render_consent(screen, scroll_y, read_only=False):
     # Footer button height drives the panel bottom, so the gap panel→button and button→screen-bottom
     # are EQUAL (FOOTER_MARGIN each) — a balanced bottom regardless of the button's height.
     btn_font = i18n.pixel_font_for_lang(ACTIVE_LANG, FOOT_NATIVE)
-    foot_h = tims_button_size(OK_LABEL, btn_font, _FOOT_T)[1]
+    foot_h = tims_button_size(i18n.t(OK_KEY), btn_font, _FOOT_T)[1]
     fy = SCREEN_H - FOOTER_MARGIN - foot_h  # footer button TOP
     panel_top = band.BAND_H + 40 + PANEL_TOP_GAP  # title row ≈ 40px under the band
     panel = pygame.Rect(PANEL_X, panel_top, SCREEN_W - 2 * PANEL_X, (fy - FOOTER_MARGIN) - panel_top)
@@ -702,7 +702,7 @@ def render_consent(screen, scroll_y, read_only=False):
         back_rect = pygame.Rect(SCREEN_W - PANEL_X - bw, fy, bw, foot_h)
         draw_tims_button(screen, back_rect, i18n.t("setup_tims.back"), font=btn_font, t=_FOOT_T)
         return band_hits, None, back_rect, max_scroll, True
-    ow, oh = tims_button_size(OK_LABEL, btn_font, _FOOT_T)
+    ow, oh = tims_button_size(i18n.t(OK_KEY), btn_font, _FOOT_T)
     cw, ch = tims_button_size(i18n.t("setup.ocr_disclaimer.cancel"), btn_font, _FOOT_T)
     ok_rect = pygame.Rect(SCREEN_W - PANEL_X - ow, fy, ow, oh)
     cancel_rect = pygame.Rect(ok_rect.left - 10 - cw, fy, cw, ch)  # both hug the right (IRL 取消/設定 pair)
@@ -714,9 +714,9 @@ def render_consent(screen, scroll_y, read_only=False):
         chrome.blit_lowres(screen, hint, PANEL_X, fy + (foot_h - hh) // 2, hint_font, AMBER, 1)
     if ok_ready:  # reached the bottom → flash lit↔normal to hint the user can proceed
         lit = (pygame.time.get_ticks() // 450) % 2 == 0
-        draw_tims_button(screen, ok_rect, OK_LABEL, font=btn_font, t=_FOOT_T, state="waiting" if lit else "normal")
+        draw_tims_button(screen, ok_rect, i18n.t(OK_KEY), font=btn_font, t=_FOOT_T, state="waiting" if lit else "normal")
     else:  # locked → grey palette until scrolled to bottom
-        draw_tims_button(screen, ok_rect, OK_LABEL, font=btn_font, t=_FOOT_T_GREY)
+        draw_tims_button(screen, ok_rect, i18n.t(OK_KEY), font=btn_font, t=_FOOT_T_GREY)
     return band_hits, cancel_rect, ok_rect, max_scroll, ok_ready
 
 
@@ -757,7 +757,7 @@ def run_consent(screen, read_only=False):
                     return False
                 if not read_only and ok_ready and ok_rect.collidepoint(event.pos):
                     press_transition(
-                        screen, rect=ok_rect, label=OK_LABEL, font=i18n.pixel_font_for_lang(ACTIVE_LANG, FOOT_NATIVE), t=_FOOT_T, blank_ms=0
+                        screen, rect=ok_rect, label=i18n.t(OK_KEY), font=i18n.pixel_font_for_lang(ACTIVE_LANG, FOOT_NATIVE), t=_FOOT_T, blank_ms=0
                     )
                     return True
 
@@ -810,7 +810,7 @@ def render_settings(screen):
     screen.fill(BG_COLOR)
     band.ACTIVE_LANG = ACTIVE_LANG
     band_hits = band.render(screen)
-    chrome.title_row(screen, SETTINGS_CODE, "OCR自動報站設定", ACTIVE_LANG)  # zh_HK draft title → i18n later
+    chrome.title_row(screen, SETTINGS_CODE, i18n.t("setup_tims.ocr_settings.heading"), ACTIVE_LANG)
 
     y = band.BAND_H + 90
     lead_minus, lead_plus = _draw_stepper(screen, i18n.t("setup.lead_label"), f"{_lead_m}m", y)
