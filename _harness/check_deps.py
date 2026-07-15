@@ -16,8 +16,10 @@ import tomllib
 from pathlib import Path
 
 # pyproject.toml install name → import-time top-level package names (when they differ)
+# pywin32 installs several independent top-level modules (win32api, win32con, win32gui
+# via the win32 package, pywintypes, …); list each name production actually imports.
 _INSTALL_TO_IMPORT: dict[str, list[str]] = {
-    "pywin32": ["win32", "pywintypes"],
+    "pywin32": ["win32", "win32api", "pywintypes"],
 }
 
 # Non-production dirs to exclude from scanning
@@ -36,12 +38,25 @@ _EXCLUDE_DIRS = {
 }
 
 
+# Root-level non-production Python excluded from the scan: the preserved monolith +
+# preview/testing harnesses. Not shipped, not reachable from main.py, so their imports
+# don't affect release safety — and they legitimately import dev-only tools
+# (preview_display.py loads _dev_scripts/calibration_editor via a sys.path hack).
+# NOTE: plot_drive.py is deliberately NOT excluded — it IS production-reachable
+# (Report button → auto_input/driver.py), per critical_lessons.md §3.
+_EXCLUDE_ROOT_FILES = {"old_version.py"}
+_EXCLUDE_ROOT_PREFIXES = ("preview_",)
+
+
 def _production_files(root: Path) -> list[Path]:
     files: list[Path] = []
     for item in root.iterdir():
         if item.is_file() and item.suffix == ".py":
-            if not item.name.startswith("_") and item.name != "old_version.py":
-                files.append(item)
+            if item.name.startswith("_") or item.name in _EXCLUDE_ROOT_FILES:
+                continue
+            if item.name.startswith(_EXCLUDE_ROOT_PREFIXES):
+                continue
+            files.append(item)
         elif item.is_dir():
             if item.name.startswith(("_", ".")) or item.name in _EXCLUDE_DIRS:
                 continue

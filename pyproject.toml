@@ -10,6 +10,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "certifi>=2026.4.22",
     "dxcam>=0.3.0",
     "keyboard>=0.13.5",
     "numpy>=2.4.2",

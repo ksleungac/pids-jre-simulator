@@ -957,6 +957,7 @@ name = "pids-jre-simulator"
 version = "0.5.4"
 source = { virtual = "." }
 dependencies = [
+    { name = "certifi" },
     { name = "dxcam" },
     { name = "keyboard" },
     { name = "numpy" },
@@ -986,6 +987,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "certifi", specifier = ">=2026.4.22" },
     { name = "dxcam", specifier = ">=0.3.0" },
     { name = "keyboard", specifier = ">=0.13.5" },
     { name = "numpy", specifier = ">=2.4.2" },

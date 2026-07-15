@@ -35,6 +35,11 @@ LINE_ICONS_DIR = DATA_ROOT / "line_icons"
 PASSING_FORBIDDEN = ("sta", "sta_cut", "time", "pa_at_station")
 PRE_STOP_FORBIDDEN = ("pa", "pa_at_station", "sta", "sta_cut", "time")
 VALID_LINE_CATEGORIES = {"jr_east", "shinkansen", "non_jr"}
+# Active-line badge codes (route-level `line_code`) — drives the transfer-info
+# active-line filter. See DATA_FORMAT.md § Route-Level Fields.
+VALID_LINE_CODES = {"JY", "JK", "JC", "JO", "JU", "JT", "JJ", "JE", "JN", "JA"}
+# UI-chrome locales every data/translations_app.json key must carry.
+APP_LOCALES = ("en", "zh_HK", "zh_CN")
 
 
 def load(path) -> dict:
@@ -138,6 +143,44 @@ def check_transfers_by_view(stations_data: dict, lines_data: dict, issues: list)
                     )
 
 
+def _check_color(rel: str, field: str, val, issues: list) -> None:
+    """A color field, when present, must be [R, G, B] ints in 0-255. Colors are
+    consumed at render time, so a malformed value slips past the loader
+    smoke-check and only crashes / mis-renders in the live drive."""
+    if val is None:
+        return
+    if not (isinstance(val, list) and len(val) == 3 and all(isinstance(c, int) and 0 <= c <= 255 for c in val)):
+        issues.append((rel, f"{field}={val!r}: expected [R, G, B] ints 0-255"))
+
+
+def check_app_translations(issues: list) -> None:
+    """data/translations_app.json: every key carries all APP_LOCALES with a
+    non-empty value, and {placeholder} tokens match across locales. Guards the
+    recurring missing-locale-key -> tofu / dropped-{placeholder} -> format-break
+    class (e.g. the packaged zh_CN tofu). EN is the placeholder reference
+    (authoritative per the file's own _comment)."""
+    data = load(DATA_ROOT / "translations_app.json")
+    ph = re.compile(r"\{[^}]+\}")
+    for key, val in data.items():
+        if key.startswith("_"):  # _comment metadata
+            continue
+        if not isinstance(val, dict):
+            issues.append(("data/translations_app.json", f"'{key}': expected {{locale: text}} object"))
+            continue
+        for loc in APP_LOCALES:
+            if loc not in val:
+                issues.append(("data/translations_app.json", f"'{key}': missing '{loc}' translation"))
+            elif not val[loc]:
+                issues.append(("data/translations_app.json", f"'{key}': '{loc}' is empty"))
+        en_ph = set(ph.findall(val["en"])) if isinstance(val.get("en"), str) else set()
+        for loc in APP_LOCALES:
+            if loc == "en" or not isinstance(val.get(loc), str):
+                continue
+            loc_ph = set(ph.findall(val[loc]))
+            if loc_ph != en_ph:
+                issues.append(("data/translations_app.json", f"'{key}': '{loc}' placeholders {sorted(loc_ph)} != en {sorted(en_ph)}"))
+
+
 def check_route(route_path: Path, translations: dict, train_types: dict, issues: list) -> None:
     rel = route_path.parent.relative_to(AUDIO_ROOT).as_posix()
     try:
@@ -157,6 +200,22 @@ def check_route(route_path: Path, translations: dict, train_types: dict, issues:
     dest = data.get("dest", "")
     if not fixture and dest and dest not in translations:
         issues.append((rel, f'dest "{dest}": no translations.json entry'))
+
+    # Route-level: model → train-model registry (cross-ref)
+    model = data.get("model")
+    if not fixture and model:
+        from displays.train_models import TRAIN_MODELS
+
+        if model not in TRAIN_MODELS:
+            issues.append((rel, f'model "{model}": not a registered train model (displays/train_models)'))
+
+    # Route-level: line_code enum + color [R,G,B] shape
+    line_code = data.get("line_code")
+    if not fixture and line_code and line_code not in VALID_LINE_CODES:
+        issues.append((rel, f'line_code "{line_code}": not a known active-line code {sorted(VALID_LINE_CODES)}'))
+    if not fixture:
+        for cfield in ("color", "contrast_color", "type_color"):
+            _check_color(rel, cfield, data.get(cfield), issues)
 
     # pre_stops shape (shape rule, applies to fixtures too)
     for i, ps in enumerate(data.get("pre_stops", [])):
@@ -338,11 +397,18 @@ def main():
         check_lines_json(lines, issues)
         check_stations_transfers(stations, lines, issues)
         check_transfers_by_view(stations, lines, issues)
+        check_app_translations(issues)
         route_paths = sorted(AUDIO_ROOT.rglob("route.json"))
     else:
         route_paths = [route_arg]
 
     for route_path in route_paths:
+        rel = route_path.parent.relative_to(AUDIO_ROOT).as_posix()
+        # Full-scan = shipped-data gate; `_*/` routes (mock / archive / WIP like
+        # _joban) are not shipped, so don't gate the release on them. An explicit
+        # --route still validates whatever's named (fixture-aware in check_route).
+        if route_arg is None and is_fixture(rel):
+            continue
         check_route(route_path, translations, train_types, issues)
         check_route_frames(route_path, issues)
         check_route_loads(route_path, translations, issues)

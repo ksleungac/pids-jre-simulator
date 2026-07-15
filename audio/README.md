@@ -48,7 +48,7 @@ Ordered by JR EAST line code. Standard fields omitted (= follows convention). En
 
 - **Name:** 常磐線 / Jōban Line
 - **Diagrams:** `tsuchiura` (station-name descriptive — folder name deviates from scheduled-ID convention)
-- **Status: WIP.** `route.json` incomplete — missing `time` on every stop, missing `sta_code` on every stop, mixed PA filename convention (Roman codes `JT1/JJ1` mixed with numerics `4/5/6`), terminus 土浦 has `sta: []` instead of field-omit. `validate_data.py` flags are expected, not real bugs. Don't auto-fix; await user pass.
+- **Status: WIP — not shipped; moved to `audio/_joban/` (2026-07-15) so the incomplete route stays out of the release picker.** `route.json` incomplete — missing `time` on every stop, missing `sta_code` on every stop, mixed PA filename convention (Roman codes `JT1/JJ1` mixed with numerics `4/5/6`), terminus 土浦 has `sta: []` instead of field-omit. `validate_data.py` flags are expected, not real bugs. Don't auto-fix; await user pass.
 
 ### JK — Keihin-Tohoku (京浜東北線)
 

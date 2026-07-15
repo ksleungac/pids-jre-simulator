@@ -357,6 +357,7 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
     "type_color": [R, G, B],       // Color for train type text (optional, default: black)
     "type": "列車種別",             // Train type (e.g., 快速，普通，各駅停車)
     "dest": "終点",                 // Final destination (kanji) - furigana loaded from data/translations.json
+    "remarks": {...},              // Optional. {direction, through, note} — feeds the TIMS route-select 備考 column via setup_tims/route_select._compose_remark.
     "pre_stops": [...],            // Optional. Through-service pre-route stations rendered as dim/passed
     "frames": [...]                // Optional. Through-service display frames — partitions the route, LCD swaps at junctions
 }
@@ -563,7 +564,7 @@ All lines share central `data/translations.json` (display text) and `data/statio
 | Line | Code Prefix | Folder |
 |------|-------------|--------|
 | Chuo Main (中央線) | JC | `audio/chuo/` |
-| Joban (常磐線) | JJ | `audio/joban/` |
+| Joban (常磐線) | JJ | `audio/_joban/` (WIP — not shipped) |
 | Keihin-Tohoku (京浜東北) | JK | `audio/keihin/` |
 | Keiyo (京葉線) | JE | `audio/keiyo/` |
 | Nambu (南武線) | JN | `audio/nambu/` |
