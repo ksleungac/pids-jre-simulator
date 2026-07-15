@@ -112,10 +112,12 @@ _LANG_TUNEABLES = {
     # bevel was trimmed (-10%), the exact-cancel tipped under the k=2 threshold.
 }
 
-# Big-button chrome: ACTION_IDS = stable hit keys (only "route" + "tutorial" are wired; settings/record
-# are inert placeholders). ACTION_KEYS parallels them — the i18n labels (translations_app.json). Leftmost
-# card = 報站設定 (PA setup; the route → diagram → station flow), keyed "route" but labelled action.pa_setup.
+# Big-button chrome: ACTION_IDS = stable hit keys. "route" + "tutorial" are wired; "settings" + "record"
+# are OUT OF SCOPE this release → rendered silver/disabled (chrome.DISABLED) + fully inert (no press beat,
+# no nav). ACTION_KEYS parallels them — the i18n labels (translations_app.json). Leftmost card = 報站設定
+# (PA setup; the route → diagram → station flow), keyed "route" but labelled action.pa_setup.
 ACTION_IDS = ["route", "tutorial", "settings", "record"]
+INACTIVE_ACTIONS = {"settings", "record"}  # not in this release — silver + inert
 ACTION_KEYS = [
     "setup_tims.action.pa_setup",
     "setup_tims.action.tutorial",
@@ -243,10 +245,15 @@ def render_menu(surf):
     for i, label in enumerate(actions):
         x = big_x0 + i * (BIG_W + BIG_GAP)
         rect = pygame.Rect(x, big_y, BIG_W, BIG_H)
-        # OOBE: flash the 教學 card (normal↔waiting) until the first visit, to pull a new user in
-        state = "waiting" if (oobe_flash and ACTION_IDS[i] == "tutorial") else "normal"
-        draw_tims_button(surf, rect, label, font=action_font, t=at, state=state)
-        action_rects[ACTION_IDS[i]] = rect
+        aid = ACTION_IDS[i]
+        if aid in INACTIVE_ACTIONS:
+            # Out of scope this release → silver/disabled palette (same geometry), no flash.
+            draw_tims_button(surf, rect, label, font=action_font, t={**at, **chrome.DISABLED}, state="normal")
+        else:
+            # OOBE: flash the 教學 card (normal↔waiting) until the first visit, to pull a new user in
+            state = "waiting" if (oobe_flash and aid == "tutorial") else "normal"
+            draw_tims_button(surf, rect, label, font=action_font, t=at, state=state)
+        action_rects[aid] = rect
     return action_rects, action_font, at, hint_rect, lang_rects
 
 
@@ -320,6 +327,8 @@ def run(screen):
                     rect = action_rects.get(aid)
                     if not (rect and rect.collidepoint(event.pos)):
                         continue
+                    if aid in INACTIVE_ACTIONS:
+                        break  # out of scope this release — silver + inert (no press beat, no nav)
                     is_nav = aid in ("tutorial", "route")  # Tutorial + 報站設定 navigate; others inert
                     # press beat (yellow) for every card; loading beat only for the navigational ones
                     press_transition(

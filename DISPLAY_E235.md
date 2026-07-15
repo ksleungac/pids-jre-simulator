@@ -277,9 +277,10 @@ The "15 ahead" walk dedupes by sta_code, handling the route.json shape where Yam
 
 **Out-of-spec fallback**: any non-Yamanote route loaded into E235-0 gets the open horseshoe (`OpenRouteFullRouteDisplay`) — the same racetrack with one cap dropped, NOT a linear bar. See [§ E235-0 — open-horseshoe full-route](#e235-0--open-horseshoe-full-route-non-yamanote).
 
+**Click-to-jump** (`hit_test`): nearest station dot within `_HIT_RADIUS` (40 px) → its stop index, else `None` (off-track). Curved layout ⇒ nearest-station, not E235-1000's rectangular cells. Positions keyed by JY code (`_pos_for_stop` maps stop→jy→pos); the open horseshoe overrides `_pos_for_stop` to its index-keyed positions. Coords are LCD-local (caller subtracted the debug band); the duplicate loop terminal (大崎 at both ends) resolves to the first index.
+
 **Pending iteration / known gaps:**
 
-- Hit-test (click-to-jump on the racetrack) returns `None` for now — pentagon is animated + no clickable affordance yet.
 - The breath animation only cycles in interactive preview / app mode; screenshots capture a single frame at random phase.
 
 ---
@@ -317,6 +318,8 @@ Live in [`displays/train_models/e235_0/lower_lcd.py`](displays/train_models/e235
 **Band — Tier-2 mask PNG.** Shape is hand-drawn white-on-transparent (`data/e235_0/five_station_band.png`, pixel-precise, not parametric), baked once with the route line color at `__init__` (`_bake_band` — alpha-stencil tint: near-white fill → line color, the grey edge outline left as-drawn, alpha untouched). A green fill animation (`_BAND_FILL_DURATION`) replays on each slot-enter, sweeping bottom → top **along the band's curved centerline** with the leading front cut perpendicular to the local tangent (so it stays diagonal to the curve) and feathered smooth (`_BAND_FILL_FEATHER`) rather than a hard cut. The centerline = the retired arc waypoints' end-caps (p0/p6) bracketing the live markers m0..m4, built in `_build_fill_centerline` (which densifies via the Catmull-Rom helper `_build_catmull_rom_centerline`); the arc machinery's own render path is retired — see [WIP_calibration_editor.md § "Two-tier tuning model"](WIP_calibration_editor.md).
 
 **Five markers** (positions in `_TUNEABLES_FIVE_STATION`, calibration-editor tuneable): m0 = current stop at the bottom, m1..m4 = next four going up. The next-stop walk (`_visible_stop_indices`) wraps past the doubled loop terminal with name-dedup on a **circular** route (`stops[0].name == stops[-1].name`), so approaching 大崎 the view keeps extending around the loop (大崎 → 品川 → …) instead of dead-ending; linear routes stop at the last stop. m0 is a **free-polygon** red pentagon (five hand-placed vertices v0..v4 — fixed slot + orientation, so no parametric shape model; the white dot rides m0/`m0_dr`) when STOPPING; an approaching-circle + countdown digit + animated sweep arrow (`a0_*`) when APPROACHING. m1..m4 are numbered countdown circles. Minute values = the E235-1000 `draw_times` cumulative chain (`_ahead_minutes` / `_first_stop_minutes`); the chain restarts from 0 when STOPPED (the curr→curr+1 leg is already travelled) vs seeds from the remaining-to-curr time when APPROACHING.
+
+**Click-to-jump** (`hit_test`): each visible slot's box spans its marker + badge + name (3-char name width, matching `_draw_station_name`); a click inside returns `vis[k]` — which IS the stop index (`self.stops` space == sim-index space, no frame offset). Nearest slot-centre wins when wide-name boxes overlap.
 
 #### Inline transfer panel (left column)
 

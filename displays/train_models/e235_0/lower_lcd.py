@@ -1237,10 +1237,34 @@ class CircularFullRouteDisplay:
     # hit-testing each station's pentagon/numbered-circle/dot at its
     # `self.positions[jy]` screen coord (use `self.circle_outer_radius` as the
     # pick radius for circle/dot; pentagon hit-box is its bounding rect).
-    # Sibling reference: e235_1000.JapaneseDisplay.hit_test (linear bar).
+    # Sibling reference: e235_1000.JapaneseDisplay.hit_test (linear bar). This model's layout is a
+    # curved racetrack, not a linear cell grid, so hit-testing is NEAREST-STATION within a radius:
+    # each station's screen dot lives in self.positions (coords in the same LCD-local space as the
+    # click, per __init__ y_top = UPPER_HEIGHT — the caller already subtracted the debug band).
+    _HIT_RADIUS = 40  # px — nearest station beyond this → miss (click landed on empty track / disclaimer)
+
+    def _pos_for_stop(self, idx: int) -> Optional[Tuple[int, int]]:
+        """Screen position of stop `idx`. Circular keys self.positions by JY code; OpenRoute
+        (index-keyed positions) overrides this."""
+        jy = _parse_jy_code(self.stops[idx].get("sta_code", ""))
+        return self.positions.get(jy) if jy is not None else None
+
     def hit_test(self, state, mx: int, my: int) -> Optional[int]:
-        """Click hit-test. Deferred — return None for now."""
-        return None
+        """Map an LCD-local click to a stop index (click-to-jump): the nearest station dot within
+        _HIT_RADIUS, else None. Past-dest filtering lives in the caller (PASimulator) — circular
+        routes skip it, so every stop is clickable."""
+        best_idx, best_d2 = None, None
+        for idx in range(len(self.stops)):
+            pos = self._pos_for_stop(idx)
+            if pos is None:
+                continue
+            dx, dy = mx - pos[0], my - pos[1]
+            d2 = dx * dx + dy * dy
+            if best_d2 is None or d2 < best_d2:
+                best_idx, best_d2 = idx, d2
+        if best_idx is None or best_d2 > self._HIT_RADIUS**2:
+            return None
+        return best_idx
 
 
 # =============================================================================
@@ -1492,6 +1516,11 @@ class OpenRouteFullRouteDisplay(CircularFullRouteDisplay):
             mid = x + w / 2
             pts = [(2 * mid - px, py) for (px, py) in pts]
         draw_aapolygon(self.screen, PASSED_COLOR, pts)
+
+    def _pos_for_stop(self, idx: int) -> Optional[Tuple[int, int]]:
+        """OpenRoute keys self.positions by stop index (not JY code) — override the parent's
+        JY lookup so nearest-station hit_test (inherited) resolves correctly."""
+        return self.positions.get(idx)
 
     def show_stops(self, state, current_time: float = 0.0) -> None:
         """Render the open horseshoe. Same draw order as the circular parent,
@@ -2504,8 +2533,32 @@ class JapaneseFiveStationDisplay:
         draw_text_given_width(nx, ny, width, font, name, DARK_BG, self.screen)
 
     def hit_test(self, state, mx: int, my: int) -> Optional[int]:
-        """Click hit-test. Deferred — no clickable elements yet."""
-        return None
+        """Map an LCD-local click to a stop index (click-to-jump). The view shows up to 5 fixed slots
+        (curr + 4 ahead, from _visible_stop_indices); each slot's clickable box spans its marker +
+        badge + station name. `vis[k]` IS the stop index (self.stops space == sim-index space), so the
+        matched slot returns directly. Nearest slot-centre wins when boxes overlap (wide names)."""
+        if state is None:
+            return None
+        vis = self._visible_stop_indices(state.curr_stop)
+        t = _TUNEABLES_FIVE_STATION
+        MARKER_R = 22  # nominal marker reach (largest is m0_circle_r=22); pads the box on the marker side
+        best_idx, best_d2 = None, None
+        for k, idx in enumerate(vis):
+            mx0, my0 = t[f"m{k}_x"], t[f"m{k}_y"]
+            gx, gy = t[f"g{k}_x"], t[f"g{k}_y"]
+            name_font = self._font("ShinGoPr6N-Medium.otf", t[f"g{k}_ns"])
+            name_w = name_font.size("永")[0] * 3  # fixed 3-char name width — matches _draw_station_name
+            name_h = name_font.get_height()
+            left = min(mx0 - MARKER_R, gx)
+            right = gx + t[f"g{k}_ni"] + name_w
+            top = min(my0 - MARKER_R, gy - name_h // 2)
+            bot = max(my0 + MARKER_R, gy + name_h // 2)
+            if left <= mx <= right and top <= my <= bot:
+                cx, cy = (left + right) / 2, (top + bot) / 2  # slot centre → disambiguate overlaps
+                d2 = (mx - cx) ** 2 + (my - cy) ** 2
+                if best_d2 is None or d2 < best_d2:
+                    best_idx, best_d2 = idx, d2
+        return best_idx
 
 
 # =============================================================================

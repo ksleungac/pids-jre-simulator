@@ -5,8 +5,8 @@ realistic OCR states (boot / stopped / approaching / paused / fire), so the band
 without the game. The mock fixtures (`_MockState` / `_STOPS` / `_scenarios`) are inlined below —
 self-contained, dev-only.
 
-Keys:  1-6 scenario   P pause   L language (en / zh_HK / zh_CN)   ESC/Q quit
-Click: the band's Pause button toggles pause.
+Keys:  1-7 scenario   P pause   S save   L language (en / zh_HK / zh_CN)   ESC/Q quit
+Click: the band's Pause / Save button. Save flashes the confirmation strip (generating → saved).
 
   uv run _dev_scripts/preview_band_ocr.py
   uv run _dev_scripts/preview_band_ocr.py --screenshot _band_ocr.png   (montage of ALL scenarios)
@@ -168,6 +168,29 @@ def _scenarios() -> list[tuple[str, dict, _MockState]]:
             },
             _MockState(curr_stop=3, cnt_pa=0),
         ),
+        (
+            "7. limit just changed (cyan flash then clears)",
+            {
+                "badge": "MOVING",
+                "badge_diff": 1.3,
+                "speed": 68,
+                "speed_score": 0.94,
+                "distance": 900,
+                "distance_score": 0.92,
+                "stopping_offset_cm": None,
+                "stopping_offset_score": 1.0,
+                "speed_limit": 45,
+                "speed_limit_score": 0.95,
+                "limit_change_ts": 0.0,  # refreshed to the scenario-enter ts in _live → flashes then clears
+                "departure_observed": True,
+                "arrival_observed": False,
+                "at_station_observed": False,
+                "inferred_state": "CRUISING",
+                "segment_start_stop": 2,
+                "paused": False,
+            },
+            _MockState(curr_stop=3, cnt_pa=1),
+        ),
     ]
 
 
@@ -175,7 +198,7 @@ def _footer(surf, font, label, paused, lang):
     surf.fill((30, 30, 36))
     pygame.draw.line(surf, (60, 60, 70), (0, 0), (surf.get_width(), 0), 1)
     surf.blit(font.render(f"{label}    [lang {lang}]", True, (220, 220, 220)), (12, 10))
-    surf.blit(font.render("1-6 scenario   P pause   L language   ESC/Q quit", True, (160, 160, 160)), (12, 34))
+    surf.blit(font.render("1-7 scenario   P pause   S save   L language   ESC/Q quit", True, (160, 160, 160)), (12, 34))
     surf.blit(font.render("click the band Pause button to toggle pause", True, (160, 160, 160)), (12, 54))
     if paused:
         surf.blit(font.render("[PAUSED — OCR frozen]", True, (240, 200, 60)), (12, 74))
@@ -188,12 +211,14 @@ def _live(status, paused, fire_ts):
     live = {**status, "paused": paused} if status else status
     if live and "last_fire" in live:
         live["last_fire"] = {**live["last_fire"], "ts": fire_ts}
+    if live and "limit_change_ts" in live:
+        live["limit_change_ts"] = fire_ts  # re-arm the cyan change-flash on scenario enter → flashes then clears
     return live or None
 
 
-def _draw(window, footer_font, scenarios, idx, paused, lang, fire_ts):
+def _draw(window, footer_font, scenarios, idx, paused, lang, fire_ts, save_notice):
     label, status, mock_state = scenarios[idx]
-    hits = band.render(window.subsurface((0, 0, W, band.BAND_H)), _live(status, paused, fire_ts), mock_state, _STOPS)
+    hits = band.render(window.subsurface((0, 0, W, band.BAND_H)), _live(status, paused, fire_ts), mock_state, _STOPS, save_notice=save_notice)
     _footer(window.subsurface((0, band.BAND_H, W, FOOTER_H)), footer_font, label, paused, lang)
     return hits
 
@@ -256,9 +281,17 @@ def main():
     clock = pygame.time.Clock()
     lang_idx, idx, paused = 1, 2, False
     fire_ts = time.time()
+    save_notice = None  # {ts, phase}; S / Save-button stamps "generating", auto-flips to "saved" after ~1.5 s
     running = True
+
+    def _save_click():
+        nonlocal save_notice
+        save_notice = {"ts": time.time(), "phase": "generating"}
+
     while running:
-        hits = _draw(window, footer_font, scenarios, idx, paused, _LANGS[lang_idx], fire_ts)
+        if save_notice and save_notice["phase"] == "generating" and time.time() - save_notice["ts"] > 1.5:
+            save_notice = {"ts": time.time(), "phase": "saved"}  # mock async completion
+        hits = _draw(window, footer_font, scenarios, idx, paused, _LANGS[lang_idx], fire_ts, save_notice)
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -268,11 +301,13 @@ def main():
                     running = False
                 elif event.key == pygame.K_p:
                     paused = not paused
+                elif event.key == pygame.K_s:
+                    _save_click()
                 elif event.key == pygame.K_l:
                     lang_idx = (lang_idx + 1) % len(_LANGS)
                     band.ACTIVE_LANG = _LANGS[lang_idx]
                     i18n.set_language(_LANGS[lang_idx])
-                elif pygame.K_1 <= event.key <= pygame.K_6:
+                elif pygame.K_1 <= event.key <= pygame.K_9:
                     ni = event.key - pygame.K_1
                     if ni < len(scenarios):
                         idx = ni
@@ -280,6 +315,8 @@ def main():
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if hits and hits["pause"].collidepoint(event.pos):
                     paused = not paused
+                elif hits and hits["save"].collidepoint(event.pos):
+                    _save_click()
         clock.tick(30)
     pygame.quit()
 

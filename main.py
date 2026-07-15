@@ -117,6 +117,12 @@ def main():
     pygame.init()
     pygame.mixer.init()
 
+    # Pin every window created from here on (setup flow, tutorials, sim) always-on-top — the app is a
+    # companion overlay for the game. One seam wraps set_mode so no screen has to remember to re-pin.
+    import window_utils
+
+    window_utils.install_topmost_hook()
+
     # Kick off the fail-silent update check early so its 3s network window
     # overlaps the picker/setup screens; the setup screen polls the result.
     update_check.check_async()

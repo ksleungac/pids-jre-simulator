@@ -40,6 +40,8 @@ App-level runtime + the setup / chrome flow. Canonical home for app-level specs 
 
 Window sizes: `SETUP_SIZE=(730,420)` (classic setup / picker / OOBE), `TIMS_SIZE=(730,610)` (TIMS flow).
 
+**Always-on-top:** the app is a companion overlay for the game, so the window stays `HWND_TOPMOST`. `main()` calls `window_utils.install_topmost_hook()` once (after `pygame.init()`), wrapping `pygame.display.set_mode` so EVERY window it creates re-pins topmost — one seam, regression-proof as screens are added. Needed because every `set_mode` drops the topmost style and the TIMS flow re-`set_mode`s per screen transition; the old monolith re-pinned inline after each call, the modular rewrite kept the pin only in the sim → the setup flow lost it. Previews / dev scripts don't call the hook (stay unpinned). No-op off-Windows / if pywin32 absent.
+
 ## Launch config (setup → `main._run_drive`)
 The dict every setup flow returns, shaped like `setup.SetupScreen.run()`:
 
@@ -85,7 +87,7 @@ Codes mirror the real TIMS register (`C07AC` / `X00AA` photographed; the rest pl
 | X00AA | 番台選択 / 列車型號 model picker | `model_select.py` |
 
 ### Home (page 1)
-4 flush action cards — **報站設定** (→ C07AA) / **教學** (→ tutorial) / **設定** / **行車記錄** (last two placeholders). 3 language knobs top-right (yellow = momentary press, NOT a selected state). Version tag bottom-left (`Version ０５４`, full-width numerals; flashes an update hint when `update_check.get_update()` returns a newer release). **OOBE:** while `oobe_completed` is False the 教學 card flashes; the first visit persists the flag (`home._mark_oobe_done`) — replaces the forced first-run fullscreen tutorial.
+4 flush action cards — **報站設定** (→ C07AA) / **教學** (→ tutorial) / **設定** / **行車記錄**. The last two are **out of scope this release** → rendered silver/disabled (`chrome.DISABLED`, same geometry) + fully inert (no press beat, no nav); `home.INACTIVE_ACTIONS` drives both the palette and the click skip, so re-enabling either later is a one-line change. 3 language knobs top-right (yellow = momentary press, NOT a selected state). Version tag bottom-left (`Version ０５４`, full-width numerals; flashes an update hint when `update_check.get_update()` returns a newer release). **OOBE:** while `oobe_completed` is False the 教學 card flashes; the first visit persists the flag (`home._mark_oobe_done`) — replaces the forced first-run fullscreen tutorial.
 
 ### Route selection (route → station → diagram)
 Reached from **C07AA's 選擇路綫** button. Real TIMS route-selection screens backed by existing `route.json` (no bespoke per-line logic). Flow: **C07AB route → C07AC start station → C07AF run-pattern (diagram).**
@@ -108,7 +110,8 @@ From C07AA's 列車型號. Grid = built models (blue, from the train-model regis
 - **OCR自動報站 = the OCR consent view read-only** (`ocr_setting.run_consent(read_only=True)`).
 
 ### Persistent status band
-Full-width near-black status strip across every setup screen AND the live in-drive OCR panel — one module, `status_band.py` (root). `render(surf, status, sim_state, stops)`; `status=None` in setup → placeholder (no readings). Live drive feeds `auto_input_status` + wires the `[pause][save][home]` cluster via `app.py::_handle_band_click`. Detail: `auto_input/README.md § Debug panel`.
+Full-width near-black status strip across every setup screen AND the live in-drive OCR panel — one module, `status_band.py` (root). `render(surf, status, sim_state, stops, save_notice=)`; `status=None` in setup → placeholder (no readings). Live drive feeds `auto_input_status` + wires the `[pause][save][home]` cluster via `app.py::_handle_band_click`. Detail: `auto_input/README.md § Debug panel`.
+- **Static labels render in EVERY state; only readings/effects gate on live status.** The `制限` speed-limit row label + the `km/h`/`m` units are static chrome → shown even in the no-readings setup band (beside the dim `--`). Live-only (absent until OCR runs): the actual numbers, the limit's cyan change-flash, the yellow message strips + save confirmation. The limit's cyan block is a CHANGE cue (blinks ~`LIMIT_FLASH_WINDOW` s on a value→value change, `driver` stamps `limit_change_ts` like `last_fire`), not a resting highlight.
 
 ### Band Home
 Every setup screen's band Home returns to the HOME MENU (not one level up) with a press + loading beat. Deep pages return the sentinel `"home"`, bubbled up through parents (`route_select`/`model_select` → `pa_setting` → home; `tutorial_basic` → `tutorial_select` → home).

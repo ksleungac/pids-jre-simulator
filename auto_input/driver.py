@@ -232,13 +232,16 @@ def _badge_transition_kind(prev: Optional[str], curr: Optional[str]) -> Optional
     return None
 
 
-def _render_report_async(log_path: Path) -> None:
+def _render_report_async(log_path: Path, sim) -> None:
     """Background-thread report generation so the simulator UI doesn't freeze.
 
     `auto_input/` package and `plot_drive.py` both live at the project root, so
     the import resolves via the standard sys.path that the launching
     `main.py` set up — no per-call sys.path.insert needed (and previously
     accumulated duplicate entries on every click).
+
+    Flips `sim.last_save` phase → "saved" / "failed" on completion (atomic attr rebind, read by the
+    main-thread status band — same single-writer/single-reader pattern as `sim.auto_input_status`).
     """
     try:
         from plot_drive import render_html_report, load_jsonl
@@ -247,20 +250,25 @@ def _render_report_async(log_path: Path) -> None:
         meta, events, samples = load_jsonl(log_path)
         render_html_report(meta, events, samples, 999, out_path)
         print(f"[Drive recorder] Report saved -> {out_path}")
+        sim.last_save = {"ts": time.time(), "phase": "saved"}
     except Exception as e:
         print(f"[Drive recorder] Report generation failed: {e}")
+        sim.last_save = {"ts": time.time(), "phase": "failed"}
 
 
 def generate_report(sim) -> None:
     """Kick off async HTML drive-report generation from the sim's live JSONL log. The migrated
     Report control — called by the status band's Save button (app.py). No-op (with a note) when no
-    drive log is open yet."""
+    drive log is open yet. Stamps `sim.last_save` {ts, phase} so the status band can flash a
+    save-confirmation message (phase: nolog → generating → saved/failed)."""
     log_path = getattr(sim, "drive_log_path", None)
     if log_path is None:
         print("[Drive recorder] No drive log open yet — wait for the AutoDriver to capture some samples.")
+        sim.last_save = {"ts": time.time(), "phase": "nolog"}
         return
     print(f"[Drive recorder] Generating report from {log_path.name} ...")
-    threading.Thread(target=_render_report_async, args=(log_path,), daemon=True).start()
+    sim.last_save = {"ts": time.time(), "phase": "generating"}
+    threading.Thread(target=_render_report_async, args=(log_path, sim), daemon=True).start()
 
 
 # ─────────────────────────── auto-input driver ────────────────────────────
@@ -435,6 +443,11 @@ class AutoDriver:
     # by _fire_departure / _fire_arrival / _fire_at_station on success only;
     # skipped fires don't count.
     _last_fire: Optional[dict] = field(default=None, init=False)
+    # Speed-limit change tracking → the band's cyan change-cue. `_last_speed_limit` = last non-None
+    # OCR read; a value→different-value change stamps `_limit_change_ts` (None reads are OCR dropouts /
+    # no-limit segments, ignored so they don't spuriously flash). Published as `limit_change_ts`.
+    _last_speed_limit: Optional[int] = field(default=None, init=False)
+    _limit_change_ts: float = field(default=0.0, init=False)
     # Stop indices whose arrival PA is long enough to warrant the long-approach
     # lead bump (see LONG_APPROACH_PA_SEC). Probed once from audio headers on
     # thread start; empty until then. Looked up per-cycle by _lead_for.
@@ -648,6 +661,12 @@ class AutoDriver:
                     sample_ts = time.time()
                     if sl_val is not None and sl_score < SUSPICIOUS_SPEED_LIMIT_SCORE:
                         _dump_misread_speed_limit_cell(sl_cell, sl_val, sl_score, sample_ts)
+                    # Speed-limit change-cue: stamp on a value→different-value change (drives the band's
+                    # cyan flash). Ignore None (OCR dropout / no-limit segment) so flicker doesn't flash.
+                    if sl_val is not None:
+                        if self._last_speed_limit is not None and sl_val != self._last_speed_limit:
+                            self._limit_change_ts = sample_ts
+                        self._last_speed_limit = sl_val
 
                     # Publish status to the simulator's debug panel (atomic dict swap).
                     # Single-writer (this thread), single-reader (main thread) — no lock needed.
@@ -662,6 +681,7 @@ class AutoDriver:
                         "stopping_offset_score": offset_score,
                         "speed_limit": sl_val,
                         "speed_limit_score": sl_score,
+                        "limit_change_ts": self._limit_change_ts,
                         "segment_start_stop": self._segment_start_stop,
                         "departure_observed": self._detector.departure_observed,
                         "arrival_observed": self._detector.arrival_observed,

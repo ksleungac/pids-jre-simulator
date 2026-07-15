@@ -403,6 +403,11 @@
   "panel.distance": { "en": "distance:", "zh_HK": "距離：", "zh_CN": "距离：" },
   "panel.stop_offset": { "en": "stop offset:", "zh_HK": "停車位置：", "zh_CN": "停车位置：" },
 
+  "panel.save.generating": { "en": "Saving record…", "zh_HK": "記錄儲存中…", "zh_CN": "记录保存中…" },
+  "panel.save.saved": { "en": "Record saved", "zh_HK": "記錄已儲存", "zh_CN": "记录已保存" },
+  "panel.save.failed": { "en": "Save failed", "zh_HK": "儲存失敗", "zh_CN": "保存失败" },
+  "panel.save.nolog": { "en": "No record yet", "zh_HK": "尚無記錄", "zh_CN": "尚无记录" },
+
   "_comment_setup_tims": "TIMS setup chrome (setup_tims/ package): home menu, PA-setting (C07AA), route picker (C07AB/AC/AF), status band. Screen codes + the JP summary-table field labels stay fixed Japanese (not i18n). zh_CN reviewed by user 2026-06-28.",
 
   "setup_tims.action.pa_setup": { "en": "PA Setup", "zh_HK": "報站設定", "zh_CN": "报站设置" },

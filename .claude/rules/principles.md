@@ -158,12 +158,15 @@ When the user asks for a design decision that's claude's to drive, recommend ONE
 - Two genuinely equivalent options → pick one, name the tradeoff, let user override.
 
 ### Don't gate cheap verification behind a question
-After a visible change, if launching the app / preview lets the user verify, just launch it (background) as part of reporting — don't ask "want me to launch?".
+After a visible change, if a CHEAP IMMEDIATE preview lets the user verify, just launch it (background) as part of reporting — don't ask "want me to launch?". But don't auto-launch the FULL app when reaching the change requires manual setup navigation — that's not cheap; let the user drive it.
 
-**Why:** The launch is cheap + reversible; a permission question adds a pointless round-trip. Examples:
+**Why:** An immediate preview is cheap + reversible; a permission question adds a pointless round-trip. But a full-app launch the user must click through a whole flow to exercise isn't verification you can do for them. Examples:
 - (2026-07-11) User: *"next time don't ask such question, just launch it for me."* — after repeated "want me to launch the preview?" prompts.
+- (2026-07-15) Auto-launched `main.py` after an E235-0 click-to-jump fix (buried behind setup→route→drive→view). User: *"when fixed don't auto-launch."*
 
-**How to apply:** Change made + a preview/run path exists → launch it while reporting. Still gate genuinely irreversible / outward-facing actions.
+**How to apply:**
+- Change lands in an immediate preview (`preview_display.py`, a `_dev_scripts/preview_*` harness, a headless screenshot) → launch / render it while reporting.
+- Change is only reachable by navigating the live app → report + let the user launch; still gate genuinely irreversible / outward-facing actions.
 
 ### Ground reasoning in the user's stated terms
 When working through user-stated logic, reason strictly in the vocabulary and frame the user used. Don't import adjacent context unless the user invoked it.

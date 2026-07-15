@@ -152,6 +152,7 @@ class SetupScreen:
             return self.routes
 
         for root, dirs, files in os.walk(base_dir):
+            dirs[:] = [d for d in dirs if not d.startswith("_")]  # skip _mock/_joban/_archive… (not-shipped staging)
             if "route.json" in files:
                 route_path = os.path.join(root, "route.json")
                 try:

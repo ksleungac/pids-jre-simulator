@@ -427,7 +427,9 @@ class PASimulator:
         if not self.auto_input or self.debug_surface is None:
             return
         status_band.ACTIVE_LANG = i18n.current_lang()  # band chrome follows the user's UI language
-        self._band_hits = status_band.render(self.debug_surface, status=self.auto_input_status, sim_state=self.state, stops=self.stops)
+        self._band_hits = status_band.render(
+            self.debug_surface, status=self.auto_input_status, sim_state=self.state, stops=self.stops, save_notice=getattr(self, "last_save", None)
+        )
 
     def _handle_band_click(self, pos) -> None:
         """Dispatch a click inside the status band's control cluster (hit-rects from the last render):

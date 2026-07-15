@@ -31,13 +31,8 @@ from widgets import (
 )
 
 # TIMS band face = Noto Sans, per-locale, AA-OFF at native px, NO upscale (WIP § Font decision).
-# SMALL = the dense band left-column + message strips. Resolved via i18n.pixel_font_for_lang.
-SMALL_NATIVE = 13  # dense band left-column + message strips
-
-
-def pixel_font_small(lang):
-    return i18n.pixel_font_for_lang(lang, SMALL_NATIVE)
-
+# Resolved via i18n.pixel_font_for_lang. Left-column px are per-line (NOTIF_/STATE_NATIVE); the
+# message-strip px lives in the MSG block below (MSG_NATIVE).
 
 # fmt: off
 # ── band layout tuneables (all derived coords flow from these) ────────────────
@@ -61,10 +56,10 @@ STATE_INK          = chrome.INK
 STATE_SUB          = chrome.DIM   # dimmer secondary line
 
 # CENTER readout cell — speed limit / speed / distance (OCR placeholders), right-aligned between
-# separators. The LIMIT is ALWAYS cyan (steady highlight block); on CHANGE it FLASHES (blinks cyan↔
-# plain) for a few seconds, then settles back to STEADY cyan — cyan is the resting state, the flash
-# is the change cue. If SPEED exceeds the LIMIT the whole cell BACKGROUND flashes RED (over-speed
-# warning). Both the change-flash and over-speed are driven off live OCR deltas.
+# separators. The LIMIT is PLAIN at rest (no highlight); cyan is the CHANGE CUE only — when the limit
+# value just changed it BLINKS cyan↔plain for LIMIT_FLASH_WINDOW seconds, then settles back to plain.
+# If SPEED exceeds the LIMIT the limit block flashes RED (over-speed warning). Both the change-flash
+# and over-speed are driven off live OCR deltas (driver stamps limit_change_ts, like last_fire).
 CELL_X             = 222               # readout cell left edge — right of the (now wider) folded left column
 CELL_W             = 120
 CELL_PAD           = 8
@@ -89,9 +84,18 @@ DIST_UNIT          = "m"              # distance is ALWAYS metres (OCR reads m; 
 LIMIT_Y            = 18                # BAND ROW BASELINES — shared by readout AND left state column (rows line up); ink bottom-aligns here
 SPEED_Y            = 39
 DIST_Y             = 60
+LIMIT_LABEL        = "制限"            # 2-char row label AHEAD of the limit number = "this is the speed limit"
+                                       # (the game HUD labels it 最高速度; band cell dropped labels — this restores
+                                       # a short one). The label IS the identity cue → the number stays plain
+                                       # (no red ink). Fixed-JP (a HUD label, like NOTIF_TEXT) — not localized.
+LIMIT_LABEL_COLOR  = (150, 164, 178)   # dim slate — a quiet annotation; the bright number stays the focus
+LIMIT_LABEL_NATIVE = 16                # label px (AA-off native) — max that clears a 3-digit limit (100–130); a
+                                       # 3-digit "120 km/h" number starts ~x262, label at LIMIT_LABEL_X ends ~x257
+LIMIT_LABEL_X      = CELL_X + 3        # label left edge (just inside the cell's left separator at CELL_X)
 LIMIT_PAD_X        = 3                 # cyan limit block inset (x) — tight (hugs ink)
 LIMIT_PAD_Y        = 1
-LIMIT_FLASH_MS     = 400               # half-period of the change blink (cyan↔plain, then steady cyan)
+LIMIT_FLASH_MS     = 400               # half-period of the change blink (cyan↔plain)
+LIMIT_FLASH_WINDOW = 2.5               # seconds the change-blink runs after a limit change, then plain
 OVER_LIMIT_BG      = (190, 30, 34)     # over-speed warning: the LIMIT block flashes this red (not the cell)
 OVER_LIMIT_INK     = (245, 240, 240)   # light ink on the red block (dark cyan-ink would vanish on red)
 OVER_LIMIT_FLASH_MS = 350              # half-period of the red over-limit block flash
@@ -107,6 +111,7 @@ STRIP_RADIUS       = 0                 # SHARP corners — no rounding (user: st
 STRIP_COLOR        = (34, 46, 58)      # dim slate — TIMS message-strip fill
 STRIP_INK          = (210, 222, 230)
 MSG_K              = 1
+MSG_NATIVE         = 17                # message-strip text px (AA-off native) — bumped from 13; strip is 24px tall
 MSG_FLASH_MS       = 450               # message-display flash half-period (bright yellow, auto-clears)
 MSG_PAD_X          = 6                 # text inset inside a strip
 
@@ -227,6 +232,31 @@ def _blit_readout(
 
 
 _MSG_YELLOW = (250, 228, 70)  # TIMS message-display yellow (strips flash this, then auto-clear)
+_SAVE_KEYS = {  # Save-button confirmation → top message strip (phase set on sim.last_save by the driver)
+    "generating": "panel.save.generating",
+    "saved": "panel.save.saved",
+    "failed": "panel.save.failed",
+    "nolog": "panel.save.nolog",
+}
+SAVE_NOTICE_WINDOW = 3.0  # seconds a terminal save phase (saved/failed/nolog) shows; "generating" holds
+SAVE_GENERATING_MAX = 20.0  # failsafe: drop a stuck "generating" after this (thread died before flipping)
+
+
+def _save_message(save_notice):
+    """Resolve `sim.last_save` {ts, phase} → a localized strip message, or None when stale/absent.
+    'generating' holds up to SAVE_GENERATING_MAX (async render can outlast the terminal window);
+    terminal phases (saved/failed/nolog) show for SAVE_NOTICE_WINDOW then clear."""
+    if not save_notice:
+        return None
+    phase = save_notice.get("phase")
+    key = _SAVE_KEYS.get(phase)
+    if not key:
+        return None
+    age = time.time() - save_notice.get("ts", 0)
+    window = SAVE_GENERATING_MAX if phase == "generating" else SAVE_NOTICE_WINDOW
+    return i18n.t(key) if age < window else None
+
+
 # Layer-2 badge folds onto the state line in STATE_SUB (dim) — decision: NO confidence colour on it.
 
 # The band reads the SAME i18n strings the live OCR debug panel uses (auto_input/driver.py:
@@ -322,14 +352,16 @@ def _band_vals(status, sim_state, stops):
         "limit": (str(sl) if sl is not None else "--", "km/h"),
         "speed": (str(sp) if sp is not None else "--", "km/h"),
         "dist": (str(ds) if ds is not None else "--", "m"),
-        "limit_changed": False,
+        # cyan change-cue: driver stamps limit_change_ts on a value→value change (mirrors last_fire);
+        # blink for LIMIT_FLASH_WINDOW s after, then plain. None reads don't stamp (OCR-dropout safe).
+        "limit_changed": (lct := status.get("limit_change_ts") or 0) > 0 and time.time() - lct < LIMIT_FLASH_WINDOW,
         "over_limit": over,
         "msgs": msgs,
         "paused": bool(status.get("paused")),
     }
 
 
-def render(surf, status=None, sim_state=None, stops=None, *, force_flash_on=False, home_inert=False):
+def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, force_flash_on=False, home_inert=False):
     """Persistent TIMS status band across the top. Drives off a live OCR `status` dict (auto_input
     shape: badge / inferred_state / segment_start_stop / speed / speed_limit / distance /
     stopping_offset_cm / last_fire / reentry_pending / paused, + `sim_state.curr_stop/cnt_pa` + `stops`
@@ -346,8 +378,11 @@ def render(surf, status=None, sim_state=None, stops=None, *, force_flash_on=Fals
     Returns {"home"/"save"/"pause": rect} hit-rects."""
     width = surf.get_width()
     vals = _band_vals(status, sim_state, stops)
+    save_msg = _save_message(save_notice)  # Save-button confirmation → top strip, priority over ambient msgs
+    if save_msg:
+        vals["msgs"] = [save_msg] + vals["msgs"]
     pygame.draw.rect(surf, BAND_COLOR, (0, 0, width, BAND_H))
-    cjk = pixel_font_small(ACTIVE_LANG)  # small dense band face for the localized msg strips, AA-off native
+    msg_font = i18n.pixel_font_for_lang(ACTIVE_LANG, MSG_NATIVE)  # localized msg-strip face, AA-off native
     btn_font = i18n.pixel_font_for_lang(ACTIVE_LANG, BAND_BTN_TEXT_NATIVE)  # band control-button labels
 
     # right-edge control cluster: [pause][save][home], uniform squares (all sized to the home label).
@@ -389,8 +424,13 @@ def render(surf, status=None, sim_state=None, stops=None, *, force_flash_on=Fals
     rd_ink = STATE_SUB if no_rd else CELL_INK
     # LIMIT carries the highlight block (only the limit value, NOT the whole column):
     #   * over speed   → the block FLASHES RED (warning), light ink.
-    #   * just changed → BLINKS cyan↔plain, then settles to steady cyan.
-    #   * resting      → steady cyan (cyan is the limit's normal state).
+    #   * just changed → BLINKS cyan↔plain for LIMIT_FLASH_WINDOW s, then plain (cyan = change cue).
+    #   * resting      → PLAIN (no highlight) — cyan is NOT the limit's normal state.
+    # short "制限" label ahead of the limit number — a STATIC row label (like the km/h unit), so it shows
+    # in EVERY state including the no-readings setup band (identifies the limit row even beside dim '--').
+    _lf = i18n.pixel_font_for_lang("en", LIMIT_LABEL_NATIVE)  # "en"=NotoSansJP renders the kanji
+    _, _lh = lowres_text_size(LIMIT_LABEL, _lf, 1, 0)
+    chrome.blit_lowres(surf, LIMIT_LABEL, LIMIT_LABEL_X, LIMIT_Y - _lh, _lf, LIMIT_LABEL_COLOR, 1)
     if vals["over_limit"]:
         red_on = force_flash_on or (ticks // OVER_LIMIT_FLASH_MS) % 2 == 0
         _blit_readout(
@@ -407,8 +447,8 @@ def render(surf, status=None, sim_state=None, stops=None, *, force_flash_on=Fals
             hl_ink=OVER_LIMIT_INK if red_on else HINT_INK_COLOR,
         )
     else:
-        limit_hl = not no_rd  # no cyan highlight at the no-readings stage
-        if vals["limit_changed"]:
+        limit_hl = False  # PLAIN at rest — cyan is the change cue, not the resting state
+        if vals["limit_changed"] and not no_rd:
             limit_hl = force_flash_on or (ticks // LIMIT_FLASH_MS) % 2 == 0
         _blit_readout(surf, *vals["limit"], rx, LIMIT_Y, num_font, unit_font, rd_ink, CELL_UNIT_INK, highlight=limit_hl)
     _blit_readout(surf, *vals["speed"], rx, SPEED_Y, num_font, unit_font, rd_ink, CELL_UNIT_INK)
@@ -422,8 +462,8 @@ def render(surf, status=None, sim_state=None, stops=None, *, force_flash_on=Fals
         pygame.draw.rect(surf, STRIP_COLOR, (MSG_X, sy, msg_w, STRIP_H), border_radius=STRIP_RADIUS)
         if i < len(vals["msgs"]) and msg_on:
             text = vals["msgs"][i]
-            _, th = lowres_text_size(text, cjk, MSG_K, 0)
-            chrome.blit_lowres(surf, text, MSG_X + MSG_PAD_X, sy + (STRIP_H - th) // 2, cjk, _MSG_YELLOW, MSG_K)
+            _, th = lowres_text_size(text, msg_font, MSG_K, 0)
+            chrome.blit_lowres(surf, text, MSG_X + MSG_PAD_X, sy + (STRIP_H - th) // 2, msg_font, _MSG_YELLOW, MSG_K)
 
     # Save/Pause are only wired in a live drive (sim_state present); in setup they're inert → SILVER.
     # Home is live everywhere EXCEPT the home screen itself (home_inert), where it's a no-op → SILVER.

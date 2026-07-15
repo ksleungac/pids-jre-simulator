@@ -197,8 +197,9 @@ def load_routes():
     model (resolved train-model key) / dest / start / end / stops (names). path + model feed the launch bridge."""
     base = project_root() / "audio"
     routes = []
-    for root, _, files in os.walk(base):
-        if "route.json" not in files or "_mock" in root.replace("\\", "/"):
+    for root, dirs, files in os.walk(base):
+        dirs[:] = [d for d in dirs if not d.startswith("_")]  # skip _mock/_joban/_archive… (not-shipped staging)
+        if "route.json" not in files:
             continue
         try:
             with open(os.path.join(root, "route.json"), encoding="utf-8") as f:
