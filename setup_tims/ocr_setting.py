@@ -654,14 +654,7 @@ def _draw_journey(surf, w, y, cap_font):
 _FOOT_T = {**chrome.BTN_BAR, "v_pad": 9}  # bottom-bar 2-char; v_pad trimmed 14→9 (FOOT_NATIVE 20 made it too tall)
 # 設定(accept) locked state — silver/grey palette (per conventions: grey = palette, not a scrim) until
 # the user scrolls to the bottom. Once ready it FLASHES (normal↔waiting) to hint "you can proceed".
-_FOOT_T_GREY = {
-    **_FOOT_T,
-    "face_top_color": (120, 128, 138),
-    "face_bottom_color": (92, 100, 110),
-    "bezel_hi_color": (150, 158, 168),
-    "bezel_lo_color": (74, 82, 92),
-    "text_color": (60, 66, 74),
-}
+_FOOT_T_GREY = {**_FOOT_T, **chrome.DISABLED}  # canonical silver (was a darker private grey; unified to tims_chrome.DISABLED)
 
 
 def render_consent(screen, scroll_y, read_only=False):
@@ -751,13 +744,43 @@ def run_consent(screen, read_only=False):
                         blank_rect=pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H),
                     )
                     return "home"
-                if read_only and ok_rect.collidepoint(event.pos):
-                    return True
-                if not read_only and cancel_rect.collidepoint(event.pos):
-                    return False
-                if not read_only and ok_ready and ok_rect.collidepoint(event.pos):
+                if read_only and ok_rect.collidepoint(event.pos):  # read-only 返回 → yellow press + loading beat
                     press_transition(
-                        screen, rect=ok_rect, label=i18n.t(OK_KEY), font=i18n.pixel_font_for_lang(ACTIVE_LANG, FOOT_NATIVE), t=_FOOT_T, blank_ms=0
+                        screen,
+                        rect=ok_rect,
+                        label=i18n.t("setup_tims.back"),
+                        font=i18n.pixel_font_for_lang(ACTIVE_LANG, FOOT_NATIVE),
+                        t=_FOOT_T,
+                        redraw=lambda s: render_consent(s, scroll_y, read_only),
+                        blank_color=BG_COLOR,
+                        blank_ms=450,
+                        blank_rect=pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H),
+                    )
+                    return True
+                if not read_only and cancel_rect.collidepoint(event.pos):  # 取消 → yellow press + loading beat → decline
+                    press_transition(
+                        screen,
+                        rect=cancel_rect,
+                        label=i18n.t("setup.ocr_disclaimer.cancel"),
+                        font=i18n.pixel_font_for_lang(ACTIVE_LANG, FOOT_NATIVE),
+                        t=_FOOT_T,
+                        redraw=lambda s: render_consent(s, scroll_y, read_only),
+                        blank_color=BG_COLOR,
+                        blank_ms=450,
+                        blank_rect=pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H),
+                    )
+                    return False
+                if not read_only and ok_ready and ok_rect.collidepoint(event.pos):  # 明白 accept → yellow press + loading beat
+                    press_transition(
+                        screen,
+                        rect=ok_rect,
+                        label=i18n.t(OK_KEY),
+                        font=i18n.pixel_font_for_lang(ACTIVE_LANG, FOOT_NATIVE),
+                        t=_FOOT_T,
+                        redraw=lambda s: render_consent(s, scroll_y, read_only),
+                        blank_color=BG_COLOR,
+                        blank_ms=450,
+                        blank_rect=pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H),
                     )
                     return True
 
@@ -765,6 +788,8 @@ def run_consent(screen, read_only=False):
 # ── settings view (steppers) ─────────────────────────────────────────────────────
 _lead_m = 900
 _interval_s = 5
+_entry_lead = None  # settings-page entry snapshot (working-copy semantics: 返回 reverts, 設定 commits)
+_entry_int = None
 _LEAD_MIN, _LEAD_MAX, _LEAD_STEP = 500, 1500, 100
 _INT_MIN, _INT_MAX, _INT_STEP = 1, 10, 1
 
@@ -785,8 +810,9 @@ def _save_state():
 _STEP_T = chrome.BTN_STEP
 
 
-def _draw_stepper(surf, label, value_text, y):
-    """A [−] value [+] row; returns (minus_rect, plus_rect). Value = fat TIMS numerals."""
+def _draw_stepper(surf, label, value_text, y, *, can_dec=True, can_inc=True):
+    """A [−] value [+] row; returns (minus_rect, plus_rect). Value = fat TIMS numerals. A stepper button
+    goes SILVER (inactive) when the value is at the respective bound (can_dec / can_inc False)."""
     label_font = i18n.pixel_font_for_lang(ACTIVE_LANG, TITLE_NATIVE)
     num_font = i18n.pixel_font_for_lang("en", STEP_VALUE_NATIVE)
     btn_font = i18n.pixel_font_for_lang(ACTIVE_LANG, TITLE_NATIVE)
@@ -796,8 +822,10 @@ def _draw_stepper(surf, label, value_text, y):
     minus_rect = pygame.Rect(STEP_X + 210, y, bw, 44)
     value_box = pygame.Rect(minus_rect.right + 8, y, 120, 44)
     plus_rect = pygame.Rect(value_box.right + 8, y, bw, 44)
-    draw_tims_button(surf, minus_rect, "−", font=btn_font, t=_STEP_T)
-    draw_tims_button(surf, plus_rect, "＋", font=btn_font, t=_STEP_T)
+    minus_t = _STEP_T if can_dec else {**_STEP_T, **chrome.DISABLED}
+    plus_t = _STEP_T if can_inc else {**_STEP_T, **chrome.DISABLED}
+    draw_tims_button(surf, minus_rect, "−", font=btn_font, t=minus_t)
+    draw_tims_button(surf, plus_rect, "＋", font=btn_font, t=plus_t)
     pygame.draw.rect(surf, PANEL_BG, value_box)
     pygame.draw.rect(surf, PANEL_BORDER, value_box, 1)
     nw = draw_lowres_number(pygame.Surface((1, 1)), value_text, (0, 0), num_font, INK, k=1)[0]
@@ -813,17 +841,31 @@ def render_settings(screen):
     chrome.title_row(screen, SETTINGS_CODE, i18n.t("setup_tims.ocr_settings.heading"), ACTIVE_LANG)
 
     y = band.BAND_H + 90
-    lead_minus, lead_plus = _draw_stepper(screen, i18n.t("setup.lead_label"), f"{_lead_m}m", y)
+    lead_minus, lead_plus = _draw_stepper(
+        screen, i18n.t("setup.lead_label"), f"{_lead_m}m", y, can_dec=_lead_m > _LEAD_MIN, can_inc=_lead_m < _LEAD_MAX
+    )
     y += 44 + STEP_ROW_GAP
-    int_minus, int_plus = _draw_stepper(screen, i18n.t("setup.interval_label"), f"{_interval_s}s", y)
+    int_minus, int_plus = _draw_stepper(
+        screen, i18n.t("setup.interval_label"), f"{_interval_s}s", y, can_dec=_interval_s > _INT_MIN, can_inc=_interval_s < _INT_MAX
+    )
 
+    # footer: 返回 (cancel/revert) bottom-LEFT + 設定 (save) bottom-RIGHT — a grouped pair, same size + design.
+    # 設定 FLASHES white once a value has changed from the entry snapshot ('press to apply'); steady otherwise.
     btn_font = i18n.pixel_font_for_lang(ACTIVE_LANG, FOOT_NATIVE)
-    bw, bh = tims_button_size(i18n.t("setup_tims.back"), btn_font, _FOOT_T)
-    back_rect = pygame.Rect(PANEL_X, SCREEN_H - FOOTER_H, bw, bh)
-    draw_tims_button(screen, back_rect, i18n.t("setup_tims.back"), font=btn_font, t=_FOOT_T)
+    back_label, set_label = i18n.t("setup_tims.back"), i18n.t("setup_tims.set")
+    bw = max(tims_button_size(back_label, btn_font, _FOOT_T)[0], tims_button_size(set_label, btn_font, _FOOT_T)[0])
+    bh = tims_button_size(set_label, btn_font, _FOOT_T)[1]
+    fy = SCREEN_H - FOOTER_H
+    back_rect = pygame.Rect(PANEL_X, fy, bw, bh)
+    set_rect = pygame.Rect(SCREEN_W - PANEL_X - bw, fy, bw, bh)
+    changed = _entry_lead is not None and (_lead_m != _entry_lead or _interval_s != _entry_int)
+    set_state = "waiting" if (changed and (pygame.time.get_ticks() // 450) % 2 == 0) else "normal"
+    draw_tims_button(screen, back_rect, back_label, font=btn_font, t=_FOOT_T)
+    draw_tims_button(screen, set_rect, set_label, font=btn_font, t=_FOOT_T, state=set_state)
     return {
         "home": band_hits["home"],
         "back": back_rect,
+        "set": set_rect,
         "lead_minus": lead_minus,
         "lead_plus": lead_plus,
         "int_minus": int_minus,
@@ -831,11 +873,29 @@ def render_settings(screen):
     }
 
 
+def _stepper_tap(screen, rect, glyph):
+    """Momentary YELLOW press feedback for an in-place stepper — same press primitive as every other
+    button, but blank_ms=0 (NO loading beat: the value changes on THIS page, there's no navigation)."""
+    press_transition(
+        screen,
+        rect=rect,
+        label=glyph,
+        font=i18n.pixel_font_for_lang(ACTIVE_LANG, TITLE_NATIVE),
+        t=_STEP_T,
+        redraw=lambda s: render_settings(s),
+        blank_color=BG_COLOR,
+        blank_ms=0,
+        pressed_ms=80,
+    )
+
+
 def run_settings(screen):
-    """Run the OCR settings (steppers) view until Back / Home. Persists on exit. Returns "home" on band
-    Home (caller bubbles to the home menu), None on Back / ESC (back one level to the pa-setting page)."""
-    global _lead_m, _interval_s
+    """Run the OCR settings (steppers) view until 設定 (Set) / 返回 (Cancel) / Home. Working-copy semantics:
+    steppers edit an in-memory copy; ONLY 設定 persists (_save_state). 返回 / ESC / Home / QUIT discard by
+    reverting to the entry snapshot. Returns "home" on band Home (bubble to the menu), None on 設定 / 返回 / ESC."""
+    global _lead_m, _interval_s, _entry_lead, _entry_int
     _load_state()
+    _entry_lead, _entry_int = _lead_m, _interval_s  # snapshot for 返回=revert; 設定 commits the working copy
     clock = pygame.time.Clock()
     while True:
         hits = render_settings(screen)
@@ -844,10 +904,10 @@ def run_settings(screen):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.event.post(pygame.event.Event(pygame.QUIT))
-                _save_state()
+                _lead_m, _interval_s = _entry_lead, _entry_int  # discard unconfirmed edits (only 設定 saves)
                 return
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                _save_state()
+                _lead_m, _interval_s = _entry_lead, _entry_int  # ESC = cancel → revert
                 return
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if hits["home"].collidepoint(event.pos):  # band Home → press + load beat → bubble home
@@ -862,19 +922,52 @@ def run_settings(screen):
                         blank_ms=450,
                         blank_rect=pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H),
                     )
-                    _save_state()
+                    _lead_m, _interval_s = _entry_lead, _entry_int  # Home discards unconfirmed edits
                     return "home"
-                elif hits["back"].collidepoint(event.pos):  # 戻る → back one level (to pa-setting), no bubble
+                elif hits["set"].collidepoint(event.pos):  # 設定 → SAVE the working copy + return (yellow press + loading beat)
+                    press_transition(
+                        screen,
+                        rect=hits["set"],
+                        label=i18n.t("setup_tims.set"),
+                        font=i18n.pixel_font_for_lang(ACTIVE_LANG, FOOT_NATIVE),
+                        t=_FOOT_T,
+                        redraw=lambda s: render_settings(s),
+                        blank_color=BG_COLOR,
+                        blank_ms=450,
+                        blank_rect=pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H),
+                    )
                     _save_state()
                     return None
+                elif hits["back"].collidepoint(event.pos):  # 返回 → CANCEL: revert to entry + return (yellow press + loading beat)
+                    press_transition(
+                        screen,
+                        rect=hits["back"],
+                        label=i18n.t("setup_tims.back"),
+                        font=i18n.pixel_font_for_lang(ACTIVE_LANG, FOOT_NATIVE),
+                        t=_FOOT_T,
+                        redraw=lambda s: render_settings(s),
+                        blank_color=BG_COLOR,
+                        blank_ms=450,
+                        blank_rect=pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H),
+                    )
+                    _lead_m, _interval_s = _entry_lead, _entry_int  # cancel → discard edits
+                    return None
                 elif hits["lead_minus"].collidepoint(event.pos):
-                    _lead_m = max(_LEAD_MIN, _lead_m - _LEAD_STEP)
+                    if _lead_m > _LEAD_MIN:  # inactive (silver) at the lower bound → no tap, no change
+                        _stepper_tap(screen, hits["lead_minus"], "−")
+                        _lead_m = max(_LEAD_MIN, _lead_m - _LEAD_STEP)  # clamp too: safe if a stored value is step-misaligned
                 elif hits["lead_plus"].collidepoint(event.pos):
-                    _lead_m = min(_LEAD_MAX, _lead_m + _LEAD_STEP)
+                    if _lead_m < _LEAD_MAX:  # inactive at the upper bound
+                        _stepper_tap(screen, hits["lead_plus"], "＋")
+                        _lead_m = min(_LEAD_MAX, _lead_m + _LEAD_STEP)
                 elif hits["int_minus"].collidepoint(event.pos):
-                    _interval_s = max(_INT_MIN, _interval_s - _INT_STEP)
+                    if _interval_s > _INT_MIN:
+                        _stepper_tap(screen, hits["int_minus"], "−")
+                        _interval_s = max(_INT_MIN, _interval_s - _INT_STEP)
                 elif hits["int_plus"].collidepoint(event.pos):
-                    _interval_s = min(_INT_MAX, _interval_s + _INT_STEP)
+                    if _interval_s < _INT_MAX:
+                        _stepper_tap(screen, hits["int_plus"], "＋")
+                        _interval_s = min(_INT_MAX, _interval_s + _INT_STEP)
 
 
 # ── consent gate ─────────────────────────────────────────────────────────────────

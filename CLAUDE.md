@@ -156,6 +156,7 @@ Yellow hint square = multiple PA tracks available.
 
 Consult when needed, not upfront:
 
+- **App architecture / setup flow** → [APP.md](APP.md)
 - **Data/JSON** → [DATA_FORMAT.md](DATA_FORMAT.md)
 - **LCD displays** → [DISPLAY.md](DISPLAY.md) (cross-model); [DISPLAY_E235.md](DISPLAY_E235.md) (per-sub-series)
 - **Audio/Diagram** → `/pa-make` or `/sta-make` skill; per-line quirks in [audio/README.md](audio/README.md)

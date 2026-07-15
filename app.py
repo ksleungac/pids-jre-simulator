@@ -419,10 +419,10 @@ class PASimulator:
         """Hand the debug sub-surface to the TIMS status band for rendering.
 
         PASimulator owns the window allocation; ``status_band`` owns all panel
-        rendering (layout, fonts, colors) — same hand-off contract the old
-        ``auto_input.draw_debug_panel`` had, now the shared band. The band's
-        returned {home/save/pause} hit-rects are stashed for the run-loop click
-        handler. No-op when auto_input is off.
+        rendering (layout, fonts, colors) — same hand-off contract the retired
+        debug panel had, now the shared band. The band's returned
+        {home/save/pause} hit-rects are stashed for the run-loop click handler.
+        No-op when auto_input is off.
         """
         if not self.auto_input or self.debug_surface is None:
             return

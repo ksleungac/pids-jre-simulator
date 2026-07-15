@@ -43,6 +43,19 @@ BTN_LABEL  = {**_B, "text_align": "center", "v_pad": 0, "text_max_k": 1, "line_g
 BTN_ACTION = {**_B, "text_align": "center", "text_pad": 12, "text_max_k": 1}                               # home action cards
 BTN_STEP   = {**_B, "text_align": "center", "v_pad": 4, "text_max_k": 1, "min_w": 0}                       # steppers / number chips
 
+# ── disabled / unavailable = SILVER overlay (conventions § "disabled = silver palette, NOT a dark scrim").
+#    Spread over ANY base/role tuneable: {**_TUNEABLES_TIMS_BUTTON, **DISABLED} / {**BTN_BAR, **DISABLED}.
+#    ONE canonical silver, graduated from model_select._GRAY_T once the grey spread past one screen (roadmap
+#    tiles + consent-OK-locked + tutorial-disabled + launch-locked + inert band buttons). Overrides only the
+#    NORMAL-state face/bevel/ink — callers draw state="normal".
+DISABLED = {
+    "bezel_hi_color":    (198, 205, 212),  # light silver crest
+    "bezel_lo_color":    (96, 103, 111),   # gray shadow
+    "face_top_color":    (150, 157, 165),  # silver-gray face
+    "face_bottom_color": (132, 139, 147),
+    "text_color":        (78, 85, 93),     # muted dark-gray ink on the silver face
+}
+
 # ── standard chrome font px by ROLE (recurring sizes only; genuine per-screen one-offs stay local)
 FONT_PX = {"title": 24, "heading": 16, "body": 16, "cap": 13, "button": 20}
 # fmt: on

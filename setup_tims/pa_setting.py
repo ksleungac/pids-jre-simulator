@@ -279,8 +279,13 @@ def render(surf):
         (br_x - p, row2_y - p),  # notch: back in to the right column's left edge
     ]
     pygame.draw.polygon(surf, OCR_BOX_COLOR, frame_pts, OCR_BOX_W)
-    draw_tims_button(surf, launch_rect, ocr_launch_label, font=ocr_font, t=_BTN_TUNEABLES)
-    draw_tims_button(surf, manual_rect, ocr_manual_label, font=ocr_font, t=_BTN_TUNEABLES)
+    # the two LAUNCH buttons are locked (silver) until a route is committed; OCR設定 stays always-available.
+    # Once ready, OCR起動 FLASHES white to promote the OCR path (we steer users to OCR); 手動起動 stays steady.
+    locked = _committed is None
+    launch_t = {**_BTN_TUNEABLES, **chrome.DISABLED} if locked else _BTN_TUNEABLES
+    ocr_flash = "waiting" if (not locked and (pygame.time.get_ticks() // 450) % 2 == 0) else "normal"  # 450ms half-period
+    draw_tims_button(surf, launch_rect, ocr_launch_label, font=ocr_font, t=launch_t, state=ocr_flash)
+    draw_tims_button(surf, manual_rect, ocr_manual_label, font=ocr_font, t=launch_t)
     draw_tims_button(surf, setting_rect, ocr_setting_label, font=ocr_font, t=_BTN_TUNEABLES)
 
     return {
@@ -351,36 +356,41 @@ def run_on(screen):
                         _apply_selection(result)
                     # result is None → user backed out of the picker; stay on this page
                 elif hits["manual"].collidepoint(event.pos):
-                    # 手動報站起動 = manual launch (起動): once a route is committed, build config + bubble up.
-                    press_transition(
-                        screen,
-                        rect=hits["manual"],
-                        label=i18n.t(OCR_MANUAL_KEY),
-                        font=ocr_font,
-                        t=_BTN_TUNEABLES,
-                        redraw=lambda s: render(s),
-                        blank_color=BG_COLOR,
-                        blank_ms=0,
-                    )
+                    # 手動報站起動 = manual launch (起動). Locked (silver) until a route is committed → a click on
+                    # the locked button does nothing (no press flash). Once ready: yellow press + loading beat,
+                    # then build the config + bubble up to boot the live LCD.
                     if _committed is not None:
+                        press_transition(
+                            screen,
+                            rect=hits["manual"],
+                            label=i18n.t(OCR_MANUAL_KEY),
+                            font=ocr_font,
+                            t=_BTN_TUNEABLES,
+                            redraw=lambda s: render(s),
+                            blank_color=BG_COLOR,
+                            blank_ms=450,
+                            blank_rect=pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H),
+                        )
                         return _build_config(_committed)
                 elif hits["ocr_launch"].collidepoint(event.pos):
-                    # OCR自動報站起動 = OCR auto-PA launch. Needs a committed route + one-time consent
-                    # (自動放送設定 page); on both, build the launch config with auto_input=True.
-                    press_transition(
-                        screen,
-                        rect=hits["ocr_launch"],
-                        label=i18n.t(OCR_LAUNCH_KEY),
-                        font=ocr_font,
-                        t=_BTN_TUNEABLES,
-                        redraw=lambda s: render(s),
-                        blank_color=BG_COLOR,
-                        blank_ms=0,
-                    )
-                    from . import ocr_setting
-
-                    ocr_setting.ACTIVE_LANG = ACTIVE_LANG
+                    # OCR自動報站起動 = OCR auto-PA launch. Locked (silver) until a route is committed → a click on
+                    # the locked button does nothing. Once ready: yellow press + loading beat, then the one-time
+                    # consent gate (自動放送設定); on consent, build the launch config (auto_input=True).
                     if _committed is not None:
+                        press_transition(
+                            screen,
+                            rect=hits["ocr_launch"],
+                            label=i18n.t(OCR_LAUNCH_KEY),
+                            font=ocr_font,
+                            t=_BTN_TUNEABLES,
+                            redraw=lambda s: render(s),
+                            blank_color=BG_COLOR,
+                            blank_ms=450,
+                            blank_rect=pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H),
+                        )
+                        from . import ocr_setting
+
+                        ocr_setting.ACTIVE_LANG = ACTIVE_LANG
                         res = ocr_setting.ensure_consent(screen)
                         if res == "home":  # band Home in the consent gate → bubble to the menu
                             running = False

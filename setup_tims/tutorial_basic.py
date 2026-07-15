@@ -78,7 +78,6 @@ BTN_GAP         = 8                    # gap between stacked panel buttons
 BTN_H_PAD       = 13                   # side padding inside the button (≈4-char label + this each side)
 BTN_EDGE_MARGIN = 10                   # button column hugs the screen right edge (small gap)
 BTN_GUTTER      = 14                   # gap between the body-text column and the button column
-BTN_DISABLED_SCRIM = (40, 44, 54, 150) # "unlit" overlay on a non-actionable button
 BEAT_PRESSED_MS = 100                  # button yellow-flash hold (press feedback)
 BEAT_BLANK_MS   = 280                  # step-change loading beat (panel blanked)
 LOAD_BEAT_MS    = 300                  # page-entry loading beat (content region emptied to slate)
@@ -381,12 +380,10 @@ class BasicTutorial(Tutorial):
         self._btn_rects = {}
         for key, label, enabled in specs:
             r = pygame.Rect(bx, by, bw, BTN_H)
+            # disabled → SILVER palette (conventions § "disabled = silver, not a dark scrim")
+            btn_t = _BTN_T if enabled else {**_BTN_T, **chrome.DISABLED}
             state = "waiting" if (key == "next" and enabled and flash_on) else "normal"
-            draw_tims_button(surf, r, label, font=btn_font, t=_BTN_T, state=state)
-            if not enabled:  # dim non-actionable buttons under a scrim
-                scrim = pygame.Surface((r.w, r.h), pygame.SRCALPHA)
-                pygame.draw.rect(scrim, BTN_DISABLED_SCRIM, scrim.get_rect(), border_radius=_BTN_T["corner_radius"])
-                surf.blit(scrim, r.topleft)
+            draw_tims_button(surf, r, label, font=btn_font, t=btn_t, state=state)
             self._btn_rects[key] = r
             by += BTN_H + BTN_GAP
 

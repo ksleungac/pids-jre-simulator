@@ -12,9 +12,13 @@ Japanese Train PA (Public Address) Simulator — JR East style train announcemen
 |---|---|---|
 | ![](assets/01-keihin-tohoku-compact.png) | ![](assets/02-sobu-skip-animation.png) | ![](assets/03-sobu-full-route.png) |
 
-| Transfer info (Tokyo) | Transfer info (Shinjuku) | Setup screen |
+| Transfer info (Tokyo) | Transfer info (Shinjuku) | Yamanote 5-station (E235-0) |
 |---|---|---|
-| ![](assets/04-tokyo-transfer-info.png) | ![](assets/05-shinjuku-transfer-info.png) | ![](assets/06-setup-screen.png) |
+| ![](assets/04-tokyo-transfer-info.png) | ![](assets/05-shinjuku-transfer-info.png) | ![](assets/07-yamanote-5station-tokyo.png) |
+
+| Setup: PA settings | Setup: diagram select |
+|---|---|
+| ![](assets/08-tims-pa-setting.png) | ![](assets/09-tims-diagram-select.png) |
 
 ---
 

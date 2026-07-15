@@ -11,7 +11,7 @@ COLUMN-major (down a column, then the next — as the real screen does), a 戻�
 設定 button bottom-right. Each route box is loaded from audio/**/route.json (sampling
 setup.SetupScreen.scan_routes); station boxes are the chosen route's stops.
 
-NOTE — yellow selection: the shared press model (WIP_setup_redesign.md § Press / transition) reserves
+NOTE — yellow selection: the shared press model (conventions.md § UI code style) reserves
 yellow for the MOMENTARY press beat. This grid additionally uses yellow (the button "pressed" state) as
 the PERSISTENT selected-box marker, because the reference screen does exactly that (the tan/yellow 川崎).
 The momentary beat and the persistent selection share the colour by design here; 設定 going white-and-
@@ -287,11 +287,12 @@ def _cell_rect(local_i, box_w, box_h, x0):
 
 def _draw_arrow(surf, rect, direction, *, enabled):
     """A square TIMS button + a chunky white BLOCK arrow (shaft + head) matching the TIMS arrow-pad style
-    (tims-arrow-buttons.png) — vector-drawn (no font glyph, deployment-safe). Dim when disabled (first
-    page can't go up, last can't go down)."""
-    draw_tims_button(surf, rect, "", t=_BAR_T, state="normal")
-    fill = (240, 244, 248) if enabled else (120, 134, 150)
-    edge = (18, 30, 46) if enabled else (74, 88, 104)
+    (tims-arrow-buttons.png) — vector-drawn (no font glyph, deployment-safe). Disabled (first page can't
+    go up, last can't go down) → the SILVER inactive palette + a muted-gray arrow, like every other
+    disabled TIMS button."""
+    draw_tims_button(surf, rect, "", t=_BAR_T if enabled else {**_BAR_T, **chrome.DISABLED}, state="normal")
+    fill = (240, 244, 248) if enabled else chrome.DISABLED["text_color"]  # white arrow on blue / muted-gray on silver
+    edge = (18, 30, 46) if enabled else chrome.DISABLED["text_color"]  # crisp navy edge on blue; blends on silver
     cx, cy = rect.centerx, rect.centery
     ah = rect.height * 0.30  # arrow half-height
     aw = rect.width * 0.26  # arrowhead half-width

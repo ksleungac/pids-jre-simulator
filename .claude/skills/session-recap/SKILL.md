@@ -104,6 +104,7 @@ Consult this before ANY doc write, not only at recap time.
 | JSON field definitions | `DATA_FORMAT.md` | CLAUDE.md |
 | LCD cross-model infra | `DISPLAY.md` | CLAUDE.md |
 | LCD per-sub-series | `DISPLAY_E235.md` | DISPLAY.md |
+| App-level runtime + setup/chrome flow | `APP.md` | rules files, CLAUDE.md, DISPLAY.md |
 | Daily session logs | `memory/YYYY-MM-DD.md` | rules files |
 | Long-term memory index | `memory/MEMORY.md` | — |
 | Open work items | `TODO.md` | daily logs |

@@ -417,13 +417,13 @@ When OCR Auto-PA enabled at setup screen, `PASimulator` allocates an extra `DEBU
 
 **The panel IS the shared TIMS status band** (`status_band.render`, project root — the same band the `setup_tims` setup flow draws). `DEBUG_PANEL_HEIGHT` is re-exported from `status_band.BAND_H` (single source; the band owns its height). `app.py::_render_panel` feeds the band the live `auto_input_status` dict + stashes its returned `{home/save/pause}` hit-rects for the run-loop click handler (`_handle_band_click`: home stops PA + returns to setup, save = drive report, pause = auto-driver pause).
 
-**Strict separation still holds:** `app.py` just hands the band a sub-surface + the status dict and knows nothing about layout / fonts / colors — only the render module moved (was `auto_input/driver.py::draw_debug_panel`, now `status_band.py`). `draw_debug_panel` (the old 3-line panel) + `handle_panel_click` are retained **legacy dev-preview only** (they host the mock fixtures the band preview reuses).
+**Strict separation still holds:** `app.py` just hands the band a sub-surface + the status dict and knows nothing about layout / fonts / colors — only the render module moved (was `auto_input/driver.py::draw_debug_panel`, now `status_band.py`). The old `draw_debug_panel` + `handle_panel_click` have been **removed** — the band fully supersedes them; the band preview (`_dev_scripts/preview_band_ocr.py`) now carries its own mock fixtures.
 
 ### Layout
 
-The live panel's layout (left OCR-state column / centre speed·limit·distance readout / message strips / [pause][save][home] cluster) lives in `status_band.py` + [WIP_setup_redesign.md § "Persistent top band"](../WIP_setup_redesign.md). It reads the status-dict fields below. The OCR-panel migration DROPPED the old confidence-colour tint (green/yellow/orange OCR-score) — too debug for the public band; the raw Layer-2 badge folds onto the state line instead.
+The live panel's layout (left OCR-state column / centre speed·limit·distance readout / message strips / [pause][save][home] cluster) lives in `status_band.py` + [APP.md § Persistent status band](../APP.md). It reads the status-dict fields below. The OCR-panel migration DROPPED the old confidence-colour tint (green/yellow/orange OCR-score) — too debug for the public band; the raw Layer-2 badge folds onto the state line instead.
 
-The historical 3-line `draw_debug_panel` layout (ShinGoPr6N @ 14pt, `dep✓ arr·` flags, confidence colours) survives only in that legacy function for the dev preview.
+The historical 3-line `draw_debug_panel` layout (ShinGoPr6N @ 14pt, `dep✓ arr·` flags, confidence colours) has been removed — `status_band.render` is now the sole panel renderer.
 
 ### Width adaptivity
 
@@ -513,8 +513,8 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 
 | Path | Role |
 |---|---|
-| `auto_input/` | Package — public surface re-exports `AutoDriver`, `draw_debug_panel`, `handle_panel_click` from `__init__.py`. Internal submodules below. |
-| `auto_input/driver.py` | **Primary** — `AutoDriver` class (in-process daemon thread) + `_Detector` state machine + `generate_report()` (drive-report trigger, called by the band Save button). All auto-input logic lives here. `draw_debug_panel()` + `handle_panel_click()` are LEGACY (old 3-line panel, dev-preview only — the live panel is `status_band.render`). |
+| `auto_input/` | Package — public surface re-exports `AutoDriver`, `generate_report` from `__init__.py`. Internal submodules below. |
+| `auto_input/driver.py` | **Primary** — `AutoDriver` class (in-process daemon thread) + `_Detector` state machine + `generate_report()` (drive-report trigger, called by the band Save button). All auto-input logic lives here. |
 | `status_band.py` | **Live OCR panel** (project root) — `render(surf, status, sim_state, stops)` draws the shared TIMS status band from the `auto_input_status` dict; returns `{home/save/pause}` hit-rects. `BAND_H` = the panel height (re-exported as `constants.DEBUG_PANEL_HEIGHT`). Shared with the `setup_tims` setup flow. |
 | `auto_input/hud_layout.py` | HUD + cell bbox constants for 2560×1440 (canonical desktop coords + region-cut derived coords) |
 | `auto_input/ocr.py` | OCR pipeline + badge classifier; runnable for offline validation (`uv run python -m auto_input.ocr`) |

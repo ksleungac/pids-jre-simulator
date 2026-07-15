@@ -39,8 +39,8 @@ _sta_verify_*.json
 # Font-evaluation downloads — full per-locale Ark Pixel sets + PixelMplus etc.,
 # pulled by the font-hunt harnesses (_dev_scripts/_*_eval.py) to compare faces.
 # ~54 MB of re-downloadable OFL/PD binaries; local-only. The SHIPPED chrome fonts
-# live in fonts/ (committed). WIP_setup_redesign.md § Font records what's here +
-# where to re-fetch. Shippable picks graduate to fonts/, not committed from here.
+# live in fonts/ (committed); conventions.md § "TIMS chrome text" records the
+# shipped faces. Shippable picks graduate to fonts/, not committed from here.
 /_dev_scripts/_fonts_eval/
 
 # OCR calibration sources — full 2560×1440 desktop screenshots used by

@@ -57,9 +57,8 @@ DOT_FUTURE = (70, 76, 92)                         # fill for not-yet-reached pha
 # TIMS reskin: chrome buttons render as glossy bevel buttons (widgets.py). The
 # lit/unlit = actionable/not language (shared with the shell tabs) replaces the
 # old green-primary concept — TIMS has no green CTA; the lit button IS the
-# emphasis. A disabled button draws normal then dims under this scrim.
+# emphasis. A disabled button uses the silver inactive palette (tims_chrome.DISABLED).
 BTN_NATIVE = chrome.FONT_PX["button"]             # warehouse button-label px (Noto AA-off native, k=1)
-BTN_DISABLED_SCRIM = (40, 44, 54, 150)            # "unlit" overlay on a non-actionable button
 # fmt: on
 
 # Panel buttons use the shared warehouse preset (center-natural label, AA-off native k=1).
@@ -686,7 +685,7 @@ class Tutorial:
         # clock + display.flip(). _origin is self.screen's topleft in host-window
         # coords; incoming event/mouse positions are translated by it before
         # hit-testing. Default (standalone) keeps origin (0,0) → no translation,
-        # behavior unchanged. See tutorial_tims.py.
+        # behavior unchanged. See setup_tims/tutorial_basic.py (the embedded TIMS-tutorial host).
         self._embedded = False
         self._origin = (0, 0)
 
@@ -1331,14 +1330,12 @@ class Tutorial:
             self._draw_button(skip_tut_rect, i18n.t("tutorial.btn.skip_tutorial"), btn_font, enabled=True)
 
     def _draw_button(self, rect: pygame.Rect, label: str, font: pygame.font.Font, *, enabled: bool) -> None:
-        """TIMS bevel button. Lit (normal) when actionable; dimmed under a scrim
+        """TIMS bevel button. Lit (normal) when actionable; SILVER (inactive palette)
         when not — the lit/unlit language shared with the shell tabs. No green
         'primary' state: the lit button is the emphasis."""
-        draw_tims_button(self.screen, rect, label, font=font, t=_TUT_BTN_TUNEABLES, state="normal")
-        if not enabled:
-            scrim = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
-            pygame.draw.rect(scrim, BTN_DISABLED_SCRIM, scrim.get_rect(), border_radius=_TUT_BTN_TUNEABLES["corner_radius"])
-            self.screen.blit(scrim, rect.topleft)
+        # disabled → SILVER palette (conventions § "disabled = silver, not a dark scrim") — matches the TIMS flow
+        btn_t = _TUT_BTN_TUNEABLES if enabled else {**_TUT_BTN_TUNEABLES, **chrome.DISABLED}
+        draw_tims_button(self.screen, rect, label, font=font, t=btn_t, state="normal")
 
     def _measure_wrapped_text(self, text: str, latin_font: pygame.font.Font, cjk_font: pygame.font.Font, *, max_w: int, line_gap: int) -> int:
         """Visible height of ``text`` after wrap to ``max_w``. Returns

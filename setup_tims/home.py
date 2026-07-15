@@ -184,7 +184,7 @@ def render_menu(surf):
     keyed by lang code."""
     surf.fill(BG_COLOR)
     band.ACTIVE_LANG = ACTIVE_LANG  # carry the UI language onto the shared band
-    band.render(surf)  # persistent black status band across the top
+    band.render(surf, home_inert=True)  # persistent black status band; Home is a no-op on the home screen → silver
 
     # ── version tag, bottom-left. NORMAL: i18n "Version" word + "054" TIMS numerals. When a newer
     #    release exists the tag ALTERNATES (blink) with a SAME-STYLE hint — i18n update word + the new
@@ -280,6 +280,9 @@ def run(screen):
     a route and 起動s in the PA-setting flow (bubbled up from pa_setting.run_on); None on quit / ESC. The
     caller owns the pygame lifecycle (does NOT pygame.quit() here — main.py hands off to PASimulator)."""
     global ACTIVE_LANG, OOBE_PENDING
+    ACTIVE_LANG = i18n.current_lang()  # sync chrome font-locale to the user's chosen language (was stuck at the
+    # module default zh_HK → zh_CN rendered Simplified text in the TC face = tofu; en got the wrong face). This
+    # propagates tree-wide: every sub-screen inherits ACTIVE_LANG on entry. Mirrors app.py's live-drive band sync.
     OOBE_PENDING = not i18n.load_settings().get("oobe_completed", False)  # first-run → flash 教學 until visited
     clock = pygame.time.Clock()
     action_rects, action_font, action_t, hint_rect, lang_rects = render_menu(screen)

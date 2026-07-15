@@ -329,7 +329,7 @@ def _band_vals(status, sim_state, stops):
     }
 
 
-def render(surf, status=None, sim_state=None, stops=None, *, force_flash_on=False):
+def render(surf, status=None, sim_state=None, stops=None, *, force_flash_on=False, home_inert=False):
     """Persistent TIMS status band across the top. Drives off a live OCR `status` dict (auto_input
     shape: badge / inferred_state / segment_start_stop / speed / speed_limit / distance /
     stopping_offset_cm / last_fire / reentry_pending / paused, + `sim_state.curr_stop/cnt_pa` + `stops`
@@ -425,7 +425,12 @@ def render(surf, status=None, sim_state=None, stops=None, *, force_flash_on=Fals
             _, th = lowres_text_size(text, cjk, MSG_K, 0)
             chrome.blit_lowres(surf, text, MSG_X + MSG_PAD_X, sy + (STRIP_H - th) // 2, cjk, _MSG_YELLOW, MSG_K)
 
-    draw_tims_button(surf, pause_rect, i18n.t("setup_tims.band.pause"), font=btn_font, t=t, state="pressed" if vals["paused"] else "normal")
-    draw_tims_button(surf, save_rect, i18n.t("setup_tims.band.save"), font=btn_font, t=t)
-    draw_tims_button(surf, home_rect, home_label, font=btn_font, t=t)
+    # Save/Pause are only wired in a live drive (sim_state present); in setup they're inert → SILVER.
+    # Home is live everywhere EXCEPT the home screen itself (home_inert), where it's a no-op → SILVER.
+    setup_ctx = sim_state is None
+    dis_t = {**t, **chrome.DISABLED}
+    pause_state = "pressed" if (not setup_ctx and vals["paused"]) else "normal"
+    draw_tims_button(surf, pause_rect, i18n.t("setup_tims.band.pause"), font=btn_font, t=dis_t if setup_ctx else t, state=pause_state)
+    draw_tims_button(surf, save_rect, i18n.t("setup_tims.band.save"), font=btn_font, t=dis_t if setup_ctx else t)
+    draw_tims_button(surf, home_rect, home_label, font=btn_font, t=dis_t if home_inert else t)
     return {"home": home_rect, "save": save_rect, "pause": pause_rect}

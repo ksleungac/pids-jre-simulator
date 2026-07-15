@@ -71,6 +71,16 @@ Never suggest, offer, or ask about committing — no "want me to commit?", no "/
 - Status question ("is there anything left?", "what's uncommitted?") → state the facts including uncommitted changes; do NOT append "want me to commit it?"
 - Recap and commit are both user-invoked; neither gets a proactive nudge.
 
+### Announce self-launched multi-step processes
+When kicking off a self-directed multi-step process (a review+fix pass, a coherence sweep, an audit, a subagent fan-out), NAME it explicitly before running — don't slide into it. Self-launching is fine; the unheralded surprise is what reads as off.
+
+**Why:** the shift from ask-first to self-launch is invisible unless announced. Examples:
+- (2026-07-15) User: *"i felt like you should explicitly tell me you are running review+fix, otherwise sudden self review sounds weird."*
+
+**How to apply:**
+- State the process by name ("I'm running a review+fix pass on the diff") before the first tool call, not after.
+- Autonomous multi-step work only; a single lookup/read doesn't need heralding.
+
 ### Verify before claiming
 Before claiming "X is a bug" or "X works like Y", read the call sites and trace state transitions. Don't infer from partial context.
 

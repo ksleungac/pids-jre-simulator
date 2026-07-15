@@ -419,7 +419,7 @@
   "setup_tims.diagram_select.heading": { "en": "Run Pattern", "zh_HK": "字軌選擇", "zh_CN": "交路选择" },
   "setup_tims.model_select.heading": { "en": "Select Model", "zh_HK": "列車型號選擇", "zh_CN": "列车型号选择" },
   "setup_tims.ocr_settings.heading": { "en": "OCR Auto-PA Settings", "zh_HK": "OCR自動報站設定", "zh_CN": "OCR自动报站设定" },
-  "setup_tims.pa_setting.select_route": { "en": "Select Route", "zh_HK": "選擇路綫", "zh_CN": "选择路线" },
+  "setup_tims.pa_setting.select_route": { "en": "Select Route", "zh_HK": "選擇路線", "zh_CN": "选择路线" },
   "setup_tims.pa_setting.model": { "en": "Train Model", "zh_HK": "列車型號", "zh_CN": "列车型号" },
   "setup_tims.pa_setting.ocr_launch": { "en": "OCR Auto\nStart", "zh_HK": "OCR自動\n報站啟動", "zh_CN": "OCR自动\n报站启动" },
   "setup_tims.pa_setting.manual_launch": { "en": "Manual\nStart", "zh_HK": "手動\n報站啟動", "zh_CN": "手动\n报站启动" },
@@ -429,7 +429,7 @@
   "setup_tims.pa_setting.field.type": { "en": "Train Type", "zh_HK": "列車種別", "zh_CN": "列车种别" },
   "setup_tims.pa_setting.field.from_to": { "en": "From / To", "zh_HK": "始發・終着站", "zh_CN": "始发・终到站" },
   "setup_tims.pa_setting.field.model": { "en": "Train Model", "zh_HK": "列車型號", "zh_CN": "列车型号" },
-  "setup_tims.pa_setting.field.remark": { "en": "Remarks", "zh_HK": "備注", "zh_CN": "备注" },
+  "setup_tims.pa_setting.field.remark": { "en": "Remarks", "zh_HK": "備註", "zh_CN": "备注" },
 
   "setup_tims.back": { "en": "Back", "zh_HK": "返回", "zh_CN": "返回" },
   "setup_tims.set": { "en": "Set", "zh_HK": "設定", "zh_CN": "设定" },

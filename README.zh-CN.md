@@ -12,9 +12,13 @@ JR 东日本风格列车广播与车内 LCD 显示模拟器。
 |---|---|---|
 | ![](assets/01-keihin-tohoku-compact.png) | ![](assets/02-sobu-skip-animation.png) | ![](assets/03-sobu-full-route.png) |
 
-| 换乘信息 (东京) | 换乘信息 (新宿) | 选择界面 |
+| 换乘信息 (东京) | 换乘信息 (新宿) | 山手线 5 站显示 (E235-0) |
 |---|---|---|
-| ![](assets/04-tokyo-transfer-info.png) | ![](assets/05-shinjuku-transfer-info.png) | ![](assets/06-setup-screen.png) |
+| ![](assets/04-tokyo-transfer-info.png) | ![](assets/05-shinjuku-transfer-info.png) | ![](assets/07-yamanote-5station-tokyo.png) |
+
+| 报站设置 | 车次选择 |
+|---|---|
+| ![](assets/08-tims-pa-setting.png) | ![](assets/09-tims-diagram-select.png) |
 
 ---
 

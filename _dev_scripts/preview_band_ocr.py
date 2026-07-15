@@ -1,9 +1,9 @@
 """DEV preview — the persistent TIMS top band driven by the OCR debug-panel mock scenarios.
 
-Wires `status_band.render` (status-driven) to the SAME mock `status` dicts that
-`preview_debug_panel.py` feeds the old `draw_debug_panel`, so the band can be iterated against
-realistic OCR states (boot / stopped / approaching / paused / fire). Lives under `_dev_scripts/`
-because it reuses `preview_debug_panel`'s mock OCR states — a dev-only fixture.
+Wires `status_band.render` (status-driven) to a set of mock `status` dicts covering the
+realistic OCR states (boot / stopped / approaching / paused / fire), so the band can be iterated
+without the game. The mock fixtures (`_MockState` / `_STOPS` / `_scenarios`) are inlined below —
+self-contained, dev-only.
 
 Keys:  1-6 scenario   P pause   L language (en / zh_HK / zh_CN)   ESC/Q quit
 Click: the band's Pause button toggles pause.
@@ -24,11 +24,151 @@ import i18n  # noqa: E402
 from app_paths import project_root  # noqa: E402
 import status_band as band  # noqa: E402  (root module — the live OCR panel; dev preview reuses it)
 from setup_tims import dims  # noqa: E402  (setup-window dims — for the preview width)
-from preview_debug_panel import _STOPS, _MockState, _scenarios  # noqa: E402  (reuse the mock OCR states)
 
 _LANGS = ("en", "zh_HK", "zh_CN")
 FOOTER_H = 96
 W = dims.SCREEN_W  # 730 — preview the band at the full app width
+
+
+class _MockState:
+    """Stand-in for `app.AppState` — only the fields the panel reads."""
+
+    def __init__(self, curr_stop: int = 0, cnt_pa: int = 0) -> None:
+        self.curr_stop = curr_stop
+        self.cnt_pa = cnt_pa
+
+
+# Mock stops list — the panel only reads `name` on the row 3 station-name lookup.
+_STOPS = [
+    {"name": "高尾"},
+    {"name": "西八王子"},
+    {"name": "八王子"},
+    {"name": "豊田"},
+    {"name": "日野"},
+    {"name": "立川"},
+]
+
+
+# Representative panel states. Each entry is (label, status_dict, mock_state).
+def _scenarios() -> list[tuple[str, dict, _MockState]]:
+    return [
+        (
+            "1. boot — no capture yet",
+            {},
+            _MockState(curr_stop=0, cnt_pa=0),
+        ),
+        (
+            "2. stopped at platform (high confidence)",
+            {
+                "badge": "STOPPED",
+                "badge_diff": 0.8,
+                "speed": 0,
+                "speed_score": 0.97,
+                "distance": None,
+                "distance_score": 1.0,
+                "stopping_offset_cm": -3,
+                "stopping_offset_score": 0.94,
+                "speed_limit": 0,
+                "speed_limit_score": 1.0,
+                "departure_observed": True,
+                "arrival_observed": True,
+                "at_station_observed": True,
+                "inferred_state": "STOPPED",
+                "segment_start_stop": 4,
+                "paused": False,
+            },
+            _MockState(curr_stop=5, cnt_pa=2),
+        ),
+        (
+            "3. mid-approach (MOVING, dist 600m)",
+            {
+                "badge": "MOVING",
+                "badge_diff": 1.4,
+                "speed": 72,
+                "speed_score": 0.93,
+                "distance": 600,
+                "distance_score": 0.95,
+                "stopping_offset_cm": None,
+                "stopping_offset_score": 1.0,
+                "speed_limit": 95,
+                "speed_limit_score": 0.92,
+                "departure_observed": True,
+                "arrival_observed": False,
+                "at_station_observed": False,
+                "inferred_state": "CRUISING",
+                "segment_start_stop": 2,
+                "paused": False,
+            },
+            _MockState(curr_stop=3, cnt_pa=1),
+        ),
+        (
+            "4. mid-transit, low confidence (orange)",
+            {
+                "badge": "MOVING",
+                "badge_diff": 11.5,
+                "speed": 58,
+                "speed_score": 0.78,
+                "distance": 1850,
+                "distance_score": 0.81,
+                "stopping_offset_cm": None,
+                "stopping_offset_score": 1.0,
+                "speed_limit": 90,
+                "speed_limit_score": 0.66,
+                "departure_observed": True,
+                "arrival_observed": False,
+                "at_station_observed": False,
+                "inferred_state": "CRUISING",
+                "segment_start_stop": 1,
+                "paused": False,
+            },
+            _MockState(curr_stop=2, cnt_pa=1),
+        ),
+        (
+            "5. paused (frozen — last reading retained)",
+            {
+                "badge": "MOVING",
+                "badge_diff": 1.2,
+                "speed": 65,
+                "speed_score": 0.91,
+                "distance": 1200,
+                "distance_score": 0.94,
+                "stopping_offset_cm": None,
+                "stopping_offset_score": 1.0,
+                "speed_limit": 95,
+                "speed_limit_score": 0.93,
+                "departure_observed": True,
+                "arrival_observed": False,
+                "at_station_observed": False,
+                "inferred_state": "CRUISING",
+                "segment_start_stop": 2,
+                "paused": True,
+            },
+            _MockState(curr_stop=3, cnt_pa=1),
+        ),
+        (
+            "6. just departed — auto-played chip + (Passing)",
+            {
+                "badge": "PASSING",
+                "badge_diff": 2.0,
+                "speed": 88,
+                "speed_score": 0.95,
+                "distance": 2400,
+                "distance_score": 0.9,
+                "stopping_offset_cm": None,
+                "stopping_offset_score": 1.0,
+                "speed_limit": 100,
+                "speed_limit_score": 0.9,
+                "departure_observed": True,
+                "arrival_observed": False,
+                "at_station_observed": False,
+                "inferred_state": "CRUISING",
+                "segment_start_stop": 2,
+                "last_fire": {"ts": 0.0, "type": "departure"},  # ts refreshed live in the loop
+                "paused": False,
+            },
+            _MockState(curr_stop=3, cnt_pa=0),
+        ),
+    ]
 
 
 def _footer(surf, font, label, paused, lang):

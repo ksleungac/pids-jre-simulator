@@ -55,16 +55,9 @@ FLASH_MS       = 500         # current-model blink half-period (lit ↔ normal)
 
 _BTN_T = _TUNEABLES_TIMS_BUTTON
 # Grayed (not-yet-built) model = a flat SILVER button (desaturated face/bevel), NOT a dark scrim over the
-# blue (that read as 'shadowed', not 'disabled'). Same geometry as _BTN_T; only the colors go gray.
-# fmt: off
-_GRAY_T = {
-    **_TUNEABLES_TIMS_BUTTON,
-    "bezel_hi_color":    (198, 205, 212),  # light silver crest
-    "bezel_lo_color":    (96, 103, 111),   # gray shadow
-    "face_top_color":    (150, 157, 165),  # silver-gray face
-    "face_bottom_color": (132, 139, 147),
-}
-# fmt: on
+# blue (that read as 'shadowed', not 'disabled'). Same geometry as _BTN_T; only the colors go gray — the
+# ONE canonical silver now lives in tims_chrome.DISABLED (this screen was its original home before it spread).
+_GRAY_T = {**_TUNEABLES_TIMS_BUTTON, **chrome.DISABLED}
 
 
 def _model_font():
@@ -183,7 +176,8 @@ def run_on(screen, current_key):
                             t=_BTN_T,
                             redraw=frame,
                             blank_color=BG_COLOR,
-                            blank_ms=0,
+                            blank_ms=450,  # commits + navigates back to pa-setting → loading beat like every other nav button
+                            blank_rect=below_band,
                         )
                         return key
 

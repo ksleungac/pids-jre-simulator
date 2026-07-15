@@ -122,6 +122,7 @@ Keep this list updated whenever a new term is coined. Translate once, reuse ever
 | the project (title) | simulator | 模擬器 | 模拟器 |
 | transfer station code | 3-letter Roman code | 3 個英文字母的車站代碼 | 3 个字母的车站代码 |
 | setup screen | setup screen | 選擇畫面 | 选择界面 |
+| 5-station view (LCD) | 5-station view | 5 站顯示 | 5 站显示 |
 | Supported Routes (top-bar label) | Supported Routes | 對應路線 | 支持的路线 |
 | Planned Features (section heading) | Planned Features | 計劃中的功能 | 计划中的功能 |
 
