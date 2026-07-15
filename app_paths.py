@@ -45,6 +45,33 @@ def app_version() -> str | None:
         return None
 
 
+_display_version: str | None = None
+
+
+def display_version() -> str:
+    # CONTRACT: single source of truth for the UI VERSION TAG — never a hand-maintained
+    # display constant (a stale one shipped 0.5.4 while the build was 0.6.0; see TODO
+    # "version-drift sensor"). Frozen → app_version() (build-stamped PE metadata,
+    # authoritative). Dev → the pyproject.toml [project] version (the one number /release
+    # bumps). Falls back to "dev". Cached (version is fixed for the process).
+    # Distinct from app_version(), which stays None in dev ON PURPOSE so update_check
+    # no-ops there — this one always yields a human-facing string.
+    global _display_version
+    if _display_version is not None:
+        return _display_version
+    v = app_version()
+    if not v:
+        try:
+            import tomllib
+
+            with open(project_root() / "pyproject.toml", "rb") as f:
+                v = tomllib.load(f)["project"]["version"]
+        except Exception:
+            v = "dev"
+    _display_version = v
+    return _display_version
+
+
 def load_json_relative(filename: str) -> dict:
     """Load a JSON file resolved against project_root.
 

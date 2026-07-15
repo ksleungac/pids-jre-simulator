@@ -1,5 +1,5 @@
 """App-chrome widgets — the JR East TIMS cab-console look (glossy raised-bevel pixel buttons +
-low-res pixel text). CHROME ONLY: setup screen, language picker, OCR debug panel, future OOBE.
+low-res pixel text). CHROME ONLY: setup screen, OCR debug panel, future OOBE.
 The train LCD displays are NOT chrome — they own their own faces and primitives under `displays/`
 (`displays/utils.py`); do not route LCD drawing through here. (Module boundary settled by /third-man,
 2026-06-24: chrome widgets and LCD primitives stay separate — they share pygame, not primitives.)

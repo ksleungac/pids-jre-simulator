@@ -91,7 +91,7 @@ class SetupScreen:
         # Lead/interval clamped to the ranges below.
         self.auto_input_enabled = bool(i18n.load_settings().get("auto_input", False))
         self.lead_m = 900
-        self.interval_s = 5
+        self.interval_s = 3
         self.lead_min, self.lead_max, self.lead_step = 500, 1500, 100
         self.interval_min, self.interval_max, self.interval_step = 1, 10, 1
 

@@ -136,10 +136,10 @@ Each cycle `_resolve_reentry_target` resolves a re-entry **target** (a pure read
 | Layer 3 (game) | Target |
 |---|---|
 | 3A/3E parked, or 3B (`speed<30`), or speed unknown | none — 3B's departure fires later via the normal `SPEED_UP_30` crossing (with audio) |
-| 3C CRUISING (`speed≥30`) or PASSING | 1A; commit seeds `departure_observed=True` |
+| 3C CRUISING (`speed≥30`, badge `MOVING` or `PASSING`) | 1A; commit seeds `departure_observed=True` |
 | 3D ARRIVING (`badge==MOVING` AND `dist≤lead`) | 1B; commit seeds `departure_observed=arrival_observed=True` |
 
-**Two-probe consensus.** A target commits only after **two consecutive cycles resolve to the same target** — the `_Detector.reentry_latch` holds the prior cycle's target; a matching read commits, any *different* target (incl. 1A→1B mid-wait) or a no-op re-bases the latch. Rationale: re-entry is forward-only and irreversible (it never retreats Layer 1), so a lone transient misread while parked would stick the LCD +1 ahead of reality until the user click-jumps back. The genuine cases (cold boot, click-jump) pay one interval (~5s) of latency — cheap, and the wait is shown as the amber **"Re-aligning…"** panel indicator (`reentry_pending` in the status dict) instead of an abrupt snap.
+**Two-probe consensus.** A target commits only after **two consecutive cycles resolve to the same target** — the `_Detector.reentry_latch` holds the prior cycle's target; a matching read commits, any *different* target (incl. 1A→1B mid-wait) or a no-op re-bases the latch. Rationale: re-entry is forward-only and irreversible (it never retreats Layer 1), so a lone transient misread while parked would stick the LCD +1 ahead of reality until the user click-jumps back. The genuine cases (cold boot, click-jump) pay one sample interval of latency — cheap, and the wait is shown as the amber **"Re-aligning…"** panel indicator (`reentry_pending` in the status dict) instead of an abrupt snap.
 
 Silent because the missed announcement is stale (dep PA unrecoverable mid-segment; まもなく already partway). Mechanism: single-shot `PASimulator.pending_silent_advance` (`"1A"|"1B"`) written by the OCR thread, consumed on the **main thread** via `_silent_advance_to` → `_advance_to_next_stop(silent=True)`. AppState is mutated only on the main thread — the bg thread writes only the signal + the detector flags (multi-field AppState writes from the bg thread would tear against the render loop).
 
@@ -462,12 +462,12 @@ CPython dict assignment is atomic. No lock needed for single writer (BG thread) 
 
 ## Sample interval
 
-**5 seconds.** Trade-off:
+**3 seconds** (in-process driver `SAMPLE_INTERVAL_S`; user-adjustable 1–10s on the OCR setting page). Trade-off:
 
 - **Tighter** would catch threshold crossings more precisely but burns more CPU and could flood logs with redundant identical reads
-- **Wider** would miss events; at 100 km/h train moves ~140m in 5s, so wider sample could miss 900m threshold entirely
+- **Wider** would miss events; at 100 km/h train moves ~83m in 3s, so wider sample could miss 900m threshold entirely
 
-5s = good balance for both threshold detection and event cadence.
+3s = good balance for both threshold detection and event cadence.
 
 State machine robust to granularity — `prev_<X>` carries forward between samples, threshold-crossings fire on first sample after boundary crossed.
 
@@ -477,7 +477,7 @@ State machine robust to granularity — `prev_<X>` carries forward between sampl
 
 ```bash
 # Toggle OCR Auto-PA on the setup screen, adjust Lead (default 900m, ±100m
-# steps) and Interval (default 5s, ±1s), then select a route with Enter.
+# steps) and Interval (default 3s, ±1s), then select a route with Enter.
 uv run main.py
 ```
 
@@ -533,7 +533,7 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 | `_ocr_calibration_1080p/*.png` | **Local-only** 1080p source screenshots. Gitignored. Source for 1080p extraction passes. |
 | `_dev_scripts/extract_ocr_assets.py` | One-shot extractor: reads `_ocr_calibration*/` → writes `ocr_templates/`. Run after re-capturing sources, then commit diff. |
 | `_dev_scripts/validate_ocr.py` | Offline validation: badge + speed-limit + stopping-offset reads against labeled calibration screenshots. `--res 1080p\|1440p`. All tests PASS before deploying at that resolution. |
-| `_recordings/drive_<line>_<diagram>_<TS>.jsonl` | **Blackbox / drive recorder log** — one file per AutoDriver lifetime. Line 0 = `_type: "meta"` (route/diagram/dest/stops); subsequent lines mix `_type: "event"` (badge transitions: arrival / departure / passing_start / passing_end) and `_type: "sample"` (one OCR cycle, ~5s, all OCR fields + sim state including `at_station` / `cnt_pa_at_station` / `at_station_observed` / `inferred_state` / `segment_start_stop`). Written inside `auto_input/driver.py`'s capture loop with per-line `flush()` for crash safety. Local-only / gitignored. Field additions backward-compatible (plot_drive ignores unknowns); field removals or renames require coordinated update with `plot_drive.py`. |
+| `_recordings/drive_<line>_<diagram>_<TS>.jsonl` | **Blackbox / drive recorder log** — one file per AutoDriver lifetime. Line 0 = `_type: "meta"` (route/diagram/dest/stops); subsequent lines mix `_type: "event"` (badge transitions: arrival / departure / passing_start / passing_end) and `_type: "sample"` (one OCR sample cycle, all OCR fields + sim state including `at_station` / `cnt_pa_at_station` / `at_station_observed` / `inferred_state` / `segment_start_stop`). Written inside `auto_input/driver.py`'s capture loop with per-line `flush()` for crash safety. Local-only / gitignored. Field additions backward-compatible (plot_drive ignores unknowns); field removals or renames require coordinated update with `plot_drive.py`. |
 | `_experiments/live_captures/` | Saved HUD crops from prior live testing (gitignored — `_experiments/` itself = artifact-only folder; OCR + layout modules now bundled into `auto_input/` package) |
 | `fonts/ShinGoPr6N-Medium.otf` | Latin + CJK font used by debug panel for station names |
 

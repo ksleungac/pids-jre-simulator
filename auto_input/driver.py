@@ -14,7 +14,7 @@ and skips. No synthetic keystrokes, no keyboard hooks, no parallel route loading
 Architecture pointer: auto_input/README.md "Architecture" section.
 
 Usage (from `main.py`):
-    driver = AutoDriver(sim, lead_m=900, interval_s=5)
+    driver = AutoDriver(sim, lead_m=900, interval_s=3)
     driver.start()
     sim.run()  # blocks main thread
     driver.stop()
@@ -53,7 +53,7 @@ if TYPE_CHECKING:
     from app import PASimulator
 
 
-SAMPLE_INTERVAL_S = 5
+SAMPLE_INTERVAL_S = 3
 SPEED_DEPARTURE_KMH = 30
 DEFAULT_LEAD_M = 900
 # Long-approach lead bump. Major junctions / termini have arrival announcements
@@ -103,7 +103,7 @@ class Layer3State:
 #                   departure, passing_start, passing_end. Carries `curr_stop`
 #                   at the moment of transition. Plot tools read these directly
 #                   to place stop markers — no need to derive from sample stream.
-#   _type=sample  — one per OCR cycle (~5s). All OCR fields + sim state.
+#   _type=sample  — one per OCR sample interval. All OCR fields + sim state.
 #
 # Local-only (gitignored). Crash-safe: each line flushed immediately. Plot
 # generator (separate script — TODO) reads all three record types.
@@ -603,7 +603,7 @@ class AutoDriver:
                         # values — only the paused flag flips so the panel doesn't blank.
                         self.sim.auto_input_status = {**self.sim.auto_input_status, "paused": True}
                         # Short poll while paused — resume must take effect promptly,
-                        # not after a full sample interval (up to 5s of dead lag).
+                        # not after a full sample interval of dead lag.
                         self._stop_event.wait(min(self.interval_s, 0.5))
                         continue
                     # Click-jump re-anchor (Layer 1 authoritative → Layer 2 belief).
@@ -822,7 +822,7 @@ class AutoDriver:
         resolve to the *same* target. Re-entry is forward-only and irreversible
         (it never retreats Layer 1), so a lone transient misread while parked
         would stick the LCD +1 ahead of reality until the user click-jumps back.
-        The cost of waiting is one interval (~5s) on the genuine cases (cold
+        The cost of waiting is one sample interval on the genuine cases (cold
         boot, click-jump) — cheap, and the "re-aligning…" panel indicator turns
         the wait into a legible transition instead of an abrupt snap.
         """
@@ -848,7 +848,7 @@ class AutoDriver:
             self.sim.pending_silent_advance = "1B"
             print(f"          [AD] >>> RE-ENTRY: silent advance to 1B (game ARRIVING, dist={distance})")
         else:  # "1A"
-            # 3C CRUISING (or PASSING, dist unreliable) → land 1A; seed dep.
+            # 3C CRUISING (speed≥30, MOVING or PASSING) → land 1A; seed dep.
             self._detector.departure_observed = True
             self.sim.pending_silent_advance = "1A"
             print(f"          [AD] >>> RE-ENTRY: silent advance to 1A (game CRUISING/PASSING, speed={speed})")
@@ -880,10 +880,15 @@ class AutoDriver:
         badge = self._detector.prev_badge
         if badge == "MOVING" and distance is not None and distance <= self._detector.arrival_lead_m:
             return "1B"
-        if (speed is not None and speed >= SPEED_DEPARTURE_KMH) or badge == "PASSING":
+        if speed is not None and speed >= SPEED_DEPARTURE_KMH:
             return "1A"
-        # MOVING, speed<30, dist>lead → 3B → no-op (normal SPEED_UP_30 path plays
-        # the departure with audio when speed crosses 30).
+        # MOVING or PASSING, speed<30 → 3B → no-op. PASSING is treated identically to
+        # MOVING here (the 900m arrival is the ONLY thing PASSING changes, and that's
+        # the 1B branch above, MOVING-only), so the normal SPEED_UP_30 path plays the
+        # departure with audio when speed crosses 30. A PASSING badge must NOT force a
+        # silent re-entry at low speed — that ate the departure PA when departing a
+        # station the app was parked at (e.g. start-from-middle). speed>=30 still
+        # silent-advances above (fast-sample-past-the-ramp is a correct silent advance).
         return None
 
     def _reanchor_to_app(self) -> None:

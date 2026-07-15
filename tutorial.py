@@ -1,6 +1,6 @@
 """OOBE Tutorial — first-run hands-on walkthrough.
 
-Runs after the language picker, before the setup screen on first launch
+Runs after language resolution, before the setup screen on first launch
 (gated by ``settings["oobe_completed"]``). Boots the real simulator on
 tokaido/1865E at 国府津 (idx 13) inside a 1100×500 window; LCD lives in a
 sub-surface on the left, side-panel chrome on the right (step text +
@@ -611,7 +611,7 @@ STEPS: tuple[Step, ...] = (
 class Tutorial:
     """OOBE tutorial controller. Owns the 1100×500 window + sim instance.
 
-    Caller (main.py) invokes ``run()`` after the language picker and consumes
+    Caller (main.py) invokes ``run()`` after language resolution and consumes
     the boolean return: True = tutorial completed (set ``oobe_completed`` in
     settings); False = tutorial aborted (window closed, missing assets, etc.
     — ``oobe_completed`` decision left to the caller, but the recommendation

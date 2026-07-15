@@ -26,8 +26,8 @@ App-level runtime + the setup / chrome flow. Canonical home for app-level specs 
 
 ## Runtime map (`main.py`)
 `main()`:
-1. `pygame.init()` + `mixer.init()`; `update_check.check_async()` fires early (3 s network window overlaps picker/setup).
-2. **Language picker** — first run only (`settings["language"]` absent/unsupported → `LanguagePicker`), then `i18n.init(lang)`.
+1. `pygame.init()` + `mixer.init()`; `update_check.check_async()` fires early (3 s network window overlaps setup).
+2. **Language resolution** — NO standalone picker. Saved `settings["language"]`, else `detect_default_lang()` (OS locale), persisted on genuine first-run; then `i18n.init(lang)`. Runtime switching + persistence is owned by the TIMS home's language knobs (`setup_tims/home.py`). (The pre-TIMS grey `LanguagePicker` was removed — stale + redundant beside the knobs; critical_lessons §6.)
 3. **OOBE tutorial** — CLASSIC flow only (`--classic` + not `oobe_completed`). The default TIMS flow does its own OOBE (§ Tutorial).
 4. **Setup ↔ drive loop:**
    - `_run_setup()` → launch config, or `None` → exit.
@@ -38,7 +38,7 @@ App-level runtime + the setup / chrome flow. Canonical home for app-level specs 
 
 **`_run_drive(config)`** — builds `PASimulator(work_dir, route_data, auto_input=, model=)`; `jump_to_stop(start_idx)` if a start station was picked; if `auto_input`, spins `AutoDriver(lead_m, interval_s)` + `sim.auto_driver = driver` (exposes pause to the band). `sim.run()` returns the exit action; driver stopped in `finally`.
 
-Window sizes: `SETUP_SIZE=(730,420)` (classic setup / picker / OOBE), `TIMS_SIZE=(730,610)` (TIMS flow).
+Window sizes: `SETUP_SIZE=(730,420)` (classic setup / OOBE tutorial), `TIMS_SIZE=(730,610)` (TIMS flow). No premature window is created before the flow — each path (`_run_setup` / `_run_tutorial`) creates its own first window, so first-run goes straight to the correctly-sized screen (no blank pre-flash).
 
 **Always-on-top:** the app is a companion overlay for the game, so the window stays `HWND_TOPMOST`. `main()` calls `window_utils.install_topmost_hook()` once (after `pygame.init()`), wrapping `pygame.display.set_mode` so EVERY window it creates re-pins topmost — one seam, regression-proof as screens are added. Needed because every `set_mode` drops the topmost style and the TIMS flow re-`set_mode`s per screen transition; the old monolith re-pinned inline after each call, the modular rewrite kept the pin only in the sim → the setup flow lost it. Previews / dev scripts don't call the hook (stay unpinned). No-op off-Windows / if pywin32 absent.
 

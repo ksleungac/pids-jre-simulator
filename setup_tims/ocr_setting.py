@@ -787,7 +787,7 @@ def run_consent(screen, read_only=False):
 
 # ── settings view (steppers) ─────────────────────────────────────────────────────
 _lead_m = 900
-_interval_s = 5
+_interval_s = 3
 _entry_lead = None  # settings-page entry snapshot (working-copy semantics: 返回 reverts, 設定 commits)
 _entry_int = None
 _LEAD_MIN, _LEAD_MAX, _LEAD_STEP = 500, 1500, 100
@@ -798,7 +798,7 @@ def _load_state():
     global _lead_m, _interval_s
     s = i18n.load_settings()
     _lead_m = int(s.get("lead_m", 900))
-    _interval_s = int(s.get("interval_s", 5))
+    _interval_s = int(s.get("interval_s", 3))
 
 
 def _save_state():

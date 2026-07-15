@@ -17,7 +17,7 @@ import pygame
 
 import i18n
 import update_check
-from app_paths import project_root
+from app_paths import display_version, project_root
 from widgets import (
     _TUNEABLES_TIMS_BUTTON,
     HINT_CYAN_COLOR,
@@ -125,11 +125,12 @@ ACTION_KEYS = [
     "setup_tims.action.record",
 ]
 
-# Version tag — i18n "Version" word + "054" bottom-left: no 'v', no dots, no colon. The numerals are
-# drawn by draw_lowres_number (NOT full-width forms): each digit trimmed to ink + an explicit small
+# Version tag — i18n "Version" word + e.g. "060" bottom-left: no 'v', no dots, no colon. The numerals
+# are drawn by draw_lowres_number (NOT full-width forms): each digit trimmed to ink + an explicit small
 # gap, so they sit close like real TIMS. xscale widens them ("wider but not full width"); gap is the
-# spacing knob, independent of width. VERSION is raw (production reads pyproject); shown dot-stripped.
-VERSION = "0.5.4"
+# spacing knob, independent of width. VERSION is resolved (NOT hand-maintained): frozen = build-stamped
+# PE metadata, dev = pyproject — via app_paths.display_version(); shown dot-stripped.
+VERSION = display_version()
 VERSION_K = 1  # no upscale — AA-off native
 VERSION_DIGIT_XSCALE = 1.0  # natural ink width (Noto AA-off native; no stretch)
 VERSION_DIGIT_GAP = 1  # native px between digits (× k); small = near-touching, may be <0
@@ -322,6 +323,12 @@ def run(screen):
                     )
                     ACTIVE_LANG = lang_hit
                     i18n.set_language(lang_hit)
+                    # Persist the choice — the home knobs are now the ONLY language selector (the pre-TIMS
+                    # first-run picker was removed), so a knob click must survive restart. set_language only
+                    # flips the in-memory lang; settings.json is the durable store. (critical_lessons §6)
+                    s = i18n.load_settings()
+                    s["language"] = lang_hit
+                    i18n.save_settings(s)
                     continue
                 for i, aid in enumerate(ACTION_IDS):
                     rect = action_rects.get(aid)

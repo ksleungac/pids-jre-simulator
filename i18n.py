@@ -1,8 +1,8 @@
 """App-chrome internationalisation.
 
-Surfaces: language picker + setup screen + auto-input debug panel (`panel.*`
-keys; de-jargoned for the lightly-public audience, 2026-05-31). OOBE still to
-come. LCD station-name rendering is unrelated and stays on its own
+Surfaces: setup screen (classic + TIMS flow, incl. the home language knobs) +
+auto-input debug panel (`panel.*` keys; de-jargoned for the lightly-public
+audience, 2026-05-31). OOBE still to come. LCD station-name rendering is unrelated and stays on its own
 translations.json — but note the debug panel mixes both: chrome labels via
 `font()` here, station names via its own CJK face (see conventions.md §
 "Mixed-script i18n chrome needs two fonts").
@@ -45,7 +45,8 @@ def load_settings() -> dict:
 
 def save_settings(data: dict) -> None:
     """Best-effort write. Never crashes the app — a read-only install dir
-    just means the picker will show again next launch, which is acceptable."""
+    just means the language re-detects to the OS default each launch (and any
+    OCR/interval overrides revert to defaults), which is acceptable."""
     try:
         with open(settings_path(), "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -97,7 +98,9 @@ def init(lang: str) -> None:
 
 
 def set_language(lang: str) -> None:
-    """Switch the active language at runtime (used for picker hover-preview)."""
+    """Switch the active in-memory language at runtime (e.g. the TIMS home
+    language knobs). Does NOT persist — callers that need durability write
+    settings.json themselves (see setup_tims/home.py knob handler)."""
     global _current_lang
     if lang in SUPPORTED_LANGS:
         _current_lang = lang
@@ -174,8 +177,8 @@ def font(size: int, *, bold: bool = False) -> pygame.font.Font:
 
 def font_for_lang(lang: str, size: int, *, bold: bool = False) -> pygame.font.Font:
     """Cached chrome font for an explicit language code, bypassing the
-    active language. Used by the picker to render each row's label in its
-    own script's font regardless of which row is hovered."""
+    active language — for rendering a label in a specific script's font
+    regardless of the active locale (e.g. the setup-screen route rows)."""
     regular, bold_fname = _LANG_CHROME_FONT.get(lang, _LANG_CHROME_FONT["en"])
     fname = bold_fname if bold else regular
     key = (fname, size)

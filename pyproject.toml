@@ -1,11 +1,11 @@
 [project]
 name = "pids-jre-simulator"
-# Packaging metadata only — NOT read at runtime. The running app gets its
-# version from the exe's embedded PE metadata via app_paths.app_version();
-# the release identity is the git tag. uv requires a static version field here
-# (`dynamic = ["version"]` forces uv into package/build mode and breaks
-# `uv run`), so this is a standalone label — no runtime coupling to keep in sync.
-version = "0.5.4"
+# Version source of truth for DEV: app_paths.display_version() reads this field to show the
+# version tag when NOT frozen (the exe instead reads its build-stamped PE metadata via
+# app_version()). /build stamps the same number into version_info.txt, and /release tags it —
+# keep all three in step (a future version-drift sensor guards this; see TODO). uv requires a
+# static version field (`dynamic = ["version"]` forces package/build mode and breaks `uv run`).
+version = "0.6.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"

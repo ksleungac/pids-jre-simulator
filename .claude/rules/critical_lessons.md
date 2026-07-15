@@ -89,3 +89,19 @@ if (pending_X or held_input) and preconditions_met():
 Held-key inputs self-retry (standard reset-and-call is fine). The pathology only fires for single-shot flags from sources that won't re-emit.
 
 **Scope:** any background-thread → main-thread signal where the action might decline (audio busy, mutex held, mid-animation).
+
+---
+
+## 6. Clean-state first-run paths are invisible in dev (2026-07-15)
+
+TIMS became the default setup flow, but the pre-TIMS `LanguagePicker` (old grey palette) still fired on genuine first-run — the `if lang not in SUPPORTED_LANGS` branch in `main.py`, reached only when `settings.json` has no `language`. Never caught for the whole TIMS-graduation arc because every dev/test machine already has a populated `settings.json` (`language` + `oobe_completed`), so that branch never executes locally. Surfaced only when a clean v0.6.0 release build was smoke-tested from a fresh staged folder — the first screen a real new user sees was stale and half-redundant (TIMS home already has language knobs).
+
+**Rule:** any code path gated on the ABSENCE of persisted local state (`settings.json`, caches, first-run/OOBE flags, `path.exists()`-else defaults) is structurally invisible in a dev environment that already holds that state. "The exe launched" verifies the *running* frame — not the *clean-install* frame a real new user hits. Persisted state masks first-run just as surely as `sys._MEIPASS` masks the deployment frame (lessons 3–4); same root — reasoning from the developer's environment, not the user's.
+
+**Pattern:**
+- After any change to setup / onboarding / first-run / defaults, test from a DELETED-state baseline: move `settings.json` (and any first-run flag files) aside, launch, walk the flow. Or exercise the fresh staged build folder BEFORE the smoke-test launch self-pollutes it with a `settings.json`.
+- Enumerate every state-gated branch (`if not settings.get(...)`, `if lang not in ...`, `if not X.exists()`) as its own test case — each is a distinct first-run screen a dev never sees.
+- When a flow is redesigned (classic → TIMS), re-walk EVERY first-run screen for staleness/redundancy, not only the screens the change touched.
+- `/build` smoke test is not "does it launch" — it is "does a brand-new user's first five minutes work." Delete-state first-run is a mandatory item on that checklist.
+
+**Scope:** first-run pickers, OOBE tutorials, settings-absent defaults, cache-miss paths, license/EULA gates, anything reached only when persisted state is missing.

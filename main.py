@@ -12,11 +12,10 @@ os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 
 import i18n
 import update_check
-from language_picker import LanguagePicker
 from setup import SetupScreen
 from app import PASimulator
 
-SETUP_SIZE = (730, 420)  # classic setup / language-picker / OOBE window
+SETUP_SIZE = (730, 420)  # classic setup / OOBE tutorial window
 TIMS_SIZE = (730, 610)  # TIMS-console setup flow window (taller)
 
 
@@ -86,7 +85,7 @@ def _run_drive(config):
         if auto_input:
             from auto_input import AutoDriver
 
-            driver = AutoDriver(sim, lead_m=config.get("lead_m", 900), interval_s=config.get("interval_s", 5))
+            driver = AutoDriver(sim, lead_m=config.get("lead_m", 900), interval_s=config.get("interval_s", 3))
             sim.auto_driver = driver  # exposes pause toggle to the band click handler
             driver.start()
         action = sim.run() or "quit"
@@ -124,7 +123,7 @@ def main():
     window_utils.install_topmost_hook()
 
     # Kick off the fail-silent update check early so its 3s network window
-    # overlaps the picker/setup screens; the setup screen polls the result.
+    # overlaps the setup screens; the setup screen polls the result.
     update_check.check_async()
 
     # Repo root (dev) / alongside-exe (frozen) — single canonical helper.
@@ -132,27 +131,23 @@ def main():
 
     BASE_DIR = str(project_root())
 
-    # Create screen for setup (also reused by the first-run language picker)
-    screen = pygame.display.set_mode(SETUP_SIZE)
-    pygame.display.set_caption("PA Simulator")
+    # No premature window here — the setup flow (_run_setup) and the classic OOBE tutorial each create
+    # their own correctly-sized window, so creating one now would only flash a blank frame before the
+    # handoff. (Used to exist for the removed first-run LanguagePicker — critical_lessons §6.)
 
-    # First-run language picker. Settings file absent or missing 'language' →
-    # show picker; otherwise skip straight to setup with the saved language.
+    # Language resolution — NO standalone first-run picker. Use the saved choice, else the OS-locale
+    # default; the TIMS home's language knobs own runtime switching AND persist the choice. Persist the
+    # detected default on genuine first-run so settings.json is initialized deterministically. (Removing
+    # the pre-TIMS grey LanguagePicker: it was stale + redundant beside the home knobs — critical_lessons §6.)
     settings = i18n.load_settings()
     lang = settings.get("language")
     if lang not in i18n.SUPPORTED_LANGS:
-        i18n.init(i18n.detect_default_lang())  # so picker chrome can render
-        chosen = LanguagePicker(screen).run()
-        if chosen is None:
-            print("Language selection cancelled. Exiting.")
-            pygame.quit()
-            return
-        lang = chosen
+        lang = i18n.detect_default_lang()
         settings["language"] = lang
         i18n.save_settings(settings)
     i18n.init(lang)
 
-    # First-run OOBE tutorial (CLASSIC setup only). Runs once after the language picker, before setup.
+    # First-run OOBE tutorial (CLASSIC setup only). Runs once after language resolution, before setup.
     # Set ``oobe_completed=True`` regardless of how the tutorial finished (Done / Skip / asset-missing)
     # so we don't re-prompt on next launch — a "replay" affordance lives on the setup screen.
     # The TIMS flow (default) does its OWN OOBE: the 教學 card flashes until the first visit (home._mark_oobe_done

@@ -312,6 +312,7 @@ Touch only what the task requires. Don't expand edit scope autonomously.
 - Don't "improve" adjacent code. Mention unrelated issues in chat; don't fix in the diff.
 - Remove orphans your own changes created. Clean up your own mess only.
 - Render symptom from a wrong upstream input → fix the input so existing draw code works untouched; don't add compensating draw-side logic.
+- **Bug in an existing state machine → enforce its model, don't add state.** When a bug appears in a designed state machine, first check whether an existing invariant already resolves it and enforce that at the one violating site — before introducing new flags/state. (2026-07-16) A re-entry silent-advance ate a departure PA; I proposed a new `synced` flag, but the fix was a one-line deletion enforcing the existing "PASSING ≡ MOVING (arrival aside)" invariant. User: *"don't complicate … the state machines we've discussed should be complete about these."*
 - The test: every changed line should trace directly to the user's request.
 
 ### Test the change, not just the bug
