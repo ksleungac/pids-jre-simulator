@@ -74,6 +74,21 @@ def detect_default_lang() -> str:
     return "en"
 
 
+def resolve_language(settings: dict) -> str:
+    """First-run language resolution — PURE (dict in, lang out), no I/O, no screen.
+    Saved language if valid, else the OS-locale default (`detect_default_lang`). The
+    caller persists the result when it differs from what's stored (see `main.py`).
+
+    Deliberately SCREEN-FREE: there is no interactive first-run picker. The pre-TIMS
+    grey `LanguagePicker` was removed (redundant beside the TIMS home's language
+    knobs) — critical_lessons §6. This function's total-over-a-dict contract is the
+    regression guard: reintroducing an interactive language step in the first-run
+    path would have to bypass it (locked by `_tests/t1_unit/test_resolve_language.py`
+    + `_tests/t4_clean_frame/test_clean_frame_startup.py`)."""
+    lang = settings.get("language")
+    return lang if lang in SUPPORTED_LANGS else detect_default_lang()
+
+
 # ---------------------------------------------------------------------------
 # Translation lookup. Module-global active language; t(key, **fmt) returns the
 # localized string with optional .format() substitutions; falls back through

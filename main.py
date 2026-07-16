@@ -140,9 +140,8 @@ def main():
     # detected default on genuine first-run so settings.json is initialized deterministically. (Removing
     # the pre-TIMS grey LanguagePicker: it was stale + redundant beside the home knobs — critical_lessons §6.)
     settings = i18n.load_settings()
-    lang = settings.get("language")
-    if lang not in i18n.SUPPORTED_LANGS:
-        lang = i18n.detect_default_lang()
+    lang = i18n.resolve_language(settings)  # saved-or-detect; pure + screen-free (no first-run picker)
+    if settings.get("language") != lang:  # genuine first-run (absent) or corrupt value → persist deterministically
         settings["language"] = lang
         i18n.save_settings(settings)
     i18n.init(lang)
