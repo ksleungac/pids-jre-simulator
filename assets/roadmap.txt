@@ -1,0 +1,30 @@
+  ┌──────────────────────────────────────────────────────────────┐
+  │  [PA]  THE DEVELOPMENT LINE                                     │
+  │        JRE PA Simulator — a feature history · 2026             │
+  └──────────────────────────────────────────────────────────────┘
+
+  Feb  ◉  Genesis             where it began — audio only
+       │
+  Mar  ◎  First release       runs as a Windows app            v0.5.0
+       │
+  Apr  ●  Bilingual names     station names in Japanese & English
+       ◎  Station numbers     line codes like JY 17            v0.5.2
+       ●  8-station zoom       a close-up of the next stops
+       ●  Three languages     menus in English, Chinese, Japanese
+       │
+  May  ●  Departure melodies  the jingle before the doors close
+       ●  Transfer guide      connecting lines at each station
+       ◎  Update notices      tells you when a new build is out  v0.5.4
+       │
+  Jun  ◆  Game sync (OCR)     announcements follow the actual game
+       ●  Through-service     routes that change mid-trip
+       ◆  E235 Yamanote       a second train to ride
+       │
+  Jul  ◆  TIMS cab console    setup styled like the real cab
+       ┊
+ next  ◌  More trains         E231-500 and E233 on the way
+       ┊
+       ◌  Smoother setup      a signed, one-click installer
+       ˅
+
+     ◉ start   ● feature   ◎ release   ◆ major revamp   ◌ planned
