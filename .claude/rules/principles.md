@@ -90,6 +90,7 @@ Before claiming "X is a bug" or "X works like Y", read the call sites and trace 
 - (2026-05-12) Filled audio/README JJ from folder structure alone; route.json showed JJ is WIP. Folder shape ≠ data completeness.
 - (2026-05-29) Concluded a feature "already shipped at v0.5.3a" from `git log -S` string-match + tag ancestry; correct method = read commit messages `v<prev>..HEAD` + code at the tag. User lost confidence in release-note drafting.
 - (2026-06-12) Theorized SVG-deployment risk across ~2 rounds; the user had already shipped that exact pattern (`data/line_icons/` SVG-sourced PNGs). Resolved only after reading `setup.py`. Don't raise a hypothetical risk the repo may have already solved.
+- (2026-07-16) Reasoned about the auto-driver layer model from a stale preloaded `conventions.md` binding that mislabelled badge reads as "Layer 2"; the canonical `auto_input/README.md` has them as Layer 3 inputs. Trusted the preloaded summary over the doc for several rounds. A preloaded rules-file summary of a domain model may have drifted — read the canonical doc before reasoning about the model, not after being told.
 
 **How to apply:**
 - When the user references their own existing setup ("if you read my X you'll know") — read it BEFORE theorizing, especially before raising a risk/blocker. The answer is often already in-repo.
@@ -324,6 +325,16 @@ Exercise the change's full blast radius before saying done. Smoke test on the bu
 **How to apply:**
 - Identify blast radius before saying done. "Every route's load path" → exercise every route.
 - Grep proves path exists; runtime simulation proves behavioral correctness.
+
+### Testability is a precondition, not an afterthought
+A regression-worthy change ships with a test in the right tier — scope picks the tier (pure fn → T1, cross-module headless → T3, state-absent first-run → T4; rendering exempt, by-eye). If the logic isn't reachable by a headless test — buried in a pygame/blocking monolith, behind a display init, tangled with I/O — **extract it to a pure function so it is**, then test that.
+
+**Why:** untestable logic is how a bug class stays uncovered — the v0.6.0 language picker (a first-run branch no dev ever executed) and the re-entry PA-drop (decision logic reachable only mid-drive) both hid in exactly this gap. Examples:
+- (2026-07-16) `resolve_language` extracted from `main()`'s inline first-run block so the decision became a pure `dict → lang` function a T1/T4 test can call; the extraction IS what makes an interactive picker un-reintroducible there.
+
+**How to apply:**
+- New production path / decision fn / regression-worthy fix → add the test in the same change; don't defer it to "later."
+- "I can't test this without launching the app" is a design smell, not an excuse — name the extraction. Enforced at review by `review-dirty` Lens 4 (test-not-stale · feature-has-test · code-testable).
 
 ### Blind A/B verify presentation convention changes
 Before adopting a new presentation convention, validate via blind A/B: parallel fresh-context agents with identical questions — one reads original, one reads new. Adopt only when answers match.

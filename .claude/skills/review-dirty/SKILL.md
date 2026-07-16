@@ -17,6 +17,15 @@ You are a code reviewer analyzing dirty changes in a repository.
 
 Apply this to both the coordinator and the reviewer subagent: run git commands via the PowerShell tool; do NOT use the Bash tool even when a bash code block appears in this document — those blocks are illustrative syntax, not a directive to use bash.
 
+## Scope mode — DIRTY (default) vs FULL / MODULE vs INTEGRATION
+Two scope axes. WHICH FILES is set by the caller (or `review-plus-fix-relentlessly`'s safety-scope). WHICH LINES within a file has a mode:
+
+- **DIRTY** (default — "review", "review my changes"): review the diff hunks.
+- **FULL / MODULE / END-TO-END** (user says "scan the module", "end-to-end", "review the whole X", or names specific files/dirs): review EVERY LINE of the named files — git status is irrelevant, committed-but-unchanged code is IN scope. A hardcoded `VERSION = "0.5.4"` sat as unchanged history for weeks while every dirty-diff review was structurally blind to it.
+- **INTEGRATION** (the change **flips a default flow, inserts/removes a first-run/onboarding screen, or rewires an entry-point branch** — `--tims`→`--classic` default flip, a picker/tutorial/consent screen added or dropped, a flow-routing `if` edited): auto-escalate to FULL scope on the touched flow module(s) AND run the **integration-residue checklist** — re-walk EVERY state-gated branch (`if not settings.get(...)`, `if X not in ...`, `if not path.exists()`) and EVERY reachable screen, asking per item: *still reachable? still needed? now redundant beside a sibling feature?* A change reviewed only along its OWN axis (the flag it flips) is blind to a screen made redundant on an ORTHOGONAL axis (persisted state) — the v0.6.0 language picker survived its own graduation commit exactly this way (`critical_lessons §6`). **A DUTY, not a user opt-in:** recognize the trigger and escalate even from a DIRTY-mode call.
+
+In FULL mode: (1) embed the WHOLE in-scope files in the reviewer payload, not `git diff`; (2) the reviewer runs the deterministic scanners over the whole module FIRST (see Derivation-bypass scan), then the lenses over every line. **A stated full scope is LITERAL — never silently narrow it to the diff.**
+
 ## Instructions when invoked:
 1. Gather git status information using PowerShell:
    ```powershell
@@ -49,7 +58,25 @@ This project has codified rules and dormant-scaffolding patterns; surface findin
 5. Read `.claude/skills/vibe-check/SKILL.md` Step 2 — the 10 smell categories you will apply as Lens 2
 6. For any domain doc in the diff (`DISPLAY.md`, `DATA_FORMAT.md`, `auto_input/README.md`), read its EDIT-CONTRACT block at the top
 
-## Three review lenses (apply ALL three to the in-scope diff)
+## Derivation-bypass scan — canonical-source duplication (run BEFORE the lenses)
+A hardcoded literal that re-states a value which owns a single canonical source drifts silently — it is correct-at-authoring, so neither an eyeball nor a dirty-diff review catches it (a hardcoded `\"0.5.4\"` shipped while the build was 0.6.0). Two halves:
+
+**(1) Deterministic — run the linter over the in-scope .py files** (re-checks committed code the diff never shows; read-only, safe):
+```powershell
+python _dev_scripts/lint_primitives.py --derivable <in-scope .py files>
+python _dev_scripts/lint_primitives.py <in-scope .py files>
+```
+
+**(2) Semantic — the sub-classes a linter CANNOT reason about.** Check each in-scope file for a hardcoded literal that should instead DERIVE from a source:
+- **Special-case where a general rule belongs** — a specific literal used as a filter/branch that should be a predicate (`== \"_mock\"` where `startswith(\"_\")` is meant; one route/model/station name special-cased instead of its category). → the general predicate.
+- **Color literal == a palette constant** — an RGB tuple equal to a `tims_chrome` PALETTE value, typed inline instead of the constant. → the constant.
+- **Dimension re-typed, not read** — one model's dimension hardcoded in SHARED code. → `surf.get_height()` or a param.
+- **UI string bypassing i18n** — a user-facing chrome label as a literal. → `i18n.t(key)`.
+- **Route-derived field with per-call fallback** — `stop.get(\"X\") or default` in a renderer. → filled in the `finalize_route` closure (`principles.md` § \"JSON is input grammar\").
+
+Report each finding as a Lens-3 item (rule: `conventions.md` § Tooling \"canonical-source duplication\") with file:line · the literal · the canonical source it should derive from.
+
+## Four review lenses (apply ALL four to the in-scope code — the diff in DIRTY mode, the whole files in FULL / INTEGRATION mode)
 
 ### Lens 1 — Bug correctness
 - Logic bugs, edge cases, null handling
@@ -59,7 +86,7 @@ This project has codified rules and dormant-scaffolding patterns; surface findin
 - **Deployment-frame / runtime-semantics verification.** If the diff touches PyInstaller path semantics (`sys.frozen`, `sys._MEIPASS`, `sys.executable`, `Path(__file__)` for behavior-dependent paths), threading primitives, file-I/O timing assumptions, library API behavior that differs between dev and frozen, OR any code where "correctness" depends on runtime conditions not visible from reading the file — verify against primary source (the build script's actual copy logic, the library's runtime-hook source, official docs, or actual exercise of the deployed artifact). Don't accept "intentional / standard / the way it's always done" claims from memory. The 2026-05-05 release-crash trace had a prior reviewer defend `i18n.app_root`'s `_MEIPASS` usage as "intentional semantics" — wrong, because the defense reasoned from generic PyInstaller mythology rather than checking THIS project's build script (which doesn't use `--add-data`, so `_MEIPASS` is empty). Per `principles.md` § "Verify deployment-frame and external-runtime semantics from primary source."
 
 ### Lens 2 — Vibe-check smells
-Apply ALL 12 categories from `.claude/skills/vibe-check/SKILL.md` Step 2:
+Apply ALL 13 categories from `.claude/skills/vibe-check/SKILL.md` Step 2:
 1. Duplicated logic / forked helpers
 2. Dead helpers / unreachable code (EXCEPTION: documented dormant scaffolding with multi-line `# NOTE: deliberately NOT called from ... yet` block — DO NOT flag)
 3. Half-finished implementations
@@ -72,6 +99,7 @@ Apply ALL 12 categories from `.claude/skills/vibe-check/SKILL.md` Step 2:
 10. Production code (project root + `displays/`) importing from `_*/` paths
 11. **Local utility helper that should live in a shared module** (path resolver / JSON loader / slug parser / format helper / common regex / stdlib-only helper buried in a feature module instead of `app_paths.py` / `displays/utils.py` / `constants.py` / `i18n.py`). Per `principles.md` § "Search before authoring common utility code."
 12. **Deployment-frame / runtime-semantics primitive outside canonical home, without verification anchor** (`sys._MEIPASS`, `sys.frozen`, `sys.executable`, `Path(__file__)` for behavior-dependent paths, `if frozen:` branching outside `app_paths.py`; OR threading / I/O timing patterns without a comment explaining the invariant). Per `principles.md` § "Verify deployment-frame and external-runtime semantics from primary source." Sibling to Lens 1 verification — Lens 1 fires on the diff; Lens 2 fires on the standing pattern.
+13. **Integration residue — a screen / branch / flag made redundant by a sibling feature but still wired.** After a flow integration (a flow becomes default, a screen's job moves to a sibling), a now-redundant first-run screen or state-gated branch is often left reachable because it's invisible in dev (the branch only fires on absent persisted state). **FULL / INTEGRATION-scope only — a DIRTY diff is structurally blind to it** (the stale branch is unchanged history). Distinct from #2 (dead/unreachable) — this code IS still reachable, just no longer *needed*. Per `critical_lessons.md §6`. **Verification:** for each first-run / onboarding screen, confirm a live entry path AND that no sibling feature already owns its job (the v0.6.0 picker was redundant beside the TIMS home's language knobs).
 
 **On Lens 2 categories #11 + #12 — pre-flight grep**: when reviewing a diff that introduces a small utility helper or a deployment-frame primitive, do a `grep -rn` cross-codebase pass for sibling implementations BEFORE approving. The duplication isn't visible from the diff alone — it's visible only from the codebase view.
 
@@ -86,6 +114,14 @@ Cite specific rules from the pre-read. When a finding violates:
 - A domain doc's EDIT-CONTRACT block (refuse-list violations: history notes / code illustrations / speculative future / design-rationale prose / cross-doc duplication)
 
 ...cite the rule by name. Generic findings without rule citations are weaker than rule-grounded ones; the citation forces you to consult the rules instead of pattern-matching from training.
+
+### Lens 4 — Test integrity
+The project carries a real test suite (`_tests/`, tier map in `_tests/README.md`). Review the CHANGE against it on three axes:
+- **Test-not-stale.** A test that asserts removed/renamed behavior, encodes an old spec, or whose subject the change moved — a green stale test is worse than none (false confidence). Flag any test the change silently invalidated. Cross-cutting sibling: a coherence test that agrees with a *drifted doc* (`_tests/README.md` "Coherence ≠ correctness") — assert the deepest invariant, not a derived restatement.
+- **Feature-must-have-test.** A new production code path / decision function / regression-worthy bug-fix landing with NO accompanying test in the appropriate tier — pick by SCOPE: pure fn → T1, cross-module headless → T3, state-absent first-run → T4 (`_tests/README.md` "Fixture ≠ tier"). Rendering is exempt (by-eye by design). Regression-test-per-incident is the project's first-fill rule.
+- **Code-must-be-testable.** Decision logic buried where it can't be exercised headlessly (inside a pygame/blocking monolith, behind a display init, tangled with I/O) — flag as untestable-as-written and NAME the extraction (a pure function the test can call, per the `resolve_language` extraction that made the first-run language path testable). Untestable logic is how a bug class stays uncovered.
+
+Severity: a stale / false-green test → `critical` (it actively misleads); a missing test on a regression-worthy path, or untestable-as-written logic → `warning`.
 
 ## Severity tiers
 - `architectural-critical` — Lens 3 with rule citation, OR Lens 2 #10 (production imports of `_*/`), OR similar deploy-frame issue. Loop must NOT stop while these exist.
@@ -103,8 +139,11 @@ Cite specific rules from the pre-read. When a finding violates:
 ## Git Status:
 $(git status --short)
 
-## Git Diff (selected files):
+## In-scope code:
+# DIRTY mode (default) — the diff hunks:
 $(git diff --unified=3 -- $(git diff --name-only | head -10))
+# FULL / MODULE mode — replace the diff above with the WHOLE in-scope files
+# (Get-Content each named file); committed-but-unchanged lines MUST be reviewed.
 
 ## Review focus from user:
 $ARGUMENTS

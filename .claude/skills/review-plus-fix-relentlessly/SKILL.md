@@ -37,6 +37,11 @@ If the user explicitly says "review everything", surface findings on out-of-cont
 
 Concrete rule for the reviewer prompt: enumerate the in-scope files explicitly and list out-of-scope ones with a one-line "why excluded" each. Don't pass `git diff --name-only | xargs` style "review whatever's dirty" — that conflates your work with everyone else's.
 
+### Line-scope mode (DIRTY vs FULL) — passed through to review-dirty
+The Scope rule above governs WHICH FILES. WHICH LINES within them is a separate mode, defined in `review-dirty` § "Scope mode": **DIRTY** (diff hunks, default) vs **FULL / MODULE / END-TO-END** (every line of the named files, committed-but-unchanged code included). When the user says "scan the module", "end-to-end", "review the whole X", or names specific files/dirs, pass that intent through in the `review-dirty` call's `args` — so its reviewer embeds the whole files, runs the deterministic scanners over the module (Derivation-bypass scan), and applies the lenses to every line, NOT just the diff. A hardcoded literal that shipped weeks ago is unchanged history — a DIRTY-mode loop is structurally blind to it. **A stated full scope is literal; never narrow it to the diff.**
+
+**INTEGRATION escalation is automatic, not user-gated:** if the fix set flips a default flow, adds/removes a first-run/onboarding screen, or rewires an entry-point branch, pass that intent through so `review-dirty`'s INTEGRATION scope runs the integration-residue checklist over the flow module — the reviewer escalates even when the user didn't ask, because the stale redundant branch is invisible in both the diff AND the dev environment (`review-dirty` § "Scope mode"; `critical_lessons §6`).
+
 ## Workflow when invoked:
 
 ### Step 1: Initialize loop variables
