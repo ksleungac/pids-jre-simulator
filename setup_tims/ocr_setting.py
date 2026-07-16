@@ -4,15 +4,16 @@ near-black panel, Noto AA-off text, bevel buttons).
 
 Two views:
   * CONSENT — scrollable how-it-works + terms, with a SCROLL-TO-ACCEPT gate (設定 stays grayed until
-    the panel is scrolled to the bottom). Shown ONCE as a gate the first time the user launches via OCR
-    (自動放送始発起動) or opens OCR settings (自動放送設定); acceptance persists in settings.json
-    ("ocr_consent"). Afterwards it's read-only from the home Tutorials button (no accept gate).
+    the panel is scrolled to the bottom). Shown ONCE as a LAUNCH-time gate the first time the user
+    launches via OCR (自動放送始発起動); acceptance persists in settings.json ("ocr_consent"). Opening
+    OCR settings (自動放送設定) goes DIRECT to SETTINGS — no gate. Afterwards the how-it-works view is
+    read-only from the home Tutorials button.
   * SETTINGS — lead-distance / interval steppers, backed by settings.json (lead_m / interval_s).
 
 Gate helper `ensure_consent(screen)` is what the pa-setting OCR buttons call.
 
-v1 note: the legacy flow strip animated (pulsing HUD, cycling digit templates). Ported STATIC here —
-add the animation back once the layout is judged.
+The how-it-works flow strip is animated (cycling digit templates, moving train, pulsing PgDn key),
+mirroring the legacy flow's motion.
 
 Preview:  uv run _dev_scripts/preview_setup_tims.py --screen consent   (scroll wheel / drag; ESC quit)
           uv run _dev_scripts/preview_setup_tims.py --screen ocrset
@@ -716,6 +717,7 @@ def render_consent(screen, scroll_y, read_only=False):
 def run_consent(screen, read_only=False):
     """Run the consent view. Returns True if accepted (or read_only OK-closed), "home" if the band Home
     button was pressed (caller bubbles the return all the way to the home menu), False if cancelled/ESC."""
+    _load_state()  # reflect the user's persisted interval/lead in the how-it-works flow + journey (else stale defaults)
     clock = pygame.time.Clock()
     scroll_y = 0
     while True:

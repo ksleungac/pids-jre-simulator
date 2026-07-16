@@ -47,9 +47,7 @@ TEXT_COLOR = chrome.INK                            # bright white body ink
 DIM_COLOR = chrome.DIM                             # dim secondary text
 ACCENT_COLOR = (96, 168, 84)                      # completed phase / primary button
 ACCENT_BRIGHT = (132, 212, 110)                   # current-step outer ring
-BTN_BG = (88, 96, 112)
 BTN_BG_DIM = (70, 76, 90)
-BTN_BORDER = (118, 126, 142)
 PROGRESS_BG = chrome.PANEL_BG                      # near-black top strip — matches the status band
 LINE_DIM = (76, 84, 100)                          # incomplete progress-line segments
 DOT_FUTURE = (70, 76, 92)                         # fill for not-yet-reached phase dots
@@ -66,15 +64,9 @@ _TUT_BTN_TUNEABLES = chrome.BTN_LABEL
 
 
 # ── fonts ───────────────────────────────────────────────────────────────────
-# Tutorial chrome uses the project's bundled OTFs:
-#   - HelveticaNeue: Latin + Latin Extended (covers macron ō in 'Kōzu').
-#     Frutiger is also bundled but only as Bold — using the Helvetica family
-#     keeps Roman/Medium/Bold consistent.
-#   - ShinGoPr6N: kanji + kana for embedded Japanese (国府津, ただいま).
-#   - Noto Sans CJK SC: zh_CN chrome (ShinGoPr6N is JIS-only and tofus
-#     Simplified-specific glyphs).
-# Mixed strings render via ``_render_mixed`` which switches font per-codepoint
-# and baseline-aligns the runs.
+# Post-TIMS-reskin: all three chrome-font helpers route to the per-locale Noto Sans
+# face (i18n.pixel_font_for_lang) — see the helper block below. Mixed strings render
+# via ``_render_mixed`` which switches font per-codepoint and baseline-aligns the runs.
 
 
 # TIMS reskin step 1 — TYPEFACE swap only. All three chrome-font helpers now route through the
@@ -88,11 +80,6 @@ def _font_helv(size: int, *, bold: bool = False, medium: bool = False) -> pygame
     return i18n.pixel_font_for_lang("en", size)
 
 
-def _font_shingo(size: int, *, heavy: bool = False) -> pygame.font.Font:
-    """Embedded-Japanese face → NotoSansJP (renders the JP kanji/kana on the panel, 国府津 / 鴨宮)."""
-    return i18n.pixel_font_for_lang("en", size)
-
-
 def _font_cjk(size: int, *, heavy: bool = False) -> pygame.font.Font:
     """Language-aware CJK chrome face → the active locale's Noto sibling (en→JP, zh_HK→TC, zh_CN→SC),
     matching how the OCR tutorial resolves localized chrome. Replaces the ShinGoPr6N / Noto-SC split
@@ -101,9 +88,9 @@ def _font_cjk(size: int, *, heavy: bool = False) -> pygame.font.Font:
 
 
 def _is_cjk(ch: str) -> bool:
-    """True for codepoints we want rendered with ShinGoPr6N rather than the
-    Latin font: CJK ideographs, kana, and CJK punctuation/symbols. Latin
-    Extended (macrons etc.) returns False — those go to HelveticaNeue."""
+    """True for codepoints that should render with the CJK chrome face rather than the
+    Latin one: CJK ideographs, kana, and CJK punctuation/symbols. Latin Extended
+    (macrons etc.) returns False — those render in the Latin face."""
     cp = ord(ch)
     # fmt: off
     return (
@@ -1149,8 +1136,8 @@ class Tutorial:
         pygame.draw.rect(self.screen, PANEL_BG, panel_rect)
 
         # Header — phase name (large, bold). Mixed-font render so CJK phase
-        # labels (zh-HK / zh-CN) don't tofu — Helvetica handles Latin runs,
-        # ShinGoPr6N covers Han / kana.
+        # labels (zh-HK / zh-CN) don't tofu — the Latin face handles Latin runs,
+        # the CJK face covers Han / kana.
         header_latin = _font_helv(header_size, bold=True)
         header_cjk = _font_cjk(header_size, heavy=True)
         header = self._step_header_text()
@@ -1218,8 +1205,8 @@ class Tutorial:
         )
         action_block_top = action_top - history_block_h
 
-        # Body — multi-line wrapped, mixed-script (Helvetica for Latin incl.
-        # macrons, ShinGoPr6N for embedded kanji/kana). Flows from top down.
+        # Body — multi-line wrapped, mixed-script (Latin face for Latin incl.
+        # macrons, CJK face for embedded kanji/kana). Flows from top down.
         body_latin = _font_helv(body_size, medium=True)
         body_cjk = _font_cjk(body_size)
         body = self._step_body_text()

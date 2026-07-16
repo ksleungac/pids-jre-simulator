@@ -81,6 +81,7 @@ BTN_GUTTER      = 14                   # gap between the body-text column and th
 BEAT_PRESSED_MS = 100                  # button yellow-flash hold (press feedback)
 BEAT_BLANK_MS   = 280                  # step-change loading beat (panel blanked)
 LOAD_BEAT_MS    = 300                  # page-entry loading beat (content region emptied to slate)
+NEXT_FLASH_MS   = 450                  # Next-button 'proceed' flash half-period (lit↔normal)
 HOME_BEAT_MS    = 450                  # band-Home exit beat (matches the select page's nav beat)
 
 # audio seek bar — lives in the title-row header (right of the title), space being tight. Visible ONLY
@@ -92,7 +93,7 @@ SEEK_LABEL_PX     = 13                  # elapsed/total label px (AA-off)
 SEEK_LABEL_GAP    = 7                   # gap bar↔label
 SEEK_RIGHT_MARGIN = 16                  # right edge inset (matches title left inset)
 SEEK_BG_COLOR     = (44, 50, 62)        # unfilled bar track
-SEEK_FILL_COLOR   = (84, 214, 226)      # filled progress — TIMS cyan (green dropped)
+SEEK_FILL_COLOR   = chrome.CYAN         # filled progress — TIMS cyan (green dropped)
 # ──────────────────────────────────────────────────────────────────────────────
 # fmt: on
 
@@ -376,7 +377,7 @@ class BasicTutorial(Tutorial):
         bw = max(tims_button_size(lbl, btn_font, _BTN_T)[0] for _, lbl, _ in specs)
         bx = SCREEN_W - BTN_EDGE_MARGIN - bw
         by = PANEL_Y + PANEL_PAD
-        flash_on = (pygame.time.get_ticks() // 450) % 2 == 0
+        flash_on = (pygame.time.get_ticks() // NEXT_FLASH_MS) % 2 == 0
         self._btn_rects = {}
         for key, label, enabled in specs:
             r = pygame.Rect(bx, by, bw, BTN_H)

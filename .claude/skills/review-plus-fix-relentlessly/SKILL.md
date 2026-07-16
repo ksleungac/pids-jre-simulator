@@ -42,6 +42,16 @@ The Scope rule above governs WHICH FILES. WHICH LINES within them is a separate 
 
 **INTEGRATION escalation is automatic, not user-gated:** if the fix set flips a default flow, adds/removes a first-run/onboarding screen, or rewires an entry-point branch, pass that intent through so `review-dirty`'s INTEGRATION scope runs the integration-residue checklist over the flow module — the reviewer escalates even when the user didn't ask, because the stale redundant branch is invisible in both the diff AND the dev environment (`review-dirty` § "Scope mode"; `critical_lessons §6`).
 
+### Fix-confidence gating on surfaces you didn't build
+The Scope rule (above) excludes files you didn't touch. A sharper axis applies when the run IS in scope but you lack the DESIGN context — a release-prep / whole-code scan of features built across prior sessions, not your own diff. There, gate each finding on **fix-confidence**, not file-ownership:
+- **obvious-safe** — mechanical, zero behavioral ambiguity (hard-rule violation, palette / canonical-source derivation, dead code with grep-confirmed zero callers, stale docstring/comment) → apply inline.
+- **needs-context** — requires the module's design / layout-calibration / state-machine intent → **defer to TODO `## Deferred review findings`**; do NOT fix blind.
+
+A "looks safe" fix on code you don't understand is exactly how review+fix introduces new bugs. Have the reviewer tag every finding with this flag (obvious-safe | needs-context) so triage is mechanical. Real bugs on out-of-focus surfaces still get LOGGED (not dropped) — deferral is not dismissal. (2026-07-16: user — *"your fixer does not have context for working on these tasks, might introduce new bugs, so delve to TODO for nonobvious tasks."*)
+
+### Release-prep / whole-code scope: fold in `/vibe-check`
+`review-dirty`'s lenses are diff/module-oriented. For a FULL release-prep sweep ("whole code scan for release", "prepare for release"), the reviewer must ALSO apply **`vibe-check`'s smell list** — the codebase-mess lens (dead code, duplication, canonical-source drift, integration residue) that a lens-by-lens review under-weights. Fold vibe-check's smells into the reviewer brief; don't run `review-dirty` alone. NOT for dirty-diff reviews — those don't need the whole-codebase sweep. (2026-07-16: user — *"reviewer should take advantage of vibe check."*)
+
 ## Workflow when invoked:
 
 ### Step 1: Initialize loop variables

@@ -109,7 +109,6 @@ STRIP_GAP          = 5
 STRIP_Y1           = 10                # strips nearer the band top (+ taller STRIP_H) → more reading space
 STRIP_RADIUS       = 0                 # SHARP corners — no rounding (user: strips are sharp, not smooth)
 STRIP_COLOR        = (34, 46, 58)      # dim slate — TIMS message-strip fill
-STRIP_INK          = (210, 222, 230)
 MSG_K              = 1
 MSG_NATIVE         = 17                # message-strip text px (AA-off native) — bumped from 13; strip is 24px tall
 MSG_FLASH_MS       = 450               # message-display flash half-period (bright yellow, auto-clears)

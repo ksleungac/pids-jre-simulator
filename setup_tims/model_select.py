@@ -1,7 +1,7 @@
 """Train-model picker (番台選択-style), reached from the C07AA PA-setting page's 列車型號 button (the IRL
 番線 slot, repurposed). Mirrors the real TIMS 番台選択 screen (tims_bandai_choice.png): a 2-column grid of
 glossy bevel buttons, the active model LIT (white) like the IRL selected 番台, the rest normal, and the
-not-yet-built roadmap models GRAYED (dim scrim — they show but aren't selectable, per the reference).
+not-yet-built roadmap models GRAYED (desaturated silver — they show but aren't selectable, per the reference).
 
 Each button is two staggered lines: the train SERIES (主型號, e.g. E235系) on line 1 hugging LEFT, the
 SUB-SERIES (番台, e.g. 1000番台) on line 2 hugging RIGHT, chars spaced out. Built models come from the
@@ -48,7 +48,7 @@ GRID_TOP       = 150         # grid top y (below band + title row)
 STAGGER_SPAN   = 0.62        # each line spans this fraction of the face width (justify spreads chars in it)
 LINE_INK       = chrome.INK   # white-ish text on a normal (blue) button
 LINE_INK_SEL   = (24, 34, 46)      # dark ink on the LIT (white) current button
-LINE_INK_GRAY  = (78, 85, 93)      # muted dark-gray text on a grayed (silver) unbuilt button
+LINE_INK_GRAY  = chrome.DISABLED["text_color"]  # muted silver-button ink — tracks the canonical DISABLED ink
 FLASH_MS       = 500         # current-model blink half-period (lit ↔ normal)
 # ──────────────────────────────────────────────────────────────────────────────
 # fmt: on

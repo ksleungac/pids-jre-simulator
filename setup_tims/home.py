@@ -6,9 +6,9 @@ newer GitHub release exists).
 報站設定 (leftmost card) enters the 案内設定 PA-setting page; 教學 opens the green TIMS
 tutorial. The other two cards are inert placeholders for now.
 
-The production entry that returns a launch-config dict lands in the manual-launch wiring
-phase; for now ``run_interactive`` is the clickable preview (driven by
-``_dev_scripts/preview_setup_tims.py``).
+``run(screen)`` is the production entry — it returns a launch-config dict when the user commits
+a route and 起動s in the PA-setting flow. ``run_interactive`` is the standalone dev preview
+(driven by ``_dev_scripts/preview_setup_tims.py``).
 """
 
 import webbrowser

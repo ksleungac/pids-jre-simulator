@@ -1,4 +1,4 @@
-"""DRAFT — TIMS selection-grid screens (route + start-station), variants of the general
+"""TIMS selection-grid screens (route + start-station), variants of the general
 始発駅選択 (C07AC) template (tims-route-selection-general style.png). Reached from the 案内設定
 page's 選擇路綫 button:
 
@@ -17,7 +17,7 @@ the PERSISTENT selected-box marker, because the reference screen does exactly th
 The momentary beat and the persistent selection share the colour by design here; 設定 going white-and-
 flashing is the "a selection is ready to confirm" cue.
 
-Staged for production (setup_tims package); not yet wired into main.py. Previewed via the launcher below.
+The default production route/start picker (reached from the 案内設定 page's 選擇路綫 button). Also previewed via the launcher below.
 
 Preview:   uv run _dev_scripts/preview_setup_tims.py --screen route        (L = cycle locale, ESC = back/quit)
 Static:    uv run _dev_scripts/preview_setup_tims.py --screen route --screenshot route_select.png

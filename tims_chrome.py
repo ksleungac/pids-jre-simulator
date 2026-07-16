@@ -79,10 +79,10 @@ TITLE_X          = 16
 TITLE_Y          = 73             # hugs the black top band (BAND_H 68) with a 5px margin
 TITLE_NATIVE     = 24             # cyan heading px (4px shorter than the pre-redesign size)
 TITLE_XSCALE     = 1.36           # heading x-stretch
-TITLE_COLOR      = (84, 214, 226) # TIMS cyan heading
+TITLE_COLOR      = CYAN           # TIMS cyan heading (palette CYAN)
 CODE_HEIGHT_FRAC = 0.8            # code rendered height = this × the heading's rendered height
 CODE_XSCALE      = 1.0            # screen-code at NATURAL width (no stretch — not fat)
-CODE_COLOR       = (210, 218, 228)# near-white code
+CODE_COLOR       = CODE_INK       # near-white code (palette CODE_INK)
 CODE_GAP_FRAC    = 0.8            # code↔heading gap = this × a heading full-width char
 # fmt: on
 

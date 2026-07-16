@@ -1,16 +1,17 @@
 """PA-setting screen (案内設定 / TIMS C07AA), reached from the home menu's 報站設定 (PA Setup)
 card. Models the real TIMS 案内設定 register: a settings-summary table (route / train-type /
-origin-terminal / …) plus a route-picker entry button and a confirm button. Renders the persistent
-top band (shared with the home menu) so it reads as the same chrome. Staged for production
-(setup_tims package); not yet wired into main.py — the run()→config launch bridge lands later.
+origin-terminal / …) plus a route-picker entry button and launch buttons. Renders the persistent
+top band (shared with the home menu) so it reads as the same chrome. This is the default production
+PA-setting page; ``run_on()`` returns a launch config once a route is committed and launched.
 
 Deltas from the real TIMS screen (tims-pa-setting.png):
   * the 6-car consist diagram + its 'A' consist button are REMOVED (we have no consist data)
     → replaced by a single 選擇路綫 (Select Route) button.
   * the 番線 (platform) button + 現在駅 (current-station) button are REMOVED (no platform model).
 
-The 選擇路綫 button is the route → diagram → station picker entry (the 始発駅選択 flow,
-tims-route-selection.jpg); 確認 commits the setting. Both are inert in this draft.
+The 選擇路綫 button opens the route → diagram → station picker (the 始発駅選択 flow,
+tims-route-selection.jpg); 列車型號 picks the train model; the launch buttons start the drive
+(OCR auto-PA behind a one-time consent gate, or manual).
 
 Preview:   uv run _dev_scripts/preview_setup_tims.py --screen pa   (L = cycle locale, ESC = quit)
 Static:    uv run _dev_scripts/preview_setup_tims.py --screen pa --screenshot pa_setting.png
