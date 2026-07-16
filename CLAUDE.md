@@ -160,6 +160,7 @@ Consult when needed, not upfront:
 - **LCD displays** → [DISPLAY.md](DISPLAY.md) (cross-model); [DISPLAY_E235.md](DISPLAY_E235.md) (per-sub-series)
 - **Audio/Diagram** → `/pa-make` or `/sta-make` skill; per-line quirks in [audio/README.md](audio/README.md)
 - **Auto-input / OCR** → [auto_input/README.md](auto_input/README.md)
+- **Testing / test suite + hierarchy** → [_tests/README.md](_tests/README.md)
 - **Code contracts** → inline `# CONTRACT:` blocks at code sites
 - **Preview** → `uv run preview_display.py` (mock route) or a real route via `--route <line>/<diagram>` (e.g. `--route sobu/1217F --stop 9`). Flags: `--screenshot out.png` (static frame, headless), `--lower-view full|eight|transfer` (freeze a view), `--mode kanji|furigana|english`, `--model e235_1000|e235_0`. Controls: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. Full arg list in the `preview_display.py` docstring.
 - **Build/Release** → `/build` + `/release` skills

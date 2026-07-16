@@ -14,6 +14,7 @@ exclusions (`_dev_scripts/`, `_experiments/`, etc.) live in `.pre-commit-config.
 
 from __future__ import annotations
 
+import ast
 import io
 import re
 import sys
@@ -93,17 +94,88 @@ def check_file(path: Path) -> Iterable[str]:
             yield f"{norm}:{line_no}: {msg}"
 
 
+# ── Derivable-literal bans — conventions.md § Tooling "canonical-source duplication" ──
+# The BANS above match CODE primitives OUTSIDE string literals. These are the INVERSE:
+# they inspect literal VALUES that must instead DERIVE from a single canonical source,
+# because a hand-typed copy drifts silently when the source moves (a hardcoded "0.5.4"
+# shipped while the build was 0.6.0). AST-based, not token/regex, so it distinguishes a
+# value from a docstring/comment and (R2) checks the call context — the false-positive
+# surface (version examples in docstrings, "data/…" in error strings) that a blind
+# string-scan would either flag as noise or paper over with production-file-wide exempts.
+_VERSION_RE = re.compile(r"^v?\d+\.\d+\.\d+[a-z]?$")  # 0.5.4 / v0.6.0 / 0.6.0a
+_ASSET_RE = re.compile(r"^(?:\./)?(?:fonts|data|audio|ocr_templates)/")
+# Call names that load a bundled asset from a path argument.
+_ASSET_LOADERS = frozenset({"Font", "SysFont", "load", "Sound", "image", "open"})
+
+
+def _docstring_ids(tree: ast.AST) -> set[int]:
+    """id()s of the Constant nodes that are module/class/func docstrings — skipped by R1."""
+    ids: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = getattr(node, "body", None)
+            if body and isinstance(body[0], ast.Expr):
+                val = body[0].value
+                if isinstance(val, ast.Constant) and isinstance(val.value, str):
+                    ids.add(id(val))
+    return ids
+
+
+def check_derivable_literals(path: Path) -> Iterable[str]:
+    norm = str(path).replace("\\", "/")
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, SyntaxError):
+        return
+    docs = _docstring_ids(tree)
+
+    # R1 — hardcoded version literal in a value position (docstrings skipped; comments
+    #      aren't AST nodes). Canonical source: app_paths.display_version().
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docs and _VERSION_RE.match(node.value):
+            yield (
+                f"{norm}:{node.lineno}: hardcoded version literal {node.value!r} — derive from "
+                "app_paths.display_version() (frozen→PE metadata, dev→pyproject); a hand-maintained "
+                "constant shipped 0.5.4 while the build was 0.6.0. See conventions.md § Tooling."
+            )
+
+    # R2 — bare bundled-asset path passed to a loader call. Paths built from
+    #      project_root() are Call/Name args (not str Constants) → not flagged.
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", None)
+        if fn not in _ASSET_LOADERS:
+            continue
+        for arg in node.args:
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and _ASSET_RE.match(arg.value):
+                yield (
+                    f"{norm}:{arg.lineno}: bare bundled-asset path {arg.value!r} in {fn}(...) — resolve via "
+                    "app_paths.project_root() / '<dir>' / '<file>'; a bare relative path works in the dev "
+                    "cwd but crashes in the frozen exe. See critical_lessons.md § 4."
+                )
+
+
 def main(argv: list[str]) -> int:
+    # Messages carry non-ASCII (→, §); cp1252 pipes on Windows would mojibake them.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+    args = argv[1:]
+    check, label = check_file, "forbidden primitive"
+    if args and args[0] == "--derivable":
+        check, label, args = check_derivable_literals, "hardcoded derivable literal", args[1:]
     findings: list[str] = []
-    for arg in argv[1:]:
+    for arg in args:
         path = Path(arg)
         if not path.is_file() or path.suffix != ".py":
             continue
-        findings.extend(check_file(path))
+        findings.extend(check(path))
     if findings:
         for f in findings:
             print(f)
-        print(f"\n{len(findings)} forbidden primitive(s) found. See conventions.md § Tooling.")
+        print(f"\n{len(findings)} {label}(s) found. See conventions.md § Tooling.")
         return 1
     return 0
 
