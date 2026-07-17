@@ -88,6 +88,8 @@ git log --oneline "$prevTag..master"
 
 Surface this list to the user before drafting — gives them a chance to flag commits they don't want in the notes.
 
+**Read the commits CAREFULLY — reconstruct the timeline, don't skim.** A large release (50+ commits) is not licence to judge from subjects at a glance. Read the messages (bodies where they matter) to build the shape of the release: which commits are iterations of ONE body of work (many `feat(setup)` commits = one first-release feature, not many); what is a genuine fix to a PRE-EXISTING shipped feature versus polish on something new this release; and what a later commit superseded. That timeline judgment is what sets correct weighting and categorization — skimming is exactly what produces a one-line blurb for a huge feature and a "Fixes" bucket full of a new feature's internals. Per `principles.md § "Verify before claiming"` ("deriving release/history facts: read the commit messages in range").
+
 ### Step 4 — Draft release_notes.md
 
 **Filter criterion** (copied here verbatim from `/build` skill so the rule lives where it's applied):
@@ -126,6 +128,14 @@ Surface this list to the user before drafting — gives them a chance to flag co
 ```
 
 Each bullet starts with a bolded headline noun followed by `.` then the description. Terse — 1–3 sentences.
+
+**Voice — professional and factual, never editorial (standing user preference).** Complete, plain sentences that state what a feature is and does. No marketing register, hype, flourishes, or commit-message fragments. Explain a feature the way you would to a person — contrast old→new only where it clarifies a capability ("you used to press a key for each announcement; now the app plays them automatically"). See user-level `~/.claude/CLAUDE.md § Language and tone`.
+
+**Image-first.** If a feature can be shown, embed a screenshot (committed under `assets/`, referenced by a tag-pinned raw URL `https://raw.githubusercontent.com/<owner>/<repo>/<tag>/assets/<file>`) and CUT the prose that narrates what the image shows. Reserve prose for what an image cannot convey: logic/behavioural changes, opt-in requirements, localization.
+
+**A first release of a component has no baseline.** When a feature ships for the FIRST time (e.g. the TIMS setup interface in v0.6.0), describe it at a high level — do NOT itemize its internal behaviours or polish (button-press feedback, a pre-selected sole option, a toggle label, the default language) as "changes" or "fixes". There is no prior version to compare against, so those read as noise. Report detail only as a change relative to what users already had.
+
+**Weight matches work; categorize by feature, not a "Fixes" bucket.** A large body of work must not be compressed below a minor item. Polish that is part of a new feature belongs under that feature (or is omitted per the first-release rule). A standalone `Fix — X` bullet is reserved for a change to a PRE-EXISTING shipped feature (e.g. the E235-1000 8-station view), never to something new this release.
 
 **Don't:**
 - Include refactor / cleanup commits (clip-rect, helper consolidation) unless they fix a visible regression. Internal hygiene is invisible to end users.

@@ -88,6 +88,7 @@ If the third man says you (Claude) misread, accept that as data — don't reliti
 - **Burying Claude's interpretation in justification.** Just state it: "Claude interpreted X as Y and was about to do Z." Don't pre-defend.
 - **Filtering quotes.** Include the user's pushback messages too — those are the strongest signal that something is off.
 - **Skipping file reads.** The agent NEEDS to read primary sources. If the contested point is "what does the code currently do," your verbal summary is the same lens that already misread once.
+- **Baking a wrong premise into the brief.** Leading-the-witness is about wording; this is deeper. If the brief states a flawed *frame* as a given, the agent executes that frame faithfully and cannot rescue the miss — delegation does not correct a premise you got wrong. When you cannot tell whether your own framing is the problem, present the competing framings as open, or explicitly ask the agent to challenge the premise; never hand it your conclusion as a fact. (2026-07-18: a release-notes third-man kept trivial first-release sub-bullets because the brief pre-decided they belonged in the notes — the same misread that prompted the consult.)
 
 ## Out of scope (for MVP)
 
