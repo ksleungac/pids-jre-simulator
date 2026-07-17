@@ -356,23 +356,18 @@ A second Japanese-mode renderer that shows the next 8 upcoming stations at ~2× 
 
 #### Window invariant — always exactly 8 cells
 
-Computed in `_get_window(curr_stop, cursor_pos)`. The two args differ only during a skip animation, when `cursor_pos` lags behind `curr_stop` (cursor walks across passing stations while curr_stop already points at the next PA target).
+Computed in `_get_window(cursor_pos)`. **Every regime keys on `cursor_pos`** (the VISUAL train position), NOT `curr_stop` (the skipped-ahead PA target). The two differ during a skip animation, when `cursor_pos` lags behind `curr_stop` (cursor walks across passing stations while curr_stop already points at the next PA target).
 
 | condition | window start | cursor's local index |
 |---|---|---|
 | `len(stops) ≤ VISIBLE_COUNT (=8)` | 0 | cursor_pos |
-| `curr_stop == 0` | 0 | 0 (no past cell — train hasn't departed anywhere yet) |
-| `curr_stop > n - VISIBLE_COUNT` (locked) | `n - 8` | `cursor_pos - (n - 8)` (cursor marches rightward) |
+| `cursor_pos ≤ 0` | 0 | 0 (no past cell — train hasn't departed anywhere yet) |
+| `cursor_pos > n - VISIBLE_COUNT` (locked) | `n - 8` | `cursor_pos - (n - 8)` (cursor marches rightward) |
 | otherwise (sliding) | `cursor_pos - 1` | 1 (one past cell on the cursor's left) |
 
-`LOCK_THRESHOLD = VISIBLE_COUNT - 1 = 7`. Lock kicks in when `remaining ≤ 7` so the locked window has 1 already-passed cell + 7 ahead = 8 visible.
+`LOCK_THRESHOLD = VISIBLE_COUNT - 1 = 7`. Lock kicks in when the VISUAL position leaves `remaining ≤ 7` so the locked window has 1 already-passed cell + 7 ahead = 8 visible, terminus (`n-1`) always included.
 
-**Why sliding is keyed on `cursor_pos` but lock on `curr_stop`:**
-
-- *Sliding on `cursor_pos`* keeps the "1 past cell on the cursor's left" contract honest mid-skip. If sliding were keyed on `curr_stop`, the visible cursor (at `cursor_pos < curr_stop` during a skip) would land at local index 0 with zero past context — observable as "the just-departed station vanishes the moment a passing-station skip starts."
-- *Lock on `curr_stop`* preserves destination visibility near route-end. If lock were keyed on `cursor_pos`, a brief skip animation just before the lock threshold would let the destination cell drop out of view for the duration of the animation. Lock entry is the moment "the route's tail fits in 8 cells regardless of cursor position" — that's a curr_stop fact.
-
-**Visual side effect:** anchoring sliding on `cursor_pos` means the window shifts left by exactly one cell at the frame `cursor_pos` catches up to `curr_stop` (skip animation completes). Single-frame snap; preserves the past-cell-always-visible contract.
+**Why every regime keys on `cursor_pos` — the pointer-visibility invariant.** A position-locked view MUST always show the train pointer (see [DISPLAY.md § Position-locked views always show the pointer](DISPLAY.md)). Keying any regime on `curr_stop` breaks this: a departure that skips passing stations jumps `curr_stop` several cells ahead while the cursor is still animating across them, so a curr_stop-keyed window snaps to the tail *before* the visible cursor arrives — pushing the cursor off the window's left edge (`local_disp < 0` → `draw_ptr` suppresses the pointer). The same jump makes the manager's `_should_lock_to_eight` drop the FULL slot early. Keying both on `cursor_pos` keeps the cursor at local index 1 (sliding) or ≥ 1 (locked) at all times, and the locked window `[n-8 .. n-1]` still always contains the terminus — dest stays visible too, so there is **no tradeoff**.
 
 #### View cycler (`LowerDisplay`)
 

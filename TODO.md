@@ -111,7 +111,7 @@ Open items surfaced by `/review+fix` that were deferred (not blocking, scope-cre
 
 ### From 2026-06-10 (through-service display frames)
 
-- [ ] **Frame-swap fire is boundary-aligned only when the junction has transfers** — `displays/train_models/e235_1000/lower_lcd.py:2030` (lens 1, info; rule: DISPLAY.md § Through-Service Display Frames "no mid-page cut"; first flagged 2026-06-10) — The swap fires on `current_time - _swap_arm_time >= _swap_rotation_dur` (elapsed time). For a junction WITH transfers (e.g. 千葉), `_handle_at_station_edge` force-resets `_slot_start = arm_time` on the STOPPING edge, so `arm + rotation_dur` lands exactly on the slot rollover → boundary-aligned, no mid-page cut. But at a junction WITHOUT transfers, TRANSFER isn't force-reset, so the rotation phase is offset and the fire could land mid-page. Deferred because: latent — no current route has a no-transfer junction (1217F's 千葉 has transfers). Fix path if it arises: fire on the next `_tick_cycle` slot rollover at/after `arm + rotation_dur` instead of on raw elapsed time.
+- [x] **Frame-swap fire is boundary-aligned only when the junction has transfers** — RESOLVED 2026-07-18. The swap hold was `sum(available slot durations)` (coupled to the view-cycle), which both ran too long (~18–30s, user flagged after arriving 千葉) and carried this mid-page-cut caveat. Replaced with a fixed `_SWAP_HOLD_DURATION` decoupled from the cycle — no rotation phase to land mid-page, caveat moot.
 
 ### From 2026-06-11 (Fable review of the through-service commit)
 

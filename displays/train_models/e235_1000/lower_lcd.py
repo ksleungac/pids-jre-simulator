@@ -999,35 +999,35 @@ class JapaneseEightStationDisplay(_FrameWindowMixin):
     # CONTRACT: window invariant — exactly 8 cells, three regimes (short / sliding / locked).
     # See DISPLAY_E235.md § "Window invariant — always exactly 8 cells" for the
     # cursor-local-index table. Past regressions came from editing without consulting it.
-    def _get_window(self, curr_stop: int, cursor_pos: int) -> List[Tuple[int, Dict]]:
+    def _get_window(self, cursor_pos: int) -> List[Tuple[int, Dict]]:
         """Return (global_index, stop) pairs for the visible 8-cell window.
 
         Always 8 cells: 1 already-passed cell + cursor + 6 ahead.
 
-        - len(stops) ≤ VISIBLE_COUNT → return everything (short-route case).
-        - curr_stop == 0 → no past cell available; window = [0..7].
-        - curr_stop > n-VISIBLE_COUNT → locked (keyed on curr_stop, not
-          cursor_pos, so the destination cell stays visible during a near-end
-          skip animation); window = [n-8 .. n-1]. Cursor marches rightward.
-        - otherwise → sliding, anchored on cursor_pos (NOT curr_stop) so the
-          visible cursor always has 1 past cell to its left even mid-skip
-          (when cursor_pos lags behind curr_stop). window = [cursor_pos-1 ..
-          cursor_pos+6]. Cursor sits at local index 1.
+        Every regime keys on ``cursor_pos`` (the VISUAL train position), NOT
+        ``curr_stop`` (the skipped-ahead PA target). A departure that skips
+        passing stations advances curr_stop several cells while cursor_pos
+        lags behind, animating across them — keying the window on curr_stop
+        would snap the window to the tail before the visible cursor arrives,
+        pushing the cursor off the window's left edge (pointer suppressed).
 
-        Anchoring sliding on cursor_pos means the window slides forward by
-        one cell at the moment cursor_pos catches up to curr_stop after a
-        skip animation — visible single-frame shift, but preserves the
-        "1 past cell always visible" contract per the docstring.
+        - len(stops) ≤ VISIBLE_COUNT → return everything (short-route case).
+        - cursor_pos ≤ 0 → no past cell available; window = [0..7].
+        - cursor_pos > n-VISIBLE_COUNT → locked; window = [n-8 .. n-1]. The
+          window always includes the terminus (n-1), so dest stays visible;
+          cursor marches rightward inside it.
+        - otherwise → sliding; window = [cursor_pos-1 .. cursor_pos+6], cursor
+          at local index 1 (always 1 past cell on its left, even mid-skip).
         """
         # Operates in display-index space against display_stops (pre + active).
-        # `curr_stop` and `cursor_pos` are display-shifted by the caller.
+        # `cursor_pos` is display-shifted by the caller.
         n = len(self.display_stops)
         if n <= self.VISIBLE_COUNT:
             return list(enumerate(self.display_stops))
 
-        if curr_stop == 0:
+        if cursor_pos <= 0:
             start = 0
-        elif curr_stop > n - self.VISIBLE_COUNT:
+        elif cursor_pos > n - self.VISIBLE_COUNT:
             start = n - self.VISIBLE_COUNT
         else:
             start = cursor_pos - 1
@@ -1459,7 +1459,7 @@ class JapaneseEightStationDisplay(_FrameWindowMixin):
         # _frame_indices clips to the active through-service frame and rebases
         # into frame-local display space (no-op for legacy routes).
         curr_stop, cursor_pos = self._frame_indices(state)
-        window = self._get_window(curr_stop, cursor_pos)
+        window = self._get_window(cursor_pos)
         self._last_window = window
 
         # Loader fills dest on every stop via sticky closure (route_loader);
@@ -1782,6 +1782,15 @@ class LowerDisplay:
 
     # Through-service restart screen: seconds the JR-logo blank shows on swap.
     _TRANSITION_DURATION = 5.0
+    # Seconds the train sits STOPPED at the junction before the reboot fires.
+    # Mental model: the hold must (a) signal the train is stopped at the frame
+    # boundary and (b) show the junction's exchange (transfer) info. On the
+    # STOPPING edge _handle_at_station_edge force-switches to the TRANSFER slot,
+    # so the transfer page shows immediately; the hold gives it comfortable
+    # read time before the reboot. Fixed timer, deliberately decoupled from the
+    # view-cycle — NOT "exhaust every page" (nobody needs FULL + EIGHT shown
+    # before the swap), just long enough for the above (tuned by feel).
+    _SWAP_HOLD_DURATION = 12.0
 
     def __init__(self, screen, route_data, stops, mode_cycler):
         self.screen = screen
@@ -1817,7 +1826,6 @@ class LowerDisplay:
         self._active_frame_idx = 0
         self._swap_armed = False
         self._swap_arm_time = 0.0
-        self._swap_rotation_dur = 0.0
         # Restart transition — on swap fire, the lower LCD blanks to the JR logo
         # for _TRANSITION_DURATION before the new frame appears (the "restart"
         # while parked at the junction). A page-jump cancels it.
@@ -1846,9 +1854,13 @@ class LowerDisplay:
     def update(self, current_time: float = None) -> None:
         pass
 
-    def _should_lock_to_eight(self, curr_stop: int) -> bool:
-        """When remaining stops ≤ LOCK_THRESHOLD (=7), drop the full-route view permanently."""
-        return (len(self.stops) - curr_stop) <= JapaneseEightStationDisplay.LOCK_THRESHOLD
+    def _should_lock_to_eight(self, cursor_pos: int) -> bool:
+        """Drop the full-route view once the VISUAL train position (cursor_pos,
+        not the skipped-ahead curr_stop) leaves ≤ LOCK_THRESHOLD (=7) stops to
+        the end. Keying on cursor_pos means a departure that skips passing
+        stations keeps FULL in rotation until the train is visually near the
+        tail — not the instant curr_stop jumps to the next PA target."""
+        return (len(self.stops) - cursor_pos) <= JapaneseEightStationDisplay.LOCK_THRESHOLD
 
     def _in_transfer_window(self, state) -> bool:
         """True when transfer-info should be in the cycle rotation.
@@ -1894,7 +1906,7 @@ class LowerDisplay:
         transfers (or filtering wipes them out) — the cycle simply rotates
         without a blank slot.
         """
-        locked = self._should_lock_to_eight(state.curr_stop)
+        locked = self._should_lock_to_eight(state.cursor_pos)
         in_window = self._in_transfer_window(state) and self._station_has_transfers(state)
         if locked and in_window:
             return [self._SLOT_EIGHT, self._SLOT_TRANSFER]
@@ -1965,15 +1977,15 @@ class LowerDisplay:
         return self._frame_count - 1
 
     # CONTRACT: drives the through-service frame swap. Arm at STOPPING@junction,
-    # wait one full page rotation (all pages shown once), then flip the frame.
-    # The lag is required — the LCD "restarts while stopping" per IRL. See
-    # DISPLAY.md § Through-Service Display Frames.
+    # hold a fixed _SWAP_HOLD_DURATION, then flip the frame. The lag is required
+    # — the LCD "restarts while stopping" per IRL. See DISPLAY.md § Through-
+    # Service Display Frames.
     def _update_active_frame(self, state, current_time: float) -> None:
         """Advance ``_active_frame_idx`` with the arm → wait → fire rule.
 
         - Aligned + STOPPING at the active frame's junction → arm, record the
-          rotation duration (sum of the slots available at arm).
-        - One full rotation elapsed → fire: flip to the next frame. The frame
+          arm time.
+        - _SWAP_HOLD_DURATION elapsed → fire: flip to the next frame. The frame
           now leads position (shows frame N+1 while the train is still parked
           at the boundary) — held until the train departs the junction.
         - Any other divergence (jump, backward, paged through fast) → snap to
@@ -2005,8 +2017,7 @@ class LowerDisplay:
         if not self._swap_armed:
             self._swap_armed = True
             self._swap_arm_time = current_time
-            self._swap_rotation_dur = sum(self._SLOT_DURATIONS[s] for s in self._available_slots(state))
-        elif current_time - self._swap_arm_time >= self._swap_rotation_dur:
+        elif current_time - self._swap_arm_time >= self._SWAP_HOLD_DURATION:
             self._active_frame_idx = a + 1  # FIRE — flip the window
             self._swap_armed = False
             self._transition_active = True  # play the JR-logo restart screen

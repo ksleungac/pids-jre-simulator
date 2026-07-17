@@ -259,6 +259,12 @@ self.lower.draw(timestamp)
 pygame.display.flip()
 ```
 
+### Position-locked views always show the pointer
+
+Any lower-LCD view whose window is locked to the train's position (E235-1000 8-station, E235-0 5-station / circular / open-horseshoe — every renderer that re-centres on the train) MUST render the train pointer in every frame. **Every stop-count / window / lock consideration keys on `cursor_pos` (the VISUAL train position), never `curr_stop` (the skipped-ahead PA target).** A departure that skips passing stations advances `curr_stop` several cells ahead while `cursor_pos` animates across them; keying a window or lock threshold on `curr_stop` snaps it to the tail before the visible cursor arrives, pushing the pointer out of view. Key on `cursor_pos` and the pointer stays visible throughout.
+
+**Scope — the active frame.** The invariant applies to whichever frame is *active* (the one containing the train's position). For a through-service route the junction station is **shared** between adjacent frames, so a train parked at a junction sits at index 0 of the incoming frame — the leading-frame hold (a fired swap shows frame N+1 while still parked at the junction — see [Through-Service Display Frames](#through-service-display-frames)) therefore still renders the pointer, at the junction station. There is no active frame without a train icon.
+
 ### Terminus (`dest_stop_idx`)
 
 Non-circular routes terminate at route-level `dest`, not at `len(stops) - 1`. Some route data (e.g. Keihin 727B) extends past operational dest for through-running reference — Keihin 727B's dest is 磯子 (index 40) but stops continue 41..45 to 大船 to capture the through-running segment.
@@ -289,7 +295,7 @@ Active frame = first frame whose global window contains the train (junction = sh
 `LowerDisplay` owns the swap (it sees the view-cycle) and pushes the lagging frame index into the active renderer via `set_active_frame`:
 
 - **Armed** at STOPPING@junction (`at_station` + position == active frame's `to_idx`, frame has a successor).
-- **Held** through one full page rotation (= sum of slot durations available at arm = "all pages shown once"). The STOPPING-edge resets the cycle to its anchor slot the same instant arm records its time, so `arm + rotation_dur` lands on the slot rollover → no mid-page cut. (Latent caveat: a junction with NO transfers isn't cycle-reset, could fire mid-page — see TODO.)
+- **Held** for a fixed `_SWAP_HOLD_DURATION` (12s) — decoupled from the view-cycle. The hold's purpose: signal the train is stopped at the frame boundary AND give the junction's exchange (transfer) info time to read (the STOPPING edge force-switches to the TRANSFER slot, so it shows immediately). NOT "exhaust every page."
 - **Fires**: advance `_active_frame_idx`, start the restart transition. Frame now LEADS position (shows frame N+1 while train still parked at the junction) — held until the train departs.
 - **Jump / backward / fast-page** → resync to the natural frame, disarm, cancel any restart.
 
