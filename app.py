@@ -438,14 +438,19 @@ class PASimulator:
         hits = self._band_hits
         home, pause, save = hits.get("home"), hits.get("pause"), hits.get("save")
         if home is not None and home.collidepoint(pos):
+            status_band.press_flash(self.debug_surface, home, "home")
             self.exit_action = "home"
             self.running = False
         elif pause is not None and pause.collidepoint(pos):
             driver = self.auto_driver
+            # Flash the CURRENTLY-shown label (the toggle's pre-click state): "繼續/Play" when
+            # already paused, "暫停/Pause" when running.
+            status_band.press_flash(self.debug_surface, pause, "resume" if (driver is not None and driver.paused) else "pause")
             if driver is not None:
                 driver.paused = not driver.paused
                 print(f"[AutoDriver] {'paused' if driver.paused else 'resumed'} via band button")
         elif save is not None and save.collidepoint(pos):
+            status_band.press_flash(self.debug_surface, save, "save")
             from auto_input import generate_report  # local import: defer dxcam pull
 
             generate_report(self)

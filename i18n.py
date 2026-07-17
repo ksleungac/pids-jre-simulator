@@ -58,7 +58,9 @@ def save_settings(data: dict) -> None:
 # Locale detection. Maps OS user locale to one of SUPPORTED_LANGS.
 # Bare "zh" / zh_TW / zh_HK / zh_MO / zh_Hant → Traditional (zh_HK).
 # zh_CN / zh_SG / zh_Hans → Simplified.
-# Anything else → English.
+# Anything else → zh_HK — the clean-install default is the app's HK-primary home
+# language (the audience is HK railfans), NOT English. Users switch via the TIMS
+# home language knobs. (DEFAULT_LANG="en" stays the TRANSLATION fallback — distinct.)
 # ---------------------------------------------------------------------------
 
 
@@ -67,11 +69,11 @@ def detect_default_lang() -> str:
         loc = (locale.getdefaultlocale()[0] or "").lower()
     except Exception:
         loc = ""
-    if loc.startswith("zh"):
-        if any(tag in loc for tag in ("cn", "sg", "hans")):
-            return "zh_CN"
-        return "zh_HK"
-    return "en"
+    # Simplified-Chinese OS → zh_CN; EVERYTHING else (incl. non-Chinese locales) → zh_HK,
+    # the HK-primary clean-install default.
+    if loc.startswith("zh") and any(tag in loc for tag in ("cn", "sg", "hans")):
+        return "zh_CN"
+    return "zh_HK"
 
 
 def resolve_language(settings: dict) -> str:

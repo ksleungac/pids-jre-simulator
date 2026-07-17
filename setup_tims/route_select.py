@@ -702,6 +702,10 @@ def _run_diagram(screen, route_name, start_name, end_name, variants, *, preselec
     clock = pygame.time.Clock()
     below_band = pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H)
     selected = preselect
+    # Single-diagram screen: pre-select the sole variant (renders yellow, arms 設定) so the user
+    # confirms directly — no redundant box-click when there's only one choice.
+    if selected is None and len(variants) == 1:
+        selected = 0
 
     def frame(s):
         bf = i18n.pixel_font_for_lang(ACTIVE_LANG, BTN_NATIVE)

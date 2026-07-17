@@ -449,5 +449,6 @@
 
   "setup_tims.band.home": { "en": "Back\nHome", "zh_HK": "返回\n主頁", "zh_CN": "返回\n主页" },
   "setup_tims.band.pause": { "en": "Pause", "zh_HK": "暫停", "zh_CN": "暂停" },
+  "setup_tims.band.resume": { "en": "Play", "zh_HK": "繼續", "zh_CN": "继续" },
   "setup_tims.band.save": { "en": "Save\nPlot", "zh_HK": "保存\n記錄", "zh_CN": "保存\n曲线" }
 }

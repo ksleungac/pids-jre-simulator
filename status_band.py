@@ -28,6 +28,7 @@ from widgets import (
     HINT_INK_COLOR,
     draw_tims_button,
     lowres_text_size,
+    press_transition,
 )
 
 # TIMS band face = Noto Sans, per-locale, AA-OFF at native px, NO upscale (WIP § Font decision).
@@ -391,7 +392,7 @@ def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, f
     # Uniform squares, locale-INDEPENDENT: size to the worst-case control label across ALL locales, so
     # the [pause][save][home] cluster is identical in en / zh_HK / zh_CN (per-locale sizing made it jump).
     worst = 0
-    for _key in ("setup_tims.band.home", "setup_tims.band.pause", "setup_tims.band.save"):
+    for _key in ("setup_tims.band.home", "setup_tims.band.pause", "setup_tims.band.resume", "setup_tims.band.save"):
         for _loc in i18n.SUPPORTED_LANGS:
             _lab = i18n.t(_key, lang=_loc)
             _lw, _lh = lowres_text_size(_lab, i18n.pixel_font_for_lang(_loc, BAND_BTN_BOX_NATIVE), BAND_BTN_BOX_K, t["line_gap"])
@@ -468,8 +469,43 @@ def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, f
     # Home is live everywhere EXCEPT the home screen itself (home_inert), where it's a no-op → SILVER.
     setup_ctx = sim_state is None
     dis_t = {**t, **chrome.DISABLED}
-    pause_state = "pressed" if (not setup_ctx and vals["paused"]) else "normal"
-    draw_tims_button(surf, pause_rect, i18n.t("setup_tims.band.pause"), font=btn_font, t=dis_t if setup_ctx else t, state=pause_state)
+    # Pause is a play/pause TOGGLE: paused → "繼續/Play" (the label conveys the paused state), else
+    # "暫停/Pause". Drawn NORMAL (not persistent-yellow) in both states so the click press-flash reads
+    # on EITHER direction — the paused state is signaled by this label + the "已暫停" message strip.
+    paused = not setup_ctx and vals["paused"]
+    pause_label = i18n.t("setup_tims.band.resume") if paused else i18n.t("setup_tims.band.pause")
+    draw_tims_button(surf, pause_rect, pause_label, font=btn_font, t=dis_t if setup_ctx else t)
     draw_tims_button(surf, save_rect, i18n.t("setup_tims.band.save"), font=btn_font, t=dis_t if setup_ctx else t)
     draw_tims_button(surf, home_rect, home_label, font=btn_font, t=dis_t if home_inert else t)
     return {"home": home_rect, "save": save_rect, "pause": pause_rect}
+
+
+# Band control buttons flash yellow on press — the TIMS "registered" feedback every clickable
+# button gets (conventions § UI code style, TIMS button model). The setup_tims screens already
+# flash the band Home via press_transition; this is the same feedback for the LIVE-drive cluster
+# (pause / save / home), called from app.py::_handle_band_click at the click site.
+_BAND_BTN_LABEL_KEYS = {
+    "home": "setup_tims.band.home",
+    "pause": "setup_tims.band.pause",
+    "resume": "setup_tims.band.resume",
+    "save": "setup_tims.band.save",
+}
+
+
+def press_flash(surf, rect, which):
+    """Yellow press-flash for a live-drive band control button (`which` ∈ home/pause/resume/save).
+
+    Pure flash, no loading beat — the band strip is persistent chrome, not a navigable
+    sub-region (a Home exit repaints the whole setup screen next via main.py). `surf` is the
+    band surface (app.py's ``debug_surface`` subsurface, whose rects match render()'s output);
+    `rect` is the hit-rect from render(). Blocks ~pressed_ms; call at the click site before
+    running the action. The run loop's next _render_panel() restores the normal button.
+    """
+    press_transition(
+        surf,
+        rect=rect,
+        label=i18n.t(_BAND_BTN_LABEL_KEYS[which]),
+        font=i18n.pixel_font_for_lang(ACTIVE_LANG, BAND_BTN_TEXT_NATIVE),
+        t=_BAND_BTN_TUNEABLES,
+        blank_ms=0,
+    )

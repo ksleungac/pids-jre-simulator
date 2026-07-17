@@ -27,7 +27,7 @@ App-level runtime + the setup / chrome flow. Canonical home for app-level specs 
 ## Runtime map (`main.py`)
 `main()`:
 1. `pygame.init()` + `mixer.init()`; `update_check.check_async()` fires early (3 s network window overlaps setup).
-2. **Language resolution** — NO standalone picker. Saved `settings["language"]`, else `detect_default_lang()` (OS locale), persisted on genuine first-run; then `i18n.init(lang)`. Runtime switching + persistence is owned by the TIMS home's language knobs (`setup_tims/home.py`). (The pre-TIMS grey `LanguagePicker` was removed — stale + redundant beside the knobs; critical_lessons §6.)
+2. **Language resolution** — NO standalone picker. Saved `settings["language"]`, else `detect_default_lang()` (OS locale → `zh_CN` for Simplified locales, **`zh_HK` for everything else** — the HK-primary clean-install default, NOT English; `DEFAULT_LANG="en"` stays the separate translation fallback), persisted on genuine first-run; then `i18n.init(lang)`. Runtime switching + persistence is owned by the TIMS home's language knobs (`setup_tims/home.py`). (The pre-TIMS grey `LanguagePicker` was removed — stale + redundant beside the knobs; critical_lessons §6.)
 3. **OOBE tutorial** — CLASSIC flow only (`--classic` + not `oobe_completed`). The default TIMS flow does its own OOBE (§ Tutorial).
 4. **Setup ↔ drive loop:**
    - `_run_setup()` → launch config, or `None` → exit.
@@ -112,6 +112,7 @@ From C07AA's 列車型號. Grid = built models (blue, from the train-model regis
 ### Persistent status band
 Full-width near-black status strip across every setup screen AND the live in-drive OCR panel — one module, `status_band.py` (root). `render(surf, status, sim_state, stops, save_notice=)`; `status=None` in setup → placeholder (no readings). Live drive feeds `auto_input_status` + wires the `[pause][save][home]` cluster via `app.py::_handle_band_click`. Detail: `auto_input/README.md § Debug panel`.
 - **Static labels render in EVERY state; only readings/effects gate on live status.** The `制限` speed-limit row label + the `km/h`/`m` units are static chrome → shown even in the no-readings setup band (beside the dim `--`). Live-only (absent until OCR runs): the actual numbers, the limit's cyan change-flash, the yellow message strips + save confirmation. The limit's cyan block is a CHANGE cue (blinks ~`LIMIT_FLASH_WINDOW` s on a value→value change, `driver` stamps `limit_change_ts` like `last_fire`), not a resting highlight.
+- **Live-drive control cluster interaction.** `[pause][save][home]` each flash yellow on press (`status_band.press_flash` → `press_transition`, the TIMS press-flash every clickable button gets — the setup band already did this). **Pause is a play/pause TOGGLE**: paused → label flips to 繼續/Play, drawn NORMAL (not persistent-yellow) so the flash reads on either direction; the paused state is signaled by the label + the `已暫停` message strip. (English "Resume"/"Continue" overflow the fixed band square, so the `en` resume label is the shorter "Play"; zh shows 繼續.)
 
 ### Band Home
 Every setup screen's band Home returns to the HOME MENU (not one level up) with a press + loading beat. Deep pages return the sentinel `"home"`, bubbled up through parents (`route_select`/`model_select` → `pa_setting` → home; `tutorial_basic` → `tutorial_select` → home).
