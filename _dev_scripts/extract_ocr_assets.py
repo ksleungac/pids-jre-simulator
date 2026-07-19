@@ -26,6 +26,7 @@ Then commit the diff under `ocr_templates/`. Domain reference: auto_input/README
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -34,7 +35,7 @@ import pygame
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from auto_input.hud_layout import PROFILE_1920_1080  # noqa: E402
+from auto_input.hud_layout import PROFILE_1920_1080, PROFILES  # noqa: E402
 from auto_input.ocr import (  # noqa: E402
     BADGE_ANCHOR_FILES,
     SegConfig,
@@ -243,6 +244,73 @@ def extract_badges(
             print(f"[badge {state}/{stem}] {cell.shape[1]}×{cell.shape[0]} -> {out.relative_to(OUT_DIR.parent)}")
 
 
+FIXTURES_DIR = Path(__file__).parent.parent / "_tests" / "fixtures" / "ocr"
+
+# Cell type -> the ResolutionProfile bbox that crops it. distance_value_bbox is
+# shared by distance + stopping-offset (colour-discriminated at read time).
+_CELL_BBOX = {
+    "badge": lambda p: p.badge_bbox,
+    "speed_limit": lambda p: p.speed_limit_value_bbox,
+    "stopping_offset": lambda p: p.distance_value_bbox,
+}
+
+
+def generate_test_fixtures() -> None:
+    """Regenerate committed OCR test fixtures under _tests/fixtures/ocr/<res>/.
+
+    Each resolution's ``manifest.json`` is the single ground-truth source. For
+    every listed cell we crop the labelled cell from the full calibration frame
+    (production ``crop_cell`` + profile geometry); for every listed frame we crop
+    the capture-region quadrant (what production actually grabs at runtime). The
+    committed PNGs are what ``_tests/t3_invariant/test_ocr_reads.py`` asserts
+    against, so the test needs no local calibration screenshots.
+    """
+    if not FIXTURES_DIR.exists():
+        print(f"[skip] {FIXTURES_DIR} not found — no manifests to regenerate from.")
+        return
+    for res_dir in sorted(p for p in FIXTURES_DIR.iterdir() if p.is_dir()):
+        manifest_p = res_dir / "manifest.json"
+        if not manifest_p.exists():
+            continue
+        manifest = json.loads(manifest_p.read_text(encoding="utf-8"))
+        res = manifest["resolution"]
+        profile = PROFILES[tuple(manifest["profile_key"])]
+        src_dir = Path(__file__).parent.parent / manifest["source_dir"]
+        if not src_dir.exists():
+            print(f"[skip] {res}: source dir {src_dir.name}/ absent — fixtures not regenerated.")
+            continue
+        cells_dir = res_dir / "cells"
+        frames_dir = res_dir / "frames"
+        cells_dir.mkdir(parents=True, exist_ok=True)
+        frames_dir.mkdir(parents=True, exist_ok=True)
+
+        n_cells = 0
+        for entry in manifest["cells"]:
+            src = src_dir / f"{entry['stem']}.png"
+            if not src.exists():
+                print(f"[skip] {res} cell {entry['stem']} — source missing")
+                continue
+            bbox = _CELL_BBOX[entry["type"]](profile)
+            cell = crop_cell(pygame.image.load(str(src)), profile, bbox)
+            save_anchor_crop(cell, cells_dir / f"{entry['type']}__{entry['stem']}.png")
+            n_cells += 1
+
+        n_frames = 0
+        left, top, right, bottom = profile.capture_region
+        for entry in manifest["frames"]:
+            src = src_dir / f"{entry['stem']}.png"
+            if not src.exists():
+                print(f"[skip] {res} frame {entry['stem']} — source missing")
+                continue
+            surf = pygame.image.load(str(src))
+            quad = surf.subsurface(pygame.Rect(left, top, right - left, bottom - top)).copy()
+            pygame.image.save(quad, str(frames_dir / f"{entry['type']}__{entry['stem']}.png"))
+            n_frames += 1
+
+        rel = res_dir.relative_to(FIXTURES_DIR.parent.parent)
+        print(f"[fixtures {res}] {n_cells} cells + {n_frames} quadrant frames -> {rel}/")
+
+
 def main() -> int:
     pygame.init()
     if not SOURCES_DIR.exists():
@@ -280,7 +348,9 @@ def main() -> int:
         )
     else:
         print(f"[skip] {SOURCES_DIR_1080P.name}/ not found — 1080p red digits not extracted.")
-    print(f"\nDone. Commit the diff under {OUT_DIR.name}/.")
+    print("\n--- test fixtures (_tests/fixtures/ocr) ---")
+    generate_test_fixtures()
+    print(f"\nDone. Commit the diff under {OUT_DIR.name}/ and _tests/fixtures/ocr/.")
     return 0
 
 

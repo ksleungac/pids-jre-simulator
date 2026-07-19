@@ -31,7 +31,7 @@ TIERS = [
         "pre-commit: _dev_scripts/lint_primitives.py, check_fonts.py",
     ),
     ("T1 Unit", "pure function I/O — no pygame, no I/O", "dir", "t1_unit"),
-    ("T2 Contract", "authored data conforms + cross-file parity", "external", "validate_data.py (root), _dev_scripts/validate_ocr.py"),
+    ("T2 Contract", "authored data conforms + cross-file parity", "external", "validate_data.py (root)"),
     ("T3 Invariant", "cross-module behavior over real files, headless (no display)", "dir", "t3_invariant"),
     ("T4 Clean-frame", "first-run / OOBE from a deleted settings.json", "dir", "t4_clean_frame"),
     ("T5 Smoke/E2E", "built exe boots + frozen-only paths", "manual", "run against the exe post-build"),
@@ -44,7 +44,11 @@ def _run_dir(target: str):
     tests = sorted(d.glob("test_*.py")) if d.is_dir() else []
     results = []
     for t in tests:
-        r = subprocess.run([sys.executable, str(t)], capture_output=True, text=True)
+        # Decode child output as utf-8 (tests reconfigure stdout to utf-8 and print
+        # Japanese); the Windows default cp1252 would crash the reader thread on
+        # non-cp1252 bytes. errors="replace" is a belt-and-suspenders. (conventions.md
+        # § Tooling "reconfigure(encoding=utf-8)".)
+        r = subprocess.run([sys.executable, str(t)], capture_output=True, text=True, encoding="utf-8", errors="replace")
         results.append((t.name, r.returncode, (r.stdout or "") + (r.stderr or "")))
     return results
 

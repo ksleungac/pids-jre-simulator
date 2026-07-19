@@ -198,7 +198,7 @@ def _write_sample(f: TextIO, sample: dict) -> None:
 
 
 def _write_event(f: TextIO, kind: str, curr_stop: int, ts: float) -> None:
-    """Write a transition event line. `kind` ∈ {arrival, departure, passing_start, passing_end, cross_reject}."""
+    """Write a transition event line. `kind` ∈ {arrival, departure, passing_start, passing_end, cross_reject, offset_reject}."""
     try:
         f.write(
             json.dumps(
@@ -230,6 +230,29 @@ def _badge_transition_kind(prev: Optional[str], curr: Optional[str]) -> Optional
     if prev == "PASSING" and curr == "MOVING":
         return "passing_end"
     return None
+
+
+def _accept_stopping_offset(offset_cm: Optional[int], badge: Optional[str]) -> Optional[int]:
+    """Gate the phantom-prone ±cm offset read on the badge groundtruth.
+
+    The green ±cm offset is a precise, transient VALUE the game shows only after
+    MOVING→STOPPED (train at rest, STOPPED badge up). The read itself is phantom-prone
+    — scenery-green bleeding through the semi-transparent HUD can fabricate a ±cm value
+    mid-transit. Gate it on `badge == "STOPPED"`: the badge is the most reliable read on
+    the HUD (canonical — the game never shows STOPPED in motion — with a clean
+    pixel-diff separation), strictly more reliable than the speed/distance digit reads
+    (which suffer decimal-slip and segmentation misreads). So the badge, not speed, is
+    the groundtruth for "is the train stopped." A phantom survives only if the badge
+    itself misreads to STOPPED while moving — far rarer than a speed/offset digit slip.
+
+    Deliberately NOT speed-gated: adding the noisier speed read to a badge that is
+    already groundtruth would only add false-rejects (a speed misread at a real stop)
+    with no phantom protection the badge doesn't already give. Same reason
+    FIRE_AT_STATION stays badge-only — badge read > (distance, speed). Rejections log an
+    `offset_reject` event so a valid offset ever lost to a badge misread stays visible
+    and correctable from evidence.
+    """
+    return offset_cm if (offset_cm is not None and badge == "STOPPED") else None
 
 
 def _render_report_async(log_path: Path, sim) -> None:
@@ -403,6 +426,11 @@ class _Detector:
         # and post-jump_to_stop. Triggers the press that flips `at_station=True`
         # on the simulator (no audio — unified state machine's APPROACHING→STOPPING
         # transition is silent; pa_at_station cycling happens on subsequent presses).
+        # DELIBERATELY badge-only — do NOT add a speed/distance gate here. The STOPPED
+        # badge is canonical groundtruth (the game never shows it in motion) and is the
+        # most reliable read on the HUD; the speed/distance digit reads are noisier, so
+        # folding one in would only dilute an already-stable trigger. The stopping-offset
+        # gate uses the same badge-only rule. Badge read > (distance, speed).
         if badge == "STOPPED" and self.arrival_observed and not self.at_station_observed:
             events.append("FIRE_AT_STATION")
             self.at_station_observed = True
@@ -655,7 +683,13 @@ class AutoDriver:
                     # arrival). Run both readers unconditionally — their masks are
                     # mutually exclusive, only one returns non-None per frame.
                     d_val, _, d_score = read_distance(d_cell, templates, seg=seg)
-                    offset_val, _, offset_score = read_stopping_offset(d_cell, templates, seg=seg)
+                    offset_raw, _, offset_score = read_stopping_offset(d_cell, templates, seg=seg)
+                    # Cross-attribute hardening: the phantom-prone green ±cm read is
+                    # trusted only when the badge groundtruth says STOPPED (scenery-green
+                    # bleed can fabricate a ±cm value mid-transit). Badge read is more
+                    # reliable than speed/distance, so it's the sole gate — no speed.
+                    # See _accept_stopping_offset. Rejections logged below.
+                    offset_val = _accept_stopping_offset(offset_raw, badge)
                     # Speed limit (最高速度): line-dependent, often empty. None is normal.
                     sl_val, _, sl_score = read_speed_limit(sl_cell, templates, seg=seg, red_templates=red_templates)
                     sample_ts = time.time()
@@ -726,6 +760,12 @@ class AutoDriver:
                                 "segment_start_stop": self._segment_start_stop,
                             },
                         )
+                        if offset_raw is not None and offset_val is None:
+                            # A green ±cm read was rejected because the badge groundtruth
+                            # was not STOPPED — logged so a rare valid-offset loss (badge
+                            # misread at a true stop) is visible against the paired
+                            # sample's badge context.
+                            _write_event(log_file, "offset_reject", self.sim.state.curr_stop, sample_ts)
 
                     if badge is not None:
                         prev_log_badge = badge

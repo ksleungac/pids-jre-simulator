@@ -1,0 +1,157 @@
+{
+  "resolution": "1080p",
+  "profile_key": [
+    1920,
+    1080
+  ],
+  "source_dir": "_ocr_calibration_1080p",
+  "cells": [
+    {
+      "stem": "running_en",
+      "type": "badge",
+      "expected": "MOVING"
+    },
+    {
+      "stem": "running_ja",
+      "type": "badge",
+      "expected": "MOVING"
+    },
+    {
+      "stem": "stopping_en",
+      "type": "badge",
+      "expected": "STOPPED"
+    },
+    {
+      "stem": "stopping_ja",
+      "type": "badge",
+      "expected": "STOPPED"
+    },
+    {
+      "stem": "passing_en",
+      "type": "badge",
+      "expected": "PASSING"
+    },
+    {
+      "stem": "passing_ja",
+      "type": "badge",
+      "expected": "PASSING"
+    },
+    {
+      "stem": "limit_30",
+      "type": "speed_limit",
+      "expected": 30
+    },
+    {
+      "stem": "limit_35",
+      "type": "speed_limit",
+      "expected": 35
+    },
+    {
+      "stem": "limit_40",
+      "type": "speed_limit",
+      "expected": 40
+    },
+    {
+      "stem": "limit_45",
+      "type": "speed_limit",
+      "expected": 45
+    },
+    {
+      "stem": "limit_50",
+      "type": "speed_limit",
+      "expected": 50
+    },
+    {
+      "stem": "limit_55",
+      "type": "speed_limit",
+      "expected": 55
+    },
+    {
+      "stem": "limit_65",
+      "type": "speed_limit",
+      "expected": 65
+    },
+    {
+      "stem": "limit_70",
+      "type": "speed_limit",
+      "expected": 70
+    },
+    {
+      "stem": "limit_75",
+      "type": "speed_limit",
+      "expected": 75
+    },
+    {
+      "stem": "limit_80",
+      "type": "speed_limit",
+      "expected": 80
+    },
+    {
+      "stem": "limit_85",
+      "type": "speed_limit",
+      "expected": 85
+    },
+    {
+      "stem": "limit_90",
+      "type": "speed_limit",
+      "expected": 90
+    },
+    {
+      "stem": "limit_95",
+      "type": "speed_limit",
+      "expected": 95
+    },
+    {
+      "stem": "limit_100",
+      "type": "speed_limit",
+      "expected": 100
+    },
+    {
+      "stem": "limit_105",
+      "type": "speed_limit",
+      "expected": 105
+    },
+    {
+      "stem": "limit_110",
+      "type": "speed_limit",
+      "expected": 110
+    },
+    {
+      "stem": "limit_110_2",
+      "type": "speed_limit",
+      "expected": 110
+    },
+    {
+      "stem": "limit_115",
+      "type": "speed_limit",
+      "expected": 115
+    },
+    {
+      "stem": "limit_120",
+      "type": "speed_limit",
+      "expected": 120
+    },
+    {
+      "stem": "stopping_-11cm",
+      "type": "stopping_offset",
+      "expected": -11
+    }
+  ],
+  "frames": [
+    {
+      "stem": "running_en",
+      "type": "badge",
+      "expected": "MOVING"
+    },
+    {
+      "stem": "limit_100",
+      "type": "speed_limit",
+      "expected": 100
+    },
+    {
+      "stem": "stopping_-11cm",
+      "type": "stopping_offset",
+      "expected": -11
+    }
+  ]
+}

@@ -154,7 +154,7 @@ Silent because the missed announcement is stale (dep PA unrecoverable mid-segmen
               │
               │ DXGI Output Duplication (dxcam) with region=profile.capture_region
               ▼
-[Desktop quadrant BGRA  (1280×720 @ 1440p  |  960×540 @ 1080p)]
+[Primary-monitor quadrant BGRA  (1280×720 @ 1440p  |  960×540 @ 1080p)]
               │
               │ profile.hud_bbox_in_capture crop (region-relative coords)
               ▼
@@ -219,7 +219,7 @@ All bboxes = `(x, y, w, h)`. Cell bboxes = HUD-relative; HUD bbox = canonical sc
 
 | Constant | Value | Notes |
 |---|---|---|
-| `CAPTURE_REGION_2560_1440` | `(1280, 0, 2560, 720)` | dxcam region= signature (left, top, right, bottom). Top-right quadrant of desktop. Production grab path; cuts capture work ~75% vs full-desktop |
+| `CAPTURE_REGION_2560_1440` | `(1280, 0, 2560, 720)` | dxcam region= signature (left, top, right, bottom). Top-right quadrant of the primary monitor (coords are output-local, not virtual-desktop). Production grab path; cuts capture work ~75% vs full-monitor |
 | `HUD_BBOX` | `(2200, 20, 350, 480)` | Canonical screen-relative position. Consumed by `*_from_surface` helpers (1b dev tool) + calibration extractor |
 | `HUD_BBOX_IN_CAPTURE` | `(920, 20, 350, 480)` | Derived: `HUD_BBOX` minus `CAPTURE_REGION_2560_1440` origin. Consumed by production `_crop_cell` against region-grabbed frame |
 | `DISTANCE_VALUE_BBOX` | `(120, 314, 230, 55)` | Right side of "Distance" / "残距離" row (shared with stopping-offset) |
@@ -248,6 +248,7 @@ Notes:
 - `grab()` can return `None` (no new frame since last call) — retry with brief sleep
 - Game must be **rendering** (not minimized/alt-tabbed in a state where it pauses)
 - Top-right corner where HUD lives must not be covered by other windows
+- **Primary monitor only.** `dxcam.create()` is called with `output_idx=None` → dxcam auto-selects the output Windows flags Primary (device_idx 0, the first adapter). Both `capture_region` and the startup resolution probe are relative to that one monitor. See Limitations for the multi-monitor consequences.
 
 ## OCR pipeline (digit cells)
 
@@ -268,7 +269,7 @@ Text band excludes HUD's top/bottom borders and any scenery bleed-through near c
 Three filters in sequence:
 
 1. **Digit-shape filter**: keep only bboxes with `h ≥ 22` and `7 ≤ w ≤ 30`. Drops 'm' suffix strokes (h≈10), label tail fragments, scenery blobs.
-2. **Decimal-stop** (speed only): scan raw bboxes for small bbox (`h ≤ 10, w ≤ 7`) in bottom half of text band — that's the decimal point. Stop accepting digits at its x-position. **Robust against gap variance**; replaces gap-based heuristic that was failing on `1x.x` and `11x.x`.
+2. **Decimal-stop** (speed only): scan raw bboxes for small bbox (`h ≤ 10, w ≤ 7`) in bottom half of text band — that's the decimal point. Stop accepting digits at its x-position. **Robust against gap variance**; replaces gap-based heuristic that was failing on `1x.x` and `11x.x`. **Domain safety-net:** when decimal-stop still fails (glued kerning / AA), the tenths digit slips into the integer (72.7 → `727`); `read_speed` then domain-rectifies via `_rectify_speed` — a read above the 140 km/h ceiling (drivable max 135 + slack) drops one trailing digit and re-checks, recovering `727 → 72`, `1350 → 135`; genuine garbage still out of range → `None`.
 3. **Gap-stop** (safety net): stop accepting digits at first horizontal gap greater than `MAX_GAP`. Distance: 20 (anything past 'm' has bigger gap). Speed: 25 (relaxed because decimal-stop = primary boundary; 25 catches scenery blobs but lets through wide kerning like '1' to '1' which can be 18px).
 
 ### Stage 3 — template matching
@@ -306,6 +307,8 @@ These are fields on `SegConfig` (frozen dataclass, `auto_input/ocr.py`). `SEG_DE
 - **Green text `±Ncm`** — stopping offset from the platform's stop mark. Shown briefly after `MOVING→STOPPED` (~5s window). Sign shown only for negative (train stopped past the mark); `0` and positives omit the sign character.
 
 Both readers run unconditionally each capture cycle. Their masks are mutually exclusive (`gray < 70` for m-distance, `(G - max(R,B)) > 30` for cm-offset), so at most one returns non-None per frame. JSONL records both fields each sample; display priority gives cm precedence (transient signal of interest), falls through to m otherwise.
+
+**Badge-gated acceptance (driver, not reader).** `read_stopping_offset` is state-agnostic, but the driver trusts its value only when the badge groundtruth says STOPPED (`_accept_stopping_offset` in `driver.py`). The green ±cm read is phantom-prone — scenery-green bleed through the semi-transparent HUD can fabricate a ±cm value mid-transit — so it is gated on `badge == "STOPPED"`. **Badge read > (distance, speed):** the badge is the most reliable read on the HUD (canonical, clean pixel-diff separation), strictly more reliable than the speed/distance digit reads, so it is the SOLE gate — deliberately NOT speed-gated (folding in the noisier speed read would only add false-rejects, no phantom protection the badge doesn't already give). Same badge-only rule as `FIRE_AT_STATION`. Rejections emit an `offset_reject` drive-log event (pairs with the same-ts sample) so a valid offset ever lost to a badge misread stays visible. The reader also domain-clamps `|offset| ≤ 500cm` (the game's stop zone); a larger magnitude is a garbage green read → `None`.
 
 Two pipeline differences in `read_stopping_offset` vs `read_distance`:
 - **Color mask** as above.
@@ -503,8 +506,8 @@ uv run python _dev_scripts/capture_game.py --res 1080p
 **Offline calibration validation** (no live game required):
 
 ```bash
-uv run python _dev_scripts/validate_ocr.py           # default: 1080p
-uv run python _dev_scripts/validate_ocr.py --res 1440p
+uv run python _tests/t3_invariant/test_ocr_reads.py          # committed fixtures, both resolutions
+uv run python _tests/t3_invariant/test_ocr_reads.py --deep   # also re-sweep local _ocr_calibration*/ when present
 ```
 
 Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distance, scores) plus indented `>>>` lines for state-machine events and auto/manual key activity.
@@ -531,8 +534,9 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 | `ocr_templates/1080p/badges/*.png` | **Runtime input** — 6 badge cell crops (83×30 RGB, 1080p). Committed. |
 | `_ocr_calibration/*.png` | **Local-only** 1440p source screenshots (~33 MB). Gitignored. Source for `extract_ocr_assets.py`. |
 | `_ocr_calibration_1080p/*.png` | **Local-only** 1080p source screenshots. Gitignored. Source for 1080p extraction passes. |
-| `_dev_scripts/extract_ocr_assets.py` | One-shot extractor: reads `_ocr_calibration*/` → writes `ocr_templates/`. Run after re-capturing sources, then commit diff. |
-| `_dev_scripts/validate_ocr.py` | Offline validation: badge + speed-limit + stopping-offset reads against labeled calibration screenshots. `--res 1080p\|1440p`. All tests PASS before deploying at that resolution. |
+| `_dev_scripts/extract_ocr_assets.py` | One-shot extractor: reads `_ocr_calibration*/` → writes `ocr_templates/` AND the committed T3 test fixtures under `_tests/fixtures/ocr/<res>/` (cells + quadrant frames, per each resolution's `manifest.json`). Run after re-capturing sources, then commit diff. |
+| `_tests/t3_invariant/test_ocr_reads.py` | **T3 test** — asserts the production OCR pipeline reads correct values from committed HUD fixtures (badge + speed-limit + stopping-offset), both resolutions, no local calibration needed. Runs at `/build` pre-flight via `run_all.py`. `--deep` also sweeps `_ocr_calibration*/` when present. Replaced the former `validate_ocr.py`. |
+| `_tests/fixtures/ocr/<res>/` | **Committed test input** — `manifest.json` (stem → type + expected value, the single ground-truth source), `cells/*.png` (full-coverage cropped cells), `frames/*.png` (capture-region quadrant crops for crop-geometry). ~KB per cell; a few quadrant frames per resolution. |
 | `_recordings/drive_<line>_<diagram>_<TS>.jsonl` | **Blackbox / drive recorder log** — one file per AutoDriver lifetime. Line 0 = `_type: "meta"` (route/diagram/dest/stops); subsequent lines mix `_type: "event"` (badge transitions: arrival / departure / passing_start / passing_end) and `_type: "sample"` (one OCR sample cycle, all OCR fields + sim state including `at_station` / `cnt_pa_at_station` / `at_station_observed` / `inferred_state` / `segment_start_stop`). Written inside `auto_input/driver.py`'s capture loop with per-line `flush()` for crash safety. Local-only / gitignored. Field additions backward-compatible (plot_drive ignores unknowns); field removals or renames require coordinated update with `plot_drive.py`. |
 | `_experiments/live_captures/` | Saved HUD crops from prior live testing (gitignored — `_experiments/` itself = artifact-only folder; OCR + layout modules now bundled into `auto_input/` package) |
 | `fonts/ShinGoPr6N-Medium.otf` | Latin + CJK font used by debug panel for station names |
@@ -543,13 +547,15 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 2. Add a `ResolutionProfile` to `auto_input/hud_layout.py` with scaled `hud_bbox` + cell bboxes; add to `PROFILES`. `_scale_bbox(bbox, s)` helper scales the 1440p reference.
 3. Save source screenshots to `_ocr_calibration_<res>/` (gitignored parallel dir).
 4. Add `BADGE_ANCHOR_FILES_<res>` + `KNOWN_LIMIT_VALUES_<res>` to `_dev_scripts/extract_ocr_assets.py`; add extraction passes in `main()` for the new resolution.
-5. Run `uv run python _dev_scripts/extract_ocr_assets.py` → produces `ocr_templates/<res>/badges/` + `ocr_templates/<res>/digits_red/`. **Dark digit templates are not re-extracted** — `compare()` NN-resizes 1440p templates to match glyph size at runtime.
-6. Run `uv run python _dev_scripts/validate_ocr.py --res <res>` (after adding the resolution's ground-truth to `CAL_DATA`). All tests should PASS before committing.
-7. Commit the `ocr_templates/<res>/` diff.
+5. Author `_tests/fixtures/ocr/<res>/manifest.json` — the ground-truth source: `resolution`, `profile_key`, `source_dir`, the `cells` list (stem → type → expected value), and a few `frames` for crop-geometry. This replaces the old inline `CAL_DATA`.
+6. Run `uv run python _dev_scripts/extract_ocr_assets.py` → produces `ocr_templates/<res>/badges/` + `ocr_templates/<res>/digits_red/` AND regenerates `_tests/fixtures/ocr/<res>/` (cells + quadrant frames) from the manifest. **Dark digit templates are not re-extracted** — `compare()` NN-resizes 1440p templates to match glyph size at runtime.
+7. Run `uv run python _tests/t3_invariant/test_ocr_reads.py` — all reads must PASS before committing.
+8. Commit the `ocr_templates/<res>/` and `_tests/fixtures/ocr/<res>/` diffs.
 
 ## Limitations
 
 - **Supported resolutions**: 2560×1440 and 1920×1080. Adding new resolutions = `ResolutionProfile` entry + template extraction + validation. See "Recalibration".
+- **Primary monitor only**: capture targets the display Windows marks Primary (dxcam `output_idx=None`, `device_idx=0`). The game must run on the primary monitor, and the **primary monitor's own resolution** must be a supported one — a supported-resolution game on a *secondary* monitor is never captured, because the startup probe reads the primary's resolution and disables the driver if it isn't 2560×1440 or 1920×1080. A secondary monitor's placement does not offset the capture (region coords are output-local). Multi-GPU note: `device_idx=0` is fixed, so a primary display driven by a second adapter would mismatch.
 - **Game must be visible**: HUD area (top-right) must not be covered.
 - **Game must be actively rendering**: minimized/alt-tabbed games may stop rendering and produce stale captures.
 - **Scenery bleed**: HUD background is semi-transparent; very dark scenery behind reduces match scores (still reads correctly above ~0.7).

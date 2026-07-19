@@ -100,6 +100,7 @@ SPEED_MAX_GAP = 25
 GREEN_TEXT_DELTA = 30  # pixel is "green text" when (G - max(R,B)) > this
 SIGN_MAX_H = 12  # minus glyph is a thin horizontal bar
 SIGN_MAX_W = 18
+STOPPING_OFFSET_MAX_CM = 500  # game's stop zone; |offset| beyond this = garbage green read
 SIGN_BAND_Y = (24, 42)  # vertical center of text band — minus sits here
 
 # Speed-limit reader: 最高速度 row shows red digit value + dark "km/h" suffix. The
@@ -421,11 +422,41 @@ def read_distance(cell: np.ndarray, templates: Templates, seg: SegConfig | None 
     return _read_value(cell, templates, max_gap=_seg.distance_max_gap, seg=_seg)
 
 
+# Speed domain grammar. Drivable top speed in JR EAST Train Sim Real is 135 km/h (no
+# line limit exceeds it); reads are accepted up to a small slack ceiling. The common
+# overshoot is a decimal slip: when the decimal-point bbox isn't detected (kerning
+# glues it to the integer, or AA fails the shape filter), the tenths digit
+# concatenates onto the integer — 72.7 → "727". Recovering it is a single
+# trailing-digit drop, so an out-of-range read is rectified (`//10`, re-checked)
+# rather than discarded — keeps the speed sample instead of a dropout.
+MAX_DRIVABLE_SPEED_KMH = 135
+SPEED_READ_CEILING_KMH = 140  # accept ceiling = drivable max + slack
+
+
+def _rectify_speed(value: int | None) -> int | None:
+    """Domain-clamp a raw speed read, recovering the common decimal-slip overshoot.
+
+    `value` ≤ ceiling → returned unchanged (every real speed, incl. the legit 3-digit
+    100–135 band, passes through). Above the ceiling → drop one trailing digit (the
+    slipped tenths: 727 → 72, 1350 → 135) and re-check; still out of range → None
+    (genuine garbage, e.g. a 4-digit scenery misread). One drop only — the game shows
+    a single decimal place, so at most one extra digit can ever slip in.
+    """
+    if value is None or value <= SPEED_READ_CEILING_KMH:
+        return value
+    recovered = value // 10
+    return recovered if recovered <= SPEED_READ_CEILING_KMH else None
+
+
 def read_speed(cell: np.ndarray, templates: Templates, seg: SegConfig | None = None) -> tuple[int | None, str, float]:
     """Read speed integer from a speed cell. Stops at decimal-point bbox so .X digit doesn't slip in.
-    Returns (kmh_int, raw_text, min_score)."""
+
+    The returned value is domain-rectified (`_rectify_speed`): a decimal-slip overshoot
+    like 72.7→"727" is recovered to 72. `raw` stays the un-rectified OCR string so the
+    log shows what the segmenter actually saw. Returns (kmh_int, raw_text, min_score)."""
     _seg = seg or SEG_DEFAULT
-    return _read_value(cell, templates, max_gap=_seg.speed_max_gap, stop_at_decimal=True, seg=_seg)
+    value, raw, min_score = _read_value(cell, templates, max_gap=_seg.speed_max_gap, stop_at_decimal=True, seg=_seg)
+    return _rectify_speed(value), raw, min_score
 
 
 def read_stopping_offset(cell: np.ndarray, templates: Templates, seg: SegConfig | None = None) -> tuple[int | None, str, float]:
@@ -504,7 +535,12 @@ def read_stopping_offset(cell: np.ndarray, templates: Templates, seg: SegConfig 
     raw = ("-" if sign < 0 else "") + digits_str
     if not digits_str or not all(c.isdigit() for c in digits_str):
         return None, raw, min_score
-    return sign * int(digits_str), raw, min_score
+    value = sign * int(digits_str)
+    # Domain clamp: the game's stop zone is at most ±500cm; a larger magnitude is a
+    # garbage green read (scenery bleed parsed to digits). Reject rather than log it.
+    if abs(value) > STOPPING_OFFSET_MAX_CM:
+        return None, raw, min_score
+    return value, raw, min_score
 
 
 def _dilate_binary(arr: np.ndarray, iters: int) -> np.ndarray:
