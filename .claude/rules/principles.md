@@ -157,6 +157,7 @@ When the user asks for a design decision that's claude's to drive, recommend ONE
 **How to apply:**
 - Answer reachable from loaded context → commit. Recommendation + one-line reason.
 - Two genuinely equivalent options → pick one, name the tradeoff, let user override.
+- **Implementation / engineering-practice questions the user can't usefully arbitrate → decide, don't ask.** Bring the user ONLY real-world / mental-model / user-facing questions ("what's different on your end", in-game behavior); make the practice call yourself and show the result for a yes/no. A "idk, your call" reply is the signal you should have decided it. (2026-07-19; also brainstorming-skill override #1.)
 
 ### Don't gate cheap verification behind a question
 After a visible change, if a CHEAP IMMEDIATE preview lets the user verify, just launch it (background) as part of reporting — don't ask "want me to launch?". But don't auto-launch the FULL app when reaching the change requires manual setup navigation — that's not cheap; let the user drive it.
