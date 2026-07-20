@@ -122,6 +122,7 @@ pids_jre_simulator/
 ├── constants.py                       # Cross-model only: TIME_SCALE=60, FRAME_RATE=15, audio, setup palette
 ├── app_paths.py                       # Canonical project_root() — sole PyInstaller path resolver
 ├── i18n.py                            # App-chrome i18n: settings, locale detect, t(), font helper
+├── frame_stream.py                    # Opt-in window mirroring over HTTP (--stream / --stream-lan)
 ├── setup.py                           # Route selection screen
 ├── route_loader.py                    # finalize_route: JSON → runtime closure with derived fields
 ├── preview_display.py                 # Audio-free preview entry (PASimulator(preview=True))

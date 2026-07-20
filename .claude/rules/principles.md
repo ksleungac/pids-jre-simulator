@@ -342,6 +342,17 @@ Companion bound on the above: the "ships with a test" bar is for the **silent-fa
 
 **Why:** (2026-07-20) Reflexively proposed a stub-sim test for `if start_idx is not None:` → user *"what is this test… too redundant?"*. On testing TIMS → *"not like autodriver where it has sophisticated logics… if we test tims it has to be page by page."*
 
+### A simplification must carry its constraints forward
+When a design collapses to something simpler, re-derive which parts of the original were load-bearing. A constraint that was correct in the complex design is still correct in the simple one — dropping it alongside the scaffolding it lived in is silent, and only surfaces as a user-visible defect.
+
+**Why:** the discarded piece looks like part of what was removed. Examples:
+- (2026-07-20) Frame-streaming spec said "main thread copies, server thread encodes." Collapsing to whole-window mirroring made the frame-source plumbing unnecessary — and dropped the publish-on-main-thread half with it. Result: the server sampled the surface mid-draw, shipping torn frames the user saw as flashing.
+- (2026-07-20) `image-rendering: pixelated` was right for AA-off TIMS chrome, then applied to a stream carrying AA-off chrome *and* AA-on LCD text. One filter cannot serve both.
+
+**How to apply:**
+- On collapsing a design, list what the complex version was protecting against, then check each survives. Cheap; the alternative is finding out from the user.
+- A rule derived for one content/case type does not automatically hold once the scope widens to carry several — re-check the premise, don't port the conclusion.
+
 ### Blind A/B verify presentation convention changes
 Before adopting a new presentation convention, validate via blind A/B: parallel fresh-context agents with identical questions — one reads original, one reads new. Adopt only when answers match.
 

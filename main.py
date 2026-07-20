@@ -110,6 +110,16 @@ def main():
         action="store_true",
         help="Launch the classic setup screen instead of the default TIMS-console setup flow (setup_tims)",
     )
+    parser.add_argument(
+        "--stream",
+        action="store_true",
+        help="Mirror the app window to http://127.0.0.1:8420/ (same-PC browser only)",
+    )
+    parser.add_argument(
+        "--stream-lan",
+        action="store_true",
+        help="Mirror the app window to the LAN so a phone/tablet can view it. Raises a Windows firewall prompt on first use.",
+    )
     args = parser.parse_args()
 
     # Initialize pygame for the setup screen
@@ -121,6 +131,24 @@ def main():
     import window_utils
 
     window_utils.install_topmost_hook()
+
+    # Window mirroring (opt-in, off by default). Owned HERE rather than by PASimulator: the setup<->drive
+    # loop below rebuilds a sim per drive, so a sim-owned server would hit a bind failure on drive #2.
+    # Living above the loop also means the stream spans setup, tutorial and drive without dropping.
+    import frame_stream
+
+    stream_host = frame_stream.resolve_bind_host(args.stream, args.stream_lan)
+    if stream_host is not None:
+        urls = frame_stream.start(stream_host)
+        if urls:
+            if args.stream_lan:
+                # Several candidates when a VPN or virtual adapter is present — the
+                # default route is often the tunnel, not the Wi-Fi the phone is on.
+                print("[stream] open ONE of these on a device on the same Wi-Fi:")
+                for u in urls:
+                    print(f"[stream]     {u}")
+            else:
+                print(f"[stream] mirroring this window at {urls[0]}")
 
     # Kick off the fail-silent update check early so its 3s network window
     # overlaps the setup screens; the setup screen polls the result.
@@ -162,6 +190,7 @@ def main():
         config = _run_setup(args, settings, BASE_DIR)
         if config is None:
             print("No route selected. Exiting.")
+            frame_stream.stop()
             pygame.quit()
             return
         # Tear down the setup window before the drive builds its own (taller, panel-carved) window.
@@ -170,6 +199,7 @@ def main():
         if action != "home":
             break  # "quit" → full exit; anything else is defensive
         # "home": pygame / fonts / mixer are still alive (drive did display.quit only) → re-show setup.
+    frame_stream.stop()
     pygame.quit()
 
 
