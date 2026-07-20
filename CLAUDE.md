@@ -25,6 +25,20 @@ Backlog = **GitHub Issues** ([repo issues](https://github.com/ksleungac/pids-jre
 - **Finish** → the commit carries `Closes #<N>` (progress commits: `Refs #<N>`); pushing to `master` auto-closes. See `/commit`.
 - **New work** surfaced mid-session → `gh issue create --label <area>`.
 
+### Issue scope — an issue is an OUTCOME, not a unit of work
+
+Test: *if I finish this, does what the user can do change?* No → it's a commit, not an issue.
+
+| shape | when |
+|---|---|
+| **Plain issue** | one outcome, one sitting — most things |
+| **Parent + sub-issues** | outcome spans sessions/stages. `gh issue edit <parent> --add-sub-issue <N>` (gh ≥ 2.96). Parent tracks `completed/total` natively and closes when the outcome is real; each stage closes as it lands |
+| **Not an issue** | no user-visible change |
+
+**`Closes #N` only when you did everything #N describes.** Doing less is a signal the scope was wrong — fix by splitting a stage out **under** the outcome, never by closing it and opening a peer. A peer orphans the feature: the two tickets read as unrelated and the thing the user actually wants has no home. (2026-07-20: closed #71 "window mirroring" after shipping only its display-only stage and filed stage 2 as a sibling; user — *"can you not closes the issue just for a new stage?"*. Restructured to #71 parent → #77 stage 1 / #76 stage 2.)
+
+Sub-issues beat a long-lived `Refs`-only ticket because progress stays legible — the parent shows a completion count instead of sitting `in-progress` for weeks with its state readable only from git log.
+
 Session start prints the open / in-progress / recently-closed / stale summary; `/session-recap` reconciles against `gh issue list` (closure is authoritative — no keyword guessing).
 
 ## Run

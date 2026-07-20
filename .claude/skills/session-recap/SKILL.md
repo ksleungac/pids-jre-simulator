@@ -55,7 +55,8 @@ If no corrections, state explicitly. All omits → "all N corrections omitted as
 ### Issue backlog reconcile (GitHub Issues)
 Closure is authoritative — a pushed commit with `Closes #N` already closed the issue, so there's no fuzzy matching. Then:
 - **Closed this session**: `gh issue list --state closed --search "closed:>=<last-session-date>"` — confirm each maps to work that shipped (GitHub already closed them; no action needed).
-- **New**: deferred design Qs / dangling follow-ups surfaced this session → `gh issue create --label <area>`.
+- **New**: deferred design Qs / dangling follow-ups surfaced this session → `gh issue create --label <area>`. Scope each as an **outcome**, not a unit of work; a multi-stage outcome gets a parent + sub-issues rather than sibling tickets — `CLAUDE.md § "Issue scope"`.
+- **Partly done**: an issue whose scope you only partly delivered is NOT closed and NOT filed-around — split the delivered stage into a sub-issue under it. Closing it and opening a peer orphans the outcome.
 - **Deferred**: work parked mid-flight → issue keeps a `deferred` label + a reason comment (not closed).
 - **Stale**: `gh issue list --label in-progress --search "updated:<<14d-ago>"` — an `in-progress` issue gone quiet is either done (close it) or truly parked (→ `deferred`).
 - **No changes**: state explicitly.
