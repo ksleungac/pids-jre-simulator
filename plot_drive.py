@@ -228,6 +228,7 @@ _END_LINE = "rgba(185,28,28,0.75)"
 _STOPPED_FILL = "rgba(120,120,120,0.13)"
 # Cab speed-limit line — orange, matching the Omiya museum drive-record aesthetic.
 _LIMIT_LINE = "#ea580c"
+_LIMIT_LINE_W = 4.0  # px; the line is drawn so its BOTTOM edge sits on the value (a ceiling cap), not centered
 
 # Stopping-offset chip colour by |cm|. Tiers: ≤10 best, ≤30 good, ≤100 acceptable
 # (game floor before screen-blacks-out on overrun), >100 bad.
@@ -293,15 +294,23 @@ def _fmt_elapsed(seconds: float) -> str:
     return f"{m}:{s:02d}"
 
 
+def _disp_speed(s: dict):
+    """Report display speed: decimal-precision (`speed_decimal`) when the log carries it,
+    else the integer `speed` (older logs). The report shows decimal; the live status band
+    stays integer by design (see auto_input/driver.py + status_band.py)."""
+    d = s.get("speed_decimal")
+    return d if d is not None else s.get("speed")
+
+
 def _hover_text(s: dict, meta: dict, start_ts: float) -> str:
     cs = s.get("curr_stop", -1)
     stops = meta.get("stops", [])
     name = stops[cs].get("name", "?") if 0 <= cs < len(stops) else "?"
     elapsed = s["ts"] - start_ts
-    spd = s.get("speed")
+    spd = _disp_speed(s)
     dst = s.get("distance")
     lim = s.get("speed_limit")
-    spd_str = str(spd) if spd is not None else "—"
+    spd_str = (f"{spd:.1f}" if isinstance(spd, float) else str(spd)) if spd is not None else "—"
     clock = datetime.fromtimestamp(s["ts"]).strftime("%H:%M:%S")
     lines = [
         f"<span style='color:#94a3b8'>+{_fmt_elapsed(elapsed)} · {clock}</span>",
@@ -338,6 +347,14 @@ def build_section_figure(
     No internal title or metrics — those are in the surrounding HTML."""
     stops = meta.get("stops", [])
     row_samples = [s for s in samples if rs <= s["ts"] <= re_]
+
+    # Plot-area pixel height + px-per-data-unit. Single source, used by the limit-line
+    # bottom-edge offset (below) AND the square-grid x-dtick sizing (further down).
+    _plot_h = height - 52 - 40  # total height minus the t=52 / b=40 margins (see update_layout)
+    _y_px_per_unit = _plot_h / max(ymax + 10, 1)
+    # Shift the limit line up by half its pixel width so its BOTTOM edge lands on the
+    # value (reads as a ceiling cap): px → data units via _y_px_per_unit.
+    _limit_y_off = (_LIMIT_LINE_W / 2) / max(_y_px_per_unit, 1e-6)
 
     fig = go.Figure()
 
@@ -416,9 +433,9 @@ def build_section_figure(
         fig.add_trace(
             go.Scatter(
                 x=[datetime.fromtimestamp(s["ts"]) for s in row_samples],
-                y=[int(s["speed"]) if s.get("speed") is not None else 0 for s in row_samples],
+                y=[_disp_speed(s) if _disp_speed(s) is not None else 0 for s in row_samples],
                 mode="lines",
-                line=dict(color=_SPEED_LINE, width=2.0, shape="spline", smoothing=0.4),
+                line=dict(color=_SPEED_LINE, width=4.0, shape="spline", smoothing=0.4),
                 fill="tozeroy",
                 fillcolor=_SPEED_FILL,
                 hovertemplate="%{customdata}<extra></extra>",
@@ -454,19 +471,19 @@ def build_section_figure(
             if lim != prev_lim and prev_lim is not None:
                 # Extend previous run to the transition point, then break.
                 xs_l.append(cur_x)
-                ys_l.append(int(prev_lim))
+                ys_l.append(int(prev_lim) + _limit_y_off)
                 xs_l.append(None)
                 ys_l.append(None)
             if lim is not None:
                 xs_l.append(cur_x)
-                ys_l.append(int(lim))
+                ys_l.append(int(lim) + _limit_y_off)
             prev_lim = lim
         fig.add_trace(
             go.Scatter(
                 x=xs_l,
                 y=ys_l,
                 mode="lines",
-                line=dict(color=_LIMIT_LINE, width=2.0, shape="linear"),
+                line=dict(color=_LIMIT_LINE, width=_LIMIT_LINE_W, shape="linear"),
                 connectgaps=False,
                 hoverinfo="none",
                 name="speed_limit_line",
@@ -609,8 +626,7 @@ def build_section_figure(
     # independently so the chart isn't crowded with timestamps.
     # Assumes container ≈ 1550px plot-area (90vw on 1920px screen).
     _ASSUMED_PLOT_W = 1550
-    _plot_h = height - 52 - 40
-    _y_px_per_unit = _plot_h / max(ymax + 10, 1)
+    # _plot_h / _y_px_per_unit hoisted to the top of the function (shared with the limit-line offset).
     # Target = one y-MINOR (10 km/h) in pixels, so x-minor matches y-minor.
     _target_x_px = 10 * _y_px_per_unit
     _target_x_s = _target_x_px * x_axis_duration_s / _ASSUMED_PLOT_W

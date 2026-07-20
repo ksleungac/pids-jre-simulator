@@ -63,7 +63,7 @@ STATE_SUB          = chrome.DIM   # dimmer secondary line
 # and over-speed are driven off live OCR deltas (driver stamps limit_change_ts, like last_fire).
 CELL_X             = 222               # readout cell left edge — right of the (now wider) folded left column
 CELL_W             = 120
-CELL_PAD           = 8
+CELL_PAD           = 3
 SEP_COLOR          = chrome.FRAME   # vertical separators flanking the cell
 SEP_W              = 2
 CELL_INK           = chrome.INK   # the number ink (bright)
@@ -75,10 +75,11 @@ READOUT_NUM_H       = 18            # number rendered HEIGHT (px). SUPERSAMPLED 
                                     # stay proportional ("pixel but not squary").
 READOUT_NUM_SS_NATIVE = 18          # readout number load px — AA-off native (supersample retired)
 READOUT_UNIT_K      = 1             # unit stays crisp pixel (draw_lowres) at its own native grid
-READOUT_UNIT_NATIVE = 13            # unit native (≈13px) — a touch larger than the old 12, rendered dim
+READOUT_UNIT_NATIVE = 15            # unit native (≈15px) — larger; bottom-aligned to the number baseline (grows upward), rendered dim
 READOUT_DIGIT_XSCALE = 1.3          # WIDE TIMS numerals: widen each digit, independent of the gap
 READOUT_DIGIT_GAP    = 2            # px between digits at the rendered size
-READOUT_UNIT_GAP     = 4            # gap between the number and its unit (km/h, m)
+READOUT_UNIT_GAP     = 2            # gap between the number and its unit (km/h, m) — tight, unit sits close
+READOUT_UNIT_CELL_GAP = 1           # px BETWEEN the fat full-width unit glyphs (proportional advance); ≤1 keeps them touching/near-touching
 LIMIT_UNIT         = "km/h"           # units for the '--' no-readings display (live values carry their own)
 SPEED_UNIT         = "km/h"
 DIST_UNIT          = "m"              # distance is ALWAYS metres (OCR reads m; finer than rounded km)
@@ -208,27 +209,77 @@ def _draw_number_ss(surf, text, pos, font, color, target_h, xscale, gap):
             x += font.size(ch)[0]
 
 
+def _fullwidth(ch: str) -> str:
+    """ASCII printable → its FAT full-width (全角) form (`k`→`ｋ`) — same family as the full-width
+    digits. Exception: `/` stays natural — the full-width `／` is ~2× wider than the letters and
+    would balloon the monospace cell; the narrow natural slash reads better between them."""
+    if ch == "/":
+        return ch
+    o = ord(ch)
+    return chr(o + 0xFEE0) if 0x21 <= o <= 0x7E else ch
+
+
+_unit_cell_cache: dict = {}
+
+
+def _unit_ss_metrics(unit, font, gap):
+    """Metrics for the FAT full-width unit run, rendered PROPORTIONALLY (each glyph advances by its
+    own ink width + `gap`, so `gap=0` makes the glyphs TOUCH — the dense CJK look). A uniform cell
+    floats the narrow glyphs (`/`), which reads as bad spacing; proportional keeps the fat glyphs
+    butting. Returns (ink_top, ink_bot, total_w)."""
+    key = (id(font), gap, unit)
+    v = _unit_cell_cache.get(key)
+    if v is None:
+        tops, bots = [], []
+        total = 0
+        for i, ch in enumerate(unit):
+            bb = font.render(_fullwidth(ch), False, (255, 255, 255)).get_bounding_rect()
+            total += bb.w + (gap if i < len(unit) - 1 else 0)  # gap BETWEEN glyphs, not after the last
+            if bb.h:
+                tops.append(bb.y)
+                bots.append(bb.y + bb.h)
+        top = min(tops) if tops else 0
+        bot = max(bots) if bots else font.get_height()
+        v = (top, bot, total)
+        _unit_cell_cache[key] = v
+    return v
+
+
+def _draw_unit_ss(surf, unit, pos, font, color, gap):
+    """Draw `unit` (km/h / m) in FAT full-width forms, glyphs advancing by their own width + `gap`
+    (gap=0 → touching). Matches the digits' fat look at the unit font size. `pos` = top-left of the
+    run; caller bottom-aligns via pos.y (ink bottom lands on the baseline)."""
+    x = int(pos[0])
+    y0 = pos[1]
+    for ch in unit:
+        f = _fullwidth(ch)
+        bb = font.render(f, False, (255, 255, 255)).get_bounding_rect()
+        surf.blit(font.render(f, False, color), (x - bb.x, y0))  # ink flush at x
+        x += bb.w + gap
+
+
 def _blit_readout(
     surf, number, unit, rx, baseline, num_font, unit_font, color, unit_color, *, highlight=False, hl_color=HINT_CYAN_COLOR, hl_ink=HINT_INK_COLOR
 ):
     """One readout value, ink BOTTOM-ALIGNED to `baseline` and right-anchored at `rx`: an AA-off TIMS
-    numeral run (_draw_number_ss) + a SMALLER, DIMMER unit, both sitting on the SAME baseline.
+    numeral run (_draw_number_ss) + a SMALLER, DIMMER unit rendered on the SAME monospace + full-width
+    model (_draw_unit_ss), both sitting on the SAME baseline.
     `highlight` paints a block that HUGS the ink (not the font's full leading box, which sat too tall
     and too high) — the speed-limit's always-on cyan cue, its change blink, or the red over-speed flash."""
     n_top, n_bot, nw = _number_ink(number, num_font, READOUT_DIGIT_GAP)
-    uw, uh = lowres_text_size(unit, unit_font, READOUT_UNIT_K, 0)  # uh = unit INK height (ink-based)
+    u_top, u_bot, uw = _unit_ss_metrics(unit, unit_font, READOUT_UNIT_CELL_GAP)
     total_w = nw + READOUT_UNIT_GAP + uw
     x0 = rx - total_w
     num_ink = hl_ink if highlight else color
     unit_ink = hl_ink if highlight else unit_color
     num_y = baseline - n_bot  # full-height glyph cell shifted so the digit ink bottom lands on baseline
-    unit_y = baseline - uh  # unit ink bottom on the same baseline (bottom-aligned with the number)
+    unit_y = baseline - u_bot  # unit ink bottom on the same baseline (bottom-aligned with the number)
     if highlight:
-        block_top = min(num_y + n_top, unit_y)
+        block_top = min(num_y + n_top, unit_y + u_top)
         block = pygame.Rect(x0, block_top, total_w, baseline - block_top)
         pygame.draw.rect(surf, hl_color, block.inflate(2 * LIMIT_PAD_X, 2 * LIMIT_PAD_Y), border_radius=3)
     _draw_number_ss(surf, number, (x0, num_y), num_font, num_ink, READOUT_NUM_H, READOUT_DIGIT_XSCALE, READOUT_DIGIT_GAP)
-    chrome.blit_lowres(surf, unit, x0 + nw + READOUT_UNIT_GAP, unit_y, unit_font, unit_ink, READOUT_UNIT_K)
+    _draw_unit_ss(surf, unit, (x0 + nw + READOUT_UNIT_GAP, unit_y), unit_font, unit_ink, READOUT_UNIT_CELL_GAP)
 
 
 _MSG_YELLOW = (250, 228, 70)  # TIMS message-display yellow (strips flash this, then auto-clear)
