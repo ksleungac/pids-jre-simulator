@@ -8,7 +8,7 @@
 >
 > **Dissolves into:** `auto_input/README.md` (Resolution dependency / HUD layout / Recalibration sections) when the feature ships; this file is then deleted.
 >
-> **Status (2026-07-19):** PAUSED. The user is introducing a separate method first — **"logic hardening"** (details pending) — before we finalize this. Resume the design consolidation after that.
+> **Status (2026-07-21):** PAUSED (design consolidation), but **"logic hardening" is actively shipping** — see § "Relationship to the logic-hardening method" for the rules landed. **1080p is the confirmed CANONICAL resolution and the absolute-stability target** (user, 2026-07-21): because the resume design downscales every input to 1080p (Finding 2), the 1080p pipeline must be rock-solid — it is what real users run through, not the crisp higher-native 1440p. Bugs that are invisible on a dev machine's crisp 1080p capture but bite a user's softened capture are the priority (see `critical_lessons.md §7`).
 
 ## Goal
 
@@ -62,9 +62,11 @@ One pipeline for every resolution:
 
 ## Relationship to the logic-hardening method
 
-"Logic hardening" = OCR-read robustness rules at the reader/driver layer, independent of resolution. Two shipped 2026-07-19 (both T1-tested):
+"Logic hardening" = OCR-read robustness rules at the reader/driver layer, independent of resolution. Shipped so far (all T1/T3-tested):
 
-- **Speed domain rectify** (`_rectify_speed`, `ocr.py`) — a read above the 140 km/h ceiling (drivable max 135 + slack) drops one trailing digit and re-checks, recovering the decimal-slip misread (`72.7 → "727" → 72`) instead of dropping the sample.
-- **Stopping-offset speed gate** (`_accept_stopping_offset`, `driver.py`) — the ±cm offset is accepted only at `speed == 0`, rejecting scenery-green phantoms; rejections log an `offset_reject` event.
+- **Speed domain rectify** (`_rectify_speed`, `ocr.py`, 2026-07-19) — a read above the 140 km/h ceiling (drivable max 135 + slack) drops one trailing digit and re-checks, recovering the decimal-slip misread (`72.7 → "727" → 72`) instead of dropping the sample. Now a rarely-exercised backstop behind the decimal-stop fix below.
+- **Stopping-offset speed gate** (`_accept_stopping_offset`, `driver.py`, 2026-07-19) — the ±cm offset is accepted only at `speed == 0` (later `badge == "STOPPED"`), rejecting scenery-green phantoms; rejections log an `offset_reject` event.
+- **1-column-tolerant decimal-stop** (`segment_chars`, `ocr.py`, 2026-07-20) — the decimal search scans the raw column-runs, not the finalized digit bboxes, so a decimal dot that binarized to a single dark column (the 1080p / softened-capture failure — `critical_lessons.md §7`) is still found and the tenths no longer slips into the integer. The exact-resolution reason 1080p was fragile and 1440p was not (dot 2 vs 3–4 columns). T3 speed-cell fixtures incl. a rectify-proof `5.3→5` regression cell.
+- **Badge-reject score gate** (`_apply_badge_reject_gate`, `driver.py`, 2026-07-21) — when `badge is None` (classifier reject = degraded frame), drop any `speed`/`distance`/`speed_limit` read below `BADGE_NONE_SCORE_GATE` (0.80); conditional on badge-reject, so it supplies the honest threshold a global score floor lacked. Data: badge=None reads sit at score ~0.60 vs ~0.90 when the badge reads. Emits a `score_gate` event.
 
 **Why it matters to THIS design:** hardening each read widens the pipeline's misread tolerance, which directly softens the ±2% scale-alignment cliff the user-drawn-box approach introduces (the stopping-offset canary in Finding 3). More per-read robustness ⇒ more forgiving box alignment ⇒ less precision the calibration UX must force the user to hit. Fold further hardening rules here as they land (candidates under discussion: digit-read score-gating, at-station speed gate), then re-weigh how tight the box-alignment UX actually needs to be.

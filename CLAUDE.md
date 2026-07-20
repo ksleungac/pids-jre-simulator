@@ -79,7 +79,7 @@ Build mechanics live in `/build` skill.
 
 - **Steady state**: new train models (E235-0 Yamanote next, then E231-500 / E233 — re-skin, not re-architecture) + display fidelity polish.
 - **Two speculative side-quests competing for budget:**
-  - **OCR automation** — template-match game HUD at ~5 Hz on window-bound capture. Closes the 3-year companion-app loop.
+  - **OCR automation** — template-match game HUD at ~5 Hz on window-bound capture. Closes the 3-year companion-app loop. **1080p is the canonical resolution and the absolute-stability target** — the multi-resolution path downscales every input to 1080p, so the crisp higher-native 1440p is not the bar; the real user's softened 1080p capture is (`WIP_ocr_multiresolution.md`, `critical_lessons.md §7`).
   - **Distribution polish** — signed installer, first-run smoothness.
 - **Closed-off** (don't re-propose): memory hooking `*saf.dll`, decrypting SimDATA, audio fingerprinting, full-desktop OCR, tesseract, scaling to lines the game already covers, Mac build.
 

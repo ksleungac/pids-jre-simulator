@@ -3,6 +3,7 @@
 Three readers:
     - read_distance(cell, templates) -> int meters
     - read_speed(cell, templates) -> int km/h (decimal stripped at decimal-point bbox)
+    - read_speed_tenths(cell, templates) -> the digit after the decimal (log/report only)
     - classify_badge_state(cell, anchors) -> "MOVING" | "STOPPED" | "PASSING"
 
 Digit OCR pipeline:
@@ -285,9 +286,12 @@ def segment_chars(
 
     `max_gap` controls where digit collection stops on horizontal gap.
 
-    `stop_at_decimal=True` (used by speed OCR) finds the small decimal-point bbox in
+    `stop_at_decimal=True` (used by speed OCR) finds the small decimal-point mark in
     the bottom half of the text band and uses its x as a hard stop — robust to gap
-    variance from anti-aliasing differences.
+    variance from anti-aliasing differences. The decimal is detected 1-column-tolerantly
+    (see the `col_runs` scan below): on 1080p and softer captures the dot binarizes to a
+    single dark column, which `finalize()` cannot turn into a `raw` bbox, so the search
+    scans the column-runs directly rather than the finalized digit boxes.
 
     `seg` overrides module-level segmentation constants for non-1440p resolutions.
     Pass ``seg_for_scale(0.75)`` for 1080p; omit for 1440p (uses module defaults).
@@ -300,6 +304,9 @@ def segment_chars(
 
     col_has_text = band.sum(axis=0) > _seg.column_text_min
     raw: list[tuple[int, int, int, int]] = []
+    # Every contiguous run of text-columns, INCLUDING ones too thin for finalize() to
+    # emit a bbox. The decimal-point scan needs these: a 1-column dot never reaches `raw`.
+    col_runs: list[tuple[int, int]] = []
     in_char = False
     x_start = 0
 
@@ -315,9 +322,11 @@ def segment_chars(
             x_start = x
             in_char = True
         elif not has and in_char:
+            col_runs.append((x_start, x))
             finalize(x)
             in_char = False
     if in_char:
+        col_runs.append((x_start, len(col_has_text)))
         finalize(len(col_has_text))
 
     shape_filtered: list[tuple[int, int, int, int]] = []
@@ -330,11 +339,22 @@ def segment_chars(
     decimal_x: int | None = None
     if stop_at_decimal:
         baseline_y = band_top + int((band_bot - band_top) * DECIMAL_BASELINE_FRACTION)
-        for bb in raw:
-            w = bb[2] - bb[0]
-            h = bb[3] - bb[1]
-            if h <= _seg.decimal_max_h and w <= _seg.decimal_max_w and bb[1] >= baseline_y:
-                decimal_x = bb[0]
+        # Scan the column-runs (not the finalized `raw` boxes) so a decimal that
+        # binarized to a single dark column is still found. Height is measured with a
+        # 1-px row tolerance (`> 0`, vs finalize()'s `> ROW_TEXT_MIN`) for the same
+        # reason. A real digit run is far wider than decimal_max_w and taller than
+        # decimal_max_h, so this stays a strict decimal-only match. See segment_chars
+        # docstring + auto_input/README.md § "Decimal-stop".
+        for x0, x1 in col_runs:
+            sub = band[:, x0:x1]
+            ys = np.where(sub.sum(axis=1) > 0)[0]
+            if len(ys) == 0:
+                continue
+            w = x1 - x0
+            h = int(ys[-1] - ys[0]) + 1
+            top = band_top + int(ys[0])
+            if h <= _seg.decimal_max_h and w <= _seg.decimal_max_w and top >= baseline_y:
+                decimal_x = x0
                 break
 
     digits: list[tuple[int, int, int, int]] = []
@@ -457,6 +477,27 @@ def read_speed(cell: np.ndarray, templates: Templates, seg: SegConfig | None = N
     _seg = seg or SEG_DEFAULT
     value, raw, min_score = _read_value(cell, templates, max_gap=_seg.speed_max_gap, stop_at_decimal=True, seg=_seg)
     return _rectify_speed(value), raw, min_score
+
+
+def read_speed_tenths(cell: np.ndarray, templates: Templates, seg: SegConfig | None = None, *, int_raw: str | None = None) -> int | None:
+    """Read the single digit AFTER the decimal point (the tenths) — for decimal-precision
+    LOGGING / reporting only, NEVER for the integer speed or any driver decision.
+
+    `read_speed` cuts at the decimal and returns the robust integer; this reads every
+    digit (no decimal-stop) and takes the one trailing digit beyond that integer read as
+    the tenths. Isolating it against the already-read integer (not `//10` of the whole)
+    is what keeps it non-corrupting: on an exact `X.0` frame where the `0` fails to
+    segment, this returns None and the caller treats the speed as `.0` — it can never
+    turn 11.0 into 1.1 (the failure mode of dividing the whole read by 10). Pass
+    `int_raw` = the `raw` string `read_speed` already produced to skip a redundant pass.
+    """
+    _seg = seg or SEG_DEFAULT
+    if int_raw is None:
+        _, int_raw, _ = _read_value(cell, templates, max_gap=_seg.speed_max_gap, stop_at_decimal=True, seg=_seg)
+    _, full_raw, _ = _read_value(cell, templates, max_gap=_seg.speed_max_gap, stop_at_decimal=False, seg=_seg)
+    if int_raw and full_raw.startswith(int_raw) and len(full_raw) == len(int_raw) + 1 and full_raw[-1].isdigit():
+        return int(full_raw[-1])
+    return None
 
 
 def read_stopping_offset(cell: np.ndarray, templates: Templates, seg: SegConfig | None = None) -> tuple[int | None, str, float]:

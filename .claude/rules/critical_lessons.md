@@ -1,6 +1,6 @@
 # Critical Lessons — DO NOT REPEAT
 
-Five deployment-class incidents. Each locally defensible; each broke production. The shared root: **claude reasons about code as text rather than as a deployed artifact.**
+Seven deployment-class incidents. Each locally defensible; each broke production. The shared root: **claude reasons about code as text rather than as a deployed artifact.**
 
 ---
 
@@ -106,3 +106,18 @@ TIMS became the default setup flow, but the pre-TIMS `LanguagePicker` (old grey 
 - `/build` smoke test is not "does it launch" — it is "does a brand-new user's first five minutes work." Delete-state first-run is a mandatory item on that checklist.
 
 **Scope:** first-run pickers, OOBE tutorials, settings-absent defaults, cache-miss paths, license/EULA gates, anything reached only when persisted state is missing.
+
+---
+
+## 7. Dev-quality capture masks input-degradation bugs (2026-07-20)
+
+The 1080p speed OCR dropped the decimal on ~40% of a user's frames (19.1 → "191"), yet was invisible on every dev machine: 0 slips on crisp local calibration + a 0/69 live drive. Root: on a *softened* capture (H.264 compression, or a hair less contrast) the decimal dot binarizes to a SINGLE dark column, and `finalize()` can't form a bbox from one column, so the decimal-stop missed it; dev captures render the dot at 2 solid columns → detected. The margin between works/fails is one pixel of darkness. I nearly abandoned the (real) fix, conceding "the reader is stable," on can't-reproduce-locally + the crisp sample — until running the production OCR over the user's screen-recording reproduced it.
+
+**Rule:** for any read from captured / rendered input (OCR, vision, screen-scrape), the dev machine's capture is CLEANER than a real user's (compression, GPU scaling, contrast, DPI). "It reads fine here" — plus a small crisp local sample — is NOT evidence the bug is absent. Same root as lessons 3–6: reasoning from the developer's environment, not the user's.
+
+**Pattern:**
+- Reproduce against the USER's captured artifact — run the production pipeline over their recording / uploaded frame; don't trust a fresh local capture to represent theirs.
+- The stable target is the DEGRADED case. For this project that is **1080p at real capture quality** — the planned multi-resolution path downscales all inputs to 1080p, so 1080p is canonical and must be absolutely stable (see `WIP_ocr_multiresolution.md`), NOT the crisp dev frame or the higher-native 1440p.
+- A detector resting on a feature at the binarization floor (one-pixel margin) is a bug even when it passes on dev — widen the tolerance.
+
+**Scope:** all OCR / vision reads; anything whose correctness depends on input pixel fidelity.

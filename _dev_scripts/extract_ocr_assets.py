@@ -250,6 +250,7 @@ FIXTURES_DIR = Path(__file__).parent.parent / "_tests" / "fixtures" / "ocr"
 # shared by distance + stopping-offset (colour-discriminated at read time).
 _CELL_BBOX = {
     "badge": lambda p: p.badge_bbox,
+    "speed": lambda p: p.speed_value_bbox,
     "speed_limit": lambda p: p.speed_limit_value_bbox,
     "stopping_offset": lambda p: p.distance_value_bbox,
 }

@@ -40,7 +40,9 @@ from auto_input.ocr import (  # noqa: E402
     classify_badge_state,
     crop_cell,
     load_badge_anchors,
+    read_speed,
     read_speed_limit,
+    read_speed_tenths,
     read_stopping_offset,
     seg_for_scale,
 )
@@ -72,6 +74,8 @@ def _read_value(cell: np.ndarray, cell_type: str, a: _Assets):
     """Run the production reader for `cell_type` and return the parsed value."""
     if cell_type == "badge":
         return classify_badge_state(cell, a.anchors)[0]
+    if cell_type == "speed":
+        return read_speed(cell, a.dark_templates, seg=a.seg)[0]
     if cell_type == "speed_limit":
         return read_speed_limit(cell, a.dark_templates, seg=a.seg, red_templates=a.red_templates)[0]
     if cell_type == "stopping_offset":
@@ -82,6 +86,7 @@ def _read_value(cell: np.ndarray, cell_type: str, a: _Assets):
 def _cell_bbox(profile: ResolutionProfile, cell_type: str):
     return {
         "badge": profile.badge_bbox,
+        "speed": profile.speed_value_bbox,
         "speed_limit": profile.speed_limit_value_bbox,
         "stopping_offset": profile.distance_value_bbox,
     }[cell_type]
@@ -133,8 +138,13 @@ def main() -> int:
             if not fx.exists():
                 fails.append(f"{res} cell {e['type']}/{e['stem']}: fixture missing ({fx.name})")
                 continue
-            got = _read_value(_load_cell(fx), e["type"], a)
+            cell = _load_cell(fx)
+            got = _read_value(cell, e["type"], a)
             _check(fails, f"{res} cell {e['type']}/{e['stem']}", got, e["expected"])
+            # Speed cells may also lock the tenths digit (decimal-precision log read).
+            if e["type"] == "speed" and "expected_tenths" in e:
+                got_t = read_speed_tenths(cell, a.dark_templates, seg=a.seg)
+                _check(fails, f"{res} cell speed-tenths/{e['stem']}", got_t, e["expected_tenths"])
             n_cells += 1
 
         # --- frames: capture-region quadrant -> production crop geometry ---

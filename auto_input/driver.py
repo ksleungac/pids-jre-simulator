@@ -38,6 +38,7 @@ import soundfile as sf
 from .hud_layout import PROFILES
 from .ocr import (
     DEFAULT_TEMPLATES_DIR,
+    MAX_DRIVABLE_SPEED_KMH,
     Templates,
     build_templates,
     classify_badge_state,
@@ -45,6 +46,7 @@ from .ocr import (
     read_distance,
     read_speed,
     read_speed_limit,
+    read_speed_tenths,
     read_stopping_offset,
     seg_for_scale,
 )
@@ -117,6 +119,16 @@ RECORDINGS_DIR = project_root() / "_recordings"
 SUSPICIOUS_SPEED_LIMIT_SCORE = 0.75
 MISREAD_DUMP_DIR = project_root() / "_ocr_calibration" / "_misread_dumps"
 
+# Cross-attribute hardening: on a badge-reject frame (badge is None — classifier diff >
+# BADGE_DIFF_REJECT, a degraded frame), digit reads below this confidence are dropped.
+# Set from the badge=None sampling: those reads cluster at score ~0.60 (the docs' <0.6
+# random-match danger zone) vs ~0.90 (p25 0.88) when the badge reads. 0.80 splits them.
+BADGE_NONE_SCORE_GATE = 0.80
+
+# Distance plausibility guard: slack (m) added on top of the physical v·Δt bound so legit
+# approach reads + OCR jitter pass, while the 1000m+ single-frame spikes are still rejected.
+DISTANCE_GUARD_SLACK_M = 50.0
+
 
 def _dump_misread_speed_limit_cell(cell: np.ndarray, sl_val: int, sl_score: float, ts: float) -> None:
     """Save a low-confidence speed-limit cell crop as PNG for offline calibration.
@@ -157,8 +169,15 @@ def _build_stops_meta(sim) -> list[dict]:
     return out
 
 
-def _open_drive_log(sim) -> tuple[Optional[TextIO], Optional[Path]]:
+def _open_drive_log(sim, probe_wh, profile) -> tuple[Optional[TextIO], Optional[Path]]:
     """Open a fresh JSONL log for this drive session and write the meta header.
+
+    ``probe_wh`` is the raw dxcam desktop probe ``(w, h)``; ``profile`` is the
+    ResolutionProfile selected from it. Both are recorded in the meta header so a
+    "problematic OCR" report is self-diagnosing — the log alone tells whether the
+    OCR ran at the resolution the user thinks it did (they are equal by
+    construction today; recorded separately so any future divergence — windowed
+    capture, multi-monitor, DPI — is attributable without re-driving).
 
     Returns (file_handle, path) or (None, None) if anything goes wrong.
     Caller is responsible for closing the handle on shutdown.
@@ -178,6 +197,11 @@ def _open_drive_log(sim) -> tuple[Optional[TextIO], Optional[Path]]:
             "diagram": diagram,
             "route": sim.route_data.get("route", ""),
             "dest": sim.route_data.get("dest", ""),
+            # Resolution self-diagnosis: raw desktop probe vs the OCR profile it
+            # selected (profile.scale drives every seg threshold). See docstring.
+            "desktop_resolution": [probe_wh[0], probe_wh[1]],
+            "ocr_profile_resolution": [profile.desktop_w, profile.desktop_h],
+            "ocr_scale": profile.scale,
             "stops": _build_stops_meta(sim),
         }
         f.write(json.dumps(meta, ensure_ascii=False) + "\n")
@@ -253,6 +277,86 @@ def _accept_stopping_offset(offset_cm: Optional[int], badge: Optional[str]) -> O
     and correctable from evidence.
     """
     return offset_cm if (offset_cm is not None and badge == "STOPPED") else None
+
+
+def _apply_badge_reject_gate(
+    badge: Optional[str],
+    speed: Optional[int],
+    speed_score: float,
+    distance: Optional[int],
+    distance_score: float,
+    speed_limit: Optional[int],
+    speed_limit_score: float,
+) -> tuple[Optional[int], Optional[int], Optional[int], tuple[str, ...]]:
+    """Cross-attribute hardening: drop low-confidence digit reads on a badge-reject frame.
+
+    When the badge fails to classify (``badge is None`` — the classifier's best anchor
+    diff exceeded ``BADGE_DIFF_REJECT``, i.e. a degraded frame: black-screen at platform
+    or a mid-animation transient), the other digit reads are phantom-prone. Sampling the
+    drive logs on ``badge=None`` frames, speed/distance land at score median ~0.60 (the
+    docs' "<0.6 random-match danger zone") vs ~0.90 when the badge reads — a clean
+    separation. So when the most reliable HUD read fails ("badge > distance, speed"), any
+    accompanying read below ``BADGE_NONE_SCORE_GATE`` is dropped to ``None``.
+
+    CONDITIONAL, not a global score floor: a genuine 0.6 read is kept whenever the badge
+    confirms the frame (``badge is not None`` → returned unchanged); only a low-confidence
+    read on an already-degraded frame is rejected. Offset is intentionally absent — it is
+    already badge-gated to STOPPED (`_accept_stopping_offset`), so ``badge=None`` rejects
+    it upstream. Sibling to that gate and the black-screen cross-reject.
+
+    Returns the (possibly-nulled) ``(speed, distance, speed_limit)`` plus the tuple of
+    gated field names, so the caller can emit a paired ``score_gate`` drive-log event.
+    """
+    if badge is not None:
+        return speed, distance, speed_limit, ()
+    gated: list[str] = []
+    if speed is not None and speed_score < BADGE_NONE_SCORE_GATE:
+        speed = None
+        gated.append("speed")
+    if distance is not None and distance_score < BADGE_NONE_SCORE_GATE:
+        distance = None
+        gated.append("distance")
+    if speed_limit is not None and speed_limit_score < BADGE_NONE_SCORE_GATE:
+        speed_limit = None
+        gated.append("speed_limit")
+    return speed, distance, speed_limit, tuple(gated)
+
+
+def guard_distance(
+    prev_badge: Optional[str],
+    badge: Optional[str],
+    distance: Optional[int],
+    last_valid: Optional[int],
+    dt_s: float,
+) -> tuple[Optional[int], bool]:
+    """Physical-plausibility gate on the remaining-distance read. Returns (value, rejected).
+
+    A degraded 1080p frame mis-segments the distance number into a single-frame spike (e.g.
+    `1372 → 3 → 1257`), correlated with the speed decimal-slip. The badge-reject gate misses
+    these — the badge still reads MOVING on ~60% of them — but distance obeys physics: between
+    two samples the train moves at most `v·Δt`. So reject a read whose change from the last
+    VALID distance exceeds `MAX_DRIVABLE_SPEED_KMH · Δt` (+ slack) and HOLD-LAST-GOOD (return the
+    last valid value). The ceiling speed, not the current frame's (co-corrupted on spike frames),
+    keeps the bound false-reject-proof while still catching the 1000m+ spikes.
+
+    Gate ONLY during steady MOVING travel. A STOPPED/PASSING frame — on EITHER the prior or the
+    current badge — is a reference-frame-in-flux where distance legitimately jumps (departure
+    STOPPED→MOVING, PASSING→MOVING or MOVING→PASSING switch, a passing run): accept + re-anchor
+    unconditionally, so `v·Δt` never wrongly rejects it. A `badge=None` degraded frame while the
+    PRIOR badge was MOVING IS still gated (not reset) — else a confident-but-garbage spike on an
+    unreadable-badge frame would re-anchor and poison the guard. No consensus latch: a genuine
+    double spike is rejected on both frames (held) and self-heals when a plausible read near the
+    anchor returns. `prev_badge` is the detector's prior-frame badge (guard runs before
+    `detector.update`). See auto_input/README.md § "Distance plausibility guard".
+    """
+    if distance is None:
+        return None, False  # OCR dropout, not a spike — pass through (the detector tolerates None)
+    if last_valid is None or prev_badge != "MOVING" or badge in ("STOPPED", "PASSING"):
+        return distance, False  # boot, or reference-frame in flux (either badge) → accept + re-anchor
+    max_delta = (MAX_DRIVABLE_SPEED_KMH / 3.6) * dt_s + DISTANCE_GUARD_SLACK_M
+    if abs(distance - last_valid) > max_delta:
+        return last_valid, True  # implausible single-frame spike → hold last valid
+    return distance, False
 
 
 def _render_report_async(log_path: Path, sim) -> None:
@@ -476,6 +580,11 @@ class AutoDriver:
     # no-limit segments, ignored so they don't spuriously flash). Published as `limit_change_ts`.
     _last_speed_limit: Optional[int] = field(default=None, init=False)
     _limit_change_ts: float = field(default=0.0, init=False)
+    # Distance plausibility guard anchor: last VALID remaining-distance read + its ts. A read that
+    # moves further from this than the train physically could (v·Δt) is a spike → held. See
+    # guard_distance. Guard is active only during steady MOVING; any STOPPED/PASSING frame re-anchors.
+    _last_valid_distance: Optional[int] = field(default=None, init=False)
+    _last_valid_distance_ts: float = field(default=0.0, init=False)
     # Stop indices whose arrival PA is long enough to warrant the long-approach
     # lead bump (see LONG_APPROACH_PA_SEC). Probed once from audio headers on
     # thread start; empty until then. Looked up per-cycle by _lead_for.
@@ -609,7 +718,7 @@ class AutoDriver:
         # each sample below appends a line + flushes for crash safety. Path is
         # also stashed on the simulator so the debug-bar Report button can find
         # the live log to render.
-        log_file, log_path = _open_drive_log(self.sim)
+        log_file, log_path = _open_drive_log(self.sim, (pw, ph), profile)
         if log_path is not None:
             print(f"[AutoDriver] Recording drive log -> {log_path}")
             self.sim.drive_log_path = log_path
@@ -676,7 +785,15 @@ class AutoDriver:
                     sl_cell = _crop_cell(frame, hud, profile.speed_limit_value_bbox)
                     b_cell = _crop_cell(frame, hud, profile.badge_bbox)
                     badge, b_diff = classify_badge_state(b_cell, badge_anchors)
-                    s_val, _, s_score = read_speed(s_cell, templates, seg=seg)
+                    s_val, s_raw, s_score = read_speed(s_cell, templates, seg=seg)
+                    # Decimal-precision speed for the LOG/report only (never a driver
+                    # decision — those key off the integer s_val). The tenths is read
+                    # against s_raw so a dropped `.0` degrades to None (→ `.0`), never a
+                    # wrong integer. See read_speed_tenths. Status band stays integer.
+                    s_tenths = read_speed_tenths(s_cell, templates, seg=seg, int_raw=s_raw) if s_val is not None else None
+                    s_decimal = (
+                        (s_val + s_tenths / 10) if (s_val is not None and s_tenths is not None) else (float(s_val) if s_val is not None else None)
+                    )
                     # The DISTANCE cell is shared and self-identifies via color: dark text
                     # `Nm` (distance to next stop, both transit and ~5s+ after arriving at
                     # platform) vs green text `+/-Ncm` (stopping offset, briefly after
@@ -692,7 +809,24 @@ class AutoDriver:
                     offset_val = _accept_stopping_offset(offset_raw, badge)
                     # Speed limit (最高速度): line-dependent, often empty. None is normal.
                     sl_val, _, sl_score = read_speed_limit(sl_cell, templates, seg=seg, red_templates=red_templates)
+                    # Badge-reject score gate — when the badge fails to classify (degraded
+                    # frame), drop the low-confidence digit reads BEFORE any decision, the
+                    # log, or the band sees them. See _apply_badge_reject_gate. Runs after
+                    # every read so speed/distance/limit are gated together; s_tenths/s_decimal
+                    # (log-only) follow the integer speed to None.
+                    s_val, d_val, sl_val, gated_fields = _apply_badge_reject_gate(badge, s_val, s_score, d_val, d_score, sl_val, sl_score)
+                    if "speed" in gated_fields:
+                        s_tenths = s_decimal = None
                     sample_ts = time.time()
+                    # Distance plausibility guard (physical-motion gate + hold-last-good). Runs BEFORE
+                    # detector.update, so self._detector.prev_badge is the PRIOR frame's badge (the
+                    # reference-frame signal). Rejects an implausible single-frame spike, holds the last
+                    # valid distance, and re-anchors on a reference-frame change. See guard_distance.
+                    dt_dist = (sample_ts - self._last_valid_distance_ts) if self._last_valid_distance_ts else 0.0
+                    d_val, dist_rejected = guard_distance(self._detector.prev_badge, badge, d_val, self._last_valid_distance, dt_dist)
+                    if d_val is not None and not dist_rejected:
+                        self._last_valid_distance = d_val
+                        self._last_valid_distance_ts = sample_ts
                     if sl_val is not None and sl_score < SUSPICIOUS_SPEED_LIMIT_SCORE:
                         _dump_misread_speed_limit_cell(sl_cell, sl_val, sl_score, sample_ts)
                     # Speed-limit change-cue: stamp on a value→different-value change (drives the band's
@@ -740,6 +874,7 @@ class AutoDriver:
                                 "_type": "sample",
                                 "ts": sample_ts,
                                 "speed": s_val,
+                                "speed_decimal": s_decimal,
                                 "speed_score": s_score,
                                 "distance": d_val,
                                 "distance_score": d_score,
@@ -766,12 +901,22 @@ class AutoDriver:
                             # misread at a true stop) is visible against the paired
                             # sample's badge context.
                             _write_event(log_file, "offset_reject", self.sim.state.curr_stop, sample_ts)
+                        if gated_fields:
+                            # One or more digit reads dropped by the badge-reject score gate
+                            # (badge=None + score < BADGE_NONE_SCORE_GATE). Pairs with the
+                            # sample line, whose *_score fields still hold the rejected reads'
+                            # confidences for offline review.
+                            _write_event(log_file, "score_gate", self.sim.state.curr_stop, sample_ts)
+                        if dist_rejected:
+                            # A distance read was an implausible physical-motion spike and was
+                            # replaced by the last valid value (guard_distance). Log-only marker.
+                            _write_event(log_file, "distance_reject", self.sim.state.curr_stop, sample_ts)
 
                     if badge is not None:
                         prev_log_badge = badge
 
                     ts = time.strftime("%H:%M:%S")
-                    s_str = f"{s_val:>3}km/h" if s_val is not None else " --"
+                    s_str = f"{s_decimal:>5.1f}km/h" if s_decimal is not None else " --"
                     b_str = badge or "?"
                     # Cell-content priority: cm reading wins (only shows briefly after
                     # arrival); fall through to m if cm is empty.
