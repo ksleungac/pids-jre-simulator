@@ -353,6 +353,13 @@ When a design collapses to something simpler, re-derive which parts of the origi
 - On collapsing a design, list what the complex version was protecting against, then check each survives. Cheap; the alternative is finding out from the user.
 - A rule derived for one content/case type does not automatically hold once the scope widens to carry several — re-check the premise, don't port the conclusion.
 
+### Construction-proof model beats the next repro theory
+When static analysis keeps contradicting a reproducible observation across 2+ rounds — your trace says the bug can't happen, the user keeps seeing it — stop generating repro theories. Either instrument for ground truth, or redesign the invariant so the whole bug CLASS is impossible by construction. The Nth theory has diminishing value once analysis and observation disagree.
+
+**Why:** (2026-07-20) The lower-LCD "flash" hunt — the slot cycler's code proved the 5-station slot could not be cut sub-second (it's in every slot-set), yet the user reproduced it. Six rounds of theories didn't converge; the fix was to ground the timing model on "a change" + a minimum floor so no two changes land too close — flashes impossible by construction, whatever the trigger.
+
+**How to apply:** say "I've hit the limit of what reading proves," then instrument OR redesign the invariant — don't spin another theory. A construction-proof model also retires enumerating every trigger path.
+
 ### Blind A/B verify presentation convention changes
 Before adopting a new presentation convention, validate via blind A/B: parallel fresh-context agents with identical questions — one reads original, one reads new. Adopt only when answers match.
 
