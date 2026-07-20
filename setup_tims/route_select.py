@@ -380,9 +380,6 @@ def _run_grid(screen, screen_key, labels, *, preselect=None):
     box_t = {**_BOX_T_BASE, "text_align": SCREENS[screen_key]["align"], "text_slots": SCREENS[screen_key]["std_chars"]}
     box_w, box_h = _grid_metrics(labels, box_font, box_t, SCREENS[screen_key]["std_chars"])
     below_band = pygame.Rect(0, band.BAND_H, SCREEN_W, SCREEN_H - band.BAND_H)  # load-beat scope (band persists)
-    # localized chrome fonts (戻る / 設定 / Home) re-resolve each frame so the L-key locale cycle takes effect
-    btn_font = i18n.pixel_font_for_lang(ACTIVE_LANG, BTN_NATIVE)
-    home_font = i18n.pixel_font_for_lang(band.ACTIVE_LANG, band.BAND_BTN_TEXT_NATIVE)
     selected = preselect
     _, per_page = _page_layout(box_w)
     page = preselect // per_page if preselect is not None else 0  # land on the page holding the preselection
@@ -393,6 +390,7 @@ def _run_grid(screen, screen_key, labels, *, preselect=None):
 
     running = True
     while running:
+        # localized chrome fonts (戻る / 設定 / Home) re-resolve each frame so the L-key locale cycle takes effect
         btn_font = i18n.pixel_font_for_lang(ACTIVE_LANG, BTN_NATIVE)
         home_font = i18n.pixel_font_for_lang(band.ACTIVE_LANG, band.BAND_BTN_TEXT_NATIVE)
         hits = frame(screen)

@@ -1,10 +1,10 @@
 """E235-0 series Lower LCD display implementation.
 
-Today: provides a circular full-route renderer (Yamanote racetrack layout)
-and a `LowerDisplay` manager that swaps the full-route slot's renderer for
-the circular variant on Yamanote routes. Other slots (8-station zoom,
-transfer-info) inherit unchanged from E235-1000 — interim until the
-E235-0-specific 5-station view lands.
+Provides a circular full-route renderer (Yamanote racetrack layout) and a
+`LowerDisplay` manager that swaps the full-route slot's renderer for the
+circular variant on Yamanote routes. The 8-station-zoom slot is replaced by
+the E235-0-specific 5-station stopping view (`JapaneseFiveStationDisplay`)
+universally; only the transfer-info slot inherits unchanged from E235-1000.
 
 Dispatch is route-keyed: ``route_data["route"] == "山手線"`` → circular
 racetrack (`CircularFullRouteDisplay`); else → `OpenRouteFullRouteDisplay`,

@@ -80,7 +80,7 @@ def _run_drive(config):
     try:
         sim = PASimulator(config["work_dir"], config["route_data"], auto_input=auto_input, model=config.get("model"))
         start_idx = config.get("start_idx")
-        if start_idx:  # setup_tims start-station selection → land there (classic setup has no start_idx)
+        if start_idx is not None:  # setup_tims start-station selection → land there (classic setup has no start_idx); idx 0 is a valid target
             sim.jump_to_stop(start_idx)
         if auto_input:
             from auto_input import AutoDriver

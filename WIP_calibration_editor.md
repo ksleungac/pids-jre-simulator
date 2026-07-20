@@ -136,7 +136,7 @@ Sibling to the region-rect dict above. Each region's drawable internals get a `_
 
 **Synthetic rows.** Candidate cyclers use a sentinel `dqn` shape `"__candidate__:<element_id>"` with `type_tag = "candidate"`. `_build_param_rows` returns the normal dict-derived rows; the cycler is prepended in `_on_click` when the focused element has a build-candidates hook. `_draw_focused_indicator` early-returns on `"candidate"` / `"unsupported"` rows.
 
-**Writeback.** AST walks the dict literal `<dict_name> = {...}` at module level, replaces each key's value-side via `ast.Constant` end-col-offset math. Type-guarded (int / float / tuple-of-numeric / str). Multi-line values skipped with warning. Tuple inside dict re-emitted via `repr()`. **Iteration is reversed** so rightmost edits land first — earlier-col cols stay accurate when multi-key-per-line schemas (Phase 1b arc polyline) put N values on one line. Forward iteration corrupts source the moment any value's repr length shifts. See [critical_lessons.md § "AST source-edit must iterate values in reverse"](.claude/rules/critical_lessons.md).
+**Writeback.** AST walks the dict literal `<dict_name> = {...}` at module level, replaces each key's value-side via `ast.Constant` end-col-offset math. Type-guarded (int / float / tuple-of-numeric / str). Multi-line values skipped with warning. Tuple inside dict re-emitted via `repr()`. **Iteration is reversed** so rightmost edits land first — earlier-col cols stay accurate when multi-key-per-line schemas (Phase 1b arc polyline) put N values on one line. Forward iteration corrupts source the moment any value's repr length shifts. Canonical rationale lives inline at `_dev_scripts/calibration_editor.py:_swap_dict_literal` — a dev-tool source-edit gotcha (the editor doesn't ship), so it stays at the code site, not in `critical_lessons.md`.
 
 ---
 
@@ -186,7 +186,7 @@ The `_TUNEABLES_ARC` dict, `_build_catmull_rom_centerline`, and `_draw_arc` are 
 
 - **New tuneable additions:** must land in module-level `_TUNEABLES_*` dict + follow suffix convention. Hard rule going forward.
 - **Existing inline `# fmt: off` tuneable blocks:** stay as-is. Convert lazily — only when next touched for tuning. No eager backfill sweep.
-- **AST writeback iteration must stay reversed.** Multi-key-per-line schemas (Phase 1b polyline) only stay safe under reverse iteration. See `_dev_scripts/calibration_editor.py:_swap_dict_literal` + [critical_lessons.md § "AST source-edit must iterate values in reverse"](.claude/rules/critical_lessons.md).
+- **AST writeback iteration must stay reversed.** Multi-key-per-line schemas (Phase 1b polyline) only stay safe under reverse iteration. See the canonical inline rationale at `_dev_scripts/calibration_editor.py:_swap_dict_literal`.
 
 ---
 

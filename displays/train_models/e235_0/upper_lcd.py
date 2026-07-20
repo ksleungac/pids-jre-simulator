@@ -23,7 +23,7 @@ from displays.utils import clip, draw_text_given_width, draw_station_code_badge
 # outside the rect are dropped by pygame. See DISPLAY_E235.md § "Element
 # confinement (clip-enforced)" for the rationale and gotchas.
 #
-# Coordinates are within the upper LCD area (y=0..UPPER_HEIGHT=117).
+# Coordinates are within the upper LCD area (y=0..UPPER_HEIGHT=130).
 # "Debug" tints come from _DEBUG_COLORS below — `--debug-grid` paints them so
 # a new region's declared rect can be visually verified to cover its
 # intended footprint.

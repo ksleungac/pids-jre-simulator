@@ -337,6 +337,11 @@ A regression-worthy change ships with a test in the right tier — scope picks t
 - New production path / decision fn / regression-worthy fix → add the test in the same change; don't defer it to "later."
 - "I can't test this without launching the app" is a design smell, not an excuse — name the extraction. Enforced at review by `review-dirty` Lens 4 (test-not-stale · feature-has-test · code-testable).
 
+### Test real logic, not ceremony
+Companion bound on the above: the "ships with a test" bar is for the **silent-failure class** (deployment-frame, first-run, cross-module composition) — NOT every changed line. Name the independent oracle first; if the only oracle is the implementation restated, the test is a tautological change-detector (zero forward value). A read-obvious one-liner (a falsy-vs-`None` guard) doesn't earn a test, and extracting it *solely* to make the tautology testable is over-engineering a single-use helper (cf. Simplicity First). And a UI flow with **no logic core** (a linear page sequence, unlike the auto-driver engine) isn't tested page-by-page — its testable surface is the thin pure **seams**: config assembly (`_build_config`: picked-result → launch config), where the real resolution logic + bug cluster live. The pages themselves are rendering → by-eye.
+
+**Why:** (2026-07-20) Reflexively proposed a stub-sim test for `if start_idx is not None:` → user *"what is this test… too redundant?"*. On testing TIMS → *"not like autodriver where it has sophisticated logics… if we test tims it has to be page by page."*
+
 ### Blind A/B verify presentation convention changes
 Before adopting a new presentation convention, validate via blind A/B: parallel fresh-context agents with identical questions — one reads original, one reads new. Adopt only when answers match.
 
