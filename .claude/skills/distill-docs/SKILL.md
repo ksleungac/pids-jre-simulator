@@ -37,7 +37,7 @@ Out of scope:
 - `.claude/rules/conventions.md`, `critical_lessons.md`, `redlines.md` (no dedicated audit; may fold into `/distill-rules` if bloat surfaces)
 - `.claude/skills/*/SKILL.md` (updated proactively per `feedback_proactive_skill_updates`)
 - `memory/*.md` (logs are append-only by design)
-- `TODO.md` (sweep handled by `/session-recap`)
+- `TODO.md` (now a pointer to GitHub Issues + closed-off ledger — nothing to audit)
 - `audio/_mock/main/README.md` (small + stable)
 
 ## When to run
@@ -78,7 +78,7 @@ Trust-but-verify, like `/vibe-check` does for code. False-positive findings = lo
 |---|---|
 | History note | Confirm equivalent info is in `git log --oneline -- <file>` (or the changelog has it; OR the section's content is genuinely past-tense ephemera) |
 | Code illustration | Open the referenced file and confirm the live code matches the doc's claim. If illustration is stale, removal case is stronger (incorrect illustration > no illustration) |
-| Speculative future | Grep the codebase for the speculative feature name. If zero references and no `TODO.md` entry, the speculation is fully dormant |
+| Speculative future | Grep the codebase for the speculative feature name. If zero references and no open GitHub issue, the speculation is fully dormant |
 | Cross-doc duplication | Quote the duplicate location with `file:line` (e.g. `CLAUDE.md:67`, `displays/.../upper_lcd.py:42` for an inline contract) |
 | Cumulative staleness | Read the relevant code module to confirm the doc claim is actually obsolete — not just unfamiliar |
 | Principle inflation | Diff each entry against the canonical home (`principles.md` / `conventions.md`); flag only if substantively redundant |
@@ -174,7 +174,7 @@ Recognize these patterns and don't flag them:
 1. **Discussion-first per finding.** Never delete without explicit user approval per item. Batch-approval is fine within one shape category if the user signals it.
 2. **Verify before flagging.** Quote the canonical alternative location for cross-doc dedup. Quote git log for history removal. Read the code for illustration / staleness checks. Skipping verification = false positives = lost trust.
 3. **Don't refactor while distilling.** This skill removes / merges; it does not restructure. If a doc's structure is genuinely wrong, flag it as a structural note in the wrap report and let the user decide whether to address it separately.
-4. **Respect dormant scaffolding.** If a "Future: X" section has a clear known-future trigger (e.g. ENGLISH lower-LCD eventual implementation that's already on `TODO.md`), propose moving the reference to `TODO.md` rather than deleting outright. Same logic as `/vibe-check`'s dormant-scaffolding carve-out for code.
+4. **Respect dormant scaffolding.** If a "Future: X" section has a clear known-future trigger (e.g. ENGLISH lower-LCD eventual implementation that's already an open GitHub issue), propose filing a GitHub issue for the reference rather than deleting outright. Same logic as `/vibe-check`'s dormant-scaffolding carve-out for code.
 5. **Don't expand scope mid-pass.** This skill audits the three named domain docs. If you notice bloat in CLAUDE.md / a skill / an inline contract during the pass, note it in the wrap report; don't pull it into the current proposal.
 6. **Removal-only, no rephrasing.** Don't rewrite sentences "while you're there." Each rewrite is an opportunity to introduce drift; this skill's discipline is to remove what shouldn't be there, not to improve what stays.
 

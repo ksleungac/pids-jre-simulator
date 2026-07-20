@@ -12,7 +12,7 @@ Renamed STA files + updated route.json without verifying MP3s existed → missin
 
 **Pattern:** Glob target dir → cross-reference config → report gaps → wait for confirmation → then act.
 
-**Scope:** any file rename, move, delete, overwrite, or batch operation.
+**Scope:** any file rename, move, delete, overwrite, or batch operation — including **non-file bulk mutations** (bulk `gh issue close`/`delete`, API sweeps). 2026-07-20: a PowerShell `Where-Object` filter silently matched all 34 `review-finding` issues and a `foreach { gh issue close }` mass-closed them when only #47 was intended (caught + reopened). Print the *resolved* target list and eyeball it BEFORE the destructive loop — never drive a bulk close/delete straight off an unverified filter.
 
 ---
 

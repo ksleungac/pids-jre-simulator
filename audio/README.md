@@ -68,7 +68,7 @@ Ordered by JR EAST line code. Standard fields omitted (= follows convention). En
 - **IRL:** physical through-service 久里浜 → 東京 (Yokosuka portion) → 成田空港 (Sōbu Rapid + Narita Line continuation). LCD shows combined journey with pre-Tokyo Yokosuka portion dim/passed.
 - **Sim quirks:**
   - Pre-route Yokosuka stations (横須賀 → 新橋) modeled via `pre_stops` in `route.json`; simulator's active route begins at 東京. See [DATA_FORMAT § pre_stops Array](../DATA_FORMAT.md).
-  - IRL frames swap at 千葉 (Sōbu Rapid yields to Sōtobō / Narita Line views). Modeling deferred — see [TODO.md § Display / LCD fidelity](../TODO.md).
+  - IRL frames swap at 千葉 (Sōbu Rapid yields to Sōtobō / Narita Line views). Modeling deferred — see [GitHub Issues](https://github.com/ksleungac/pids-jre-simulator/issues) (`display` label).
   - 千葉 has no STA melody IRL — terminus-only station for through-service inbound, `sta` + `sta_cut` omitted on that stop.
 - **Audio quirks:** PA = descriptive (`{station}-{dep|arr}`).
 - **Naming asymmetry:** folder `audio/sobu/` ↔ `lines.json` slug `yokosuka_sobu`. Same physical line, different namespaces. Don't conflate when refactoring either side.

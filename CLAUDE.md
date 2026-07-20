@@ -6,7 +6,7 @@ Japanese Train PA (Public Address) Simulator — pygame-based app simulating sta
 
 Before doing anything else, every session:
 
-Run `uv run _harness/session_init.py` — dumps today's + yesterday's memory, MEMORY.md index, and TODO sweep in one shot. Read the output instead of opening files individually.
+Run `uv run _harness/session_init.py` — dumps today's + yesterday's memory, MEMORY.md index, and the GitHub-Issues backlog summary (open by area · in-progress · recently closed · stale) in one shot. Read the output instead of opening files individually.
 
 `principles.md`, `conventions.md`, `critical_lessons.md`, `redlines.md` auto-load as memory files — already in context.
 
@@ -15,6 +15,17 @@ Run `uv run _harness/session_init.py` — dumps today's + yesterday's memory, ME
 - **Memory files are informational only.** Rules / learnings live in their canonical home (`principles.md` / `conventions.md` / `CLAUDE.md` / domain doc / inline `# CONTRACT:` / skill), written synchronously during `/session-recap`. Codify-or-omit; no log-only middle bucket.
 - **Before any doc edit, check the placement table** in [.claude/skills/session-recap/SKILL.md](.claude/skills/session-recap/SKILL.md) — pick the narrowest-domain home.
 - **Write it down.** "Mental notes" don't survive session restarts. Capture WHY, not just WHAT — git log has what changed. Use `/session-recap` at session end.
+
+## Working loop (GitHub Issues)
+
+Backlog = **GitHub Issues** ([repo issues](https://github.com/ksleungac/pids-jre-simulator/issues)). `TODO.md` is now only a pointer + the closed-off-paths ledger. Area labels: `auto-input` · `display` · `chrome-i18n` · `distribution` · `housekeeping` · `review-finding` · `build-incident`.
+
+- **Pick up** an issue → `gh issue edit <N> --add-label in-progress` + a stamp comment (so a concurrent session/PC sees it's taken — don't double-pick).
+- **Park** it → swap `in-progress` for `deferred` + a one-line reason comment.
+- **Finish** → the commit carries `Closes #<N>` (progress commits: `Refs #<N>`); pushing to `master` auto-closes. See `/commit`.
+- **New work** surfaced mid-session → `gh issue create --label <area>`.
+
+Session start prints the open / in-progress / recently-closed / stale summary; `/session-recap` reconciles against `gh issue list` (closure is authoritative — no keyword guessing).
 
 ## Run
 

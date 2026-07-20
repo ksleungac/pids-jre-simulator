@@ -52,11 +52,13 @@ Classify each and propose canonical home. Every entry promotes or is omitted.
 
 If no corrections, state explicitly. All omits → "all N corrections omitted as passing remarks."
 
-### TODO.md sweep
-Run `uv run _harness/sweep_todo.py` — pre-digested report of section counts, likely-closed items (cross-referenced against recent commits), and stale `[x]` items. Read the report instead of parsing TODO.md manually. Then:
-- **Closed**: items shipped — propose `[x]` mark or removal.
-- **New**: deferred design Qs, dangling follow-ups surfaced this session.
-- **Rephrase**: items whose framing rotted. **No changes**: state explicitly.
+### Issue backlog reconcile (GitHub Issues)
+Closure is authoritative — a pushed commit with `Closes #N` already closed the issue, so there's no fuzzy matching. Then:
+- **Closed this session**: `gh issue list --state closed --search "closed:>=<last-session-date>"` — confirm each maps to work that shipped (GitHub already closed them; no action needed).
+- **New**: deferred design Qs / dangling follow-ups surfaced this session → `gh issue create --label <area>`.
+- **Deferred**: work parked mid-flight → issue keeps a `deferred` label + a reason comment (not closed).
+- **Stale**: `gh issue list --label in-progress --search "updated:<<14d-ago>"` — an `in-progress` issue gone quiet is either done (close it) or truly parked (→ `deferred`).
+- **No changes**: state explicitly.
 
 ### Documentation updates (will land after Step 2 approval)
 - List target files and sections.
@@ -108,7 +110,7 @@ Consult this before ANY doc write, not only at recap time.
 | Test suite + tier hierarchy | `_tests/README.md` | rules files, CLAUDE.md |
 | Daily session logs | `memory/YYYY-MM-DD.md` | rules files |
 | Long-term memory index | `memory/MEMORY.md` | — |
-| Open work items | `TODO.md` | daily logs |
+| Open work items | **GitHub Issues** (`gh issue`) | `TODO.md`, daily logs |
 
 **Region-scoped vs primitive-scoped test:** if the rule names a language/library primitive callable anywhere → primitive-scoped (needs `conventions.md` + inline CONTRACT). If precondition is "editing this code region" → region-scoped (inline-only sufficient).
 

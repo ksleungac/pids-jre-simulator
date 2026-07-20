@@ -236,7 +236,7 @@ Graduate BOTH (E235-0 + editor), E235-0 first. The git merge was a single clean 
 7. ~~**P2 skill**~~ **DONE** → `.claude/skills/calibration-editor/SKILL.md` (launch + suffix table + add-an-element runbook with the badge/PA-hint worked example + new-model fork runbook + two-tier model + AST caveat). **This skill is now the canonical home for the editor mechanics** — the reference sections above (param-suffix convention, region-rect pattern, per-element dict shape, keybindings) are superseded by it; they remain here only until the route bar lands and this doc dissolves.
 8. **Dissolve this WIP doc** — **BLOCKED on the route bar.** Once the route bar + lower-view dispatch land, absorb any residual notes into the skill / `DISPLAY_E235.md` and delete this file.
 
-**Deferred:** P4 lint gate + the route bar / lower-view dispatch (both → TODO.md).
+**Deferred:** P4 lint gate + the route bar / lower-view dispatch (both → GitHub Issues).
 
 E233-0 (next model) then forks a fully-proven, already-exercised, editor-native `e235_0` from day one.
 
@@ -244,4 +244,4 @@ E233-0 (next model) then forks a fully-proven, already-exercised, editor-native 
 
 ## Trigger to graduate
 
-This doc deletes at Merge-plan Phase 2 step 8 — once the **route bar + lower-view dispatch** complete P5 (`e235_0` fully wired). P1 (code standard), P2 (skill), P3 (editor on master), and P5-upper are already on master (2026-06-23); the editor-mechanics story has landed in `conventions.md` + the `/calibration-editor` skill. P4 (lint gate) is deferred and tracked in TODO.md — it does NOT block dissolution.
+This doc deletes at Merge-plan Phase 2 step 8 — once the **route bar + lower-view dispatch** complete P5 (`e235_0` fully wired). P1 (code standard), P2 (skill), P3 (editor on master), and P5-upper are already on master (2026-06-23); the editor-mechanics story has landed in `conventions.md` + the `/calibration-editor` skill. P4 (lint gate) is deferred and tracked in GitHub Issues — it does NOT block dissolution.

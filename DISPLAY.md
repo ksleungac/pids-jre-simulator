@@ -12,7 +12,7 @@ Train-family scope and in-spec/best-effort policy live in [CLAUDE.md](CLAUDE.md)
 > - Per-sub-series renderer details (E235-1000's linear bar, E235-0's circular full-route, transfer-info pipeline) — those live in [DISPLAY_E235.md](DISPLAY_E235.md) and future per-series docs
 > - History notes / change logs (`### 2026-03-14`, "pre-X behavior", "Key Changes from legacy …") — `git log` has this
 > - Code-snippet illustrations of how a class looks — link `file:line` instead
-> - Speculative future sections ("When X is implemented, …") — defer until needed; `TODO.md` is the home for pending designs
+> - Speculative future sections ("When X is implemented, …") — defer until needed; GitHub Issues is the home for pending designs
 > - Design-discussion rationale (multi-paragraph framings of *why* a model exists) — the rule lives here; the rationale lives in `memory/YYYY-MM-DD.md`
 > - Facts already in [CLAUDE.md](CLAUDE.md) mental model / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
 >
@@ -307,7 +307,7 @@ A non-final frame's right edge (the junction) is a continuation, NOT a terminus 
 - Full-route: `_get_stops_list_disp` sets the tail slot (slot 2 two-row / slot 0 single-row) from the SAME comparison — `_frame_global_lo + window_last < len(_full_display_stops) - 1`. Symmetric with 8-station; no draw-side override.
 - **Drawing fix (8-station)**: when the train stops ON the last visible cell, `draw_times` skips that cell's 分-area, so the continuity triangle would float past the red pentagon. The 分-area bar extension is painted before the pointer (pentagon overdraws it) so the triangle always connects to the route bar.
 
-> **Pending IRL verification**: continuity arrow at the screen-edge / row-end case (full-route chevrons + 8-station triangle) when a frame boundary lands at a row end — see `TODO.md`.
+> **Pending IRL verification**: continuity arrow at the screen-edge / row-end case (full-route chevrons + 8-station triangle) when a frame boundary lands at a row end — see [GitHub Issues](https://github.com/ksleungac/pids-jre-simulator/issues).
 
 ---
 

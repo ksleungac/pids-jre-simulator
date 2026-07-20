@@ -45,7 +45,7 @@ The Scope rule above governs WHICH FILES. WHICH LINES within them is a separate 
 ### Fix-confidence gating on surfaces you didn't build
 The Scope rule (above) excludes files you didn't touch. A sharper axis applies when the run IS in scope but you lack the DESIGN context — a release-prep / whole-code scan of features built across prior sessions, not your own diff. There, gate each finding on **fix-confidence**, not file-ownership:
 - **obvious-safe** — mechanical, zero behavioral ambiguity (hard-rule violation, palette / canonical-source derivation, dead code with grep-confirmed zero callers, stale docstring/comment) → apply inline.
-- **needs-context** — requires the module's design / layout-calibration / state-machine intent → **defer to TODO `## Deferred review findings`**; do NOT fix blind.
+- **needs-context** — requires the module's design / layout-calibration / state-machine intent → **defer to a GitHub issue** (`gh issue create --label review-finding`); do NOT fix blind.
 
 A "looks safe" fix on code you don't understand is exactly how review+fix introduces new bugs. Have the reviewer tag every finding with this flag (obvious-safe | needs-context) so triage is mechanical. Real bugs on out-of-focus surfaces still get LOGGED (not dropped) — deferral is not dismissal. (2026-07-16: user — *"your fixer does not have context for working on these tasks, might introduce new bugs, so delve to TODO for nonobvious tasks."*)
 
@@ -129,35 +129,37 @@ done
 
 ## Triage policy for deferred findings
 
-When you (main agent) decide to defer a finding rather than fix it during a cycle, route it to **TODO.md `## Deferred review findings`** regardless of severity. The daily-log routing path (`memory/YYYY-MM-DD.md`) is **not used** — daily logs are narrative continuity / metacognitive observations only per `session-recap/SKILL.md`. Code-related obligations live as forward state in TODO.md.
+When you (main agent) decide to defer a finding rather than fix it during a cycle, file it as a **GitHub issue** (`gh issue create`) regardless of severity. The daily-log routing path (`memory/YYYY-MM-DD.md`) is **not used** — daily logs are narrative continuity / metacognitive observations only per `session-recap/SKILL.md`. Code-related obligations live as forward state in the issue backlog.
 
 ### Routing rule
 
-| Severity | Where it goes |
+Every deferred finding → a GitHub issue with the `review-finding` label (plus the area label — `auto-input` / `display` / `chrome-i18n` / … — so it groups on the board).
+
+| Severity | Files an issue? |
 |---|---|
-| `architectural-critical` | TODO.md `## Deferred review findings` (real obligation, must surface at startup) |
-| `critical` | TODO.md `## Deferred review findings` |
-| `warning` | TODO.md `## Deferred review findings` |
-| `info` | TODO.md `## Deferred review findings` if user explicitly defers OR you auto-defer with a real reason. **Drop** if the ASK-flag was answered "not real" (no value tracking these). |
+| `architectural-critical` | yes — surfaces in the session-start backlog summary |
+| `critical` | yes |
+| `warning` | yes |
+| `info` | yes if the user explicitly defers OR you auto-defer with a real reason. **Drop** if the ASK-flag was answered "not real" (no value tracking these). |
 
 ### Dedup logic
 
-For each finding to be logged, dedup by `<file>:<line>` + issue summary:
+For each finding to be filed, dedup by `<file>:<line>` + summary:
 
-1. **Already in TODO.md `## Deferred review findings`?** → skip (no duplicate in backlog). Optionally bump a recurrence counter in the existing entry's parenthetical (`recurred X times across [date list]`).
-2. **Otherwise (first occurrence)**: append per the format below.
+1. **Already an open issue?** — `gh issue list --state open --label review-finding --search "<file basename>"`, scan titles/bodies. Match → skip; add a comment bumping recurrence (`recurred <date>`).
+2. **Otherwise (first occurrence)** → create per the format below.
 
-### TODO.md entry format
-
-Append to TODO.md under section `## Deferred review findings` (create section if not present, place at end before `## Closed-off paths`):
+### Issue format
 
 ```
-- [ ] **<issue summary>** — `<file>:<line>` (lens N, severity; rule: <citation if any>; first flagged YYYY-MM-DD; recurred X times across [date list]) — Deferred because: <why>
+gh issue create --label review-finding --label <area> \
+  --title "<summary> — <file>:<line>" \
+  --body "lens N, severity; rule: <citation if any>; first flagged YYYY-MM-DD — Deferred because: <why>"
 ```
 
 ### Lifecycle
 
-Entries are checkbox-tracked in TODO.md; mark `[x]` and move to `## Closed-off paths` (with a `~~strikethrough~~` line + brief resolution note) when fixed. If the user explicitly says "not a real issue", remove the entry rather than tag it — matches the project's "no log-only middle bucket" rule.
+The issue closes when the fix lands — `Closes #<N>` in the fix commit (auto-closes on push to `master`) or `gh issue close`. If the user says "not a real issue", close it (`--reason "not planned"`) or delete — matches the project's "no log-only middle bucket" rule.
 
 ### Step 3: Final summary
 ```bash

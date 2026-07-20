@@ -11,7 +11,7 @@ App-level runtime + the setup / chrome flow. Canonical home for app-level specs 
 > - Chrome / font / interaction *rules* → [conventions.md § UI code style](.claude/rules/conventions.md) — cross-reference, don't restate
 > - History notes / change logs / iteration tuning numbers — `git log` + `memory/YYYY-MM-DD.md` have this
 > - Code-snippet illustrations of how a class looks — link `file:line` instead
-> - Speculative future designs ("when X is implemented …") — `TODO.md` is the home
+> - Speculative future designs ("when X is implemented …") — GitHub Issues is the home
 > - Facts already in [CLAUDE.md](CLAUDE.md) mental model — cross-reference, don't restate
 >
 > **Voice:** reference-shaped entries (runtime map, screen table, flow contracts) — caveman-full voice (drop articles, fragments OK, `=` for definitional equivalence). Rationale-shaped passages (incident traces, "why" framings) — stay normal voice. See [CLAUDE.md § Chat output style](CLAUDE.md).
@@ -91,7 +91,7 @@ Codes mirror the real TIMS register (`C07AC` / `X00AA` photographed; the rest pl
 
 ### Route selection (route → station → diagram)
 Reached from **C07AA's 選擇路綫** button. Real TIMS route-selection screens backed by existing `route.json` (no bespoke per-line logic). Flow: **C07AB route → C07AC start station → C07AF run-pattern (diagram).**
-- Boxes show the **basic line name** (`route.json` `route` stripped to the primary line; through-service / 直通 combined names dropped — mapping DEFERRED, see `TODO.md`). This `route` is also the LCD upper-display name.
+- Boxes show the **basic line name** (`route.json` `route` stripped to the primary line; through-service / 直通 combined names dropped — mapping DEFERRED, see [GitHub Issues](https://github.com/ksleungac/pids-jre-simulator/issues)). This `route` is also the LCD upper-display name.
 - Start-station grid **excludes passing stations** (empty `pa`/`sta`/`time` per `DATA_FORMAT.md § Skipping Stations`); maps the pick back to the full stop index.
 - C07AF lists **only diagrams that STOP at the chosen start station**; the station grid is built from `variants[0]` (always stops there → never empty). Changing start resets the pattern pick.
 

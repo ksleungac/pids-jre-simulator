@@ -47,4 +47,5 @@ For bulk additions: subject names the largest change; body enumerates the rest w
 - Prepend `CLAUDE_COMMIT_VIA_SKILL=1` — mandatory; the PreToolUse hook blocks `git commit` without this marker.
 - Use Bash (not PowerShell) for the commit: `CLAUDE_COMMIT_VIA_SKILL=1 git commit -m "$(cat <<'EOF' ... EOF)"`.
 - Include `Co-Authored-By:` trailer — read the exact model name from the session system info (e.g. `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`). Never guess; the system info is always present.
+- **Link the GitHub issue** — if the change advances or finishes an issue, add a trailer beside `Co-Authored-By:`: `Closes #N` on the finishing commit (pushing to `master` auto-closes it), `Refs #N` on a progress commit. One line per issue. A ghost ID (no such issue) is a typo — verify the number before committing.
 - Verify with `git status --short` after.

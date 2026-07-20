@@ -9,7 +9,7 @@ Per-series renderers for the E235 train family. Two sub-series ship today: **E23
 > **Refuses:**
 > - History notes / change logs (`### 2026-03-14`, "pre-X behavior", "Key Changes from legacy …") — `git log` has this
 > - Code-snippet illustrations of how a class looks — link `file:line` instead
-> - Speculative future sections ("When X is implemented, …") — defer until needed; `TODO.md` is the home for pending designs
+> - Speculative future sections ("When X is implemented, …") — defer until needed; GitHub Issues is the home for pending designs
 > - Design-discussion rationale (multi-paragraph framings of *why* a model exists) — the rule lives here; the rationale lives in `memory/YYYY-MM-DD.md`
 > - Facts already in [CLAUDE.md](CLAUDE.md) mental model / [DISPLAY.md](DISPLAY.md) cross-model infra / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
 >
