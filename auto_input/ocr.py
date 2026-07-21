@@ -66,6 +66,23 @@ BADGE_DIFF_REJECT = 50.0
 # bleed-through can land in the gray zone (~80-150). Threshold of 70 keeps text but
 # excludes gray scenery noise — matches the user's "boost the dark" intuition.
 DARK_THRESHOLD = 70
+# Adaptive-threshold bounds. DARK_THRESHOLD above is the FALLBACK; the live threshold is
+# derived per-cell by Otsu over the text band (see _cell_dark_threshold). A fixed global
+# threshold cannot work here: the HUD is semi-transparent, so background scenery brightness
+# moves the pixel levels under the text. Measured over 2442 live frames — a bright surface
+# background clipped a digit's anti-aliased edge column, binarizing the SAME `4` at 13px
+# where a dark tunnel background gave 16px; adaptive thresholding collapses that (per-digit
+# modal-width purity 89.2% -> 95.5%, the 13/14px clipped forms to zero) with ZERO read
+# changes on real drive frames.
+# The CLAMP is not cosmetic: bare Otsu on a cell with NO text splits sensor noise and
+# hallucinates digits (measured: uniform bg 240 -> read "79", bg 160 -> "9207", bg 10 ->
+# "77600"). Empty cells are normal — `read_speed_limit` gets them on every line with no
+# posted limit. Clamping keeps those reading empty.
+OTSU_CLAMP_LO = 55
+OTSU_CLAMP_HI = 100
+# Below this dynamic range the band is effectively uniform (no text, or a washed-out frame)
+# and Otsu's split is meaningless — fall back to the fixed threshold.
+OTSU_MIN_CONTRAST = 60
 COLUMN_TEXT_MIN = 2  # need > this many dark px in a column for "has text"
 ROW_TEXT_MIN = 1
 # Restrict column-scan to this y-band within the value cell. Excludes top/bottom borders and
@@ -82,6 +99,16 @@ DIGIT_MAX_W = 30
 DECIMAL_MAX_H = 10
 DECIMAL_MAX_W = 7
 DECIMAL_BASELINE_FRACTION = 0.55  # decimal sits in bottom ~half of the text band
+# Minimum clear gap (px, 1440p) between the last DIGIT-sized run and a decimal-point
+# candidate. A real decimal sits in a gap after its digit; a digit that FRAGMENTS on a
+# degraded frame leaves a 1-column stub immediately abutting its own body, and that stub
+# is dimensionally indistinguishable from a dot (short, narrow, low). Requiring a gap is
+# what separates them. Live 2026-07-22: a `4` shed a w=1 h=3 stub 1 px past its body at
+# 1080p; the scan took it as the decimal and cut the read to `4` (true 48.3). Measured
+# margin: fragments abut at 1 px, real dots clear by 4-5 px (1080p), so 4 @1440p (3 @1080p)
+# sits between with room on both sides. Do NOT drop this when tuning the dot scan — it is
+# the counterweight to the 1-column tolerance, which is what admits stubs in the first place.
+DECIMAL_MIN_GAP = 4
 # Stop accepting digits at the first large horizontal gap. Inter-digit gaps span
 # 3-18 px depending on which digits are adjacent (narrow '1' kerns very wide vs another '1').
 # DISTANCE_MAX_GAP=20 keeps consecutive digits together; anything past the 'm' has a much
@@ -135,6 +162,7 @@ class SegConfig:
     digit_max_w:      int             = DIGIT_MAX_W
     decimal_max_h:    int             = DECIMAL_MAX_H
     decimal_max_w:    int             = DECIMAL_MAX_W
+    decimal_min_gap:  int             = DECIMAL_MIN_GAP
     distance_max_gap: int             = DISTANCE_MAX_GAP
     speed_max_gap:    int             = SPEED_MAX_GAP
     sign_band_y:      tuple[int, int] = SIGN_BAND_Y
@@ -168,6 +196,7 @@ def seg_for_scale(scale: float) -> SegConfig:
         digit_max_w=sc(DIGIT_MAX_W),
         decimal_max_h=sc(DECIMAL_MAX_H),
         decimal_max_w=sc(DECIMAL_MAX_W),
+        decimal_min_gap=sc(DECIMAL_MIN_GAP),
         distance_max_gap=sc(DISTANCE_MAX_GAP),
         speed_max_gap=sc(SPEED_MAX_GAP),
         sign_band_y=sc2(SIGN_BAND_Y),
@@ -275,6 +304,44 @@ def load_speed_cell(screenshot_path: Path) -> np.ndarray:
     return speed_cell_from_surface(pygame.image.load(str(screenshot_path)))
 
 
+def _cell_dark_threshold(cell: np.ndarray, seg: "SegConfig | None" = None) -> float:
+    """Per-cell ink/background split, by Otsu over the text band. Falls back to DARK_THRESHOLD.
+
+    MUST be the single source of the threshold for BOTH `segment_chars` (which finds the
+    glyph boxes) and `extract_glyph` (which binarizes the pixels inside them). If those two
+    disagree the box and its contents are computed under different rules, and the glyph no
+    longer matches its own bounding box.
+
+    See OTSU_CLAMP_LO / OTSU_MIN_CONTRAST for why the result is clamped and guarded — an
+    unclamped Otsu on an empty cell invents digits out of sensor noise.
+    """
+    _seg = seg or SEG_DEFAULT
+    band_top, band_bot = _seg.text_band_y
+    band = cell.mean(axis=2)[band_top:band_bot]
+    if band.size == 0:
+        return float(DARK_THRESHOLD)
+    lo, hi = float(band.min()), float(band.max())
+    if hi - lo < OTSU_MIN_CONTRAST:
+        return float(DARK_THRESHOLD)  # uniform band: no ink to separate
+    hist, edges = np.histogram(band, bins=64, range=(0.0, 255.0))
+    total = hist.sum()
+    if total == 0:
+        return float(DARK_THRESHOLD)
+    centers = (edges[:-1] + edges[1:]) / 2.0
+    w0 = np.cumsum(hist)
+    w1 = total - w0
+    valid = (w0 > 0) & (w1 > 0)
+    if not valid.any():
+        return float(DARK_THRESHOLD)
+    csum = np.cumsum(hist * centers)
+    m0 = np.divide(csum, w0, out=np.zeros_like(csum), where=w0 > 0)
+    m1 = np.divide(csum[-1] - csum, w1, out=np.zeros_like(csum), where=w1 > 0)
+    between = w0 * w1 * (m0 - m1) ** 2
+    between[~valid] = -1.0
+    thr = float(centers[int(np.argmax(between))])
+    return float(min(max(thr, OTSU_CLAMP_LO), OTSU_CLAMP_HI))
+
+
 def segment_chars(
     cell: np.ndarray,
     max_gap: int = DISTANCE_MAX_GAP,
@@ -298,7 +365,7 @@ def segment_chars(
     """
     _seg = seg or SEG_DEFAULT
     gray = cell.mean(axis=2)
-    dark = gray < DARK_THRESHOLD
+    dark = gray < _cell_dark_threshold(cell, _seg)
     band_top, band_bot = _seg.text_band_y
     band = dark[band_top:band_bot]
 
@@ -345,6 +412,10 @@ def segment_chars(
         # reason. A real digit run is far wider than decimal_max_w and taller than
         # decimal_max_h, so this stays a strict decimal-only match. See segment_chars
         # docstring + auto_input/README.md § "Decimal-stop".
+        # `prev_digit_end` tracks the right edge of the last DIGIT-sized run only — a
+        # rejected small run must NOT advance it, or a fragment would shield the next
+        # candidate behind its own (zero) gap.
+        prev_digit_end: int | None = None
         for x0, x1 in col_runs:
             sub = band[:, x0:x1]
             ys = np.where(sub.sum(axis=1) > 0)[0]
@@ -354,8 +425,13 @@ def segment_chars(
             h = int(ys[-1] - ys[0]) + 1
             top = band_top + int(ys[0])
             if h <= _seg.decimal_max_h and w <= _seg.decimal_max_w and top >= baseline_y:
-                decimal_x = x0
-                break
+                # Dot-shaped. Accept only if it stands CLEAR of the preceding digit —
+                # otherwise it is that digit's own shed fragment. See DECIMAL_MIN_GAP.
+                if prev_digit_end is None or (x0 - prev_digit_end) >= _seg.decimal_min_gap:
+                    decimal_x = x0
+                    break
+            else:
+                prev_digit_end = x1
 
     digits: list[tuple[int, int, int, int]] = []
     for bb in shape_filtered:
@@ -367,12 +443,18 @@ def segment_chars(
     return digits
 
 
-def extract_glyph(cell: np.ndarray, bbox: tuple[int, int, int, int]) -> np.ndarray:
-    """Crop a tight bbox from cell; binarize to 0/1 uint8."""
+def extract_glyph(cell: np.ndarray, bbox: tuple[int, int, int, int], seg: "SegConfig | None" = None) -> np.ndarray:
+    """Crop a tight bbox from cell; binarize to 0/1 uint8.
+
+    Thresholds via `_cell_dark_threshold` on the WHOLE cell — the same value segment_chars
+    used to find this bbox. Passing the cell (not the crop) is what keeps them identical;
+    thresholding the crop alone would compute a different split from a different histogram.
+    """
     x0, y0, x1, y1 = bbox
+    thr = _cell_dark_threshold(cell, seg)
     sub = cell[y0:y1, x0:x1]
     gray = sub.mean(axis=2)
-    return (gray < DARK_THRESHOLD).astype(np.uint8)
+    return (gray < thr).astype(np.uint8)
 
 
 @dataclass
@@ -380,11 +462,15 @@ class Templates:
     glyphs: dict[str, np.ndarray]  # char -> binary glyph
 
     def match(self, glyph: np.ndarray) -> tuple[str, float]:
-        """Return (best_char, score) where score is fraction of matching pixels."""
+        """Return (best_char, score) — best over the tolerant variant set.
+
+        Uses `compare_tolerant`, NOT bare `compare`: a glyph clipped by sub-pixel phase
+        must still match its own template. See compare_tolerant.
+        """
         best_char = "?"
         best_score = -1.0
         for ch, tmpl in self.glyphs.items():
-            score = compare(glyph, tmpl)
+            score = compare_tolerant(glyph, tmpl)
             if score > best_score:
                 best_score = score
                 best_char = ch
@@ -411,6 +497,57 @@ def compare(a: np.ndarray, b: np.ndarray) -> float:
     if a.shape != b.shape:
         b = _resize_nn(b, a.shape[0], a.shape[1])
     return float((a == b).sum() / a.size)
+
+
+def _erode1(arr: np.ndarray) -> np.ndarray:
+    """Cross-kernel binary erosion by 1 px — the inverse of _dilate_binary's step."""
+    p = np.pad(arr, 1, constant_values=0)
+    return (p[1:-1, 1:-1] & p[:-2, 1:-1] & p[2:, 1:-1] & p[1:-1, :-2] & p[1:-1, 2:]).astype(arr.dtype)
+
+
+def compare_tolerant(glyph: np.ndarray, tmpl: np.ndarray) -> float:
+    """Best `compare` score over renderings of `tmpl` that tolerate capture degradation.
+
+    Bare `compare` demands the glyph be a pixel-faithful scaling of the template, and a
+    real capture is not. Two degradations dominate at 1080p, both measured live:
+
+    * **Sub-pixel phase.** The HUD number sits at a fractional x that jitters frame to
+      frame, so a digit's edge column sometimes falls under DARK_THRESHOLD and the glyph
+      binarizes 2-3 px NARROWER. `compare` then squashes a full-width template onto the
+      clipped glyph, misaligning every stroke. Live 2026-07-22: a `4` starting at x=44
+      measured w=13 and scored 0.746, while the same digit starting at x=43 measured w=16
+      and scored 0.957 — one pixel of start offset, 0.21 of score. The fix is to render the
+      template at its NATURAL aspect for the glyph's height and take the left/right window
+      (a clipped glyph lost an edge, it was not squeezed).
+    * **Ink bleed.** A softer frame thickens strokes until an open counter closes (a `7`
+      scoring as `8`), so dilate/erode variants are scored too.
+
+    BOTH variant families are required; neither alone is enough. Measured over 724 clean
+    unambiguous live glyphs put through synthetic degradation — read accuracy:
+
+        degradation   bare-compare   window-only   window+morph
+        thicken            100.0%         90.5%         100.0%
+        thin                92.8%         92.8%         100.0%
+        clip L/R           100.0%        100.0%         100.0%
+
+    **Do not judge this by the top-2 margin.** Tolerance lifts the runner-up as well as the
+    winner, so margin COMPRESSES (glyphs under 0.10 margin went 51 -> 381) while accuracy
+    IMPROVES — the ordering is what survives, not the gap. Margin looked like the stability
+    metric and is not; accuracy-under-degradation is. Validated across 1522 live frames:
+    exactly one read changed, the known truncation, and it changed to the correct value.
+    """
+    h, w = glyph.shape
+    cands = [_resize_nn(tmpl, h, w) if tmpl.shape != glyph.shape else tmpl]
+    # Natural-aspect window: handles the clipped-glyph case without squashing.
+    nat_w = max(1, int(round(tmpl.shape[1] * h / tmpl.shape[0])))
+    if nat_w > w:
+        big = _resize_nn(tmpl, h, nat_w)
+        cands.append(big[:, :w])
+        cands.append(big[:, nat_w - w :])
+    for v in list(cands):
+        cands.append(_dilate_binary(v.copy(), 1))
+        cands.append(_erode1(v))
+    return max(float((glyph == c).sum() / glyph.size) for c in cands)
 
 
 def build_templates(assets_dir: Path | None = None) -> Templates:

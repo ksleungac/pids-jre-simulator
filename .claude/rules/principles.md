@@ -87,7 +87,7 @@ Before claiming "X is a bug" or "X works like Y", read the call sites and trace 
 **Why:** Reasoning from cached impression instead of re-reading source already in context. Examples:
 - (2026-06-10) Claimed `preview_display.py` is "mock-only" from CLAUDE.md's bare `uv run preview_display.py` example; its docstring documents `--route`. A usage example shows one invocation, not the tool's full capability.
 - (2026-05-08 PM) Defended green ring on Yamanote time circle across multiple pushbacks; user: *"there is NO green ring."* Code and doc were stale relative to user's IRL mental model.
-- (2026-05-12) Filled audio/README JJ from folder structure alone; route.json showed JJ is WIP. Folder shape ≠ data completeness.
+- (2026-07-22) Took an OCR frame's "true" value from the NEIGHBOURING frame's filename instead of rendering its glyphs; invented a non-existent digit-confusion bug, filed it as an issue, and wrote it into the README and a test docstring. Rendering the pixels took one command and showed the read was already correct. A neighbouring sample is not the sample.
 - (2026-05-29) Concluded a feature "already shipped at v0.5.3a" from `git log -S` string-match + tag ancestry; correct method = read commit messages `v<prev>..HEAD` + code at the tag. User lost confidence in release-note drafting.
 - (2026-06-12) Theorized SVG-deployment risk across ~2 rounds; the user had already shipped that exact pattern (`data/line_icons/` SVG-sourced PNGs). Resolved only after reading `setup.py`. Don't raise a hypothetical risk the repo may have already solved.
 - (2026-07-16) Reasoned about the auto-driver layer model from a stale preloaded `conventions.md` binding that mislabelled badge reads as "Layer 2"; the canonical `auto_input/README.md` has them as Layer 3 inputs. Trusted the preloaded summary over the doc for several rounds. A preloaded rules-file summary of a domain model may have drifted — read the canonical doc before reasoning about the model, not after being told.
@@ -269,6 +269,17 @@ JSON files = irreducible authored content. Runtime structure = what the loader c
 ### Per-source ad-hoc scripts, not maintained libraries
 When format varies between batches, generate a fresh script per source. Don't unify into one master tool.
 
+### Hand-author the mapping; a script only executes it
+For a one-off data migration (renames, merges, restructures), what-maps-to-what is authored by hand into an explicit table and checked row by row. A script may apply that table; it must not derive it.
+
+**Why:** an inferred mapping is wrong in ways a dry-run diff doesn't advertise — every row looks plausible. Examples:
+- (2026-07-22) audio-pool restructure: one script both derived and applied the PA renames. Its dry run failed to collapse the two genuinely-identical pairs (identity test too strict) and suffixed the 東京 announcement with a train type because that announcement names a transfer line sharing the substring. User, before the second bug surfaced: *"script is where you will things wrong."* Hand migration against a checked table found two further errors the script had made.
+
+**How to apply:**
+- If a heuristic (substring match, filename pattern, positional guess) picks the target, that's derivation — do it by hand.
+- Code stays welcome for *verification* (does every old file have a twin in the new layout) and measurement.
+- Scope: one-off migrations. Repeatable per-source processing scripts are unaffected.
+
 ### Backup before in-place destructive modification
 Before re-encoding / overwriting / deleting files in place, snapshot the target first. Mention the safety net in the pre-flight summary.
 
@@ -327,6 +338,17 @@ Touch only what the task requires. Don't expand edit scope autonomously.
 - **Bug in an existing state machine → enforce its model, don't add state.** When a bug appears in a designed state machine, first check whether an existing invariant already resolves it and enforce that at the one violating site — before introducing new flags/state. (2026-07-16) A re-entry silent-advance ate a departure PA; I proposed a new `synced` flag, but the fix was a one-line deletion enforcing the existing "PASSING ≡ MOVING (arrival aside)" invariant. User: *"don't complicate … the state machines we've discussed should be complete about these."*
 - The test: every changed line should trace directly to the user's request.
 
+### A measurement is a claim until the instrument is calibrated
+A tool's output is not the fact it was meant to establish. Before a comparison / detection / similarity verdict drives a decision, run it on a case whose answer is already known — and know which direction it fails in.
+
+**Why:** every method has a failure mode that looks like a confident answer. Examples:
+- (2026-07-22) "Are these two mp3s the same recording" answered three times by three instruments, each wrong the same way: byte hash (ID3 tags + encoder padding → 9/13 pairs called "different"), strided cross-correlation (5 ms lag grid at 48 kHz → sample-identical audio scored 0.03, and a false "PA is 0% shareable across all 32×25 pairs"), whole-file chroma (conflated the melody with the station-specific announcement after it). Every report was faithful to its tool; no tool could answer the question. Resolved by threshold-free methods — silence-trimmed PCM hash, plus FFT correlation which evaluates every lag.
+
+**How to apply:**
+- Feed it a known-same and a known-different case first. A method that can't return "same" on a known-same is measuring something else.
+- Similarity / threshold methods fail toward "different": a negative is weak evidence, a positive is strong. Prefer an exact, thresholdless method where one exists.
+- The user asserting a contrary fact about their own domain outranks the instrument — re-check the instrument, not the assertion.
+
 ### Test the change, not just the bug
 Exercise the change's full blast radius before saying done. Smoke test on the bug-fix target is necessary but not sufficient.
 
@@ -378,6 +400,17 @@ A recovery / degraded / catch-up path that is *quieter* or *less reversible* tha
 - Write the primary's and the fallback's trigger conditions next to each other and ask which needs more evidence. If it's the primary, that's the bug — independent of whichever symptom brought you here.
 - Prefer partitioning the input domain (disjoint bands) over ordering the checks; ordering relies on the earlier check firing, partitioning cannot invert.
 - Frequency of fallback engagement is a *metric*, not noise — instrument it, since it counts exactly the primary's misses.
+
+### Validate against the outcome, not a proxy
+Pick the metric that IS the thing you care about. A proxy that correlates in the normal regime can invert exactly where the change bites, and a good change then looks like a regression.
+
+**Why:** the proxy is usually easier to compute, which is why it gets chosen — and why it goes unquestioned. Examples:
+- (2026-07-22) Judged an OCR matching change by the top-2 template MARGIN: it collapsed (glyphs under 0.10 margin went 51 → 381) and I called the change net-negative and nearly reverted it. Measuring the real metric — read accuracy under degradation — showed 92.8% → 100%. Tolerance lifts the runner-up along with the winner, so margin compresses while the ORDERING, which is what determines the read, improves.
+
+**How to apply:**
+- Name the outcome first ("does it read the right digit"), then ask whether the metric you are about to compute can move opposite to it. If it can, it is a proxy — go get the outcome.
+- A proxy that is a *component* of the outcome (a score, a margin, a distance) is the most dangerous kind: it looks causal.
+- When a measurement contradicts a change you reasoned carefully about, suspect the measurement once before suspecting the reasoning — then test both.
 
 ### Construction-proof model beats the next repro theory
 When static analysis keeps contradicting a reproducible observation across 2+ rounds — your trace says the bug can't happen, the user keeps seeing it — stop generating repro theories. Either instrument for ground truth, or redesign the invariant so the whole bug CLASS is impossible by construction. The Nth theory has diminishing value once analysis and observation disagree.

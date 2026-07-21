@@ -36,6 +36,7 @@ import pygame
 import soundfile as sf
 
 from .hud_layout import PROFILES
+from .sampling import GuardState, Reading, read_hud  # noqa: F401  (Reading re-exported for the 1b diagnostic)
 from .ocr import (
     DEFAULT_TEMPLATES_DIR,
     MAX_DRIVABLE_SPEED_KMH,
@@ -592,8 +593,7 @@ class AutoDriver:
     # Distance plausibility guard anchor: last VALID remaining-distance read + its ts. A read that
     # moves further from this than the train physically could (v·Δt) is a spike → held. See
     # guard_distance. Guard is active only during steady MOVING; any STOPPED/PASSING frame re-anchors.
-    _last_valid_distance: Optional[int] = field(default=None, init=False)
-    _last_valid_distance_ts: float = field(default=0.0, init=False)
+    _guard_state: GuardState = field(default_factory=GuardState, init=False)
     # Stop indices whose arrival PA is long enough to warrant the long-approach
     # lead bump (see LONG_APPROACH_PA_SEC). Probed once from audio headers on
     # thread start; empty until then. Looked up per-cycle by _lead_for.
@@ -788,54 +788,35 @@ class AutoDriver:
                         self._stop_event.wait(self.interval_s)
                         continue
 
-                    hud = profile.hud_bbox_in_capture
-                    d_cell = _crop_cell(frame, hud, profile.distance_value_bbox)
-                    s_cell = _crop_cell(frame, hud, profile.speed_value_bbox)
-                    sl_cell = _crop_cell(frame, hud, profile.speed_limit_value_bbox)
-                    b_cell = _crop_cell(frame, hud, profile.badge_bbox)
-                    badge, b_diff = classify_badge_state(b_cell, badge_anchors)
-                    s_val, s_raw, s_score = read_speed(s_cell, templates, seg=seg)
-                    # Decimal-precision speed for the LOG/report only (never a driver
-                    # decision — those key off the integer s_val). The tenths is read
-                    # against s_raw so a dropped `.0` degrades to None (→ `.0`), never a
-                    # wrong integer. See read_speed_tenths. Status band stays integer.
-                    s_tenths = read_speed_tenths(s_cell, templates, seg=seg, int_raw=s_raw) if s_val is not None else None
-                    s_decimal = (
-                        (s_val + s_tenths / 10) if (s_val is not None and s_tenths is not None) else (float(s_val) if s_val is not None else None)
-                    )
-                    # The DISTANCE cell is shared and self-identifies via color: dark text
-                    # `Nm` (distance to next stop, both transit and ~5s+ after arriving at
-                    # platform) vs green text `+/-Ncm` (stopping offset, briefly after
-                    # arrival). Run both readers unconditionally — their masks are
-                    # mutually exclusive, only one returns non-None per frame.
-                    d_val, _, d_score = read_distance(d_cell, templates, seg=seg)
-                    offset_raw, _, offset_score = read_stopping_offset(d_cell, templates, seg=seg)
-                    # Cross-attribute hardening: the phantom-prone green ±cm read is
-                    # trusted only when the badge groundtruth says STOPPED (scenery-green
-                    # bleed can fabricate a ±cm value mid-transit). Badge read is more
-                    # reliable than speed/distance, so it's the sole gate — no speed.
-                    # See _accept_stopping_offset. Rejections logged below.
-                    offset_val = _accept_stopping_offset(offset_raw, badge)
-                    # Speed limit (最高速度): line-dependent, often empty. None is normal.
-                    sl_val, _, sl_score = read_speed_limit(sl_cell, templates, seg=seg, red_templates=red_templates)
-                    # Badge-reject score gate — when the badge fails to classify (degraded
-                    # frame), drop the low-confidence digit reads BEFORE any decision, the
-                    # log, or the band sees them. See _apply_badge_reject_gate. Runs after
-                    # every read so speed/distance/limit are gated together; s_tenths/s_decimal
-                    # (log-only) follow the integer speed to None.
-                    s_val, d_val, sl_val, gated_fields = _apply_badge_reject_gate(badge, s_val, s_score, d_val, d_score, sl_val, sl_score)
-                    if "speed" in gated_fields:
-                        s_tenths = s_decimal = None
+                    # THE read path — shared verbatim with _dev_scripts/ocr_observe.py so the
+                    # diagnostic observes exactly what production does. Reader + guard ORDER is
+                    # load-bearing; the contract lives in auto_input/sampling.py. `prev_badge` is
+                    # the PRIOR frame's badge (detector.update runs after), which is what the
+                    # distance guard needs as its reference-frame signal.
                     sample_ts = time.time()
-                    # Distance plausibility guard (physical-motion gate + hold-last-good). Runs BEFORE
-                    # detector.update, so self._detector.prev_badge is the PRIOR frame's badge (the
-                    # reference-frame signal). Rejects an implausible single-frame spike, holds the last
-                    # valid distance, and re-anchors on a reference-frame change. See guard_distance.
-                    dt_dist = (sample_ts - self._last_valid_distance_ts) if self._last_valid_distance_ts else 0.0
-                    d_val, dist_rejected = guard_distance(self._detector.prev_badge, badge, d_val, self._last_valid_distance, dt_dist)
-                    if d_val is not None and not dist_rejected:
-                        self._last_valid_distance = d_val
-                        self._last_valid_distance_ts = sample_ts
+                    r = read_hud(
+                        frame,
+                        profile,
+                        templates,
+                        red_templates,
+                        badge_anchors,
+                        seg,
+                        prev_badge=self._detector.prev_badge,
+                        guard=self._guard_state,
+                        ts=sample_ts,
+                        crop=_crop_cell,
+                        accept_stopping_offset=_accept_stopping_offset,
+                        apply_badge_reject_gate=_apply_badge_reject_gate,
+                        guard_distance=guard_distance,
+                    )
+                    badge, b_diff = r.badge, r.badge_diff
+                    s_val, s_score = r.speed, r.speed_score
+                    s_tenths, s_decimal = r.speed_tenths, r.speed_decimal
+                    d_val, d_score = r.distance, r.distance_score
+                    offset_raw, offset_val, offset_score = r.raw_stopping_offset_cm, r.stopping_offset_cm, r.stopping_offset_score
+                    sl_val, sl_score = r.speed_limit, r.speed_limit_score
+                    gated_fields, dist_rejected = r.gated_fields, r.distance_rejected
+                    sl_cell = r.cells["speed_limit"]
                     if sl_val is not None and sl_score < SUSPICIOUS_SPEED_LIMIT_SCORE:
                         _dump_misread_speed_limit_cell(sl_cell, sl_val, sl_score, sample_ts)
                     # Speed-limit change-cue: stamp on a value→different-value change (drives the band's

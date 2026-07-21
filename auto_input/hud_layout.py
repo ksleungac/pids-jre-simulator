@@ -139,7 +139,7 @@ PROFILES: dict[tuple[int, int], ResolutionProfile] = {
 # signature. Top-right quadrant of 2560×1440 desktop; HUD lives entirely inside
 # this quadrant. Restricting capture to this region cuts dxcam's per-frame work
 # by ~75% versus full-desktop grabs. Production OCR path uses this; 1b dev tool
-# (`_dev_scripts/capture_game.py`) still uses full-desktop grabs against the
+# (`_dev_scripts/ocr_observe.py`) uses the same region grab as production against the
 # canonical HUD_BBOX coordinates below.
 CAPTURE_REGION_2560_1440 = _CAPTURE_REGION_2560_1440
 

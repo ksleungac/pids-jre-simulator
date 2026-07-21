@@ -30,7 +30,7 @@ This split keeps fidelity work (LCD rendering, route data, audio cuts) decoupled
 **Two integrations.** Both live in this repo and share OCR + state-machine implementation:
 
 - **In-process** (`auto_input/driver.py` `AutoDriver`) — spawned from `main.py` when **OCR Auto-PA** toggle enabled on setup screen. Runs in daemon thread, sets `PASimulator.pending_next_pa = True` at fire-time, same code path as manual PageDown. Manual-press precedence implicit: the driver gates each fire on the app's sub-state (departure only when parked, etc.), so a manual PageDown that already advanced the app makes the driver skip its own fire. Includes in-window debug panel.
-- **Separate-process** (`_dev_scripts/capture_game.py`) — standalone diagnostic script. Synthesizes PageDown via `keyboard` library, uses self-press timestamp guard for manual-press precedence. No debug panel.
+- **Observation-only** (`_dev_scripts/ocr_observe.py`) — standalone OCR corpus collector. Calls `sampling.read_hud` (THE production read path) and records what it saw: full-HUD PNGs, `reads.jsonl` with RAW beside GUARDED values, decimal speed + guard marks on the console. Fires nothing, touches no simulator state. It owns NO read logic by design — a diagnostic that re-derives any of the pipeline yields evidence about itself, not production. (Superseded `capture_game.py`, whose forked copy of the read path had drifted; that fork's synthetic-PageDown driving is gone with it — the in-process integration is the only firing path now.)
 
 ## State machine layering
 
@@ -208,7 +208,7 @@ Mechanism: single-shot `PASimulator.pending_silent_advance` (`"1A"|"1B"`) writte
 
 ## Resolution dependency
 
-Supported: **2560×1440** and **1920×1080**. `auto_input/driver.py` auto-detects at startup via bootstrap full-frame grab → `PROFILES[(w, h)]` → fatal if not found. `_dev_scripts/capture_game.py` does the same; `--res 1080p|1440p` overrides.
+Supported: **2560×1440** and **1920×1080**. `auto_input/driver.py` auto-detects at startup via bootstrap full-frame grab → `PROFILES[(w, h)]` → fatal if not found. `_dev_scripts/ocr_observe.py` does the same; `--res 1080p|1440p` overrides.
 
 **`ResolutionProfile`** (frozen dataclass, `auto_input/hud_layout.py`) — carries all per-resolution constants: `capture_region`, `hud_bbox`, `hud_bbox_in_capture`, cell bboxes (`badge_bbox`, `distance_value_bbox`, `speed_value_bbox`, `speed_limit_value_bbox`), `templates_subdir`, `badges_subdir`, `scale`. `PROFILES` dict maps `(desktop_w, desktop_h)` → profile. Adding a new resolution = add a `ResolutionProfile` entry to `PROFILES`.
 
@@ -261,12 +261,18 @@ Notes:
 ### Stage 1 — segmentation
 
 ```
-cell (RGB) → grayscale → threshold (gray < 70) → column-sum > 2 = "has text"
+cell (RGB) → grayscale → threshold (ADAPTIVE, see below) → column-sum > 2 = "has text"
                          (text band y=15..52)
                                  │
                                  ▼
             Find runs of has-text columns separated by gaps → raw bboxes
 ```
+
+**Threshold is per-cell, not a constant** (`_cell_dark_threshold`, 2026-07-22). Otsu over the text band, clamped to `[OTSU_CLAMP_LO, OTSU_CLAMP_HI]`, falling back to `DARK_THRESHOLD` when the band's dynamic range is under `OTSU_MIN_CONTRAST`. The HUD is **semi-transparent**, so background scenery brightness moves the pixel levels under the text and a fixed global split cannot hold: measured over 2442 live frames, a bright surface background clipped a digit's anti-aliased edge column so the SAME `4` binarized 13px wide where a dark tunnel background gave 16px — and a clipped glyph no longer matches its own template. Adaptive: per-digit modal-width purity **89.2% → 95.1%**, clipped forms to zero, 0 regressions (6 reads changed, all recoveries).
+
+Two non-obvious constraints, both learned the hard way:
+- **The clamp is load-bearing.** Bare Otsu on a cell with NO text splits sensor noise and hallucinates digits (uniform bg 240 → `"79"`, bg 10 → `"77600"`). Empty cells are NORMAL — `read_speed_limit` gets one on every line with no posted limit.
+- **`segment_chars` and `extract_glyph` must use the SAME threshold**, both derived from the whole cell. If they disagree, the bounding box and the pixels inside it are computed under different rules. That is why `extract_glyph` takes the cell rather than the crop.
 
 Text band excludes HUD's top/bottom borders and any scenery bleed-through near cell edges.
 
@@ -275,7 +281,7 @@ Text band excludes HUD's top/bottom borders and any scenery bleed-through near c
 Three filters in sequence:
 
 1. **Digit-shape filter**: keep only bboxes with `h ≥ 22` and `7 ≤ w ≤ 30`. Drops 'm' suffix strokes (h≈10), label tail fragments, scenery blobs.
-2. **Decimal-stop** (speed only): find the small decimal point (`h ≤ decimal_max_h, w ≤ decimal_max_w`) in the bottom half of the text band and stop accepting digits at its x-position. **Robust against gap variance**; replaces gap-based heuristic that was failing on `1x.x` and `11x.x`. **1-column-tolerant** (2026-07-20): the search scans the raw *column-runs* — not the finalized digit bboxes — with a 1-px row tolerance, because on 1080p and softer captures the dot binarizes to a single dark column (its faint edge column falls below `DARK_THRESHOLD`), which `finalize()` cannot turn into a bbox. Before this, a 1-column dot was invisible to the search and the tenths digit slipped into the integer (19.1 → `191`) on ~40% of frames of a compressed 1080p capture — the dot detection had zero margin (1440p renders it 3–4 columns wide, which is why the failure was 1080p-specific and hard to reproduce on a crisp screen). **Domain safety-net:** `read_speed` still passes the value through `_rectify_speed` — a read above the 140 km/h ceiling (drivable max 135 + slack) drops one trailing digit and re-checks (`727 → 72`, `1350 → 135`); genuine garbage → `None`. With the 1-column-tolerant stop this is now a rarely-exercised backstop rather than the primary line of defense.
+2. **Decimal-stop** (speed only): find the small decimal point (`h ≤ decimal_max_h, w ≤ decimal_max_w`) in the bottom half of the text band and stop accepting digits at its x-position. **Robust against gap variance**; replaces gap-based heuristic that was failing on `1x.x` and `11x.x`. **1-column-tolerant** (2026-07-20): the search scans the raw *column-runs* — not the finalized digit bboxes — with a 1-px row tolerance, because on 1080p and softer captures the dot binarizes to a single dark column (its faint edge column falls below `DARK_THRESHOLD`), which `finalize()` cannot turn into a bbox. Before this, a 1-column dot was invisible to the search and the tenths digit slipped into the integer (19.1 → `191`) on ~40% of frames of a compressed 1080p capture — the dot detection had zero margin (1440p renders it 3–4 columns wide, which is why the failure was 1080p-specific and hard to reproduce on a crisp screen). **Gap-guarded** (2026-07-22): a candidate is accepted only if it stands `DECIMAL_MIN_GAP` clear of the last DIGIT-sized run. The 1-column tolerance cuts both ways — on a degraded frame a digit SHEDS a 1-column stub (a `4` dropped a `w=1 h=3` fragment 1px past its own body), dimensionally identical to a dot, and the scan took it as the decimal and truncated `48.3` to `4`. A real decimal stands clear (measured 4–5px at 1080p); a shed fragment abuts at 1px. The two rules are a matched pair: **never widen the dot scan without keeping the gap guard, and never drop the gap guard while the 1-column tolerance stands.** Regression oracle: `_tests/t1_unit/test_decimal_stop.py` over a committed live cell. **Domain safety-net:** `read_speed` still passes the value through `_rectify_speed` — a read above the 140 km/h ceiling (drivable max 135 + slack) drops one trailing digit and re-checks (`727 → 72`, `1350 → 135`); genuine garbage → `None`. With the 1-column-tolerant stop this is now a rarely-exercised backstop rather than the primary line of defense.
 3. **Gap-stop** (safety net): stop accepting digits at first horizontal gap greater than `MAX_GAP`. Distance: 20 (anything past 'm' has bigger gap). Speed: 25 (relaxed because decimal-stop = primary boundary; 25 catches scenery blobs but lets through wide kerning like '1' to '1' which can be 18px).
 
 ### Stage 3 — template matching
@@ -375,7 +381,7 @@ Diff < 15 = high confidence; real reads sit there. Diff > `BADGE_DIFF_REJECT` (5
 
 ## State machine — `PaEventDetector`
 
-Lives in `_dev_scripts/capture_game.py` (1b) + `auto_input/driver.py` `_Detector` (1a, kept in sync). Tracks distance + speed + badge across samples, emits PA-fire event names on transitions.
+Lives in `auto_input/driver.py` `_Detector` — SINGLE copy since 2026-07-21 (the `capture_game.py` fork was deleted; a hand-synced duplicate silently drifted and broke). Tracks distance + speed + badge across samples, emits PA-fire event names on transitions.
 
 ### State vocabulary
 
@@ -393,7 +399,7 @@ State machine works in Layer 3 named-state vocabulary — see "State machine lay
 | `FIRE_ARRIVAL` | `badge==MOVING` AND `distance ≤ arrival_lead_m` AND `arrival_observed=False` | Fire arrival PA, set `arrival_observed=True` |
 | `FIRE_AT_STATION` | `badge==STOPPED` AND `arrival_observed=True` AND `at_station_observed=False` | Fire silent press that flips sim into STOPPING (sets `state.at_station=True`); set `at_station_observed=True` |
 
-`arrival_lead_m` = base **900m**. 1a: adjust on setup-screen Lead stepper (range 500–1500, ±100m). 1b: `--lead` on `_dev_scripts/capture_game.py`.
+`arrival_lead_m` = base **900m**, adjusted on the setup-screen Lead stepper (range 500–1500, ±100m).
 
 **Long-approach bump (auto, per-stop).** Stops whose arrival PA (`pa[1]`) runs ≥ `LONG_APPROACH_PA_SEC` (40s) fire arrival `LONG_APPROACH_BUMP_M` (+400m) earlier → effective 1300m. Probed once from audio headers on thread start (`_compute_long_approach`, soundfile header read, no decode); per-cycle `_lead_for(curr_stop)` sets `arrival_lead_m` before `update()`, so both the level-test and re-entry (`_resolve_reentry_target`) sites read it. Auto-derived per route — no route.json authoring, applies to future routes. Threshold = duration 900m can't cover at cruise (~23 m/s); flat bump (not scaled) because long PA ↔ slow approach self-compensates in distance. Replaces the old manual "1200m for transfer-heavy lines" guidance — Shinjuku / Atami / major junctions now self-bump. Rationale: `memory/2026-06-11.md`.
 
@@ -506,21 +512,19 @@ uv run main.py
 **Separate-process script** (diagnostic / observation):
 
 ```bash
-# Default — 900m arrival threshold, 5s sample interval, fires synthetic PageDowns
-uv run python _dev_scripts/capture_game.py
+# Watch the production read path live — no dumps, quick sanity check
+uv run python _dev_scripts/ocr_observe.py --no-dump
 
-# Transfer-heavy line — bump arrival threshold
-uv run python _dev_scripts/capture_game.py --lead 1200
-
-# Debug / observation mode — log OCR + events but don't send keystrokes
-uv run python _dev_scripts/capture_game.py --no-fire
-
-# Pass --route to enable PA-count cross-check
-uv run python _dev_scripts/capture_game.py --route audio/sobu/1217F
+# Collect an OCR corpus: full-HUD PNGs + reads.jsonl per sample
+uv run python _dev_scripts/ocr_observe.py --interval 0.5
 
 # Force resolution (default = auto-detect from first frame)
-uv run python _dev_scripts/capture_game.py --res 1080p
+uv run python _dev_scripts/ocr_observe.py --res 1080p
 ```
+
+Each sample dumps the WHOLE HUD region, not individual cells — so an offline sweep can
+re-crop at different bboxes to test a crop-geometry hypothesis. A cell-only dump bakes the
+suspect geometry into the evidence.
 
 **Offline calibration validation** (no live game required):
 
@@ -544,7 +548,8 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 | `setup.py` | OCR Auto-PA toggle pill + Lead/Interval steppers under route list. `_handle_band_click` updates state; selected route's Enter returns config dict including auto-input fields. |
 | `app.py` | `PASimulator`: allocates debug sub-surface in `_init_pygame`; `pending_next_pa` flag checked alongside keyboard in `_handle_input_main`; `auto_input_status` dict written by AutoDriver, read by `_render_panel()` which delegates to `status_band.render`. `MOUSEBUTTONDOWN` events in the panel area go to `_handle_band_click` (band's home/save/pause rects). `drive_log_path` attribute stashes live JSONL path so the report can find it. `run()` returns `"home"`/`"quit"`; band Home → return to setup. **No panel rendering logic lives in app.py.** |
 | `constants.py` | `DEBUG_PANEL_HEIGHT` — re-exported from `status_band.BAND_H` (single source; the band owns its height). |
-| `_dev_scripts/capture_game.py` | Standalone observation/debug script (separate process, synthetic keystrokes, optional `--route` flag for PA-count check) |
+| `auto_input/sampling.py` | **THE per-cycle read path** — `read_hud()` (crop → 4 readers → 3 guards, in a load-bearing order) + `GuardState` / `Reading`. Called by BOTH `AutoDriver` and `ocr_observe.py`, so the diagnostic cannot drift from production. Carries a `# CONTRACT:` block on the ordering. |
+| `_dev_scripts/ocr_observe.py` | Standalone OCR corpus collector — calls `read_hud`, dumps full-HUD PNGs + `reads.jsonl` (RAW beside GUARDED). Observation only, fires nothing. |
 | `_dev_scripts/test_dxcam.py` | Diagnostic — full-desktop dxcam capture + brightness check |
 | `ocr_templates/digits/*.png` | **Runtime input** — 10 pre-extracted digit glyphs (~20×30 binary PNGs). Loaded by `build_templates()`. Reused at all resolutions via NN-resize. Committed. |
 | `ocr_templates/digits_red/*.png` | **Runtime input** — 10 red-font digit glyphs (1440p). Loaded by `build_templates(red_dir)`. Committed. |
