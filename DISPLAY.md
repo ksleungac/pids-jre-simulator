@@ -57,7 +57,11 @@ Train-family scope and in-spec/best-effort policy live in [CLAUDE.md](CLAUDE.md)
 ```
 displays/
 ├── __init__.py              # Package entry point: DisplayMode, ModeCycler, get_train_model
-├── base.py                  # DisplayMode (IntEnum: KANJI=0, FURIGANA=1, ENGLISH=2), ModeCycler
+├── base.py                  # DisplayMode (IntEnum: KANJI=0, FURIGANA=1, ENGLISH=2), ModeCycler,
+│                            # ChangeScheduler + the beat schedule (beats(), *_BEATS)
+├── lower_lcd.py             # Parent LowerDisplayBase: slot cycle, transfer force-switch,
+│                            # through-service frame swap — the scheduler's contract
+│                            # (concrete renderers are per-model)
 ├── utils.py                 # Shared helpers: draw_station_code_badge, draw_route_disclaimer,
 │                            # draw_text_given_width, draw_1col_text, draw_1col_text_plain,
 │                            # arrow_points
@@ -97,7 +101,7 @@ No redundant prefixes in class names (e.g., `JapaneseDisplay` not `E235_1000Japa
 
 ### DisplayMode + ModeCycler
 
-`DisplayMode` (in `displays/base.py`) = IntEnum: `KANJI=0`, `FURIGANA=1`, `ENGLISH=2`. `ModeCycler` (same file) cycles through registered modes every `STATION_DISPLAY_INTERVAL` seconds (default 4s). Cycler keeps `enabled` flag for freezing on a forced mode.
+`DisplayMode` (in `displays/base.py`) = IntEnum: `KANJI=0`, `FURIGANA=1`, `ENGLISH=2`. `ModeCycler` (same file) holds the current mode + its timer. It does **not** tick itself — it exposes `is_due(now)` / `advance(now)` and `ChangeScheduler` drives both (see § Change scheduler). Cadence = `LANGUAGE_BEATS` (1 beat = 4s). Cycler keeps `enabled` flag for freezing on a forced mode.
 
 ### Cycler Sharing Between Upper and Lower
 
@@ -108,7 +112,7 @@ self.upper = UpperDisplay(screen, route_data, stops)
 self.lower = LowerDisplay(screen, route_data, stops, self.upper.mode_cycler)
 ```
 
-Keeps modes in lockstep without parallel timer (no drift, no re-tick). When upper switches to ENGLISH, lower switches with it. Cycler's interval, default mode, and `enabled` flag all controlled from upper side.
+Keeps modes in lockstep without parallel timer (no drift, no re-tick). When upper switches to ENGLISH, lower switches with it. Default mode + `enabled` flag controlled from upper side; the cadence and the actual ticking belong to `ChangeScheduler`.
 
 ### Cycling Behavior
 
@@ -137,7 +141,56 @@ Because the lower display has its own internal state machine for alternating bet
 
 ### ⚠️ Cycler.enabled vs Cycler.paused
 
-ModeCycler has `enabled`, **not** `paused`. To freeze a forced mode (e.g. in preview scripts), set `cycler.enabled = False`. Assigning to `paused` silently creates a new attribute that `update()` never checks — the forced mode will un-freeze after the cycle interval elapses. This has burned us before.
+ModeCycler has `enabled`, **not** `paused`. To freeze a forced mode (e.g. in preview scripts), set `cycler.enabled = False`. Assigning to `paused` silently creates a new attribute that `is_due()` never checks — the forced mode will un-freeze after the cadence elapses. This has burned us before.
+
+To freeze the language AND the lower's slot together, set `scheduler.enabled = False` — one switch for both axes (what `preview_display.py --lower-view` uses).
+
+---
+
+## Change scheduler
+
+`ChangeScheduler` (`displays/base.py`) is the single owner of every discrete view change. Constructed in `app.py` beside upper/lower; ticked once per frame from the main loop, after `update_skip_progress` (slot membership reads `cursor_pos`) and before both draws.
+
+**Change** = discrete visible mutation: language flip OR slot rotation. Continuous content (clock, countdown, skip / breath / band-fill animation) is not a change — renders every frame, untouched.
+
+### The schedule is authored in BEATS
+
+1 beat = `constants.BEAT_SECONDS` (4s) = the language cadence. Every duration is a whole beat count via `displays.base.beats(n)`, which rejects anything else:
+
+| element | beats | seconds | where |
+|---|---|---|---|
+| language | 1 | 4s | `base.LANGUAGE_BEATS` |
+| change floor | 1 | 4s | `base.CHANGE_FLOOR_BEATS` |
+| FULL / EIGHT | 3 | 12s | `LowerDisplayBase._SLOT_BEATS` |
+| TRANSFER | 2 | 8s | same |
+| swap hold | 3 | 12s | `_SWAP_HOLD_BEATS` |
+| restart logo | 1 | 4s | `_TRANSITION_BEATS` |
+
+**Why beats, not seconds** — an off-grid duration silently defers to the next allowed moment, so the number in the source stops describing the screen. Whole beats make written == observed by construction; rationale at `displays/base.py` module docstring.
+
+**Language coverage** — every (slot, language) pairing must surface eventually; there is NO requirement that one appearance of a slot spans all three languages. FULL / EIGHT dwell 3 beats = exactly the 3-language cycle, so each surfaces in every language within one appearance (the default out-of-window round trip is 3+3 = 6 beats, an exact multiple of the cycle — their starting language never rotates and doesn't need to). TRANSFER at 2 beats can't span the cycle; what covers it is the in-window round trip of 3+3+2 = 8 beats, not a multiple of 3, so its starting language rotates across successive cycles.
+
+### The floor
+
+After any change, no change of any kind for `CHANGE_FLOOR_BEATS`. At exactly one beat it doubles as the quantizer: an off-grid slot dwell defers to the next beat rather than landing mid-interval, so the rhythm is uniform without constraining what may be written.
+
+It deliberately does **not** sit below the cadence — safe only because evaluation is atomic. Rationale (the starvation trap a below-cadence floor was dodging) lives at the constant: `displays/base.py` `CHANGE_FLOOR_BEATS`.
+
+> **CONTRACT — one atomic tick per frame.** Both axes evaluate against the SAME frame-start `last_change` snapshot and apply together as one batched event, stamping `last_change` once. NOT a shared `last_change` consulted independently by upper and lower — that is exactly the starvation trap above. A due-but-blocked change is never queued: due-ness recomputes from timestamps every frame and applies on the first frame the floor allows.
+
+### Change flavors
+
+- **Scheduled** — a per-axis cadence elapsed. Deferrable by the floor.
+- **Reactive** — current slot left `_available_slots`. *Layout-invalid* (FULL after the eight-lock engages) still renders coherently → deferrable. *Content-invalid* (TRANSFER at a station that lost its transfers) would show a blank panel → treated as Preemptive, never held.
+- **Preemptive** — intent-driven, immediate, bypasses the floor and re-anchors it: the STOPPING force-switch to TRANSFER (also fired by a cross-stop jump onto a transfer-bearing stop — same rising edge), content-invalid reconcile, the restart-logo reveal, and a position change that cancels the logo. The stop force-switch fires at every stop and re-anchors the language off its cadence — accepted, transfer info must show at once. Plain paging is NOT preemptive: `_advance_to_next_stop` clears `at_station`, so no edge fires and the slot rotates on cadence.
+
+### Restart logo
+
+While `lower.transition_active`, the scheduler applies no discrete change — the screen is a static logo, and a slot mutating out of sight would flash the instant it cleared. At logo-clear it fires one Preemptive: reveal the new frame's default slot AND restart its dwell. The restart matters even when the slot is unchanged — slot timers are wall-clock, so the logo burns dwell invisibly; without it the new segment's opening view expired after one floor instead of its full 3 beats.
+
+The swap fire is the one Preemptive that is **predictable** (fixed timer from the arm), so the scheduler goes quiet for one floor before it via `lower.seconds_until_swap` — otherwise a rotation lands a frame before the logo covers it.
+
+Invariants pinned by `_tests/t3_invariant/test_change_scheduler.py` (schedule-as-spec, floor, atomic batching, boot seed, Preemptive bypass + re-anchor, logo quiet + reveal, pairing coverage).
 
 ---
 
@@ -254,7 +307,8 @@ Lower needs more per-frame state than upper (cursor_pos, skip, skip_progress, ti
 
 ```python
 self.state.update_skip_progress(timestamp)
-self.upper.update(timestamp); self.upper.draw(...)
+self.scheduler.tick(timestamp, self.state)   # every discrete change, atomically
+self.upper.draw(...)                          # pure renderers from here
 self.lower.draw(timestamp)
 pygame.display.flip()
 ```
@@ -295,7 +349,7 @@ Active frame = first frame whose global window contains the train (junction = sh
 `LowerDisplay` owns the swap (it sees the view-cycle) and pushes the lagging frame index into the active renderer via `set_active_frame`:
 
 - **Armed** at STOPPING@junction (`at_station` + position == active frame's `to_idx`, frame has a successor).
-- **Held** for a fixed `_SWAP_HOLD_DURATION` (12s) — decoupled from the view-cycle. The hold's purpose: signal the train is stopped at the frame boundary AND give the junction's exchange (transfer) info time to read (the STOPPING edge force-switches to the TRANSFER slot, so it shows immediately). NOT "exhaust every page."
+- **Held** for a fixed `_SWAP_HOLD_BEATS` (3 beats = 12s) — decoupled from the view-cycle. The hold's purpose: signal the train is stopped at the frame boundary AND give the junction's exchange (transfer) info time to read (the STOPPING edge force-switches to the TRANSFER slot, so it shows immediately). NOT "exhaust every page."
 - **Fires**: advance `_active_frame_idx`, start the restart transition. Frame now LEADS position (shows frame N+1 while train still parked at the junction) — held until the train departs.
 - **Jump / backward / fast-page** → resync to the natural frame, disarm, cancel any restart.
 
@@ -339,8 +393,7 @@ Per [CLAUDE.md](CLAUDE.md) "Mental Model → Per-model IRL line scope": new mode
 from displays.train_models.e235_1000 import UpperDisplay
 upper = UpperDisplay(screen, route_data, stops)
 upper.set_state(curr_stop=0, cnt_pa=0, at_station=True)  # boots STOPPING at start platform
-upper.update(timestamp)
-upper.draw()
+upper.draw()   # language ticking belongs to ChangeScheduler, which PASimulator owns
 
 # Registry (multiple train models) — what app.py / setup.py use
 from displays import get_train_model
@@ -353,7 +406,7 @@ lower = model.lower_cls(screen, route_data, stops, upper.mode_cycler)
 
 ## Integration with Main Application
 
-Wired in `app.py` `PASimulator.__init__` (creates `upper` + `lower`, passes upper's `mode_cycler` to lower so modes stay in lockstep, calls `lower.set_state(self.state)`) and `PASimulator.run` (per-frame call order: `state.update_skip_progress(timestamp)` → `upper.update` + `upper.draw` → `lower.draw` → `pygame.display.flip()`).
+Wired in `app.py` `PASimulator.__init__` (creates `upper` + `lower`, passes upper's `mode_cycler` to lower so modes stay in lockstep, calls `lower.set_state(self.state)`) plus `ChangeScheduler(upper.mode_cycler, lower)`) and `PASimulator.run` (per-frame call order: `state.update_skip_progress(timestamp)` → `scheduler.tick` → `upper.draw` → `lower.draw` → `pygame.display.flip()`).
 
 ---
 

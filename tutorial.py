@@ -983,13 +983,13 @@ class Tutorial:
     def _tick_sim(self) -> None:
         """Per-frame sim render. Order matches sim.run(): update_skip_progress
         first (mutates state.skip_progress that lower.draw reads via cursor_pos),
-        then upper.update/draw, then lower.draw."""
+        then the scheduler tick, then the two pure draws."""
         ts = time.time()
         # Window-bg fill happens once per frame here (covers progress bar +
         # any chrome bg outside the sim's LCD region).
         self.screen.fill(BG_COLOR)
         self.sim.state.update_skip_progress(ts)
-        self.sim.upper.update(ts)
+        self.sim.scheduler.tick(ts, self.sim.state)
         self.sim.upper.draw(time.strftime("%H:%M", time.localtime(ts)))
         self.sim.lower.draw(ts)
         self._draw_callout()

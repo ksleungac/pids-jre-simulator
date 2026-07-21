@@ -190,14 +190,13 @@ def main():
             "transfer": sim.lower._SLOT_TRANSFER,
         }
         sim.lower._current_slot = slot_map[args.lower_view]
-        sim.lower._slot_start = None
-        # Lock: replace cycler tick + at-station-edge handler with no-ops.
-        sim.lower._tick_cycle = lambda current_time: None
-        sim.lower._handle_at_station_edge = lambda state, current_time: None
+        # Lock: the scheduler owns every discrete change, so disabling it
+        # freezes the slot AND the language flip in one switch.
+        sim.scheduler.enabled = False
 
     if args.screenshot:
         timestamp = time.time()
-        sim.upper.update(timestamp)
+        sim.scheduler.tick(timestamp, sim.state)
         sim.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
         # current_time=0.0 freezes the lower-LCD countdown at full values for
         # a readable static snapshot.
@@ -313,9 +312,7 @@ def _run_edit_loop(sim, overlay_path: Optional[str] = None) -> None:
     # the user focuses a lower-LCD element. Same lock pattern as --lower-view
     # eight CLI flag.
     sim.lower._current_slot = sim.lower._SLOT_EIGHT
-    sim.lower._slot_start = None
-    sim.lower._tick_cycle = lambda current_time: None
-    sim.lower._handle_at_station_edge = lambda state, current_time: None
+    sim.scheduler.enabled = False
 
     calibration_editor.enter_edit_mode(sim)
 

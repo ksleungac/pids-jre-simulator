@@ -255,7 +255,7 @@ class BasicTutorial(Tutorial):
         # live LCD (mirror Tutorial._tick_sim's draw order), into the subsurface at LCD_Y
         ts = time.time()
         self.sim.state.update_skip_progress(ts)
-        self.sim.upper.update(ts)
+        self.sim.scheduler.tick(ts, self.sim.state)
         self.sim.upper.draw(time.strftime("%H:%M", time.localtime(ts)))
         self.sim.lower.draw(ts)
         self._draw_callout()

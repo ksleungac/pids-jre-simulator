@@ -645,9 +645,11 @@ class UpperDisplay:
         else:
             self.prefix_text = "次は"
 
-    def update(self, current_time: float = None) -> None:
-        """Update mode cycling."""
-        self.mode_cycler.update(current_time)
+    # NOTE: no `update()` here by design. The language flip is a discrete change
+    # owned by ChangeScheduler (displays/base.py), which ticks the shared
+    # mode_cycler once per frame together with the lower LCD's slot. Ticking it
+    # from the upper is what made the two clocks uncoordinated and produced
+    # sub-second view flashes. See DISPLAY.md § "Change scheduler".
 
     def draw(self, current_time_str: str = None) -> None:
         """Draw the upper display with current mode's renderer."""

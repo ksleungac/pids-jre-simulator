@@ -187,7 +187,7 @@ When writing or adjusting layout code:
 --stop <index>             # Station index (0-based)
 --pa <0|1|2>               # 0=次は/Next, 1=まもなく/Arriving at, 2=ただいま/Now stopping at
 --route <name|path>        # Route shorthand (e.g. yamanote, sobu/1217F) or path; default _mock/main
---lower-view <full|eight|cycle>  # Force lower LCD view; default 'cycle' (24s alternation).
+--lower-view <full|eight|cycle>  # Force lower LCD view; default 'cycle' (slot rotation on the beat schedule).
                                  # 'eight' or 'full' freezes the view-cycler for deterministic frames.
 --debug-grid               # Tint each upper-LCD region's clear rect with a unique color
 

@@ -141,12 +141,14 @@ pids_jre_simulator/
 ├── route_loader.py                    # finalize_route: JSON → runtime closure with derived fields
 ├── preview_display.py                 # Audio-free preview entry (PASimulator(preview=True))
 ├── displays/
-│   ├── base.py                        # DisplayMode enum, ModeCycler
+│   ├── base.py                        # DisplayMode enum, ModeCycler, ChangeScheduler + beat schedule
+│   ├── lower_lcd.py                   # LowerDisplayBase: slot cycle, force-switch, frame swap
 │   ├── utils.py                       # ALL drawing primitives + display helpers
 │   └── train_models/e235_1000/
 │       ├── __init__.py                # Per-model dimensions/palette
 │       ├── upper_lcd.py               # Japanese + Furigana + English + UpperDisplay manager
-│       └── lower_lcd.py               # Japanese + 8-station + English + LowerDisplay manager (24s cycler)
+│       └── lower_lcd.py               # Japanese + 8-station + English renderers + LowerDisplay
+│                                       # concrete (slot cycle lives in displays/lower_lcd.py)
 ├── data/
 │   ├── translations.json              # Station names (furigana, english)
 │   ├── train_types.json               # Train type English translations
@@ -161,8 +163,8 @@ pids_jre_simulator/
 
 ## Key Features
 
-1. **Display Cycling** (4s): KANJI → FURIGANA → ENGLISH. Destination always kanji.
-2. **Lower-LCD view alternation**: 24s cycle between full-route and 8-station zoomed view.
+1. **Display Cycling** (1 beat = 4s): KANJI → FURIGANA → ENGLISH. Destination always kanji.
+2. **Lower-LCD view alternation**: full-route ↔ 8-station zoomed (+ transfer when in window). One `ChangeScheduler` owns language + slot on a shared beat so no two changes collide — see [DISPLAY.md § Change scheduler](DISPLAY.md).
 3. **Real-Time Countdown**: `TIME_SCALE=60`, floor division, forces "1" on last PA.
 4. **Station Skip**: Time-based red arrow progression through passing stations.
 5. **Single train-position index**: `state.curr_stop` is stored; `state.cursor_pos` is derived (lags during skip animation).

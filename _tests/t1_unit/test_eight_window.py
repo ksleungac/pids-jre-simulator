@@ -54,7 +54,9 @@ def window(n, cursor):
 
 def locked(nstops, cursor):
     """_should_lock_to_eight for a route of nstops sim-stops at visual position cursor."""
-    fake = SimpleNamespace(stops=[{"_i": k} for k in range(nstops)])
+    # LOCK_THRESHOLD is a class attr on the concrete (derived from the renderer's
+    # canonical constant) since the cycler moved up to LowerDisplayBase.
+    fake = SimpleNamespace(stops=[{"_i": k} for k in range(nstops)], LOCK_THRESHOLD=LowerDisplay.LOCK_THRESHOLD)
     return LowerDisplay._should_lock_to_eight(fake, cursor)
 
 

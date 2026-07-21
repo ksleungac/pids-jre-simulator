@@ -149,8 +149,8 @@ Lower-LCD fonts load in `JapaneseDisplay.__init__` (locale-safe). Sizes live in 
 
 Frame-swap mechanics (arm / hold / fire, windowing, continuity) are cross-model — [DISPLAY.md § Through-Service Display Frames](DISPLAY.md). E235-1000 specifics:
 
-- **Restart screen** (`LowerDisplay._draw_restart_transition`): on swap fire, the WHOLE screen blanks to `WHITE_BG` with the JR East logo centered, held `_TRANSITION_DURATION` (5 s), then the new frame renders. Full-screen (upper + lower) — relies on the app drawing lower AFTER upper (`app.py` main loop + boot draw), so the lower's fill overdraws the upper. Cancels on any position change.
-- **JR logo** = `displays.utils.draw_jr_logo` — the single path in `lcd_references/JR_logo_(east).svg` (committed source) flattened to a bezier filled polygon at import (`_JR_LOGO_PATH`). No rasterized asset ships; nothing read at runtime, no `app_paths` / `/build` bundling needed. Tuneable `logo_height` + `bg_color` in the method's `# fmt: off` block; logo color = `draw_jr_logo`'s `_JR_LOGO_GREEN` default; hold = `_TRANSITION_DURATION`.
+- **Restart screen** (`LowerDisplay._draw_restart_transition`): on swap fire, the WHOLE screen blanks to `WHITE_BG` with the JR East logo centered, held `_TRANSITION_BEATS` (1 beat = 4 s), then the new frame renders. Full-screen (upper + lower) — relies on the app drawing lower AFTER upper (`app.py` main loop + boot draw), so the lower's fill overdraws the upper. Cancels on any position change.
+- **JR logo** = `displays.utils.draw_jr_logo` — the single path in `lcd_references/JR_logo_(east).svg` (committed source) flattened to a bezier filled polygon at import (`_JR_LOGO_PATH`). No rasterized asset ships; nothing read at runtime, no `app_paths` / `/build` bundling needed. Tuneable `logo_height` + `bg_color` in the method's `# fmt: off` block; logo color = `draw_jr_logo`'s `_JR_LOGO_GREEN` default; hold = `_TRANSITION_BEATS`. The scheduler applies no discrete change while the logo is up and fires one Preemptive reveal (default slot + dwell restart) when it clears — [DISPLAY.md § Change scheduler](DISPLAY.md).
 - **Frame background** = `WHITE_BG` — an LCD-model constant, NOT route-derived. The frame `line` identity is metadata only; not surfaced on this model's chrome (same physical JO service across the swap, so accent stays the route color).
 
 ---
@@ -371,7 +371,7 @@ Computed in `_get_window(cursor_pos)`. **Every regime keys on `cursor_pos`** (th
 
 #### View cycler (`LowerDisplay`)
 
-Slot rotation. Three slots with per-slot durations: `FULL` 12s / `EIGHT` 12s / `TRANSFER` 6s. Lives on `LowerDisplay` (NOT shared with upper's 4s language cycler — orthogonal concerns).
+Slot membership + the transitions below live on `LowerDisplayBase` (`displays/lower_lcd.py`). **Timing does not** — dwells, the change floor, and every rotation are owned by `ChangeScheduler`; slot and language are coordinated axes of one schedule, not orthogonal cyclers. Durations, the beat model, and the flavor taxonomy → [DISPLAY.md § Change scheduler](DISPLAY.md). Don't restate beat counts here.
 
 **Slot membership** is computed per-frame from state via `_available_slots`:
 
@@ -389,11 +389,11 @@ Slot rotation. Three slots with per-slot durations: `FULL` 12s / `EIGHT` 12s / `
 **Two transitions matter:**
 
 - transfer-window rising edge (passive join) — `TRANSFER` enters slot list mid-stream as the predicate flips True (last PA fired); cycle naturally rotates to it on its next turn. No timer reset.
-- `at_station` rising edge (force-switch) — `_handle_at_station_edge` sets `_current_slot = TRANSFER` and resets `_slot_start`. Boot's initial `at_station=True` is captured as the first observation without firing the edge (so boot doesn't auto-jump to transfer).
+- `at_station` rising edge (force-switch) — `observe` reports the edge, `preemptive_slot` returns TRANSFER, the scheduler applies it immediately (bypassing the floor) and re-anchors. Boot's initial `at_station=True` is captured as the first observation without firing the edge (so boot doesn't auto-jump to transfer). A no-op force-switch (already on TRANSFER) returns `None` — no visible change means no re-anchor, else every stop would shove the language cadence out.
 
-**Slot reconciliation**: when `_current_slot` is no longer in the available slot list (lock kicked in mid-FULL, window closed mid-TRANSFER, station with no transfers reached mid-TRANSFER), `_tick_cycle` snaps to `slots[0]` and resets the timer.
+**Slot reconciliation**: when `_current_slot` leaves the available list, `scheduled_slot` returns `slots[0]` — deferrable by the floor, because the stale view still renders coherently. The exception is *content*-invalid (TRANSFER at a station whose transfers filtered away): that goes through `preemptive_slot` and is never held, since holding it shows a blank panel.
 
-**Critical invariant** — `_tick_cycle(current_time)` is called from `LowerDisplay.draw()` UNCONDITIONALLY, BEFORE language-mode dispatch. Nesting it in the `KANJI/FURIGANA` branch pauses the timer during `ENGLISH` (≈1/3 of every language cycle) and cadence drifts long. `_pick_renderer(mode)` is a pure function of `_current_slot` + mode (TRANSFER overrides language; otherwise Japanese slots dispatch to full/eight, ENGLISH dispatches to `english_display` for the full-route slot, falling back to `japanese_eight_display` for the 8-station zoomed slot).
+**Critical invariant** — `LowerDisplay.draw()` is a PURE renderer: it advances no timer and mutates no view state. Every discrete change is applied by `ChangeScheduler.tick()` before the draw runs. Ticking anything inside `draw` re-creates the two-uncoordinated-clocks bug that produced sub-second view flashes (#78). `_pick_renderer(mode)` is a pure function of `_current_slot` + mode (TRANSFER overrides language; otherwise Japanese slots dispatch to full/eight, ENGLISH dispatches to `english_display` for the full-route slot, falling back to `japanese_eight_display` for the 8-station zoomed slot).
 
 #### Per-cell mini badge
 

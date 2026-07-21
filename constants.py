@@ -33,7 +33,12 @@ SETUP_KEY_REPEAT_DELAY = 300  # Initial delay before key repeat starts (millisec
 SETUP_KEY_REPEAT_INTERVAL = 30  # Interval between repeated key events (milliseconds)
 AUDIO_FADE_MS = 800
 TARGET_LOUDNESS = -15.0
-STATION_DISPLAY_INTERVAL = 4  # Seconds between kanji/furigana cycling
+# Schedule atom. EVERY discrete view change — language flip, slot rotation,
+# through-service swap, restart screen — is authored as a whole number of beats
+# and lands on a beat boundary, so the written duration is the one observed.
+# One beat is also the language cadence (kanji → furigana → english).
+# See DISPLAY.md § "Change scheduler".
+BEAT_SECONDS = 4
 
 # Time scale for countdown: 1 second of real time = this many minutes of travel time
 # Higher value = faster countdown (for testing)

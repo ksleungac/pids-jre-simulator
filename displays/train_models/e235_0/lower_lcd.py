@@ -2569,7 +2569,9 @@ class JapaneseFiveStationDisplay:
 class LowerDisplay(E235_1000_LowerDisplay):
     """E235-0 Lower LCD manager.
 
-    Inherits the slot cycler (FULL/EIGHT/TRANSFER) from E235-1000. Overrides:
+    Inherits the slot cycler (FULL/EIGHT/TRANSFER) — which lives in
+    ``LowerDisplayBase``, two levels up — via the E235-1000 concrete, whose
+    ``draw`` / ``_draw_restart_transition`` it also reuses. Overrides:
 
     - **FULL slot**: route-keyed — 山手線 → circular racetrack
       (`CircularFullRouteDisplay`); any other (non-Yamanote) route →

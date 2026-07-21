@@ -40,6 +40,7 @@ from displays.train_models.e235_1000 import (
 )
 from displays.train_models.e235_1000.transfer_info import TransferInfoDisplay
 from displays.base import DisplayMode
+from displays.lower_lcd import LowerDisplayBase
 from displays.utils import (
     draw_aapolygon,
     arrow_points,
@@ -1750,12 +1751,13 @@ class EnglishEightStationDisplay(JapaneseEightStationDisplay):
 # =============================================================================
 
 
-class LowerDisplay:
+class LowerDisplay(LowerDisplayBase):
     """E235-1000 Lower LCD manager.
 
-    Mirrors the UpperDisplay manager pattern: holds the per-mode renderers,
-    delegates drawing to whichever is active, and exposes
-    set_state / update / draw to the application.
+    Concrete half of the parent + per-model split (see
+    ``displays/lower_lcd.py``): holds the per-mode renderers and does the
+    drawing. Slot cycling, the transfer force-switch and the through-service
+    frame swap live in ``LowerDisplayBase``.
 
     The mode cycler is **shared** with the UpperDisplay — passed in from
     outside — so upper and lower stay in lockstep without a parallel timer.
@@ -1763,266 +1765,17 @@ class LowerDisplay:
     furigana the route map).
     """
 
-    # View-cycle slots (rotated in order, with per-slot durations).
-    # Default 2-slot cycle is full-route 12s / 8-station 12s (24s total).
-    # When the train is in the transfer-info window (see _in_transfer_window
-    # — derived from cnt_pa rather than state.is_last_pa for single-PA-stop
-    # correctness), TRANSFER joins as a 3rd slot at 6s. The 8-station lock
-    # (remaining stops ≤ 7) drops FULL from rotation, leaving EIGHT alone
-    # outside the window and EIGHT↔TRANSFER inside it. TRANSFER is also
-    # dropped when the current station has no transfers to render.
-    _SLOT_FULL = 0
-    _SLOT_EIGHT = 1
-    _SLOT_TRANSFER = 2
-    _SLOT_DURATIONS = {
-        _SLOT_FULL: 12.0,
-        _SLOT_EIGHT: 12.0,
-        _SLOT_TRANSFER: 6.0,
-    }
-
-    # Through-service restart screen: seconds the JR-logo blank shows on swap.
-    _TRANSITION_DURATION = 5.0
-    # Seconds the train sits STOPPED at the junction before the reboot fires.
-    # Mental model: the hold must (a) signal the train is stopped at the frame
-    # boundary and (b) show the junction's exchange (transfer) info. On the
-    # STOPPING edge _handle_at_station_edge force-switches to the TRANSFER slot,
-    # so the transfer page shows immediately; the hold gives it comfortable
-    # read time before the reboot. Fixed timer, deliberately decoupled from the
-    # view-cycle — NOT "exhaust every page" (nobody needs FULL + EIGHT shown
-    # before the swap), just long enough for the above (tuned by feel).
-    _SWAP_HOLD_DURATION = 12.0
+    # Canonical source is the renderer's own constant — derived, never re-typed.
+    LOCK_THRESHOLD = JapaneseEightStationDisplay.LOCK_THRESHOLD
 
     def __init__(self, screen, route_data, stops, mode_cycler):
-        self.screen = screen
-        self.route_data = route_data
-        self.stops = stops
+        super().__init__(screen, route_data, stops, mode_cycler)
 
         self.japanese_display = JapaneseDisplay(screen, route_data, stops)
         self.japanese_eight_display = JapaneseEightStationDisplay(screen, route_data, stops)
         self.english_display = EnglishDisplay(screen, route_data, stops)
         self.english_eight_display = EnglishEightStationDisplay(screen, route_data, stops)
         self.transfer_display = TransferInfoDisplay(screen, route_data, stops)
-
-        self.mode_cycler = mode_cycler
-        self._state = None
-
-        # View-cycle state. _slot_start = wall-clock when current slot began;
-        # _prev_at_station = last-frame at_station (None until first observed —
-        # boot's at_station=True must NOT fire a rising-edge force-switch).
-        self._current_slot: int = self._SLOT_FULL
-        self._slot_start: float | None = None
-        self._prev_at_station: bool | None = None
-        self._prev_curr_stop: int | None = None
-
-        # Through-service frame swap state. The displayed frame lags position:
-        # at a junction the train STOPS while still showing the old frame, the
-        # page cycle rotates once (all pages shown), THEN the frame flips. Owned
-        # here (not in the renderers) because the fire condition reads this
-        # manager's own view-cycle. Single-frame / legacy routes: _frame_count
-        # <= 1 → the whole machine is inert.
-        self._frames = route_data.get("frames") or []
-        self._frame_count = len(self._frames) if self._frames else 1
-        self._pre_len = len(route_data.get("pre_stops", []))
-        self._active_frame_idx = 0
-        self._swap_armed = False
-        self._swap_arm_time = 0.0
-        # Restart transition — on swap fire, the lower LCD blanks to the JR logo
-        # for _TRANSITION_DURATION before the new frame appears (the "restart"
-        # while parked at the junction). A page-jump cancels it.
-        self._transition_active = False
-        self._transition_start = 0.0
-        self._transition_curr_stop = -1  # position at fire; any change cancels
-
-    def set_state(self, state) -> None:
-        """Bind to an AppState instance. Subsequent draws read live state."""
-        self._state = state
-        # Forward to subordinate renderers that need state binding too.
-        self.transfer_display.set_state(state)
-
-    # NOTE: deliberately a no-op TODAY, but kept as scaffolding for a future
-    # split where the lower LCD owns its own mode cycler (e.g. lower cycles on
-    # a different cadence than upper, or freezes during certain states).
-    #
-    # Why no-op now: the cycler is SHARED with UpperDisplay (passed in via
-    # __init__) and ticked there. Calling cycler.update() here too would
-    # double-tick → KANJI→FURIGANA→ENGLISH cadence drops from 4 s to ~2 s.
-    # The view cycle is ticked inside `draw()` instead — it depends on live
-    # curr_stop (for the 8-station lock condition) and is cheaper to fold in.
-    #
-    # When to wire it in: if/when lower stops sharing upper.mode_cycler,
-    # construct an own ModeCycler in __init__ and tick it here.
-    def update(self, current_time: float = None) -> None:
-        pass
-
-    def _should_lock_to_eight(self, cursor_pos: int) -> bool:
-        """Drop the full-route view once the VISUAL train position (cursor_pos,
-        not the skipped-ahead curr_stop) leaves ≤ LOCK_THRESHOLD (=7) stops to
-        the end. Keying on cursor_pos means a departure that skips passing
-        stations keeps FULL in rotation until the train is visually near the
-        tail — not the instant curr_stop jumps to the next PA target."""
-        return (len(self.stops) - cursor_pos) <= JapaneseEightStationDisplay.LOCK_THRESHOLD
-
-    def _in_transfer_window(self, state) -> bool:
-        """True when transfer-info should be in the cycle rotation.
-
-        Window = APPROACHING_FINAL (cnt_pa is at the last index of pa[])
-        through STOPPING. Derived directly from cnt_pa rather than reading
-        ``state.is_last_pa`` because the flag is only set inside
-        ``_next_in_approaching`` (multi-PA path) — single-PA stations
-        auto-fire pa[0] via ``_advance_to_next_stop`` which hardcodes
-        is_last_pa = False even though pa[0] is already the last (and only)
-        PA. The derived check correctly fires for both cases.
-        """
-        if state.at_station:
-            return True
-        pa_tracks = self.stops[state.curr_stop].get("pa", [])
-        if not pa_tracks:
-            return False
-        return state.cnt_pa >= len(pa_tracks) - 1
-
-    def _station_has_transfers(self, state) -> bool:
-        """True when the current station has at least one transfer to render
-        after active-line filter + view-drop are applied.
-
-        Cheap enough to call per-frame: dict lookup + two list comps inside
-        TransferInfoDisplay._resolve_transfers. If this becomes a hot spot,
-        cache against (curr_stop, transfer_view) — but don't pre-optimize.
-        """
-        if not (0 <= state.curr_stop < len(self.stops)):
-            return False
-        name = self.stops[state.curr_stop].get("name", "")
-        return bool(self.transfer_display._resolve_transfers(name))
-
-    def _available_slots(self, state) -> list:
-        """Slots in rotation order for the current state.
-
-        Combinations (× transfer-available toggle):
-          - not in window, not locked  → [FULL, EIGHT]
-          - not in window, locked      → [EIGHT]
-          - in window,    not locked   → [FULL, EIGHT, TRANSFER]
-          - in window,    locked       → [EIGHT, TRANSFER]
-
-        TRANSFER is dropped from the list when the current station has no
-        transfers (or filtering wipes them out) — the cycle simply rotates
-        without a blank slot.
-        """
-        locked = self._should_lock_to_eight(state.cursor_pos)
-        in_window = self._in_transfer_window(state) and self._station_has_transfers(state)
-        if locked and in_window:
-            return [self._SLOT_EIGHT, self._SLOT_TRANSFER]
-        if locked:
-            return [self._SLOT_EIGHT]
-        if in_window:
-            return [self._SLOT_FULL, self._SLOT_EIGHT, self._SLOT_TRANSFER]
-        return [self._SLOT_FULL, self._SLOT_EIGHT]
-
-    # CONTRACT: must be called BEFORE language-mode dispatch (not inside the
-    # KANJI/FURIGANA branch). Nesting in the language branch pauses the timer
-    # during ENGLISH; cycle cadence drifts long. See DISPLAY_E235.md § "View cycler".
-    def _tick_cycle(self, current_time: float) -> None:
-        """Advance the slot cycle. Reconciles slot membership and per-slot durations."""
-        slots = self._available_slots(self._state)
-        # Reconcile: if current slot dropped out (lock kicked in, or window
-        # closed mid-TRANSFER), snap to the first available slot and reset timer.
-        if self._current_slot not in slots:
-            self._current_slot = slots[0]
-            self._slot_start = current_time
-            return
-        # Single-slot cycle (locked, no window): nothing to advance.
-        if len(slots) == 1:
-            return
-        # Initialize timer on first observation.
-        if self._slot_start is None:
-            self._slot_start = current_time
-            return
-        if current_time - self._slot_start >= self._SLOT_DURATIONS[self._current_slot]:
-            idx = slots.index(self._current_slot)
-            self._current_slot = slots[(idx + 1) % len(slots)]
-            self._slot_start = current_time
-
-    def _handle_at_station_edge(self, state, current_time: float) -> None:
-        """STOPPING entry: force-switch to TRANSFER (if available), reset timer.
-
-        Only fires on the at_station False→True transition. Boot's initial
-        at_station=True is captured as the first observation without firing
-        the edge, so the cycle starts on its default slot rather than
-        force-jumping to transfer.
-
-        Also fires on cross-stop jumps (curr_stop changed while at_station
-        stayed True) so jump_to_stop → arrow-key previewing shows transfer
-        info immediately at each stop.
-        """
-        if self._prev_at_station is None:
-            self._prev_at_station = state.at_station
-            self._prev_curr_stop = state.curr_stop
-            return
-        stop_changed = state.curr_stop != self._prev_curr_stop
-        rising = state.at_station and (not self._prev_at_station or stop_changed)
-        if rising:
-            slots = self._available_slots(state)
-            if self._SLOT_TRANSFER in slots:
-                self._current_slot = self._SLOT_TRANSFER
-                self._slot_start = current_time
-        self._prev_at_station = state.at_station
-        self._prev_curr_stop = state.curr_stop
-
-    def _natural_frame(self, sim_curr: int) -> int:
-        """Frame whose global window contains the train (first match — a
-        junction belongs to the EARLIER frame). The displayed frame tracks
-        this except while a fired swap holds the next frame at the junction."""
-        gi = sim_curr + self._pre_len
-        for i, fr in enumerate(self._frames):
-            if fr["from_idx"] <= gi <= fr["to_idx"]:
-                return i
-        return self._frame_count - 1
-
-    # CONTRACT: drives the through-service frame swap. Arm at STOPPING@junction,
-    # hold a fixed _SWAP_HOLD_DURATION, then flip the frame. The lag is required
-    # — the LCD "restarts while stopping" per IRL. See DISPLAY.md § Through-
-    # Service Display Frames.
-    def _update_active_frame(self, state, current_time: float) -> None:
-        """Advance ``_active_frame_idx`` with the arm → wait → fire rule.
-
-        - Aligned + STOPPING at the active frame's junction → arm, record the
-          arm time.
-        - _SWAP_HOLD_DURATION elapsed → fire: flip to the next frame. The frame
-          now leads position (shows frame N+1 while the train is still parked
-          at the boundary) — held until the train departs the junction.
-        - Any other divergence (jump, backward, paged through fast) → snap to
-          the natural frame and disarm.
-        """
-        if self._frame_count <= 1:
-            return
-        natural = self._natural_frame(state.curr_stop)
-        a = self._active_frame_idx
-        gi = state.curr_stop + self._pre_len
-
-        # Valid "fired, holding ahead": showing frame a (= natural+1) while the
-        # train is still parked at the boundary station of frame `natural`.
-        holding_ahead = a == natural + 1 and gi == self._frames[natural]["to_idx"]
-        if holding_ahead:
-            return
-        if natural != a:
-            # jump / backward / fast-paged past the junction — resync, disarm.
-            self._active_frame_idx = natural
-            self._swap_armed = False
-            return
-
-        # Aligned (displaying the train's frame): manage arm/fire at its junction.
-        has_next = a < self._frame_count - 1
-        at_junction = has_next and state.at_station and gi == self._frames[a]["to_idx"]
-        if not at_junction:
-            self._swap_armed = False
-            return
-        if not self._swap_armed:
-            self._swap_armed = True
-            self._swap_arm_time = current_time
-        elif current_time - self._swap_arm_time >= self._SWAP_HOLD_DURATION:
-            self._active_frame_idx = a + 1  # FIRE — flip the window
-            self._swap_armed = False
-            self._transition_active = True  # play the JR-logo restart screen
-            self._transition_start = current_time
-            self._transition_curr_stop = state.curr_stop
 
     def _pick_renderer(self, mode):
         """Pick the renderer for the current slot + language mode.
@@ -2044,33 +1797,22 @@ class LowerDisplay:
             return self.english_display
         return self.english_eight_display
 
+    # CONTRACT: draw() is a PURE renderer — it advances no timer and mutates no
+    # view state. Every discrete change (slot rotation, language flip, frame
+    # swap, restart transition) is owned by ChangeScheduler and already applied
+    # by the time this runs. Ticking anything here re-creates the two
+    # uncoordinated clocks that produced sub-second view flashes.
+    # See DISPLAY.md § "Change scheduler".
     def draw(self, current_time: float = 0.0) -> None:
-        """Dispatch to the active slot's renderer.
-
-        Per-frame: detect at_station rising edge → maybe force-switch to
-        TRANSFER. Tick cycle. Pick renderer for (slot, language). Draw.
-
-        Cycle ticks regardless of language mode so cadence doesn't drift
-        while the upper is in ENGLISH (which would otherwise pause the
-        timer for ~1/3 of every upper-mode cycle).
-        """
+        """Dispatch to the active slot's renderer."""
         if self._state is None:
             return
 
-        self._handle_at_station_edge(self._state, current_time)
-        self._tick_cycle(current_time)
-        self._update_active_frame(self._state, current_time)
-
-        # Restart screen: between the swap fire and the new frame, blank the
-        # lower LCD to the JR logo for _TRANSITION_DURATION. Any position change
-        # (page forward, jump) cancels it — it's a brief at-junction screen.
-        if self._transition_active and self._state.curr_stop != self._transition_curr_stop:
-            self._transition_active = False
+        # Restart screen: between the swap fire and the new frame the lower LCD
+        # blanks to the JR logo. The scheduler owns when it starts and ends.
         if self._transition_active:
-            if current_time - self._transition_start < self._TRANSITION_DURATION:
-                self._draw_restart_transition()
-                return
-            self._transition_active = False
+            self._draw_restart_transition()
+            return
 
         mode = self.mode_cycler.get_current_mode()
         renderer = self._pick_renderer(mode)
@@ -2095,21 +1837,3 @@ class LowerDisplay:
         # Logo color = draw_jr_logo's canonical default (_JR_LOGO_GREEN in utils).
         pygame.draw.rect(self.screen, bg_color, pygame.Rect(0, 0, S_WIDTH, S_HEIGHT))
         draw_jr_logo(self.screen, S_WIDTH // 2, S_HEIGHT // 2, logo_height)
-
-    def hit_test(self, mx: int, my: int) -> Optional[int]:
-        """Dispatch a click in LCD-local coords to the active renderer's hit_test.
-
-        Returns sim_index for clickable cells, None for non-clickable
-        (pre_stops, padding, transfer-info — no clickable elements there).
-        ENGLISH mode falls back to the Japanese full-route renderer's
-        hit_test — clicks DO work in ENGLISH. Past-dest filter lives in
-        the caller (`PASimulator._click_target`) since `dest_stop_idx` is
-        on the simulator, not the renderer.
-        """
-        if self._state is None:
-            return None
-        mode = self.mode_cycler.get_current_mode()
-        renderer = self._pick_renderer(mode)
-        if hasattr(renderer, "hit_test"):
-            return renderer.hit_test(self._state, mx, my)
-        return None

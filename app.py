@@ -12,6 +12,7 @@ from typing import Dict, Any, Optional
 
 from constants import DEBUG_PANEL_HEIGHT, FRAME_RATE, KEY_REPEAT_DELAY, TIME_SCALE
 from audio import AudioPlayer
+from displays.base import ChangeScheduler
 from displays.train_models import get_train_model
 from displays.utils import draw_text
 import i18n
@@ -218,6 +219,10 @@ class PASimulator:
         # reads cursor_pos / skip / etc. live from it each frame.
         self.lower = self._train_model.lower_cls(self.screen, self.route_data, self.stops, self.upper.mode_cycler)
         self.lower.set_state(self.state)
+        # Single owner of every discrete view change (language flip + slot
+        # rotation), enforcing the anti-flash floor across both. Neither
+        # display ticks itself — see displays/base.py ChangeScheduler.
+        self.scheduler = ChangeScheduler(self.upper.mode_cycler, self.lower)
 
         self.running = True
 
@@ -355,13 +360,14 @@ class PASimulator:
         # Boot lands in STOPPING@curr_stop=0 by default (see AppState.__init__);
         # prefix reads "ただいま <start station>".
         #
-        # CONTRACT: boot draw MUST pass real wall-clock to lower.draw(), not default 0.0.
-        # Default 0.0 initializes the view-cycler's _slot_start to 0.0; the first
-        # main-loop tick (current_time=wall_time) then sees a huge delta and
-        # immediately advances the slot — boot view never persists through its
-        # natural duration. Surfaced 2026-05-07 via `preview --lower-view full`
-        # opening in the 8-station view.
+        # CONTRACT: boot MUST seed the scheduler with real wall-clock, and pass
+        # the same value to lower.draw(). Seeding at 0.0 makes the first
+        # main-loop tick see a huge delta against every timer and instant-fire a
+        # change — the boot view never persists through its natural duration.
+        # Surfaced 2026-05-07 via `preview --lower-view full` opening in the
+        # 8-station view.
         boot_t = time.time()
+        self.scheduler.seed(boot_t)
         self.upper.set_state(
             self.state.curr_stop, self.state.cnt_pa, at_station=self.state.at_station, cnt_pa_at_station=self.state.cnt_pa_at_station
         )
@@ -378,8 +384,12 @@ class PASimulator:
             # the display layer stays pure-rendering, mirroring upper).
             self.state.update_skip_progress(timestamp)
 
-            # Update and draw upper display
-            self.upper.update(timestamp)
+            # One atomic tick for every discrete change (language flip, slot
+            # rotation, frame swap). MUST run after update_skip_progress — slot
+            # membership reads cursor_pos — and before both draws, which are
+            # pure renderers.
+            self.scheduler.tick(timestamp, self.state)
+
             self.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
 
             # Draw lower display with current time for real-time countdown

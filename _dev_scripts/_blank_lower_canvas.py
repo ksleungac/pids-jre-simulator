@@ -39,7 +39,6 @@ sim.upper.mode_cycler.enabled = False
 
 # Upper LCD as usual.
 timestamp = time.time()
-sim.upper.update(timestamp)
 sim.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
 
 # Lower LCD blank: flat WHITE_BG over the lower area, nothing else.

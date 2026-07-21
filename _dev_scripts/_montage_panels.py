@@ -35,9 +35,7 @@ sim = PASimulator("audio/yamanote", preview=True)
 
 # Pin lower LCD to the 5-station (EIGHT) slot; lock the cycler.
 sim.lower._current_slot = sim.lower._SLOT_EIGHT
-sim.lower._slot_start = None
-sim.lower._tick_cycle = lambda current_time: None
-sim.lower._handle_at_station_edge = lambda state, current_time: None
+sim.scheduler.enabled = False
 
 # Left strip width: panel can extend to the curve's widest control point
 # (tp3_x) plus a col-2 entry, so size the crop from the live tuneables.
@@ -60,7 +58,7 @@ for i in range(n):
     sim.state.cnt_pa = 0
     sim.upper.set_state(sim.state.curr_stop, sim.state.cnt_pa, at_station=False)
     ts = time.time()
-    sim.upper.update(ts)
+    sim.scheduler.tick(ts, sim.state)  # no-op while scheduler.enabled is False - mirrors app.run() order
     sim.upper.draw(time.strftime("%H:%M", time.localtime(ts)))
     sim.lower.draw(0.0)
     crop = sim.screen.subsurface((0, UPPER_HEIGHT, CROP_W, LOWER_H)).copy()

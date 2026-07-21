@@ -68,7 +68,7 @@ def render(step: int = 1, lang: str = "en", out: str = "screenshot_tutorial.png"
         STEPS[step - 1].entry_handler(tut)
         ts = time.time()
         sim.state.update_skip_progress(ts)
-        sim.upper.update(ts)
+        sim.scheduler.tick(ts, sim.state)
         sim.upper.draw(time.strftime("%H:%M", time.localtime(ts)))
         sim.lower.draw(ts)
         # Mirror _tick_sim's final overlay step so step-specific callouts
