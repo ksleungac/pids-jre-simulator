@@ -288,6 +288,15 @@ When subtasks have no data dependency (separate searches, reads, verifications, 
 
 **Scope: read-only fan-out + self-contained research/doc — NOT cross-file code surgery.** A subagent is safe where its output is reviewable in one read (searches, codebase mapping, a contained doc edit). The main thread drives anything that rewires code across call sites / multiple files: a subagent's "looks done" self-check (grep says zero refs, imports OK) gives false confidence on mechanical edits. 2026-06-28: an i18n subagent deleted per-module label dicts but left ~26 dangling refs across 5 modules + broke button calls, then reported "imports + render OK" (imports pass because Python doesn't run function bodies at import) — reverted, redone inline. User: *"subagents doesn't seem to be good idea, breaking things."*
 
+### Natural adoption gates tool value — push through the harness, don't add a pull-MCP
+A tool's worth is capped by whether it gets used *naturally*, and naturalness = **who owns the context-injection step**. A **pull** tool (an MCP the model must choose to call) loses to the reflex and sits unused — Serena is installed, `conventions.md` says "use it going forward," and grep still wins. To get used, the output must be **pushed**: a **skill step** (orchestrated work — the skill invokes it, so it can't be forgotten) or a **harness hook** (free-form work — injected at the decision). Judge a candidate by delivery shape FIRST, capability second.
+
+**Why:** (2026-07-21) evaluating repo-mapping tools (repomix / aider repo-map / codebase-memory-mcp / code-review-graph) — every high-star MCP failed on *adoption*, not capability; the one adopted (code-review-graph) fit because `review+fix` is orchestrated, so the skill calls it.
+
+**How to apply:**
+- Adopt a capability through the harness's injection points (a `review-dirty` pre-flight step, a PreToolUse hook), not a discretionary `.mcp.json` server.
+- "The agent may call it" → expect it unused. If you can't push it, it won't land.
+
 ---
 
 ## Engineering rigor

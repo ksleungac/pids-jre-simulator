@@ -76,6 +76,21 @@ python _dev_scripts/lint_primitives.py <in-scope .py files>
 
 Report each finding as a Lens-3 item (rule: `conventions.md` § Tooling \"canonical-source duplication\") with file:line · the literal · the canonical source it should derive from.
 
+## Structural-impact scan — code-review-graph (run BEFORE the lenses, beside the Derivation-bypass scan)
+A persistent code-graph yields two complementary views the diff alone cannot show, as ~3-4k tokens of JSON: `impact` = the **blast radius** (callers / dependents of every changed symbol — the transitive-caller set); `detect-changes` = **test-gaps** + per-symbol risk + the changed-symbol list. (Verified 2026-07-21: `detect-changes` does NOT emit callers — that is `impact`'s job.) Read-only: the index writes to the USER CACHE, never the repo. **Fail-open — on ANY error (`uvx` absent, offline, build fails) SKIP silently and proceed. Never block the review.**
+
+```powershell
+$env:PYTHONIOENCODING = 'utf-8'   # the rich --brief panel crashes on cp1252 stdout; JSON output is ASCII-safe
+uvx code-review-graph status           # if this reports no graph, run `uvx code-review-graph build` ONCE (~seconds), then continue
+uvx code-review-graph impact           # blast radius — callers / dependents of the changed symbols (auto-detects the working-tree diff; --depth N widens)
+uvx code-review-graph detect-changes   # test-gaps + risk + changed symbols, vs the committed-baseline graph — do NOT run `update` first (it folds the diff INTO the graph and erases it)
+```
+
+Feed the JSON into the lenses (skip this paragraph entirely if the scan was unavailable):
+- **Lens 1** — walk `impact`'s caller / dependent list for each changed symbol and confirm the diff did not break them (`critical_lessons` \"test the change, not just the bug\"). `impact` is the who-calls source (`detect-changes` omits it); grep only if `impact` returns nothing.
+- **Lens 4** — the `test-gaps` list IS the feature-has-test axis: a changed symbol with no covering test is a Lens-4 `warning`. Reconcile against the diff — an *uncommitted* new test shows as a gap because the graph baseline is the last commit, not the working tree.
+- **INTEGRATION scope** — a large or flow-crossing blast radius is a mechanical trigger to auto-escalate scope (per the Scope-mode DUTY above).
+
 ## Four review lenses (apply ALL four to the in-scope code — the diff in DIRTY mode, the whole files in FULL / INTEGRATION mode)
 
 ### Lens 1 — Bug correctness
