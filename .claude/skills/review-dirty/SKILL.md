@@ -77,17 +77,33 @@ python _dev_scripts/lint_primitives.py <in-scope .py files>
 Report each finding as a Lens-3 item (rule: `conventions.md` § Tooling \"canonical-source duplication\") with file:line · the literal · the canonical source it should derive from.
 
 ## Structural-impact scan — code-review-graph (run BEFORE the lenses, beside the Derivation-bypass scan)
-A persistent code-graph yields two complementary views the diff alone cannot show, as ~3-4k tokens of JSON: `impact` = the **blast radius** (callers / dependents of every changed symbol — the transitive-caller set); `detect-changes` = **test-gaps** + per-symbol risk + the changed-symbol list. (Verified 2026-07-21: `detect-changes` does NOT emit callers — that is `impact`'s job.) Read-only: the index writes to the USER CACHE, never the repo. **Fail-open — on ANY error (`uvx` absent, offline, build fails) SKIP silently and proceed. Never block the review.**
+A persistent code-graph yields two complementary views the diff alone cannot show: `impact` = the **blast radius** (callers / dependents of every changed symbol); `detect-changes` = **test-gaps** + per-symbol risk + the changed-symbol list. (Verified 2026-07-21: `detect-changes` does NOT emit callers — that is `impact`'s job.) Read-only: the index writes to the USER CACHE, never the repo. **Fail-open — on ANY error (`uvx` absent, offline, build fails) SKIP silently and proceed. Never block the review.**
 
 ```powershell
 $env:PYTHONIOENCODING = 'utf-8'   # the rich --brief panel crashes on cp1252 stdout; JSON output is ASCII-safe
-uvx code-review-graph status           # if this reports no graph, run `uvx code-review-graph build` ONCE (~seconds), then continue
-uvx code-review-graph impact           # blast radius — callers / dependents of the changed symbols (auto-detects the working-tree diff; --depth N widens)
-uvx code-review-graph detect-changes   # test-gaps + risk + changed symbols, vs the committed-baseline graph — do NOT run `update` first (it folds the diff INTO the graph and erases it)
+
+# 1. FRESHNESS GATE — `status` reporting "a graph exists" is NOT the same as "the graph is current".
+$graphCommit = (uvx code-review-graph status 2>&1 | Select-String 'Built at commit:\s*(\S+)').Matches.Groups[1].Value
+$headCommit  = (git rev-parse --short=12 HEAD)
+if (-not $graphCommit -or $graphCommit -notlike "$headCommit*") { uvx code-review-graph build }   # ~seconds
+
+# 2. detect-changes — the one that fits in context (~20 KB). Run it FIRST.
+uvx code-review-graph detect-changes   # test-gaps + risk + changed symbols, vs the committed-baseline graph
+                                       # do NOT run `update` first (it folds the diff INTO the graph and erases it)
+
+# 3. impact — blast radius. Redirect to a file and grep it; do NOT read it raw (see size warning below).
+uvx code-review-graph impact > "$env:TEMP\crg-impact.json"
 ```
 
+**Two verified limitations — factor both into how far you trust the output (measured 2026-07-21):**
+
+- **Untracked files are INVISIBLE.** The scan's changed-set comes from tracked modifications only, so a brand-new file contributes nothing: on the #78 review, `LowerDisplayBase` (a new 400-line parent class, the largest structural piece of the change) and its new T3 test each returned **zero hits across both scans**. Consequences: the blast radius silently omits new code, and the test-gap count is inflated because a new uncommitted test cannot be seen. **For every NEW file, use grep / Serena MCP (`find_referencing_symbols`) instead — the graph gives you nothing there.**
+- **Staleness is silent.** `status` reports only whether a graph exists, never whether it matches HEAD. Without the freshness gate above, a graph built several commits ago is scanned against without a word. (Nothing rebuilds it automatically — no hook wires it.)
+
+**Size warning:** `detect-changes` is ~20 KB and safe to read. `impact` on a broad change measured **1.2 MB** — never read it raw; redirect to a file and `Select-String` for the symbols you care about.
+
 Feed the JSON into the lenses (skip this paragraph entirely if the scan was unavailable):
-- **Lens 1** — walk `impact`'s caller / dependent list for each changed symbol and confirm the diff did not break them (`critical_lessons` \"test the change, not just the bug\"). `impact` is the who-calls source (`detect-changes` omits it); grep only if `impact` returns nothing.
+- **Lens 1** — walk `impact`'s caller / dependent list for each changed symbol and confirm the diff did not break them (`critical_lessons` \"test the change, not just the bug\"). `impact` is the who-calls source (`detect-changes` omits it); grep — or Serena — when `impact` returns nothing, which is guaranteed for new files.
 - **Lens 4** — the `test-gaps` list IS the feature-has-test axis: a changed symbol with no covering test is a Lens-4 `warning`. Reconcile against the diff — an *uncommitted* new test shows as a gap because the graph baseline is the last commit, not the working tree.
 - **INTEGRATION scope** — a large or flow-crossing blast radius is a mechanical trigger to auto-escalate scope (per the Scope-mode DUTY above).
 
