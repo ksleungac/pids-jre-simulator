@@ -35,9 +35,16 @@ def resolve(prev_badge, speed, distance, *, pending_next_pa=False, at_station=Tr
 
 # Spec grid — reachable domain is badge in {MOVING, PASSING} (STOPPED/None are filtered
 # upstream by the inferred_state guard). Guards satisfied (parked, no live fire).
-#   speed: None / <30 / >=30   ·   dist: None / >lead / <=lead
+#   speed: None / 10 (below band) / 40 (IN the audible band) / 80 (stale)
+#   dist:  None / >lead / <=lead
 # Expected derived from the invariant: arrival(1B) = MOVING AND dist<=lead (checked first);
-# departure(1A) = speed>=30, badge-independent; else None.
+# departure(1A) = speed >= 60 ONLY, badge-independent; else None.
+#
+# The 40 rows are #82's partition: [30, 60) belongs to the AUDIBLE level test in
+# _Detector.update, so this silent fallback must decline it. Before #82 both keyed on 30
+# and this resolver returned "1A" there — inheriting every departure the crossing dropped.
+# 60 is hardcoded, not imported, so widening the band breaks these rows (see
+# principles.md § "Test real logic, not ceremony").
 # fmt: off
 GRID = [
     # badge,     speed, dist,  expected
@@ -47,18 +54,24 @@ GRID = [
     ("MOVING",   10,    None,  None),
     ("MOVING",   10,    2000,  None),
     ("MOVING",   10,    300,   "1B"),
-    ("MOVING",   40,    None,  "1A"),
-    ("MOVING",   40,    2000,  "1A"),
+    ("MOVING",   40,    None,  None),   # in-band: audible primary owns it
+    ("MOVING",   40,    2000,  None),   # in-band: audible primary owns it
     ("MOVING",   40,    300,   "1B"),   # arrival checked BEFORE speed
+    ("MOVING",   80,    None,  "1A"),
+    ("MOVING",   80,    2000,  "1A"),
+    ("MOVING",   80,    300,   "1B"),   # arrival checked BEFORE speed
     ("PASSING",  None,  None,  None),
     ("PASSING",  None,  2000,  None),
     ("PASSING",  None,  300,   None),   # PASSING never arrives (distance unusable)
     ("PASSING",  10,    None,  None),
     ("PASSING",  10,    2000,  None),
-    ("PASSING",  10,    300,   None),   # <-- THE INCIDENT: was "1A" on the buggy clause
-    ("PASSING",  40,    None,  "1A"),
-    ("PASSING",  40,    2000,  "1A"),
-    ("PASSING",  40,    300,   "1A"),   # PASSING never returns 1B
+    ("PASSING",  10,    300,   None),   # <-- 2026-07-16 INCIDENT: was "1A" on the buggy clause
+    ("PASSING",  40,    None,  None),
+    ("PASSING",  40,    2000,  None),
+    ("PASSING",  40,    300,   None),
+    ("PASSING",  80,    None,  "1A"),
+    ("PASSING",  80,    2000,  "1A"),
+    ("PASSING",  80,    300,   "1A"),   # PASSING never returns 1B
 ]
 # fmt: on
 
@@ -73,7 +86,7 @@ def main():
 
     # [PASSING facet] departure axis is badge-independent: PASSING resolves like a
     # MOVING whose distance is unusable, and PASSING never resolves to the arrival target.
-    for speed in (None, 10, 40):
+    for speed in (None, 10, 40, 80):
         for dist in (None, 2000, 300):
             pv = resolve("PASSING", speed, dist)
             mv_nodist = resolve("MOVING", speed, None)
@@ -82,14 +95,21 @@ def main():
             if pv == "1B":
                 failures.append(f"  PASSING resolved to 1B at speed={speed}, dist={dist} — arrival is MOVING-only")
 
-    # Regression anchor — the exact incident: parked, next station passes, low speed.
+    # Regression anchor — the 2026-07-16 incident: parked, next station passes, low speed.
     if resolve("PASSING", 10, 300) is not None:
         failures.append("  REGRESSION: resolve(PASSING, speed=10, dist=300) must be None (was '1A' — ate the departure PA)")
 
+    # Regression anchor — #82 strictness inversion. This silent fallback must never be
+    # satisfiable where the audible primary is: [30, 60) is the primary's band, so a
+    # freshly-departed train at 45 km/h resolves to no target no matter the badge.
+    for badge in ("MOVING", "PASSING"):
+        if resolve(badge, 45, 2000) is not None:
+            failures.append(f"  REGRESSION: resolve({badge}, speed=45, dist=2000) must be None — [30,60) is the AUDIBLE primary's band")
+
     # Guard branches — resolver stands down regardless of badge.
-    if resolve("PASSING", 40, 2000, pending_next_pa=True) is not None:
+    if resolve("PASSING", 80, 2000, pending_next_pa=True) is not None:
         failures.append("  guard: pending_next_pa=True must return None (a live fire owns this cycle)")
-    if resolve("MOVING", 40, 2000, at_station=False) is not None:
+    if resolve("MOVING", 80, 2000, at_station=False) is not None:
         failures.append("  guard: at_station=False (app already moving) must return None")
 
     if failures:

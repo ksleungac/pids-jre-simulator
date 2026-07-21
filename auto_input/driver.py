@@ -57,6 +57,12 @@ if TYPE_CHECKING:
 
 SAMPLE_INTERVAL_S = 3
 SPEED_DEPARTURE_KMH = 30
+# Upper bound of the audible-departure band. At or above this the train is
+# demonstrably long into the segment, the departure PA is stale, and re-entry's
+# SILENT 1A advance owns it. Partitions the speed axis with SPEED_DEPARTURE_KMH so
+# the audible primary and the silent fallback are disjoint rather than competing —
+# see auto_input/README.md § "Primary/fallback strictness must not invert".
+DEPARTURE_STALE_KMH = 60
 DEFAULT_LEAD_M = 900
 # Long-approach lead bump. Major junctions / termini have arrival announcements
 # far longer than a normal stop's (transfer guides, terminal sequences). A 900m
@@ -222,7 +228,7 @@ def _write_sample(f: TextIO, sample: dict) -> None:
 
 
 def _write_event(f: TextIO, kind: str, curr_stop: int, ts: float) -> None:
-    """Write a transition event line. `kind` ∈ {arrival, departure, passing_start, passing_end, cross_reject, offset_reject}."""
+    """Write an event line. Canonical `kind` list: auto_input/README.md § Files, `_recordings/`."""
     try:
         f.write(
             json.dumps(
@@ -422,7 +428,7 @@ class _Detector:
 
     Per-segment observed-flags (`departure_observed` / `arrival_observed` /
     `at_station_observed`): record whether each trigger condition has been
-    observed in the current segment, reset on BADGE_STOPPED→(MOVING|PASSING).
+    observed in the current segment, reset on STOPPED->(MOVING|PASSING).
     These are **Layer 3 observation memory** — they feed `inferred_state()` so the
     panel reflects what the *game* is doing. They do NOT gate PA fires: fire gating
     reads Layer 1's app sub-state directly in `AutoDriver._fire_*` (the Layer 1 ↔
@@ -513,9 +519,12 @@ class _Detector:
                 self.at_station_observed = False
             elif self.prev_badge in ("MOVING", "PASSING") and badge == "STOPPED":
                 events.append("MOVING->STOPPED")
-        # Departure: speed crossing 30 km/h upward — own-train speed, badge-independent.
-        if speed is not None and self.prev_speed is not None:
-            if not self.departure_observed and self.prev_speed < SPEED_DEPARTURE_KMH <= speed:
+        # CONTRACT: departure = LEVEL test in [SPEED_DEPARTURE_KMH, DEPARTURE_STALE_KMH),
+        # gated by departure_observed. Badge-independent, direction-agnostic, no prev_speed.
+        # See auto_input/README.md § "Arrival and departure are level tests, not crossings".
+        # Re-adding a crossing loses the departure whenever prev_speed is absent or stale-high.
+        if speed is not None and not self.departure_observed:
+            if SPEED_DEPARTURE_KMH <= speed < DEPARTURE_STALE_KMH:
                 events.append("FIRE_DEPARTURE")
                 self.departure_observed = True
         # Arrival: level test, gated on badge==MOVING. Skips PASSING (wrong distance ref);
@@ -891,6 +900,7 @@ class AutoDriver:
                                 "departure_observed": self._detector.departure_observed,
                                 "arrival_observed": self._detector.arrival_observed,
                                 "at_station_observed": self._detector.at_station_observed,
+                                "reentry_pending": self._detector.reentry_latch,
                                 "inferred_state": self._detector.inferred_state(),
                                 "segment_start_stop": self._segment_start_stop,
                             },
@@ -951,7 +961,12 @@ class AutoDriver:
                     # Re-entry (Layer 3 → Layer 2/1 catch-up) runs AFTER the
                     # event loop so it reads the cross-reject-guarded badge and
                     # stands down if a normal fire already succeeded this cycle.
-                    self._maybe_reentry(s_val, d_val)
+                    committed = self._maybe_reentry(s_val, d_val)
+                    if committed is not None and log_file is not None:
+                        # A silent advance just landed. Log-only marker — without it
+                        # re-entry is console-print only and its frequency has to be
+                        # reverse-engineered from the parked-while-moving sample runs.
+                        _write_event(log_file, f"reentry_{committed.lower()}", self.sim.state.curr_stop, sample_ts)
 
                     self._stop_event.wait(self.interval_s)
                 except Exception as e:
@@ -983,7 +998,7 @@ class AutoDriver:
             self._fire_at_station()
             return
 
-    def _maybe_reentry(self, speed: Optional[int], distance: Optional[int]) -> None:
+    def _maybe_reentry(self, speed: Optional[int], distance: Optional[int]) -> Optional[str]:
         """Re-entry: Layer 3 → Layer 2/1 reconciliation (the catch-up path).
 
         Called once per cycle AFTER detector.update() + the _handle_event loop.
@@ -994,9 +1009,12 @@ class AutoDriver:
 
         Writes ONLY a single-shot signal (`sim.pending_silent_advance`) + the
         detector's observed-flags — never AppState directly (that mutation stays
-        on the main thread). The Layer 1 advance + the flag seed are one
-        consistent snapshot; the coupling is read-only on Layer 1, so this does
-        not cascade. See auto_input/README.md § "Re-entry (Layer 3 → Layer 2
+        on the main thread). Returns the COMMITTED target ("1A"/"1B") or None, so
+        the caller writes the drive-log event — same split as update()'s
+        CROSS_REJECT token: the detector decides, the loop owns the log file.
+
+        The Layer 1 advance + the flag seed are one consistent snapshot; the
+        coupling is read-only on Layer 1, so this does not cascade. See auto_input/README.md § "Re-entry (Layer 3 → Layer 2
         reconciliation)".
 
         Lockstep ±1: advances by one stop. There is no station-name OCR, so a
@@ -1016,14 +1034,14 @@ class AutoDriver:
             # No desync this cycle (live fire landed, app moving, OCR fail, or
             # game parked) — drop any pending latch.
             self._detector.reentry_latch = None
-            return
+            return None
         if target != self._detector.reentry_latch:
             # First sighting, or the target changed during the wait (e.g. 1A→1B
             # as the game crossed the arrival lead) — a changed read is NOT a
             # confirmation. Latch the new target and wait one more cycle.
             self._detector.reentry_latch = target
             print(f"          [AD] >>> RE-ENTRY: re-aligning… (probe 1, target={target})")
-            return
+            return None
         # Two consecutive identical targets — commit the silent-advance.
         self._detector.reentry_latch = None
         if target == "1B":
@@ -1033,10 +1051,11 @@ class AutoDriver:
             self.sim.pending_silent_advance = "1B"
             print(f"          [AD] >>> RE-ENTRY: silent advance to 1B (game ARRIVING, dist={distance})")
         else:  # "1A"
-            # 3C CRUISING (speed≥30, MOVING or PASSING) → land 1A; seed dep.
+            # 3C CRUISING (speed ≥ DEPARTURE_STALE_KMH, MOVING or PASSING) → land 1A; seed dep.
             self._detector.departure_observed = True
             self.sim.pending_silent_advance = "1A"
             print(f"          [AD] >>> RE-ENTRY: silent advance to 1A (game CRUISING/PASSING, speed={speed})")
+        return target
 
     def _resolve_reentry_target(self, speed: Optional[int], distance: Optional[int]) -> Optional[str]:
         """Resolve THIS cycle's re-entry target — ``"1A"`` / ``"1B"`` / ``None``.
@@ -1060,20 +1079,18 @@ class AutoDriver:
         # Game in transit while app parked at 1C. Disambiguate via the guarded
         # badge (prev_badge, post cross-reject) + raw speed/distance —
         # inferred_state can't tell 3B from 3C (both read DEPARTING cold), so the
-        # speed>=30 gate is what separates "still in the departure window" (3B,
-        # let the normal crossing play it with audio) from "already cruising" (3C).
+        # DEPARTURE_STALE_KMH gate is what separates "the departure PA is still
+        # worth playing" (below it — the normal LEVEL test already fired it with
+        # audio) from "long into the segment, announcement stale" (at or above).
         badge = self._detector.prev_badge
         if badge == "MOVING" and distance is not None and distance <= self._detector.arrival_lead_m:
             return "1B"
-        if speed is not None and speed >= SPEED_DEPARTURE_KMH:
+        if speed is not None and speed >= DEPARTURE_STALE_KMH:
             return "1A"
-        # MOVING or PASSING, speed<30 → 3B → no-op. PASSING is treated identically to
-        # MOVING here (the 900m arrival is the ONLY thing PASSING changes, and that's
-        # the 1B branch above, MOVING-only), so the normal SPEED_UP_30 path plays the
-        # departure with audio when speed crosses 30. A PASSING badge must NOT force a
-        # silent re-entry at low speed — that ate the departure PA when departing a
-        # station the app was parked at (e.g. start-from-middle). speed>=30 still
-        # silent-advances above (fast-sample-past-the-ramp is a correct silent advance).
+        # Below DEPARTURE_STALE_KMH → no target: the audible primary owns [30, 60), this
+        # silent fallback owns [60, ∞). PASSING is treated as MOVING here (the arrival lead
+        # is the ONLY thing PASSING changes — the MOVING-only 1B branch above).
+        # See auto_input/README.md § "Primary/fallback strictness must not invert".
         return None
 
     def _reanchor_to_app(self) -> None:
@@ -1085,11 +1102,18 @@ class AutoDriver:
         so a stale pre-jump read can't fire a spurious event on the next cycle:
 
           - prev_badge="STOPPED"               (badge memory reflects platform)
-          - prev_speed=None                    (drop stale speed so the very next
-                                                 cycle can't satisfy the departure
-                                                 crossing test prev_speed<30<=speed
-                                                 on a transient parked-platform
-                                                 speed misread; self-heals next read)
+          - prev_speed=None                    (UNREAD since #82 — not a guard, and not
+                                                 logged either. It protected the old
+                                                 departure CROSSING; the level test reads
+                                                 only the current speed, so that protection
+                                                 is simply gone. Nothing replaces it: the
+                                                 departure test is badge-independent, so
+                                                 post-jump a SINGLE spurious speed read in
+                                                 [30,60) fires a departure PA — at_station
+                                                 is True by construction after jump_to_stop
+                                                 and this method clears departure_observed,
+                                                 so no other gate stands in the way. Open
+                                                 risk, tracked in #85)
 
         The three observed-flags are also reset to a parked reading so Layer 3
         shows IDLE (`prev_badge=STOPPED` + `arrival_observed=False`) instead of a

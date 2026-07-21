@@ -72,6 +72,12 @@ DEFAULT_LEAD_M = 900
 OUTPUT_DIR = Path(__file__).parent.parent / "_experiments" / "live_captures"
 
 SPEED_DEPARTURE_KMH = 30
+# Mirrors auto_input/driver.py:DEPARTURE_STALE_KMH — upper bound of the audible-departure
+# band. This script has no re-entry path, so above it no departure fires at all.
+# Hand-copied, like SPEED_DEPARTURE_KMH above: this whole detector is a deliberate fork
+# (a comment is NOT a sync mechanism — the pair can drift). #83 folds 1b onto the
+# production _Detector, which retires the duplication properly.
+DEPARTURE_STALE_KMH = 60
 SELF_PRESS_GUARD_S = 0.5  # ignore key callbacks within this window after we send
 
 
@@ -120,7 +126,7 @@ class PaEventDetector:
     """Tracks distance + speed + badge state; emits PA-fire events.
 
     Per-segment fired flags prevent double-firing when OCR misreads transiently flip
-    a threshold-crossing condition. Segment boundary = BADGE_STOPPED→MOVING transition,
+    a trigger condition. Segment boundary = STOPPED->(MOVING|PASSING) transition,
     which resets all flags.
 
     `arrival_lead_m` is configurable via the --lead CLI flag (default 900). Bump to
@@ -136,7 +142,7 @@ class PaEventDetector:
     departure_fired: bool = False
     arrival_fired: bool = False
     segment_start_ts: float = field(default_factory=time.time)
-    # Counts BADGE_STOPPED->MOVING transitions. None until first transition observed.
+    # Counts STOPPED->(MOVING|PASSING) transitions. None until first transition observed.
     # If route data is loaded, this maps to: heading from stops[segment_idx] to stops[segment_idx+1].
     segment_idx: int | None = None
 
@@ -162,22 +168,32 @@ class PaEventDetector:
         if badge is not None and self.prev_badge is not None and badge != self.prev_badge:
             if self.prev_badge == "STOPPED" and badge in ("MOVING", "PASSING"):
                 self.segment_idx = 0 if self.segment_idx is None else self.segment_idx + 1
-                events.append(f"BADGE_STOPPED->MOVING (segment {self.segment_idx}, reset flags)")
+                events.append(f"STOPPED->MOVING (segment {self.segment_idx}, reset flags)")
                 self.departure_fired = False
                 self.arrival_fired = False
                 self.segment_start_ts = time.time()
             elif self.prev_badge in ("MOVING", "PASSING") and badge == "STOPPED":
-                events.append("BADGE_MOVING->STOPPED (arrived at platform)")
-        if speed is not None and self.prev_speed is not None:
-            if not self.departure_fired and self.prev_speed < SPEED_DEPARTURE_KMH <= speed:
-                events.append(f"SPEED_UP_{SPEED_DEPARTURE_KMH} (fire departure PA)")
+                events.append("MOVING->STOPPED (arrived at platform)")
+        # Departure: LEVEL test inside [SPEED_DEPARTURE_KMH, DEPARTURE_STALE_KMH), gated by
+        # the per-segment flag. Mirrors auto_input/driver.py:_Detector — see
+        # auto_input/README.md § "Arrival and departure are level tests, not crossings"
+        # for why the old crossing (prev_speed < 30 <= speed) lost departures.
+        # `segment_idx is not None` = we have SEEN a segment start. Production doesn't need
+        # this (every fire is gated on the app sub-state in _fire_departure), but 1b sends a
+        # real synthetic PageDown with no such gate — without it, launching this script while
+        # already cruising at 30-59 km/h fires a keystroke on the very first sample. The old
+        # crossing blocked that incidentally by needing a non-None prev_speed; state it here
+        # rather than let the level test silently start pressing keys on launch.
+        if speed is not None and not self.departure_fired and self.segment_idx is not None:
+            if SPEED_DEPARTURE_KMH <= speed < DEPARTURE_STALE_KMH:
+                events.append(f"FIRE_DEPARTURE (speed {speed} in [{SPEED_DEPARTURE_KMH}, {DEPARTURE_STALE_KMH}))")
                 self.departure_fired = True
         # Arrival: level test, gated on badge==MOVING. Skips PASSING (HUD distance reference
         # is wrong); handles PASSING→MOVING resumption when distance is already < lead via
         # the level (not crossing) check.
         if badge == "MOVING" and distance is not None:
             if not self.arrival_fired and distance <= self.arrival_lead_m:
-                events.append(f"DIST_DOWN_{self.arrival_lead_m} (fire arrival PA)")
+                events.append(f"FIRE_ARRIVAL (dist {distance} <= lead {self.arrival_lead_m})")
                 self.arrival_fired = True
         if speed is not None:
             self.prev_speed = speed
@@ -227,8 +243,12 @@ def handle_event(
 ) -> None:
     """Dispatch a PaEventDetector event: log it; fire PageDown if appropriate."""
     print(f"          >>> {event}")
-    is_departure = "fire departure PA" in event
-    is_arrival = "fire arrival PA" in event
+    # Dispatch on the canonical event TOKEN (the leading word), never on prose inside the
+    # string — the human-readable tail carries live numbers and is free to change. A
+    # substring test against that tail silently disarmed every synthetic PageDown when the
+    # event names were synced to production's (#82).
+    is_departure = event.startswith("FIRE_DEPARTURE")
+    is_arrival = event.startswith("FIRE_ARRIVAL")
     if not (is_departure or is_arrival):
         return
     if not fire:
@@ -267,7 +287,7 @@ def main() -> int:
         "--route",
         type=Path,
         default=None,
-        help="route.json directory (e.g. audio/sobu/1217F) — enables PA-count check so DIST_DOWN doesn't fire when next stop has only 1 PA",
+        help="route.json directory (e.g. audio/sobu/1217F) — enables PA-count check so FIRE_ARRIVAL doesn't fire when next stop has only 1 PA",
     )
     args = parser.parse_args()
     route_data = load_route(args.route) if args.route else None
@@ -338,7 +358,7 @@ def main() -> int:
     print(f"\nMode: {'AUTO-FIRE' if fire else 'LOG-ONLY (--no-fire)'}")
     print(f"Arrival threshold: {args.lead} m")
     print(f"Sample interval: {args.interval} s")
-    print(f"Route: {args.route if args.route else '(no --route; PA-count check disabled — DIST_DOWN fires for every stop)'}")
+    print(f"Route: {args.route if args.route else '(no --route; PA-count check disabled — FIRE_ARRIVAL fires for every stop)'}")
     print(f"Saving HUD crops to: {OUTPUT_DIR}")
     print("Ctrl+C to stop.\n")
 

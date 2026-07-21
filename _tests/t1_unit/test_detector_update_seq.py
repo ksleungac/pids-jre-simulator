@@ -37,7 +37,7 @@ def main():
         if not cond:
             failures.append("  " + msg)
 
-    # A. Departure fires once when own-speed crosses 30 upward on a fresh segment.
+    # A. Departure fires once when own-speed enters the audible band on a fresh segment.
     d, ev = run([(2000, 0, "STOPPED"), (2000, 5, "MOVING"), (2000, 35, "MOVING")])
     check(ev.count("FIRE_DEPARTURE") == 1, f"A departure: expected 1 FIRE_DEPARTURE, got {ev.count('FIRE_DEPARTURE')} ({ev})")
     check(d.departure_observed is True, "A departure: departure_observed should be True")
@@ -79,12 +79,46 @@ def main():
         f"G passing-departure: expected 1 FIRE_DEPARTURE through PASSING rollout, got {ev.count('FIRE_DEPARTURE')} ({ev})",
     )
 
+    # ── Departure-as-level-test (#82). H and I are the two ways the old crossing
+    #    (prev_speed < 30 <= speed) lost a departure PERMANENTLY for the segment; both
+    #    fire under the level test. J pins the ceiling. Each discriminates: H/I fail if
+    #    the crossing is restored, J fails if the upper bound is dropped.
+
+    # H. Stale-high prev_speed. prev_speed only updates on a non-None read, so dropped
+    #    reads through deceleration + dwell carry the pre-station cruise value into the
+    #    next departure. The crossing can never satisfy prev_speed < 30 again.
+    d, ev = run([(2000, 45, "MOVING")], prev_badge="STOPPED", prev_speed=78)
+    check(ev.count("FIRE_DEPARTURE") == 1, f"H stale-prev-speed: departure must fire with prev_speed=78 stale, got {ev}")
+
+    # I. Absent prev_speed — thread start, or post-click-jump (_reanchor_to_app nulls it).
+    d, ev = run([(2000, 35, "MOVING")], prev_badge="STOPPED", prev_speed=None)
+    check(ev.count("FIRE_DEPARTURE") == 1, f"I absent-prev-speed: departure must fire with prev_speed=None, got {ev}")
+
+    # J. Ceiling: at or above the stale bound the PA is unrecoverable and re-entry's
+    #    SILENT 1A advance owns it — the level test must NOT fire. Cold boot mid-cruise.
+    d, ev = run([(2000, 86, "MOVING")])
+    check("FIRE_DEPARTURE" not in ev, f"J stale-ceiling: speed 86 is re-entry territory, must not fire departure ({ev})")
+    check(d.departure_observed is False, "J stale-ceiling: departure_observed should stay False")
+
+    # K. Band edges are [30, 60). Literals DELIBERATELY hardcoded, not imported from
+    #    driver — importing the constants under test would make this pass for any band
+    #    (see principles.md § "Test real logic, not ceremony"). Widening the band is a
+    #    behaviour change and must break this line.
+    d, ev = run([(2000, 30, "MOVING")])
+    check("FIRE_DEPARTURE" in ev, f"K lower-edge: speed == 30 must fire ({ev})")
+    d, ev = run([(2000, 59, "MOVING")])
+    check("FIRE_DEPARTURE" in ev, f"K in-band-top: speed == 59 must fire ({ev})")
+    d, ev = run([(2000, 60, "MOVING")])
+    check("FIRE_DEPARTURE" not in ev, f"K upper-edge: speed == 60 must NOT fire ({ev})")
+
     if failures:
         print("FAIL: detector update() direct-read sequences")
         print("\n".join(failures))
         sys.exit(1)
     print(
-        "PASS: detector update() direct-read sequences (A departure, B debounce, C arrival, D passing-skip, E reset, F cross-reject, G passing-departure)"
+        "PASS: detector update() direct-read sequences (A departure, B debounce, C arrival, D passing-skip, "
+        "E reset, F cross-reject, G passing-departure, H stale-prev-speed, I absent-prev-speed, "
+        "J stale-ceiling, K band-edges)"
     )
 
 

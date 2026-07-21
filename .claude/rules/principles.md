@@ -158,6 +158,7 @@ When the user asks for a design decision that's claude's to drive, recommend ONE
 - Answer reachable from loaded context → commit. Recommendation + one-line reason.
 - Two genuinely equivalent options → pick one, name the tradeoff, let user override.
 - **Implementation / engineering-practice questions the user can't usefully arbitrate → decide, don't ask.** Bring the user ONLY real-world / mental-model / user-facing questions ("what's different on your end", in-game behavior); make the practice call yourself and show the result for a yes/no. A "idk, your call" reply is the signal you should have decided it. (2026-07-19; also brainstorming-skill override #1.)
+- **A finding your own analysis already resolves is not a question — resolve it and report.** Escalating it reads as a real open risk and spends the user's attention re-deriving what you had. (2026-07-21) Flagged the departure level test's deceleration path for the user to rule on, having *already written* "double-fire protection = the `departure_observed` flag" two paragraphs earlier in the same doc; user: *"how do you think, it is gated behind our departure fired?"*
 
 ### Don't gate cheap verification behind a question
 After a visible change, if a CHEAP IMMEDIATE preview lets the user verify, just launch it (background) as part of reporting — don't ask "want me to launch?". But don't auto-launch the FULL app when reaching the change requires manual setup navigation — that's not cheap; let the user drive it.
@@ -366,6 +367,17 @@ When a design collapses to something simpler, re-derive which parts of the origi
 **How to apply:**
 - On collapsing a design, list what the complex version was protecting against, then check each survives. Cheap; the alternative is finding out from the user.
 - A rule derived for one content/case type does not automatically hold once the scope widens to carry several — re-check the premise, don't port the conclusion.
+
+### A fallback must be STRICTER than the path it replaces
+A recovery / degraded / catch-up path that is *quieter* or *less reversible* than the primary must require at least as much evidence. When the fallback is easier to satisfy, every condition that defeats the primary leaves the fallback armed — so its domain becomes residual ("whatever the primary dropped") instead of principled, and the system silently drifts onto the quiet path.
+
+**Why:** the inversion is invisible in each path read alone; it only shows up when you put the two trigger conditions side by side. Examples:
+- (2026-07-21) Auto-driver departure was a crossing (two consecutive valid samples, `prev_speed` below 30) while re-entry's catch-up was a level test on the same 30 (one sample). Re-entry is silent AND forward-only-irreversible, so every OCR dropout that broke the crossing handed the departure to a silent advance — the user's report was "the PA sometimes just doesn't play." Fixed by partitioning the axis so the two are disjoint by construction.
+
+**How to apply:**
+- Write the primary's and the fallback's trigger conditions next to each other and ask which needs more evidence. If it's the primary, that's the bug — independent of whichever symptom brought you here.
+- Prefer partitioning the input domain (disjoint bands) over ordering the checks; ordering relies on the earlier check firing, partitioning cannot invert.
+- Frequency of fallback engagement is a *metric*, not noise — instrument it, since it counts exactly the primary's misses.
 
 ### Construction-proof model beats the next repro theory
 When static analysis keeps contradicting a reproducible observation across 2+ rounds — your trace says the bug can't happen, the user keeps seeing it — stop generating repro theories. Either instrument for ground truth, or redesign the invariant so the whole bug CLASS is impossible by construction. The Nth theory has diminishing value once analysis and observation disagree.
