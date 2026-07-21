@@ -212,7 +212,7 @@ class PASimulator:
         )
 
         # Initialize components
-        self.audio = _SilentAudio() if preview else AudioPlayer(work_dir, self.stops)
+        self.audio = _SilentAudio() if preview else AudioPlayer(self.audio_root, self.stops)
         self.upper = self._train_model.upper_cls(self.screen, self.route_data, self.stops, audio=self.audio)
         # Lower shares the upper's mode_cycler — modes stay in lockstep, no
         # parallel timer. set_state below binds the state reference; lower
@@ -277,7 +277,7 @@ class PASimulator:
         dest_furigana lookup) live in ``route_loader.finalize_route``; this
         method just plumbs the result onto the simulator.
         """
-        from route_loader import finalize_route, load_route_from_dir
+        from route_loader import finalize_route, load_route_from_dir, resolve_audio_root
 
         self.station_db = self._load_station_db()
 
@@ -287,6 +287,9 @@ class PASimulator:
             self.route_data = finalize_route(self.route_data, self.station_db)
 
         self.stops = self.route_data.get("stops", [])
+        # Single resolved audio root — route folder, or the per-line shared
+        # pool when route.json declares audio_root. See route_loader CONTRACT.
+        self.audio_root = str(resolve_audio_root(self.work_dir, self.route_data))
         self.route_name = self.route_data.get("route", "Unknown")
         self.train_type = self.route_data.get("type", "")
         self.dest = self.route_data.get("dest", "")

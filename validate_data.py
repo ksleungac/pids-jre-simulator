@@ -275,7 +275,11 @@ def check_route(route_path: Path, translations: dict, train_types: dict, issues:
 
     # Audio file references (cross-ref)
     if not fixture:
-        audio_dir = route_path.parent
+        # Resolve through the same single-root helper the runtime uses, so a
+        # shared-pool route validates against the pool it will actually read.
+        from route_loader import resolve_audio_root
+
+        audio_dir = resolve_audio_root(route_path.parent, data)
         pa_dir = audio_dir / "pa"
         sta_dir = audio_dir / "sta"
         for i, stop in enumerate(stops):

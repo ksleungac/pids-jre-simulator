@@ -84,3 +84,4 @@ _sta_verify_*.json
 # runtime dep, not forced on clones. uvx fetches Serena from git on demand.
 /.mcp.json
 /.serena/
+_audio_backup/

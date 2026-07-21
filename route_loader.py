@@ -19,6 +19,25 @@ def load_route_from_dir(work_dir, station_db: dict) -> dict:
     return finalize_route(route_data, station_db)
 
 
+def resolve_audio_root(work_dir, route_data: dict) -> Path:
+    """Directory holding this route's ``pa/`` and ``sta/`` folders.
+
+    # CONTRACT: exactly one audio root per route - never a search order.
+    # Audio lives in ``<work_dir>`` unless route.json declares ``audio_root``
+    # (relative to work_dir; ``".."`` selects a per-line shared pool shared by
+    # every diagram on that line). A diagram-local fallback was rejected:
+    # legacy PA slugs are diagram-local ("1.mp3" means different announcements
+    # in different diagrams), so a missing file would silently resolve to the
+    # pool and play the WRONG announcement with no error - the exact
+    # silent-breakage class of critical_lessons.md 2. One root means a missing
+    # track fails loud at its single resolved path.
+    # See DATA_FORMAT.md "audio_root Field".
+    """
+    root = Path(work_dir)
+    rel = route_data.get("audio_root")
+    return (root / rel).resolve() if rel else root
+
+
 def finalize_route(route_data: dict, station_db: dict) -> dict:
     """Apply loader-time computations to a parsed route_data dict.
 

@@ -53,15 +53,18 @@ atexit.register(_cleanup_temp_dir)
 class AudioPlayer:
     """Handles PA announcements and departure melodies with loudness normalization."""
 
-    def __init__(self, work_dir: str, stops: list):
+    def __init__(self, audio_root: str, stops: list):
         """Initialize the audio player.
 
         Args:
-            work_dir: Base directory containing pa/ and sta/ folders
+            audio_root: Base directory containing pa/ and sta/ folders. Callers
+                resolve this via ``route_loader.resolve_audio_root`` — it is the
+                route's own folder unless route.json declares ``audio_root``
+                (per-line shared pool). Never search more than this one root.
             stops: List of station data from route.json
         """
-        self.pa_dir = os.path.join(work_dir, "pa")
-        self.sta_dir = os.path.join(work_dir, "sta")
+        self.pa_dir = os.path.join(audio_root, "pa")
+        self.sta_dir = os.path.join(audio_root, "sta")
         self.stops = stops
         self._temp_index = 0  # Track which temp file to use next
         # Last-played track metadata for position()/duration() — used by the
