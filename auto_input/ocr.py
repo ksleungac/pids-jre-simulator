@@ -1060,7 +1060,12 @@ def _read_value(
     chars: list[str] = []
     min_score = 1.0
     for bbox in bboxes:
-        glyph = extract_glyph(cell, bbox)
+        # `seg` MUST be forwarded: extract_glyph derives its own threshold, and without the
+        # same SegConfig it falls back to SEG_DEFAULT's 1440p text band while segment_chars
+        # used the scaled one — different band, different Otsu split, so the bbox and the
+        # pixels inside it get binarized under different rules. Measured at 1080p before
+        # this was passed: the two sites disagreed on 25 of 400 frames.
+        glyph = extract_glyph(cell, bbox, seg)
         ch, score = templates.match(glyph)
         chars.append(ch)
         min_score = min(min_score, score)
