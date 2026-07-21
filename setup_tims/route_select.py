@@ -777,7 +777,7 @@ def _run_diagram(screen, route_name, start_name, end_name, variants, *, preselec
 def run_on(screen):
     """Drive the full route → start-station → run-pattern flow on an existing display ``screen``.
 
-    Returns the chosen selection {"route": <variant dict>, "start": <stop index>} (committed via 設定 on
+    Returns the chosen selection {"route": <variant dict>, "start_name": <stop name>, "pattern_no": <int>} (committed via 設定 on
     the run-pattern screen), or None if the user backed/jumped out to the 案内設定 page, or "home" for a
     band-Home return to the menu. The 案内設定 page reads the return to populate its summary table."""
     groups = grouped_routes(load_routes())
@@ -822,10 +822,10 @@ def run_on(screen):
                 if res3 is None:
                     break  # 戻る → back to the station screen (start stays highlighted)
                 sel_var = res3
-                # Carry the RESOLVED start name (variant-agnostic). `start` stays the variants[0]-space
-                # full index for the eventual launch bridge to re-resolve against the chosen variant —
-                # variants can have different stop lists, so the index isn't trustworthy cross-variant.
-                return {"route": shown[res3], "start": stop_idxs[sel_start], "start_name": start_name, "pattern_no": res3 + 1}
+                # Return the RESOLVED start NAME (variant-agnostic), not an index: variants have
+                # different stop lists, so a variants[0]-space index isn't trustworthy cross-variant —
+                # the launch bridge (pa_setting._build_config) re-resolves the name against the chosen variant.
+                return {"route": shown[res3], "start_name": start_name, "pattern_no": res3 + 1}
 
 
 # ── standalone preview ────────────────────────────────────────────────────────

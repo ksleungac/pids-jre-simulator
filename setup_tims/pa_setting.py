@@ -125,8 +125,8 @@ def _current_model_label():
 
 
 def _apply_selection(result):
-    """Fill the summary-table VALUES from a route_select commit ({"route": <variant dict>, "start": <stop
-    idx>}). Row 3 = CHOSEN start stop → route terminal (始発・終着駅); row 5 = the composed 備考 (direction
+    """Fill the summary-table VALUES from a route_select commit ({"route": <variant dict>, "start_name":
+    <stop name>, "pattern_no": <int>}). Row 3 = CHOSEN start stop → route terminal (始発・終着駅); row 5 = the composed 備考 (direction
     / through-service from the run-pattern page); platform (月台) has no model, stays blank. Stashes the
     raw result in `_committed` so 確認/起動 can build the launch config from it."""
     global ROW_VALUES, PATTERN_NO, _committed
