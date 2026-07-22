@@ -68,15 +68,9 @@ SEP_COLOR          = chrome.FRAME   # vertical separators flanking the cell
 SEP_W              = 2
 CELL_INK           = chrome.INK   # the number ink (bright)
 CELL_UNIT_INK      = (130, 144, 156)   # unit (km/h, m) ink — DIMMER than the number, not so bright
-READOUT_NUM_H       = 18            # number rendered HEIGHT (px). SUPERSAMPLED (drawn big AA-on, scaled
-                                    # DOWN) so this in-between size reads SMOOTH, not blocky — the pixel
-                                    # face is crisp only at 12/24, so a size between them must be either
-                                    # sub-grid (blocky, heavy strokes) or supersampled (this). Strokes
-                                    # stay proportional ("pixel but not squary").
 READOUT_NUM_SS_NATIVE = 18          # readout number load px — AA-off native (supersample retired)
 READOUT_UNIT_K      = 1             # unit stays crisp pixel (draw_lowres) at its own native grid
 READOUT_UNIT_NATIVE = 15            # unit native (≈15px) — larger; bottom-aligned to the number baseline (grows upward), rendered dim
-READOUT_DIGIT_XSCALE = 1.3          # WIDE TIMS numerals: widen each digit, independent of the gap
 READOUT_DIGIT_GAP    = 2            # px between digits at the rendered size
 READOUT_UNIT_GAP     = 2            # gap between the number and its unit (km/h, m) — tight, unit sits close
 READOUT_UNIT_CELL_GAP = 1           # px BETWEEN the fat full-width unit glyphs (proportional advance); ≤1 keeps them touching/near-touching
@@ -90,7 +84,7 @@ LIMIT_LABEL        = "制限"            # 2-char row label AHEAD of the limit n
                                        # (the game HUD labels it 最高速度; band cell dropped labels — this restores
                                        # a short one). The label IS the identity cue → the number stays plain
                                        # (no red ink). Fixed-JP (a HUD label, like NOTIF_TEXT) — not localized.
-LIMIT_LABEL_COLOR  = (150, 164, 178)   # dim slate — a quiet annotation; the bright number stays the focus
+LIMIT_LABEL_COLOR  = chrome.DIM        # dim slate — a quiet annotation; the bright number stays the focus (was a (150,164,178) palette straggler)
 LIMIT_LABEL_NATIVE = 16                # label px (AA-off native) — max that clears a 3-digit limit (100–130); a
                                        # 3-digit "120 km/h" number starts ~x262, label at LIMIT_LABEL_X ends ~x257
 LIMIT_LABEL_X      = CELL_X + 3        # label left edge (just inside the cell's left separator at CELL_X)
@@ -190,10 +184,10 @@ def _number_ink(text, font, gap):
     return top, bot, w
 
 
-def _draw_number_ss(surf, text, pos, font, color, target_h, xscale, gap):
+def _draw_number_ss(surf, text, pos, font, color, gap):
     """FAT TIMS numeral run, AA-OFF: each DIGIT is the full-width glyph (U+FF10..19) centered on a
     monospace cell (widest digit ink + `gap`) — the 全角 TIMS look; separators/unit letters render
-    natural HALF-width inline. `target_h`/`xscale` unused (kept for caller compat). `pos` = top-left of
+    natural HALF-width inline. `pos` = top-left of
     the full-height run; digit ink keeps the font's natural baseline (caller bottom-aligns via pos.y)."""
     cell, boxes, _dt, _db = _tims_digit_cell(font, gap)
     x = int(pos[0])
@@ -278,7 +272,7 @@ def _blit_readout(
         block_top = min(num_y + n_top, unit_y + u_top)
         block = pygame.Rect(x0, block_top, total_w, baseline - block_top)
         pygame.draw.rect(surf, hl_color, block.inflate(2 * LIMIT_PAD_X, 2 * LIMIT_PAD_Y), border_radius=3)
-    _draw_number_ss(surf, number, (x0, num_y), num_font, num_ink, READOUT_NUM_H, READOUT_DIGIT_XSCALE, READOUT_DIGIT_GAP)
+    _draw_number_ss(surf, number, (x0, num_y), num_font, num_ink, READOUT_DIGIT_GAP)
     _draw_unit_ss(surf, unit, (x0 + nw + READOUT_UNIT_GAP, unit_y), unit_font, unit_ink, READOUT_UNIT_CELL_GAP)
 
 

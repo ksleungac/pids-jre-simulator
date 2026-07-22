@@ -97,13 +97,13 @@ uvx code-review-graph impact > "$env:TEMP\crg-impact.json"
 
 **Two verified limitations — factor both into how far you trust the output (measured 2026-07-21):**
 
-- **Untracked files are INVISIBLE.** The scan's changed-set comes from tracked modifications only, so a brand-new file contributes nothing: on the #78 review, `LowerDisplayBase` (a new 400-line parent class, the largest structural piece of the change) and its new T3 test each returned **zero hits across both scans**. Consequences: the blast radius silently omits new code, and the test-gap count is inflated because a new uncommitted test cannot be seen. **For every NEW file, use grep / Serena MCP (`find_referencing_symbols`) instead — the graph gives you nothing there.**
+- **Untracked files are INVISIBLE.** The scan's changed-set comes from tracked modifications only, so a brand-new file contributes nothing: on the #78 review, `LowerDisplayBase` (a new 400-line parent class, the largest structural piece of the change) and its new T3 test each returned **zero hits across both scans**. Consequences: the blast radius silently omits new code, and the test-gap count is inflated because a new uncommitted test cannot be seen. **For every NEW file, grep for its symbols instead — the graph gives you nothing there.**
 - **Staleness is silent.** `status` reports only whether a graph exists, never whether it matches HEAD. Without the freshness gate above, a graph built several commits ago is scanned against without a word. (Nothing rebuilds it automatically — no hook wires it.)
 
 **Size warning:** `detect-changes` is ~20 KB and safe to read. `impact` on a broad change measured **1.2 MB** — never read it raw; redirect to a file and `Select-String` for the symbols you care about.
 
 Feed the JSON into the lenses (skip this paragraph entirely if the scan was unavailable):
-- **Lens 1** — walk `impact`'s caller / dependent list for each changed symbol and confirm the diff did not break them (`critical_lessons` \"test the change, not just the bug\"). `impact` is the who-calls source (`detect-changes` omits it); grep — or Serena — when `impact` returns nothing, which is guaranteed for new files.
+- **Lens 1** — walk `impact`'s caller / dependent list for each changed symbol and confirm the diff did not break them (`critical_lessons` \"test the change, not just the bug\"). `impact` is the who-calls source (`detect-changes` omits it); fall back to grep when `impact` returns nothing, which is guaranteed for new files.
 - **Lens 4** — the `test-gaps` list IS the feature-has-test axis: a changed symbol with no covering test is a Lens-4 `warning`. Reconcile against the diff — an *uncommitted* new test shows as a gap because the graph baseline is the last commit, not the working tree.
 - **INTEGRATION scope** — a large or flow-crossing blast radius is a mechanical trigger to auto-escalate scope (per the Scope-mode DUTY above).
 

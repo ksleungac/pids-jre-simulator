@@ -44,6 +44,14 @@ uv run _harness/check_deps.py
 
 If non-zero, stop and surface the violations. See `critical_lessons.md §3`.
 
+Then validate all shipped data (the full-scan is the shipped-data gate; skips `audio/_*/`):
+
+```powershell
+uv run validate_data.py
+```
+
+If non-zero, stop and surface the violations. See `conventions.md § Tooling` ("Data-field additions").
+
 **2b — Generate `version_info.txt`**
 
 Write a PyInstaller Windows version resource to the project root. Overwrite any existing file. Template:
