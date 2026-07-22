@@ -1,12 +1,12 @@
-"""setup_tims — the TIMS-console setup flow.
+"""tims.setup — the TIMS-console setup flow.
 
 Home menu (報站設定 / 教學 / 設定 / 行車記錄) → 案内設定 (C07AA) PA-setting page →
 route grid (C07AB) → start-station grid (C07AC) → run-pattern table (C07AF), all
 under a persistent OCR status band. Promoted from the `_dev_scripts/*_draft.py`
 sketches.
 
-The persistent status band + its shared chrome now live at project ROOT
-(``status_band.py`` / ``tims_chrome.py``), shared with the live in-drive OCR panel
+The persistent status band + its shared chrome live in the ``tims`` package
+(``tims/band.py`` / ``tims/chrome.py``), shared with the live in-drive OCR panel
 (``app.py``). This package keeps only its own window dims (``dims.py``) + screens.
 
 Modules:
@@ -22,6 +22,6 @@ calls it by default (``--classic`` opts back into the legacy setup). Preview the
 ``_dev_scripts/preview_setup_tims.py``.
 """
 
-from status_band import BAND_H  # noqa: F401
+from ..band import BAND_H  # noqa: F401
 from .dims import BG_COLOR, SCREEN_H, SCREEN_W  # noqa: F401
 from .home import run  # noqa: F401

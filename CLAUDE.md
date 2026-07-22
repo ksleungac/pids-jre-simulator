@@ -155,6 +155,11 @@ pids_jre_simulator/
 │   ├── translations_app.json          # App-chrome strings (en / zh_HK / zh_CN)
 │   └── stations.json                  # Station metadata (3-letter codes)
 ├── auto_input/                        # OCR-driven auto-PA (driver + ocr + hud_layout)
+├── tims/                              # TIMS cab-console UI package (see APP.md)
+│   ├── widgets.py                     # Draw primitives (bevel buttons, AA-off low-res text)
+│   ├── chrome.py                      # Shared vocabulary (PALETTE, button presets, role fonts)
+│   ├── band.py                        # Persistent status band (setup screens + live OCR panel)
+│   └── setup/                         # Setup/OOBE flow screens (tims.setup.run = entry)
 ├── memory/                            # Daily logs + MEMORY.md curated index
 └── audio/
     ├── [line]/[diagram]/route.json    # Real routes

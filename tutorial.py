@@ -23,9 +23,9 @@ import i18n
 from app import AppState, PASimulator
 from app_paths import project_root
 from displays.train_models.e235_1000 import S_HEIGHT, S_WIDTH
-from widgets import _TUNEABLES_TIMS_BUTTON, draw_tims_button, press_transition
+from tims.widgets import _TUNEABLES_TIMS_BUTTON, draw_tims_button, press_transition
 
-import tims_chrome as chrome  # shared TIMS palette + button-preset warehouse (root module)
+import tims.chrome as chrome  # shared TIMS palette + button-preset warehouse (tims package)
 
 # fmt: off
 # ── tuneable params (window / layout) ───────────────────────────────────────
@@ -38,7 +38,7 @@ WINDOW_W, WINDOW_H = LCD_W + SIDE_W, PROGRESS_H + LCD_H + LCD_SLACK_H   # window
 PANEL_X, PANEL_Y = LCD_W, PROGRESS_H              # side panel origin
 PANEL_W, PANEL_H = SIDE_W, WINDOW_H - PROGRESS_H
 
-# Palette — TIMS chrome tokens (aligned with the OCR tutorial + setup_tims screens via tims_chrome).
+# Palette — TIMS chrome tokens (aligned with the OCR tutorial + tims.setup screens via tims.chrome).
 # Backgrounds + ink route through the warehouse; the accent/progress hues stay local for now (a
 # separate "drop the green" pass, since TIMS has no green CTA — the lit button carries emphasis).
 BG_COLOR = chrome.BG                               # slate window background
@@ -52,10 +52,10 @@ PROGRESS_BG = chrome.PANEL_BG                      # near-black top strip — ma
 LINE_DIM = (76, 84, 100)                          # incomplete progress-line segments
 DOT_FUTURE = (70, 76, 92)                         # fill for not-yet-reached phase dots
 
-# TIMS reskin: chrome buttons render as glossy bevel buttons (widgets.py). The
+# TIMS reskin: chrome buttons render as glossy bevel buttons (tims/widgets.py). The
 # lit/unlit = actionable/not language (shared with the shell tabs) replaces the
 # old green-primary concept — TIMS has no green CTA; the lit button IS the
-# emphasis. A disabled button uses the silver inactive palette (tims_chrome.DISABLED).
+# emphasis. A disabled button uses the silver inactive palette (chrome.DISABLED).
 BTN_NATIVE = chrome.FONT_PX["button"]             # warehouse button-label px (Noto AA-off native, k=1)
 # fmt: on
 
@@ -71,7 +71,7 @@ _TUT_BTN_TUNEABLES = chrome.BTN_LABEL
 
 # TIMS reskin step 1 — TYPEFACE swap only. All three chrome-font helpers now route through the
 # per-locale Noto Sans face (i18n.pixel_font_for_lang), the SAME face the OCR tutorial + every
-# setup_tims screen use. The old bold/medium/heavy weight kwargs are accepted-but-ignored: the TIMS
+# tims.setup screen use. The old bold/medium/heavy weight kwargs are accepted-but-ignored: the TIMS
 # chrome face is single-weight (Subset OTF Thin); emphasis comes from colour/lit-state, not weight.
 # AA, palette, buttons, and layout are intentionally untouched at this step — this is fonts only, so
 # the fit (Noto's taller leading vs Helvetica) can be judged before any structural refit.
@@ -672,7 +672,7 @@ class Tutorial:
         # clock + display.flip(). _origin is self.screen's topleft in host-window
         # coords; incoming event/mouse positions are translated by it before
         # hit-testing. Default (standalone) keeps origin (0,0) → no translation,
-        # behavior unchanged. See setup_tims/tutorial_basic.py (the embedded TIMS-tutorial host).
+        # behavior unchanged. See tims/setup/tutorial_basic.py (the embedded TIMS-tutorial host).
         self._embedded = False
         self._origin = (0, 0)
 

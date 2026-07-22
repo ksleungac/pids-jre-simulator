@@ -4,7 +4,7 @@ App-level runtime + the setup / chrome flow. Canonical home for app-level specs 
 
 > **EDIT-CONTRACT** — what this doc holds, what it refuses.
 >
-> **Holds:** runtime orchestration (`main.py` entry → setup↔drive loop), the launch-config shape, the setup/chrome flow (screens + register codes, selection flow, status band, model/tutorial pickers), the `setup_tims/` package map. The catch-all for an app-level spec with no narrower home.
+> **Holds:** runtime orchestration (`main.py` entry → setup↔drive loop), the launch-config shape, the setup/chrome flow (screens + register codes, selection flow, status band, model/tutorial pickers), the `tims/` package map. The catch-all for an app-level spec with no narrower home.
 >
 > **Refuses:**
 > - LCD render internals → [DISPLAY.md](DISPLAY.md); JSON field defs → [DATA_FORMAT.md](DATA_FORMAT.md); OCR pipeline → [auto_input/README.md](auto_input/README.md)
@@ -27,14 +27,14 @@ App-level runtime + the setup / chrome flow. Canonical home for app-level specs 
 ## Runtime map (`main.py`)
 `main()`:
 1. `pygame.init()` + `mixer.init()`; `update_check.check_async()` fires early (3 s network window overlaps setup).
-2. **Language resolution** — NO standalone picker. Saved `settings["language"]`, else `detect_default_lang()` (OS locale → `zh_CN` for Simplified locales, **`zh_HK` for everything else** — the HK-primary clean-install default, NOT English; `DEFAULT_LANG="en"` stays the separate translation fallback), persisted on genuine first-run; then `i18n.init(lang)`. Runtime switching + persistence is owned by the TIMS home's language knobs (`setup_tims/home.py`). (The pre-TIMS grey `LanguagePicker` was removed — stale + redundant beside the knobs; critical_lessons §6.)
+2. **Language resolution** — NO standalone picker. Saved `settings["language"]`, else `detect_default_lang()` (OS locale → `zh_CN` for Simplified locales, **`zh_HK` for everything else** — the HK-primary clean-install default, NOT English; `DEFAULT_LANG="en"` stays the separate translation fallback), persisted on genuine first-run; then `i18n.init(lang)`. Runtime switching + persistence is owned by the TIMS home's language knobs (`tims/setup/home.py`). (The pre-TIMS grey `LanguagePicker` was removed — stale + redundant beside the knobs; critical_lessons §6.)
 3. **OOBE tutorial** — CLASSIC flow only (`--classic` + not `oobe_completed`). The default TIMS flow does its own OOBE (§ Tutorial).
 4. **Setup ↔ drive loop:**
    - `_run_setup()` → launch config, or `None` → exit.
    - `pygame.display.quit()` (tear down setup window — the drive builds its own taller, panel-carved one).
    - `_run_drive(config)` → `"home"` (band Home → re-enter setup; pygame/mixer stay alive) or `"quit"` (window close / ESC → full exit).
 
-**`_run_setup(args, …)`** — default: `setup_tims.run(surface)` in a 730×610 window. `--classic`: `SetupScreen` in 730×420 with an inner replay-tutorial loop. Returns the launch config or `None`.
+**`_run_setup(args, …)`** — default: `tims.setup.run(surface)` in a 730×610 window. `--classic`: `SetupScreen` in 730×420 with an inner replay-tutorial loop. Returns the launch config or `None`.
 
 **`_run_drive(config)`** — builds `PASimulator(work_dir, route_data, auto_input=, model=)`; `jump_to_stop(start_idx)` if a start station was picked; if `auto_input`, spins `AutoDriver(lead_m, interval_s)` + `sim.auto_driver = driver` (exposes pause to the band). `sim.run()` returns the exit action; driver stopped in `finally`.
 
@@ -51,24 +51,24 @@ The dict every setup flow returns, shaped like `setup.SetupScreen.run()`:
 | `work_dir` | route folder (`audio/<line>/<diagram>/`) |
 | `route_data` | finalized route closure (`route_loader`) |
 | `model` | train-model key (override > route default > global default) |
-| `start_idx` | start-station stop index (setup_tims only; classic has none) |
+| `start_idx` | start-station stop index (tims setup only; classic has none) |
 | `auto_input` | OCR Auto-PA armed (adds `lead_m` / `interval_s`) |
 
 ## App run loop (`app.py::PASimulator.run`)
 Main loop drives events → PA/STA/pause + the render path; `_handle_band_click` dispatches the status-band cluster (pause / save-record / home). `exit_action` defaults `"quit"`, set `"home"` by band Home. On exit: `cleanup(full_quit = exit_action != "home")`, returns `exit_action` to `_run_drive`. State-machine spec: `DISPLAY.md § Unified State Machine`.
 
-## Setup flow (TIMS — default; `setup_tims/`)
-Console re-skin of the setup flow to the JR East TIMS cab look. Runs side-by-side with classic `setup.py` (`--classic`). Primitives in `widgets.py`; shared vocabulary in `tims_chrome.py`. Chrome/font/interaction RULES → `conventions.md`.
+## Setup flow (TIMS — default; `tims/setup/`)
+Console re-skin of the setup flow to the JR East TIMS cab look. Runs side-by-side with classic `setup.py` (`--classic`). Primitives in `tims/widgets.py`; shared vocabulary in `tims/chrome.py`. Chrome/font/interaction RULES → `conventions.md`.
 
 ### Package map
-- `home.py` — page-1 menu + the setup entry (`run()` re-exported as `setup_tims.run`).
+- `home.py` — page-1 menu + the setup entry (`run()` re-exported as `tims.setup.run`).
 - `pa_setting.py` — C07AA PA-setting page + the launch-config builder (`_build_config`).
 - `route_select.py` — route / start-station / run-pattern pickers.
 - `model_select.py` — X00AA train-model picker.
 - `tutorial_select.py` / `tutorial_basic.py` — tutorial menu + the reskinned walkthrough.
 - `ocr_setting.py` — OCR consent + settings.
 - `dims.py` — setup-window dims (`SCREEN_W/H`; band height re-export).
-- `status_band.py` (project root; shared with the live drive) — the persistent top band.
+- `band.py` — the persistent top band. Lives one level up at `tims/band.py` (shared with the live drive; not part of the `setup` subpackage).
 
 ### Screens + register codes
 Codes mirror the real TIMS register (`C07AC` / `X00AA` photographed; the rest plausible siblings — droppable, kept for fidelity).
@@ -110,9 +110,9 @@ From C07AA's 列車型號. Grid = built models (blue, from the train-model regis
 - **OCR自動報站 = the OCR consent view read-only** (`ocr_setting.run_consent(read_only=True)`).
 
 ### Persistent status band
-Full-width near-black status strip across every setup screen AND the live in-drive OCR panel — one module, `status_band.py` (root). `render(surf, status, sim_state, stops, save_notice=)`; `status=None` in setup → placeholder (no readings). Live drive feeds `auto_input_status` + wires the `[pause][save][home]` cluster via `app.py::_handle_band_click`. Detail: `auto_input/README.md § Debug panel`.
+Full-width near-black status strip across every setup screen AND the live in-drive OCR panel — one module, `tims/band.py`. `render(surf, status, sim_state, stops, save_notice=)`; `status=None` in setup → placeholder (no readings). Live drive feeds `auto_input_status` + wires the `[pause][save][home]` cluster via `app.py::_handle_band_click`. Detail: `auto_input/README.md § Debug panel`.
 - **Static labels render in EVERY state; only readings/effects gate on live status.** The `制限` speed-limit row label + the `km/h`/`m` units are static chrome → shown even in the no-readings setup band (beside the dim `--`). Live-only (absent until OCR runs): the actual numbers, the limit's cyan change-flash, the yellow message strips + save confirmation. The limit's cyan block is a CHANGE cue (blinks ~`LIMIT_FLASH_WINDOW` s on a value→value change, `driver` stamps `limit_change_ts` like `last_fire`), not a resting highlight.
-- **Live-drive control cluster interaction.** `[pause][save][home]` each flash yellow on press (`status_band.press_flash` → `press_transition`, the TIMS press-flash every clickable button gets — the setup band already did this). **Pause is a play/pause TOGGLE**: paused → label flips to 繼續/Play, drawn NORMAL (not persistent-yellow) so the flash reads on either direction; the paused state is signaled by the label + the `已暫停` message strip. (English "Resume"/"Continue" overflow the fixed band square, so the `en` resume label is the shorter "Play"; zh shows 繼續.)
+- **Live-drive control cluster interaction.** `[pause][save][home]` each flash yellow on press (`tims.band.press_flash` → `press_transition`, the TIMS press-flash every clickable button gets — the setup band already did this). **Pause is a play/pause TOGGLE**: paused → label flips to 繼續/Play, drawn NORMAL (not persistent-yellow) so the flash reads on either direction; the paused state is signaled by the label + the `已暫停` message strip. (English "Resume"/"Continue" overflow the fixed band square, so the `en` resume label is the shorter "Play"; zh shows 繼續.)
 
 ### Band Home
 Every setup screen's band Home returns to the HOME MENU (not one level up) with a press + loading beat. Deep pages return the sentinel `"home"`, bubbled up through parents (`route_select`/`model_select` → `pa_setting` → home; `tutorial_basic` → `tutorial_select` → home).

@@ -25,15 +25,15 @@ import pygame
 import i18n
 from app import PASimulator
 from displays.train_models.e235_1000 import S_HEIGHT, S_WIDTH
-from widgets import draw_tims_button, lowres_text_size, press_transition, tims_button_size
+from ..widgets import draw_tims_button, lowres_text_size, press_transition, tims_button_size
 
-import status_band as band
-import tims_chrome as chrome
+from .. import band
+from .. import chrome
 from .dims import BG_COLOR
 from tutorial import PHASE_KEYS, STEPS, Tutorial, _fmt_time, _font_cjk, _font_helv, _measure_mixed, _render_mixed, _wrap_atoms
 
 ACTIVE_LANG = "zh_HK"
-SCREEN_CODE = "C07AE"  # placeholder register code (droppable — like the other setup_tims screens)
+SCREEN_CODE = "C07AE"  # placeholder register code (droppable — like the other tims setup screens)
 
 # fmt: off
 # ── vertical-fit layout tuneables (all derived coords flow from these) ─────────
@@ -209,7 +209,7 @@ class BasicTutorial(Tutorial):
 
     def _load_beat(self):
         """Page-entry loading beat: band up top, the LCD/progress/panel region emptied to slate, held a
-        beat — the entry transition every setup_tims page shows. The tutorial_select → basic switch
+        beat — the entry transition every tims.setup page shows. The tutorial_select → basic switch
         resizes the window (taller), which swallows the caller's beat, so the view emits its own."""
         surf = self.screen
         surf.fill(BG_COLOR)

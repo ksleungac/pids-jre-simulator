@@ -177,7 +177,7 @@ The LAN port is unauthenticated. Acceptable for an opt-in, off-by-default, home-
 
 ## Known cosmetic issue
 
-`press_transition` (`widgets.py:404-410`) blocks ~130 ms with `pygame.time.delay` and its own `display.flip()`. The stream visibly freezes on every band button press. Cosmetic, not worth fixing for stage 1 — recorded so it is not mistaken for a streaming bug.
+`press_transition` (`tims/widgets.py:404-410`) blocks ~130 ms with `pygame.time.delay` and its own `display.flip()`. The stream visibly freezes on every band button press. Cosmetic, not worth fixing for stage 1 — recorded so it is not mistaken for a streaming bug.
 
 ---
 
@@ -201,7 +201,7 @@ T3 stream-liveness is the one that matters: the realistic silent failure is the 
   - **Coordinate-frame trap:** `_handle_lcd_click` takes *window* coords and subtracts the panel offset itself (`app.py:481`). A streamed frame has no such offset. The touch path must call `_click_target` directly rather than reuse the window-coord contract, or clicks land on the wrong station. Same trap the reactive-window work has to solve — shared solution.
 - **Do NOT synthesize OS keystrokes.** `_handle_input_main` polls globally via `keyboard.is_pressed()` (`app.py:539`) because the app is a companion overlay while the *game* holds focus. `keyboard.press()` would inject a real keypress straight into JRE Train Sim Real.
 - **Reuse the existing pending-flag channel.** `pending_next_pa` is the proven background-thread → main-thread signal (the OCR driver sets it; `_handle_input_main` consumes it behind the audio-busy gate from `critical_lessons §5`). A tap sets the same flag and inherits the retry semantics. Add symmetric `pending_next_sta` / `pending_pause`.
-- **Virtual buttons render in pygame, into the streamed frame** — reusing `widgets.draw_tims_button` + `tims_chrome` presets — with the web client staying a dumb image + coordinate reporter. HTML/CSS buttons would be a second UI toolkit and a second design language, destined to drift from the TIMS conventions. Same "do not own two renderers" argument that decided the whole feature.
+- **Virtual buttons render in pygame, into the streamed frame** — reusing `tims.widgets.draw_tims_button` + `tims.chrome` presets — with the web client staying a dumb image + coordinate reporter. HTML/CSS buttons would be a second UI toolkit and a second design language, destined to drift from the TIMS conventions. Same "do not own two renderers" argument that decided the whole feature.
 - **Press-flash over a stream** may be swallowed by latency. Plan local optimistic flash on tap, with the pygame-rendered flash as authoritative confirmation.
 
 ---

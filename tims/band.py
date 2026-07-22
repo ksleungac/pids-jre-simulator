@@ -1,14 +1,14 @@
 """Persistent TIMS status band — the near-black top strip.
 
-Two callers, one module (lives at project root so both import DOWN into it):
-  * the ``setup_tims`` screens render it as persistent chrome across the setup flow
+Two callers, one module (lives in the ``tims`` package):
+  * the ``tims.setup`` screens render it as persistent chrome across the setup flow
     (``status=None`` → the placeholder no-readings mode);
   * the live in-drive app (``app.py::PASimulator._render_panel``) renders it as the
     OCR debug panel, feeding a live ``auto_input.driver`` status dict.
 
 It IS the OCR debug panel — promoted from ``setup_tims/band.py`` when the live
 wiring landed. Width is taken from the caller's surface (``surf.get_width()``); the
-setup-window dims (SCREEN_W/H) live in ``setup_tims/dims.py`` — never a band concept.
+setup-window dims (SCREEN_W/H) live in ``tims/setup/dims.py`` — never a band concept.
 
   * LEFT         — OCR state, SMALL k=1: segment · inferred·played · BADGE.
   * CENTER       — readout cell: speed limit / speed / distance(m), WIDE numerals.
@@ -21,8 +21,8 @@ import time
 import pygame
 
 import i18n
-import tims_chrome as chrome  # shared palette + low-res text blit (chrome.blit_lowres)
-from widgets import (
+from . import chrome  # shared palette + low-res text blit (chrome.blit_lowres)
+from .widgets import (
     _TUNEABLES_TIMS_BUTTON,
     HINT_CYAN_COLOR,
     HINT_INK_COLOR,
@@ -328,7 +328,7 @@ _FIRE_KEYS = {
 
 
 # NOTE: the live-status branch below (status != None) is exercised by the live in-drive app
-# (app.py::_render_panel feeds the auto_input.driver status dict). The setup_tims callers pass
+# (app.py::_render_panel feeds the auto_input.driver status dict). The tims.setup callers pass
 # status=None → only the placeholder branch runs there. Don't flag either branch as dead.
 def _band_vals(status, sim_state, stops):
     """Map a live OCR `status` dict (auto_input.driver shape) onto the band's display fields. `status`
@@ -337,7 +337,7 @@ def _band_vals(status, sim_state, stops):
     if not status:
         # Setup stage: OCR is NOT running yet → the NO-READINGS state. Only the green notif hint shows;
         # no segment, no speed / limit / distance readings (dim '--'), no fire/stop messages, no cyan or
-        # yellow flashing. Applies to EVERY setup_tims screen (all pre-OCR). The live-status branch below
+        # yellow flashing. Applies to EVERY tims.setup screen (all pre-OCR). The live-status branch below
         # drives the real readings once auto_input feeds a status dict.
         return {
             "left": [
@@ -526,7 +526,7 @@ def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, f
 
 
 # Band control buttons flash yellow on press — the TIMS "registered" feedback every clickable
-# button gets (conventions § UI code style, TIMS button model). The setup_tims screens already
+# button gets (conventions § UI code style, TIMS button model). The tims.setup screens already
 # flash the band Home via press_transition; this is the same feedback for the LIVE-drive cluster
 # (pause / save / home), called from app.py::_handle_band_click at the click site.
 _BAND_BTN_LABEL_KEYS = {

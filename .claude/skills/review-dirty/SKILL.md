@@ -69,7 +69,7 @@ python _dev_scripts/lint_primitives.py <in-scope .py files>
 
 **(2) Semantic — the sub-classes a linter CANNOT reason about.** Check each in-scope file for a hardcoded literal that should instead DERIVE from a source:
 - **Special-case where a general rule belongs** — a specific literal used as a filter/branch that should be a predicate (`== \"_mock\"` where `startswith(\"_\")` is meant; one route/model/station name special-cased instead of its category). → the general predicate.
-- **Color literal == a palette constant** — an RGB tuple equal to a `tims_chrome` PALETTE value, typed inline instead of the constant. → the constant.
+- **Color literal == a palette constant** — an RGB tuple equal to a `tims.chrome` PALETTE value, typed inline instead of the constant. → the constant.
 - **Dimension re-typed, not read** — one model's dimension hardcoded in SHARED code. → `surf.get_height()` or a param.
 - **UI string bypassing i18n** — a user-facing chrome label as a literal. → `i18n.t(key)`.
 - **Route-derived field with per-call fallback** — `stop.get(\"X\") or default` in a renderer. → filled in the `finalize_route` closure (`principles.md` § \"JSON is input grammar\").

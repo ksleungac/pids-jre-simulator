@@ -21,9 +21,9 @@ sys.path.insert(0, ".")
 import pygame  # noqa: E402
 
 import i18n  # noqa: E402
-import status_band as band  # noqa: E402
+import tims.band as band  # noqa: E402
 from app_paths import project_root  # noqa: E402
-from setup_tims import pa_setting, route_select  # noqa: E402
+from tims.setup import pa_setting, route_select  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8")
 

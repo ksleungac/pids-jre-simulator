@@ -15,10 +15,10 @@ import pygame
 import i18n
 from app_paths import project_root
 from displays.train_models import DEFAULT_MODEL_KEY, model_choices
-from widgets import _TUNEABLES_TIMS_BUTTON, draw_lowres_text, draw_tims_button, press_transition
+from ..widgets import _TUNEABLES_TIMS_BUTTON, draw_lowres_text, draw_tims_button, press_transition
 
-import status_band as band
-import tims_chrome as chrome
+from .. import band
+from .. import chrome
 from . import dims
 
 ACTIVE_LANG = "zh_HK"
@@ -56,7 +56,7 @@ FLASH_MS       = 500         # current-model blink half-period (lit ↔ normal)
 _BTN_T = _TUNEABLES_TIMS_BUTTON
 # Grayed (not-yet-built) model = a flat SILVER button (desaturated face/bevel), NOT a dark scrim over the
 # blue (that read as 'shadowed', not 'disabled'). Same geometry as _BTN_T; only the colors go gray — the
-# ONE canonical silver now lives in tims_chrome.DISABLED (this screen was its original home before it spread).
+# ONE canonical silver now lives in chrome.DISABLED (this screen was its original home before it spread).
 _GRAY_T = {**_TUNEABLES_TIMS_BUTTON, **chrome.DISABLED}
 
 

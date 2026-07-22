@@ -16,10 +16,10 @@ import pygame
 
 import i18n
 from app_paths import project_root
-from widgets import draw_tims_button, press_transition, tims_button_size
+from ..widgets import draw_tims_button, press_transition, tims_button_size
 
-import status_band as band
-import tims_chrome as chrome
+from .. import band
+from .. import chrome
 from .dims import BG_COLOR, SCREEN_H, SCREEN_W
 
 ACTIVE_LANG = "zh_HK"  # UI language (carried in from the home menu; chrome is i18n)

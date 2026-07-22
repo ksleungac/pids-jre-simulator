@@ -357,7 +357,7 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
     "type_color": [R, G, B],       // Color for train type text (optional, default: black)
     "type": "列車種別",             // Train type (e.g., 快速，普通，各駅停車)
     "dest": "終点",                 // Final destination (kanji) - furigana loaded from data/translations.json
-    "remarks": {...},              // Optional. {direction, through, note} — feeds the TIMS route-select 備考 column via setup_tims/route_select._compose_remark.
+    "remarks": {...},              // Optional. {direction, through, note} — feeds the TIMS route-select 備考 column via tims/setup/route_select._compose_remark.
     "pre_stops": [...],            // Optional. Through-service pre-route stations rendered as dim/passed
     "frames": [...]                // Optional. Through-service display frames — partitions the route, LCD swaps at junctions
 }

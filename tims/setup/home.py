@@ -1,4 +1,4 @@
-"""Home menu — page 1 of the setup_tims flow. The first screen: a persistent OCR status
+"""Home menu — page 1 of the tims setup flow. The first screen: a persistent OCR status
 band across the top, four big action cards (報站設定 / 教學 / 設定 / 行車記錄), a bottom-right
 language-knob row, and a bottom-left version tag (flashes a SAME-STYLE update hint when a
 newer GitHub release exists).
@@ -18,7 +18,7 @@ import pygame
 import i18n
 import update_check
 from app_paths import display_version, project_root
-from widgets import (
+from ..widgets import (
     _TUNEABLES_TIMS_BUTTON,
     HINT_CYAN_COLOR,
     HINT_INK_COLOR,
@@ -31,9 +31,9 @@ from widgets import (
     press_transition,
 )
 
-import status_band as band
-import tims_chrome as chrome
-from status_band import BAND_H
+from .. import band
+from .. import chrome
+from ..band import BAND_H
 from .dims import BG_COLOR, SCREEN_H, SCREEN_W
 
 # TIMS chrome face = Noto Sans, per-locale, AA-OFF at native px, NO upscale (WIP § Font decision).

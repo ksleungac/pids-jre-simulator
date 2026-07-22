@@ -1,8 +1,8 @@
 """Shared TIMS chrome — the design tokens + bits every TIMS surface draws identically.
 
-Lives at project root (peer of ``widgets.py``) because it's shared by BOTH the
-``setup_tims`` setup flow AND the live in-drive status band (``status_band.py``,
-rendered from core ``app.py``). ``widgets.py`` holds the PRIMITIVES (how to draw a
+Lives in the ``tims`` package (peer of ``tims/widgets.py``) because it's shared by
+BOTH the ``tims.setup`` flow AND the live in-drive status band (``tims/band.py``,
+rendered from core ``app.py``). ``tims/widgets.py`` holds the PRIMITIVES (how to draw a
 button / low-res text); this holds the STYLE VOCABULARY (which palette, which
 button role, which font px). Promoted from ``setup_tims/chrome.py`` when the band
 graduated into the live OCR panel.
@@ -15,7 +15,7 @@ low-res text blit.
 import pygame
 
 import i18n
-from widgets import _TUNEABLES_TIMS_BUTTON, draw_lowres_text, draw_lowres_text_fat, lowres_text_size
+from .widgets import _TUNEABLES_TIMS_BUTTON, draw_lowres_text, draw_lowres_text_fat, lowres_text_size
 
 # fmt: off
 # ── TIMS palette — the SINGLE SOURCE for chrome colors (design tokens). Screens reference these
@@ -63,7 +63,7 @@ FONT_PX = {"title": 24, "heading": 16, "body": 16, "cap": 13, "button": 20}
 
 def blit_lowres(surf, text, x, y, font, color, k, *, right=False):
     """Draw low-res (AA-off) pixel text flush at (x, y); right=True right-anchors at x. Shared across
-    the setup_tims screens (band readout / table cells / recap rows / marquee / page indicator) — the
+    the tims.setup screens (band readout / table cells / recap rows / marquee / page indicator) — the
     one low-res text-blit primitive, not a per-screen private helper."""
     w, h = lowres_text_size(text, font, k, 0)
     tmp = pygame.Surface((max(1, w), max(1, h)), pygame.SRCALPHA)

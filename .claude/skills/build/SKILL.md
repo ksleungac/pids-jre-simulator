@@ -130,7 +130,7 @@ Copy-Item "dist\JRE-PA-Simulator.exe" "dist-release\JRE-PA-Simulator\"
 # - Hard-listed dev / repo-only / build-output folders below.
 $shipExclude = @(
     'dist', 'dist-release', 'build',               # build outputs (would self-recurse)
-    'displays', 'auto_input', 'setup_tims',        # Python source — bundled INTO exe by PyInstaller, not alongside
+    'displays', 'auto_input', 'tims',              # Python source — bundled INTO exe by PyInstaller, not alongside
     'memory', 'lcd_references', 'tims_references',  # repo-only / dev refs
     'audio_src', 'assets'                          # dev tooling / repo-only
 )

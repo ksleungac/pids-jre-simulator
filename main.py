@@ -45,8 +45,8 @@ def _run_setup(args, settings):
     """Show the setup flow (TIMS or classic) and return a launch config, or None to exit. Owns its own
     display creation so it can be re-entered after a drive returns Home (band Home button)."""
     if not args.classic:
-        # TIMS-console setup flow (setup_tims), own-window 730×610 — now the DEFAULT flow.
-        from setup_tims import run as run_tims
+        # TIMS-console setup flow (tims.setup), own-window 730×610 — now the DEFAULT flow.
+        from tims.setup import run as run_tims
 
         pygame.display.set_mode(TIMS_SIZE)
         pygame.display.set_caption("PA Simulator")
@@ -79,7 +79,7 @@ def _run_drive(config):
     try:
         sim = PASimulator(config["work_dir"], config["route_data"], auto_input=auto_input, model=config.get("model"))
         start_idx = config.get("start_idx")
-        if start_idx is not None:  # setup_tims start-station selection → land there (classic setup has no start_idx); idx 0 is a valid target
+        if start_idx is not None:  # tims setup start-station selection → land there (classic setup has no start_idx); idx 0 is a valid target
             sim.jump_to_stop(start_idx)
         if auto_input:
             from auto_input import AutoDriver
@@ -107,7 +107,7 @@ def main():
     parser.add_argument(
         "--classic",
         action="store_true",
-        help="Launch the classic setup screen instead of the default TIMS-console setup flow (setup_tims)",
+        help="Launch the classic setup screen instead of the default TIMS-console setup flow (tims.setup)",
     )
     parser.add_argument(
         "--stream",

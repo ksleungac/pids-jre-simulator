@@ -1,6 +1,6 @@
-"""Dev preview launcher for the setup_tims package (home menu + sub-screens).
+"""Dev preview launcher for the tims.setup package (home menu + sub-screens).
 
-The screens live in the production package `setup_tims/`; this launcher is the dev-only
+The screens live in the production package `tims/setup/`; this launcher is the dev-only
 preview entry that used to be each draft's `__main__`. Production never imports `_dev_scripts/`
 — this imports the OTHER way (dev → production), which is allowed.
 
@@ -17,7 +17,7 @@ sys.stdout.reconfigure(encoding="utf-8")  # Windows console is cp1252; the debug
 
 sys.path.insert(0, ".")
 
-from setup_tims import home, pa_setting, route_select, model_select, ocr_setting, tutorial_select, tutorial_basic  # noqa: E402
+from tims.setup import home, pa_setting, route_select, model_select, ocr_setting, tutorial_select, tutorial_basic  # noqa: E402
 
 _SCREENS = {
     "home": home,

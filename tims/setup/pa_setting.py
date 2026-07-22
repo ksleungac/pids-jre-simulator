@@ -25,15 +25,15 @@ import pygame
 import i18n
 from app_paths import project_root
 from displays.train_models import DEFAULT_MODEL_KEY, model_choices
-from widgets import (
+from ..widgets import (
     draw_lowres_text_fat,
     draw_tims_button,
     lowres_text_size,
     press_transition,
 )
 
-import status_band as band
-import tims_chrome as chrome
+from .. import band
+from .. import chrome
 from . import dims
 
 ACTIVE_LANG = "zh_HK"  # develop/preview in zh_HK (chrome is i18n; station/line names stay JP)

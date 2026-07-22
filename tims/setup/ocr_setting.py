@@ -26,10 +26,10 @@ import pygame
 
 import i18n
 from app_paths import project_root
-from widgets import draw_lowres_number, draw_tims_button, lowres_text_size, press_transition, tims_button_size
+from ..widgets import draw_lowres_number, draw_tims_button, lowres_text_size, press_transition, tims_button_size
 
-import status_band as band
-import tims_chrome as chrome
+from .. import band
+from .. import chrome
 from . import dims
 
 ACTIVE_LANG = "zh_HK"  # develop/preview in zh_HK (chrome is i18n)
@@ -655,7 +655,7 @@ def _draw_journey(surf, w, y, cap_font):
 _FOOT_T = {**chrome.BTN_BAR, "v_pad": 9}  # bottom-bar 2-char; v_pad trimmed 14→9 (FOOT_NATIVE 20 made it too tall)
 # 設定(accept) locked state — silver/grey palette (per conventions: grey = palette, not a scrim) until
 # the user scrolls to the bottom. Once ready it FLASHES (normal↔waiting) to hint "you can proceed".
-_FOOT_T_GREY = {**_FOOT_T, **chrome.DISABLED}  # canonical silver (was a darker private grey; unified to tims_chrome.DISABLED)
+_FOOT_T_GREY = {**_FOOT_T, **chrome.DISABLED}  # canonical silver (was a darker private grey; unified to chrome.DISABLED)
 
 
 def render_consent(screen, scroll_y, read_only=False):

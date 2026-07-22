@@ -440,15 +440,15 @@ Speed/departure logic — speed = own-train and badge-independent.
 
 When OCR Auto-PA enabled at setup screen, `PASimulator` allocates an extra `DEBUG_PANEL_HEIGHT` row above the LCD via pygame sub-surfaces. LCD code **completely unchanged** — it gets a sub-surface positioned at `(0, DEBUG_PANEL_HEIGHT)` and thinks it's drawing to a regular LCD-sized screen.
 
-**The panel IS the shared TIMS status band** (`status_band.render`, project root — the same band the `setup_tims` setup flow draws). `DEBUG_PANEL_HEIGHT` is re-exported from `status_band.BAND_H` (single source; the band owns its height). `app.py::_render_panel` feeds the band the live `auto_input_status` dict + stashes its returned `{home/save/pause}` hit-rects for the run-loop click handler (`_handle_band_click`: home stops PA + returns to setup, save = drive report, pause = auto-driver pause).
+**The panel IS the shared TIMS status band** (`tims.band.render` — the same band the `tims.setup` flow draws). `DEBUG_PANEL_HEIGHT` is re-exported from `tims.band.BAND_H` (single source; the band owns its height). `app.py::_render_panel` feeds the band the live `auto_input_status` dict + stashes its returned `{home/save/pause}` hit-rects for the run-loop click handler (`_handle_band_click`: home stops PA + returns to setup, save = drive report, pause = auto-driver pause).
 
-**Strict separation still holds:** `app.py` just hands the band a sub-surface + the status dict and knows nothing about layout / fonts / colors — only the render module moved (was `auto_input/driver.py::draw_debug_panel`, now `status_band.py`). The old `draw_debug_panel` + `handle_panel_click` have been **removed** — the band fully supersedes them; the band preview (`_dev_scripts/preview_band_ocr.py`) now carries its own mock fixtures.
+**Strict separation still holds:** `app.py` just hands the band a sub-surface + the status dict and knows nothing about layout / fonts / colors — only the render module moved (was `auto_input/driver.py::draw_debug_panel`, now `tims/band.py`). The old `draw_debug_panel` + `handle_panel_click` have been **removed** — the band fully supersedes them; the band preview (`_dev_scripts/preview_band_ocr.py`) now carries its own mock fixtures.
 
 ### Layout
 
-The live panel's layout (left OCR-state column / centre speed·limit·distance readout / message strips / [pause][save][home] cluster) lives in `status_band.py` + [APP.md § Persistent status band](../APP.md). It reads the status-dict fields below. The OCR-panel migration DROPPED the old confidence-colour tint (green/yellow/orange OCR-score) — too debug for the public band; the raw Layer-2 badge folds onto the state line instead.
+The live panel's layout (left OCR-state column / centre speed·limit·distance readout / message strips / [pause][save][home] cluster) lives in `tims/band.py` + [APP.md § Persistent status band](../APP.md). It reads the status-dict fields below. The OCR-panel migration DROPPED the old confidence-colour tint (green/yellow/orange OCR-score) — too debug for the public band; the raw Layer-2 badge folds onto the state line instead.
 
-The historical 3-line `draw_debug_panel` layout (ShinGoPr6N @ 14pt, `dep✓ arr·` flags, confidence colours) has been removed — `status_band.render` is now the sole panel renderer.
+The historical 3-line `draw_debug_panel` layout (ShinGoPr6N @ 14pt, `dep✓ arr·` flags, confidence colours) has been removed — `tims.band.render` is now the sole panel renderer.
 
 ### Width adaptivity
 
@@ -541,13 +541,13 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 |---|---|
 | `auto_input/` | Package — public surface re-exports `AutoDriver`, `generate_report` from `__init__.py`. Internal submodules below. |
 | `auto_input/driver.py` | **Primary** — `AutoDriver` class (in-process daemon thread) + `_Detector` state machine + `generate_report()` (drive-report trigger, called by the band Save button). All auto-input logic lives here. |
-| `status_band.py` | **Live OCR panel** (project root) — `render(surf, status, sim_state, stops)` draws the shared TIMS status band from the `auto_input_status` dict; returns `{home/save/pause}` hit-rects. `BAND_H` = the panel height (re-exported as `constants.DEBUG_PANEL_HEIGHT`). Shared with the `setup_tims` setup flow. |
+| `tims/band.py` | **Live OCR panel** — `render(surf, status, sim_state, stops)` draws the shared TIMS status band from the `auto_input_status` dict; returns `{home/save/pause}` hit-rects. `BAND_H` = the panel height (re-exported as `constants.DEBUG_PANEL_HEIGHT`). Shared with the `tims.setup` flow. |
 | `auto_input/hud_layout.py` | HUD + cell bbox constants for 2560×1440 (canonical desktop coords + region-cut derived coords) |
 | `auto_input/ocr.py` | OCR pipeline + badge classifier; runnable for offline validation (`uv run python -m auto_input.ocr`) |
 | `main.py` | Reads `auto_input` / `lead_m` / `interval_s` from setup-screen config dict. Spawns `AutoDriver` when `auto_input=True` and passes same flag to `PASimulator`. |
 | `setup.py` | OCR Auto-PA toggle pill + Lead/Interval steppers under route list. `_handle_band_click` updates state; selected route's Enter returns config dict including auto-input fields. |
-| `app.py` | `PASimulator`: allocates debug sub-surface in `_init_pygame`; `pending_next_pa` flag checked alongside keyboard in `_handle_input_main`; `auto_input_status` dict written by AutoDriver, read by `_render_panel()` which delegates to `status_band.render`. `MOUSEBUTTONDOWN` events in the panel area go to `_handle_band_click` (band's home/save/pause rects). `drive_log_path` attribute stashes live JSONL path so the report can find it. `run()` returns `"home"`/`"quit"`; band Home → return to setup. **No panel rendering logic lives in app.py.** |
-| `constants.py` | `DEBUG_PANEL_HEIGHT` — re-exported from `status_band.BAND_H` (single source; the band owns its height). |
+| `app.py` | `PASimulator`: allocates debug sub-surface in `_init_pygame`; `pending_next_pa` flag checked alongside keyboard in `_handle_input_main`; `auto_input_status` dict written by AutoDriver, read by `_render_panel()` which delegates to `tims.band.render`. `MOUSEBUTTONDOWN` events in the panel area go to `_handle_band_click` (band's home/save/pause rects). `drive_log_path` attribute stashes live JSONL path so the report can find it. `run()` returns `"home"`/`"quit"`; band Home → return to setup. **No panel rendering logic lives in app.py.** |
+| `constants.py` | `DEBUG_PANEL_HEIGHT` — re-exported from `tims.band.BAND_H` (single source; the band owns its height). |
 | `auto_input/sampling.py` | **THE per-cycle read path** — `read_hud()` (crop → 4 readers → 3 guards, in a load-bearing order) + `GuardState` / `Reading`. Called by BOTH `AutoDriver` and `ocr_observe.py`, so the diagnostic cannot drift from production. Carries a `# CONTRACT:` block on the ordering. |
 | `_dev_scripts/ocr_observe.py` | Standalone OCR corpus collector — calls `read_hud`, dumps full-HUD PNGs + `reads.jsonl` (RAW beside GUARDED). Observation only, fires nothing. |
 | `_dev_scripts/test_dxcam.py` | Diagnostic — full-desktop dxcam capture + brightness check |
