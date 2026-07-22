@@ -215,7 +215,7 @@ class JapaneseDisplay:
     def draw_clock(self, time_text: str) -> None:
         """Draw clock."""
         with clip(self.screen, CLOCK_RECT):
-            clock_x, clock_w, clock_h = S_WIDTH - 170, 80, 25
+            clock_x, clock_w, clock_h = CLOCK_RECT.left, CLOCK_RECT.width, 25
             pygame.draw.rect(self.screen, _bg("clock"), pygame.Rect(clock_x, 5, clock_w, clock_h))
             clock_img = self.font_clock.render(time_text, True, WHITE_BG)
             self.screen.blit(clock_img, (clock_x, 0))
@@ -397,7 +397,7 @@ class EnglishDisplay:
     def draw_clock(self, time_text: str) -> None:
         """Draw clock."""
         with clip(self.screen, CLOCK_RECT):
-            clock_x, clock_w, clock_h = S_WIDTH - 170, 80, 25
+            clock_x, clock_w, clock_h = CLOCK_RECT.left, CLOCK_RECT.width, 25
             pygame.draw.rect(self.screen, _bg("clock"), pygame.Rect(clock_x, 5, clock_w, clock_h))
             clock_img = self.font_clock.render(time_text, True, WHITE_BG)
             self.screen.blit(clock_img, (clock_x, 0))
