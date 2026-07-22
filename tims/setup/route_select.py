@@ -308,6 +308,25 @@ def _draw_arrow(surf, rect, direction, *, enabled):
     pygame.draw.polygon(surf, edge, ipts, 1)  # thin dark outline for crispness on the blue face
 
 
+def _bar_button_rects(btn_font, bar_y):
+    """Shared 返回/設定 bottom-bar geometry — both buttons are ONE grouped size
+    (the ``grouped = same size`` invariant): 返回 anchored at BACK_X, 設定 at the
+    right edge, both ``bw`` × ``bh``. Callers draw the two buttons; ``_render_grid``
+    additionally lays the ▲/▼ page cluster to the LEFT of ``conf_rect``.
+
+    Both heights are 返回's ``bh`` deliberately — 設定's own ink height can be a
+    couple px shorter (EN 'Set' vs 'Back' → 2px; CJK 設定/返回 equal), and pinning
+    the pair to one height is what the grouped invariant means. Factored out of
+    ``_render_grid`` (which formerly used 設定's own height for its box, silently
+    breaking the invariant in EN) + ``_render_diagram``."""
+    _, bh = tims_button_size(i18n.t("setup_tims.back"), btn_font, _BAR_T)
+    sw, _ = tims_button_size(i18n.t("setup_tims.set"), btn_font, _BAR_T)
+    bw = sw + BAR_BTN_PAD_W + BACK_EXTRA_W  # 設定 content + pad, then 返回's extra — shared width
+    back_rect = pygame.Rect(BACK_X, bar_y, bw, bh)
+    conf_rect = pygame.Rect(SCREEN_W - CONFIRM_RIGHT_PAD - bw, bar_y, bw, bh)
+    return back_rect, conf_rect
+
+
 def _render_grid(surf, screen_key, labels, box_font, box_w, box_h, *, selected_idx, flash_on, btn_font, page):
     """Draw ONE page of a selection-grid screen onto ``surf``; return hit-rects
     {"boxes":[(global_idx, rect)...], "back", "confirm", "up", "down", "home", "pages"}.
@@ -341,21 +360,16 @@ def _render_grid(surf, screen_key, labels, box_font, box_w, box_h, *, selected_i
         draw_tims_button(surf, r, labels[gi], font=box_font, t=box_t, state=state)
         box_rects.append((gi, r))
 
-    # bottom bar — 返回 (back) left (+5px); 設定 (set) right-anchored (+5px); ▲/▼ page cluster LEFT of 設定
+    # bottom bar — 返回 (back) left; 設定 (set) right-anchored; ▲/▼ page cluster LEFT of 設定
     bar_y = SCREEN_H - BAR_Y_FROM_BOTTOM
-    _, bh = tims_button_size(i18n.t("setup_tims.back"), btn_font, _BAR_T)
-    sw, sh = tims_button_size(i18n.t("setup_tims.set"), btn_font, _BAR_T)
-    sw += BAR_BTN_PAD_W  # 設定: content + pad
-    bw = sw + BACK_EXTRA_W  # shared bar-button width — 設定 matches 返回 (grouped = same size)
-    back_rect = pygame.Rect(BACK_X, bar_y, bw, bh)
+    back_rect, conf_rect = _bar_button_rects(btn_font, bar_y)
     draw_tims_button(surf, back_rect, i18n.t("setup_tims.back"), font=btn_font, t=_BAR_T, state="normal")
 
     # 設定 stays anchored at the right edge; the ▲/▼ cluster appears to its LEFT, only when paging
-    conf_rect = pygame.Rect(SCREEN_W - CONFIRM_RIGHT_PAD - bw, bar_y, bw, sh)  # 設定 same width as 返回
     up_rect = down_rect = None
     if pages > 1:
-        down_rect = pygame.Rect(conf_rect.x - SET_ARROW_GAP - ARROW_W, bar_y, ARROW_W, sh)
-        up_rect = pygame.Rect(down_rect.x - ARROW_GAP - ARROW_W, bar_y, ARROW_W, sh)
+        down_rect = pygame.Rect(conf_rect.x - SET_ARROW_GAP - ARROW_W, bar_y, ARROW_W, conf_rect.height)
+        up_rect = pygame.Rect(down_rect.x - ARROW_GAP - ARROW_W, bar_y, ARROW_W, conf_rect.height)
         _draw_arrow(surf, up_rect, "up", enabled=page > 0)
         _draw_arrow(surf, down_rect, "down", enabled=page < pages - 1)
         # page indicator "p/N" centered over the arrow cluster, above it
@@ -680,13 +694,8 @@ def _render_diagram(surf, route_name, start_name, end_name, variants, *, selecte
     # bottom bar — 戻る left · 設定 right-anchored (flashes white when a No. is picked). The 案内設定
     # shortcut is HIDDEN for now (user: "no idea what that is for") — see the 案内設定-shortcut note up top.
     bar_y = SCREEN_H - BAR_Y_FROM_BOTTOM
-    _, bh = tims_button_size(i18n.t("setup_tims.back"), btn_font, _BAR_T)
-    sw, _ = tims_button_size(i18n.t("setup_tims.set"), btn_font, _BAR_T)
-    sw += BAR_BTN_PAD_W
-    bw = sw + BACK_EXTRA_W  # shared bar-button width — 設定 matches 返回 (grouped = same size)
-    back_rect = pygame.Rect(BACK_X, bar_y, bw, bh)
+    back_rect, conf_rect = _bar_button_rects(btn_font, bar_y)
     draw_tims_button(surf, back_rect, i18n.t("setup_tims.back"), font=btn_font, t=_BAR_T, state="normal")
-    conf_rect = pygame.Rect(SCREEN_W - CONFIRM_RIGHT_PAD - bw, bar_y, bw, bh)  # 設定 same width as 返回
     conf_state = "waiting" if (selected_idx is not None and flash_on) else "normal"
     draw_tims_button(surf, conf_rect, i18n.t("setup_tims.set"), font=btn_font, t=_BAR_T, state=conf_state)
 

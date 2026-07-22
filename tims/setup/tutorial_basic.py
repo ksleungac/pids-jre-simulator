@@ -30,7 +30,7 @@ from ..widgets import draw_tims_button, lowres_text_size, press_transition, tims
 from .. import band
 from .. import chrome
 from .dims import BG_COLOR
-from tutorial import PHASE_KEYS, STEPS, Tutorial, _fmt_time, _font_cjk, _font_helv, _measure_mixed, _render_mixed, _wrap_atoms
+from tutorial import PHASE_KEYS, STEPS, Tutorial, _fmt_time, _font_cjk, _font_helv, _render_mixed
 
 ACTIVE_LANG = "zh_HK"
 SCREEN_CODE = "C07AE"  # placeholder register code (droppable — like the other tims setup screens)
@@ -112,22 +112,6 @@ _BTN_T = {
     "corner_radius": 4,
     "face_corner_radius": 3,
 }
-
-
-def _wrap_mixed(text, latin_f, cjk_f, max_w):
-    """Greedy wrap that keeps [[keycap]] markup atomic (via tutorial._wrap_atoms) and measures with
-    tutorial._measure_mixed — so wrapped lines re-render faithfully through _render_mixed."""
-    lines, cur = [], ""
-    for atom, is_space in _wrap_atoms(text):
-        trial = cur + atom
-        if not cur or _measure_mixed(trial.strip(), latin_f, cjk_f) <= max_w:
-            cur = trial
-        else:
-            lines.append(cur.rstrip())
-            cur = "" if is_space else atom
-    if cur.strip():
-        lines.append(cur.rstrip())
-    return lines
 
 
 class BasicTutorial(Tutorial):
@@ -415,7 +399,7 @@ class BasicTutorial(Tutorial):
                 if not hard_line.strip():
                     y += BLANK_GAP
                     continue
-                for line in _wrap_mixed(hard_line, latin_f, cjk_f, text_w):
+                for line in self._wrap_lines(hard_line, latin_f, cjk_f, text_w):
                     if last:  # flattened recap: drop a separator that wrapped to a line start
                         line = line.lstrip("· ")
                     img = _render_mixed(line, latin_f, cjk_f, color)

@@ -29,6 +29,7 @@ it — stations before the current stop dim to INACTIVE_COLOR.
 
 import json
 import math
+from collections import namedtuple
 from typing import Dict, List, Optional, Tuple
 import pygame
 import pygame.gfxdraw
@@ -952,6 +953,11 @@ class CircularFullRouteDisplay:
             pygame.gfxdraw.filled_circle(self.screen, cx, cy, inner_disk_r, CURRENT_COLOR)
             pygame.gfxdraw.aacircle(self.screen, cx, cy, inner_disk_r, CURRENT_COLOR)
 
+        # box-center (get_rect(center)) is DELIBERATE — tabular countdown digits are
+        # designed centered within their advance box, so this IS the optical center.
+        # Ink-centering (baseline / glyph metrics, like the 5-station renderer) was
+        # tried in #33 and reverted: it strips that designed balance and pulls
+        # asymmetric glyphs (5 / 7) left. Do NOT "fix" this to ink-centering.
         img = self.font_circle.render(str(minutes), True, DARK_BG)
         self.screen.blit(img, img.get_rect(center=(cx, cy)))
         if with_minute_suffix:
@@ -1296,6 +1302,27 @@ class OpenRouteFullRouteDisplay(CircularFullRouteDisplay):
         Keihin-Tōhoku at 46 → 23/row; revisit if cramped).
     """
 
+    _BandGeom = namedtuple("_BandGeom", "cy v_outer border_outer straight_right")
+
+    def _band_geometry(self) -> "_BandGeom":
+        """The four constants describing the ONE drawn folded track — shared by
+        ``_build_positions`` (stops sit on it), ``_draw_track`` (draws it), and
+        ``_draw_passed_band`` (its gray clips must align to it). One source so a
+        track-shape edit lands once; editing a formula in a single site would
+        desync the gray band from the track. Returns RAW values — ``_draw_track``
+        keeps its own ``max(1, …)`` clamp for the ``border_radius`` draw arg, and
+        each caller keeps its OWN local derivations (``straight_left`` / ``straight_w``
+        = stop layout, may reclaim the left margin later; ``v_inner`` / ``border_inner``
+        = the inner white hole). Only the genuinely-shared four live here."""
+        v_outer = self.curve_v_radius + self.track_stroke_w // 2
+        border_outer = v_outer - self.vert_seg_h_outer // 2
+        return self._BandGeom(
+            cy=self.y_top + (self.track_top_y + self.track_bottom_y) // 2,
+            v_outer=v_outer,
+            border_outer=border_outer,
+            straight_right=S_WIDTH - self.track_right_pad - border_outer,
+        )
+
     def _build_positions(self) -> None:
         """Index-keyed two-row layout, right-aligned at the fold (right cap).
 
@@ -1312,13 +1339,12 @@ class OpenRouteFullRouteDisplay(CircularFullRouteDisplay):
         # layout (inside both cap corner-arcs). The open-left side has no cap to
         # clear, but keeping the range symmetric with the circular keeps pitch
         # parallel; the dead left margin is reclaimed only if cramped (future).
-        v_outer = self.curve_v_radius + self.track_stroke_w // 2
-        border_outer = v_outer - self.vert_seg_h_outer // 2
-        straight_left = self.track_left_pad + border_outer
-        straight_right = S_WIDTH - self.track_right_pad - border_outer
+        g = self._band_geometry()
+        straight_left = self.track_left_pad + g.border_outer  # LOCAL: open-left layout, may reclaim margin later
+        straight_right = g.straight_right
         straight_w = straight_right - straight_left
 
-        cy = self.y_top + (self.track_top_y + self.track_bottom_y) // 2
+        cy = g.cy
         top_row_y = cy - self.curve_v_radius
         bot_row_y = cy + self.curve_v_radius
 
@@ -1355,11 +1381,11 @@ class OpenRouteFullRouteDisplay(CircularFullRouteDisplay):
         ends, rounded cap).
         """
         color = band_color if band_color is not None else self.color
-        v_outer = self.curve_v_radius + self.track_stroke_w // 2
-        v_inner = max(1, self.curve_v_radius - self.track_stroke_w // 2)
-        border_outer = max(1, v_outer - self.vert_seg_h_outer // 2)
+        g = self._band_geometry()
+        cy, v_outer = g.cy, g.v_outer
+        border_outer = max(1, g.border_outer)  # clamp for border_radius (draw arg, not a coordinate)
+        v_inner = max(1, self.curve_v_radius - self.track_stroke_w // 2)  # LOCAL: inner white hole
         border_inner = max(1, v_inner - self.vert_seg_h_inner // 2)
-        cy = self.y_top + (self.track_top_y + self.track_bottom_y) // 2
 
         outer_rect = pygame.Rect(
             self.track_left_pad,
@@ -1406,10 +1432,8 @@ class OpenRouteFullRouteDisplay(CircularFullRouteDisplay):
             return  # at the origin nothing is behind the train
         n = len(self.stops)
         n_bottom = (n + 1) // 2
-        cy = self.y_top + (self.track_top_y + self.track_bottom_y) // 2
-        v_outer = self.curve_v_radius + self.track_stroke_w // 2
-        border_outer = v_outer - self.vert_seg_h_outer // 2
-        straight_right = S_WIDTH - self.track_right_pad - border_outer
+        g = self._band_geometry()
+        cy, v_outer, straight_right = g.cy, g.v_outer, g.straight_right
         pad = 3
 
         clips: List[pygame.Rect] = []
