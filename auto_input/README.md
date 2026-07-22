@@ -245,7 +245,7 @@ Position invariant across language modes (EN/JA), game states (running/stopped/a
 import dxcam
 from auto_input.hud_layout import PROFILES
 profile = PROFILES[(desktop_w, desktop_h)]  # resolved at startup from bootstrap grab
-camera = dxcam.create(output_color="BGRA")  # native, skips cv2 conversion
+camera = _open_capture_camera(output_color="BGRA")  # adapter-enumerating; native BGRA
 frame = camera.grab(region=profile.capture_region)  # right-half quadrant, resolution-dependent
 ```
 
@@ -254,7 +254,7 @@ Notes:
 - `grab()` can return `None` (no new frame since last call) — retry with brief sleep
 - Game must be **rendering** (not minimized/alt-tabbed in a state where it pauses)
 - Top-right corner where HUD lives must not be covered by other windows
-- **Primary monitor only.** `dxcam.create()` is called with `output_idx=None` → dxcam auto-selects the output Windows flags Primary (device_idx 0, the first adapter). Both `capture_region` and the startup resolution probe are relative to that one monitor. See Limitations for the multi-monitor consequences.
+- **Adapter selection is enumerated, not hardcoded to device 0.** Capture opens via `_open_capture_camera` (`driver.py`), which walks every `(device_idx, output_idx)` dxcam exposes — primary output first — and returns the first whose `create()` succeeds (a successful create IS a live duplicator; `DuplicateOutput` runs inside it). A bare `dxcam.create()` addresses only adapter 0's primary output, which raises `DXGI_ERROR_UNSUPPORTED` (0x887A0004, a hard `COMError`) when the display is owned by a different adapter — the classic Microsoft-Hybrid (Optimus) case where DDA is unsupported against the discrete GPU. Enumeration finds the display's actual owner. On total failure the full traceback is printed (never muted — it is the only signal for the next machine) and the driver disables gracefully. Residual case: if the *only* adapter owning the display is the dGPU on a hybrid system, no dxgi combo works and the fallback is dxcam's `backend="winrt"` (needs the `winrt` package bundled) — see [#97](https://github.com/ksleungac/pids-jre-simulator/issues/97).
 
 ## OCR pipeline (digit cells)
 
@@ -579,7 +579,8 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 ## Limitations
 
 - **Supported resolutions**: 2560×1440 and 1920×1080. Adding new resolutions = `ResolutionProfile` entry + template extraction + validation. See "Recalibration".
-- **Primary monitor only**: capture targets the display Windows marks Primary (dxcam `output_idx=None`, `device_idx=0`). The game must run on the primary monitor, and the **primary monitor's own resolution** must be a supported one — a supported-resolution game on a *secondary* monitor is never captured, because the startup probe reads the primary's resolution and disables the driver if it isn't 2560×1440 or 1920×1080. A secondary monitor's placement does not offset the capture (region coords are output-local). Multi-GPU note: `device_idx=0` is fixed, so a primary display driven by a second adapter would mismatch.
+- **Primary monitor only**: capture targets the display Windows marks Primary (the primary output is tried first by `_open_capture_camera`). The game must run on the primary monitor, and the **primary monitor's own resolution** must be a supported one — a supported-resolution game on a *secondary* monitor is never captured, because the startup probe reads the primary's resolution and disables the driver if it isn't 2560×1440 or 1920×1080. A secondary monitor's placement does not offset the capture (region coords are output-local).
+- **Multi-GPU / hybrid graphics**: `_open_capture_camera` enumerates all adapters, so a primary display driven by a non-zero adapter is now found automatically. The unrecoverable case is a Microsoft-Hybrid (Optimus) system whose captured display is owned by the **discrete** GPU — DDA is unsupported against the dGPU by design, every dxgi combo raises `DXGI_ERROR_UNSUPPORTED`, and the driver disables (full traceback logged). User-side workarounds and the winrt fallback: [#97](https://github.com/ksleungac/pids-jre-simulator/issues/97).
 - **Game must be visible**: HUD area (top-right) must not be covered.
 - **Game must be actively rendering**: minimized/alt-tabbed games may stop rendering and produce stale captures.
 - **Scenery bleed**: HUD background is semi-transparent; very dark scenery behind reduces match scores (still reads correctly above ~0.7).

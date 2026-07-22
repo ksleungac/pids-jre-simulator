@@ -23,8 +23,10 @@ Usage (from `main.py`):
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
+import traceback
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -555,6 +557,74 @@ class _Detector:
         return events
 
 
+def _enumerate_capture_targets() -> list[tuple[int, int, bool]]:
+    """Every (device_idx, output_idx, is_primary) dxcam can address, primary first.
+
+    dxcam.create() with its defaults picks adapter 0's primary output. On an
+    iGPU+dGPU / multi-GPU machine, adapter 0 may not be the one whose D3D device
+    can duplicate the display, and there is no guarantee the display's adapter is
+    enumerated first. Parsing output_info() gives us the full set to walk so we can
+    find the combo that actually works. Primary-first so a working primary display
+    always beats a secondary monitor (the game runs on the primary; a wrong-monitor
+    capture is rejected downstream by the resolution-profile probe).
+    """
+    try:
+        info = dxcam.output_info()
+    except Exception as e:
+        print(f"[AutoDriver] dxcam.output_info() failed ({e}); falling back to device 0 / output 0.")
+        return [(0, 0, True)]
+    targets: list[tuple[int, int, bool]] = []
+    for line in info.strip().splitlines():
+        m = re.match(r"Device\[(\d+)\] Output\[(\d+)\]:.*Primary:(True|False)", line)
+        if m:
+            targets.append((int(m.group(1)), int(m.group(2)), m.group(3) == "True"))
+    if not targets:
+        return [(0, 0, True)]
+    targets.sort(key=lambda t: not t[2])  # primary outputs first
+    return targets
+
+
+def _open_capture_camera(output_color: str = "BGRA") -> Optional["dxcam.DXCamera"]:
+    """Open a working DXGI capture camera, trying every adapter/output combo.
+
+    The bare ``dxcam.create()`` addresses only adapter 0's primary output. When the
+    display is driven by a different adapter (iGPU+dGPU laptops, a monitor plugged
+    into the motherboard, multi-GPU desktops), ``IDXGIOutput1::DuplicateOutput``
+    raises ``DXGI_ERROR_UNSUPPORTED`` (0x887A0004) — a hard ``COMError`` that used
+    to kill the whole capture thread with a raw traceback (issue #97). We walk every
+    addressable combo instead and return the first whose ``create()`` succeeds (a
+    successful create IS a live duplicator — DuplicateOutput runs inside it).
+
+    On total failure we DO NOT mute the error: the last full traceback is printed so
+    the next machine's failure is diagnosable, then None is returned so the caller
+    disables the auto-driver gracefully while the rest of the app keeps running.
+    """
+    targets = _enumerate_capture_targets()
+    last_trace: Optional[str] = None
+    for device_idx, output_idx, is_primary in targets:
+        tag = f"device={device_idx} output={output_idx}{' (primary)' if is_primary else ''}"
+        try:
+            camera = dxcam.create(device_idx=device_idx, output_idx=output_idx, output_color=output_color)
+            if camera is None:
+                print(f"[AutoDriver] {tag}: dxcam.create() returned None; trying next combo.")
+                continue
+            print(f"[AutoDriver] dxcam capture opened on {tag}.")
+            return camera
+        except Exception as e:
+            last_trace = traceback.format_exc()
+            print(f"[AutoDriver] {tag}: capture failed ({e.__class__.__name__}: {e}); trying next combo.")
+    # No adapter/output could be duplicated. Surface the original error IN FULL —
+    # muting it is exactly what leaves us blind on the next report (#97). The most
+    # common residual cause here (every dxgi combo raising UNSUPPORTED) is a GPU/driver
+    # with no Desktop Duplication support; the fallback lever is dxcam's winrt backend
+    # (needs the `winrt` package bundled), noted on #97.
+    print(f"[AutoDriver] No DXGI capture target worked. Tried: {targets}. Auto-driver disabled.")
+    if last_trace:
+        print("[AutoDriver] Last capture error (full traceback, retained for debugging):")
+        print(last_trace, end="")
+    return None
+
+
 @dataclass
 class AutoDriver:
     """Background-thread auto-driver. Captures HUD, runs OCR, sets sim.pending_next_pa.
@@ -657,9 +727,11 @@ class AutoDriver:
 
     def _run(self) -> None:
         print("[AutoDriver] Initializing dxcam...")
-        camera = dxcam.create(output_color="BGRA")
+        camera = _open_capture_camera(output_color="BGRA")
         if camera is None:
-            print("[AutoDriver] dxcam.create() returned None — DXGI capture unavailable. Auto-driver disabled.")
+            # _open_capture_camera already reported the cause (and the full traceback
+            # on a hard COMError) — nothing was capturable on any adapter/output.
+            # Disable the auto-driver; the rest of the app keeps running.
             return
         self._camera = camera  # tracked so stop() can release it (see the _camera field note)
         # Resolution gate. HUD bboxes scale per ResolutionProfile; templates
