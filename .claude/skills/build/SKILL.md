@@ -120,6 +120,8 @@ The shipped zip ships the audio folder populated with all real route data (exclu
 
 **Inclusion model — default-ship, not hand-picked.** Stage every top-level project-root directory by default; maintain only an exclusion list. This solves the recurring "we forgot to add the new asset folder" class (2026-05-05 line_icons + ocr_templates) — new folders ship automatically; if a folder shouldn't ship, you add it to `$shipExclude` in a single visible action. The cost asymmetry is heavy in favor of over-shipping: missing-required-asset = release crash; extra-shipped-folder = a few MB in the zip.
 
+**Tracked-only invariant.** Default-ship is bounded by "shipped sources are committed sources" (`critical_lessons.md §1/§2`): the staging filter drops any candidate dir git does not track. This closes the gap the exclusion list can't — a dead **untracked** dir at root (not `_`/`.`-prefixed, not on the exclude list) that would otherwise ship as-is. It also means a not-yet-committed new asset dir is *skipped and loudly listed* rather than silently zipped, forcing the §2 "commit runtime materials first" discipline at build time.
+
 ```powershell
 New-Item -ItemType Directory -Force -Path "dist-release\JRE-PA-Simulator" | Out-Null
 Copy-Item "dist\JRE-PA-Simulator.exe" "dist-release\JRE-PA-Simulator\"
@@ -135,12 +137,26 @@ $shipExclude = @(
     'audio_src', 'assets'                          # dev tooling / repo-only
 )
 
-$shipDirs = Get-ChildItem -Path "." -Directory | Where-Object {
+# Hard guard: ship only dirs git actually TRACKS. An untracked top-level dir is
+# never a legit ship target — it's either dead cruft (a stale __pycache__ shell,
+# e.g. the post-refactor `setup_tims/` that shipped stale .pyc, 2026-07-23) or a
+# new asset that per critical_lessons §2 MUST be committed before it can ship.
+# Either way: skip it, and LOUDLY list what was skipped so a genuine new-asset dir
+# announces "commit me first" instead of silently vanishing from the zip.
+$trackedTop = git ls-files | ForEach-Object { ($_ -split '/')[0] } | Sort-Object -Unique
+
+$candidateDirs = Get-ChildItem -Path "." -Directory | Where-Object {
     $_.Name -notmatch '^[_.]' -and $_.Name -notin $shipExclude
 }
+$shipDirs = $candidateDirs | Where-Object { $trackedTop -contains $_.Name }
+$skippedUntracked = $candidateDirs | Where-Object { $trackedTop -notcontains $_.Name } | ForEach-Object { $_.Name }
 
 Write-Host "Shipping top-level directories:" -ForegroundColor Cyan
 $shipDirs | ForEach-Object { Write-Host "  $($_.Name)" }
+if ($skippedUntracked) {
+    Write-Host "SKIPPED (untracked — NOT shipped; commit first if it's a real asset):" -ForegroundColor Yellow
+    $skippedUntracked | ForEach-Object { Write-Host "  $_" }
+}
 
 foreach ($dir in $shipDirs) {
     if ($dir.Name -eq 'audio') {
@@ -158,7 +174,7 @@ foreach ($dir in $shipDirs) {
 }
 ```
 
-- **The print-out of `$shipDirs`** is a soft guard — eyeball-confirm what's being staged at the start of every build. If something appears that shouldn't, add to `$shipExclude` (a deliberate, visible action) and re-run.
+- **Two guards, hard then soft.** The tracked-only filter above is the *hard* guard (an untracked dir cannot ship, and any skipped one is printed under `SKIPPED (untracked …)`). The `$shipDirs` print-out is the *soft* guard on top — eyeball-confirm what's being staged. If a **tracked** dir appears that shouldn't ship, add it to `$shipExclude` (a deliberate, visible action) and re-run. If a dir you *expected* to ship shows up under SKIPPED, commit it first (`critical_lessons.md §2`).
 - **Adding a new top-level dev-only folder** (e.g. `_visual_iter/`, `_recordings/`, `audio_src/`) — convention is `_*` prefix or `.*` prefix; otherwise add to `$shipExclude`. New shipped folders need no skill edit at all.
 - **The `_*` filter applies recursively** — `data/_*`, `fonts/_*`, `ocr_templates/_*` would all be excluded if added in future, matching the `audio/_*/` Step 3 pattern.
 - Junction caveats:
@@ -214,8 +230,30 @@ Get-ChildItem -Path "audio" -Directory | Where-Object { $_.Name -notmatch '^_' }
     Copy-Item -Path $_.FullName -Destination $audioJunction -Recurse -Force
 }
 
-# Remove smoke-test-generated runtime state (see note below) before zipping.
-Remove-Item -Path "dist-release\JRE-PA-Simulator\settings.json" -Force -ErrorAction SilentlyContinue
+# --- Strip smoke-test self-pollution (generic — the whole class, not just settings.json) ---
+# Step 2e ran the exe with project_root() == the staged folder, so it wrote runtime state
+# THERE: settings.json (tester locale + oobe flag), drive_*.html Report output, _recordings/
+# drive JSONL, plus any future log / cache / crash-dump. None were part of Step 2d staging.
+# Invariant: the only legit staged-root entries are the exe and the shipped asset DIRS (all
+# non-`_`-prefixed). Everything else at the staged root is runtime cruft. Preserve data-bearing
+# artifacts by MOVING to a gitignored repo home; delete the regenerable rest. (2026-07-23: a
+# drive Report .html + _recordings/ JSONL shipped in the first v0.6.2 zip because only
+# settings.json was hardcoded here.)
+$stagedRoot = "dist-release\JRE-PA-Simulator"
+$keepFiles = @('JRE-PA-Simulator.exe')   # future bundled bare files (manual.pdf, LICENSE) go here
+Get-ChildItem $stagedRoot | Where-Object {
+    ($_.PSIsContainer -and $_.Name -match '^_') -or (-not $_.PSIsContainer -and $_.Name -notin $keepFiles)
+} | ForEach-Object {
+    if ($_.Name -eq '_recordings' -or $_.Name -match '\.jsonl$') {
+        # drive recordings = real replay data -> preserve in the gitignored repo _recordings/
+        New-Item -ItemType Directory -Force -Path "_recordings" | Out-Null
+        Move-Item -Path $_.FullName -Destination "_recordings\" -Force
+        Write-Host "  preserved (moved to _recordings/): $($_.Name)" -ForegroundColor Yellow
+    } else {
+        Remove-Item -Path $_.FullName -Recurse -Force
+        Write-Host "  stripped smoke-test artifact: $($_.Name)" -ForegroundColor Yellow
+    }
+}
 
 # Zip
 Compress-Archive -Path "dist-release\JRE-PA-Simulator" -DestinationPath "dist-release\JRE-PA-Simulator-v<VERSION>-distribution.zip" -Force
@@ -223,7 +261,7 @@ Compress-Archive -Path "dist-release\JRE-PA-Simulator" -DestinationPath "dist-re
 
 The `_*` exclusion is critical: `_archive/` (working backups, Sobu reference recordings, etc.) and `_mock/` (preview-only test catalog) must never reach end users — those are repo-internal scaffolding.
 
-**Smoke-test self-pollution — strip `settings.json` before zip.** `i18n.py` writes `settings.json` to `project_root()`, which in the exe resolves to `Path(sys.executable).parent` = the staged folder. The Step 2e smoke-test launch therefore *creates* `dist-release\JRE-PA-Simulator\settings.json` (e.g. `{"language": "en", "oobe_completed": true}`) carrying the tester's language choice + a completed-OOBE flag. If zipped, end users skip the first-run language picker and inherit the tester's locale. The `Remove-Item` above deletes it pre-zip. Any future runtime-written user-state file at project root (logs, caches, crash dumps from the smoke test) needs the same treatment — they only appear after Step 2e, so the include-everything staging in Step 2d can't pre-empt them.
+**Smoke-test self-pollution — strip the whole class before zip, not just `settings.json`.** The exe resolves `project_root()` to `Path(sys.executable).parent` = the staged folder, so *everything* it writes at runtime lands there during the Step 2e smoke launch, after Step 2d staging finished. Known writers: `i18n.py` → `settings.json` (`{"language": …, "oobe_completed": true}` — if zipped, end users skip the first-run picker and inherit the tester's locale); the OCR Report button → `drive_*.html`; a recorded drive → `_recordings/*.jsonl`. The generic sweep above is keyed on the invariant "the only legit staged-root entries are the exe + the shipped asset dirs" rather than a hardcoded filename, so a *new* runtime writer (a log, a cache, a crash dump) is caught the first time it appears instead of silently shipping. Data-bearing artifacts (drive recordings) are moved to the gitignored repo `_recordings/`, not deleted — a real replay drive is worth keeping. (2026-07-23: the first v0.6.2 zip shipped a 4.9 MB drive Report `.html` + a `_recordings/` JSONL because only `settings.json` was stripped; generalized in the same session.)
 
 **Never** use `Remove-Item -Recurse -Force $audioJunction` — `Remove-Item` with `-Recurse` on a junction follows the reparse point and deletes the real audio directory. Use `[System.IO.Directory]::Delete(path, false)` instead, which removes only the junction entry.
 
