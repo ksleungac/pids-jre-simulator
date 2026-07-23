@@ -275,7 +275,17 @@ class EnglishDisplay:
             draw_text_given_width(box_x, 10, box_w, self.font_type_bold, train_type, type_color, self.screen, collapse=True, script="latin")
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
-        """Draw destination with 'for' label above."""
+        """Draw destination with 'for' label above.
+
+        # CONTRACT: single-line dest is CENTERED (collapse=True) — the in-spec
+        # E235-1000 look (Yokosuka/Sōbu run single-line English dests). The
+        # 2-line branch below left-aligns at x=5, but that path fires ONLY on
+        # Yamanote (the sole route with 2-line dests), which is OUT-OF-SPEC for
+        # this model now that E235-0 is the real Yamanote. So "single-line
+        # centered here vs single-line left-aligned in E235-0" is an INTENTIONAL
+        # in-spec-vs-best-effort divergence, NOT sibling drift — do not "fix" it
+        # to match E235-0. See CLAUDE.md § "Per-model IRL line scope".
+        """
         with clip(self.screen, DEST_RECT):
             dest_box_x, dest_box_w = 15, 150
             for_y = 50

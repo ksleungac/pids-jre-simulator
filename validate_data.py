@@ -87,14 +87,28 @@ def _resolve_slug_ref(ref: str, lines_data: dict) -> tuple[bool, str]:
     Reusing production's parser is dual-purpose: validator and runtime can't
     drift on what counts as a valid reference (e.g. `.scale(abc)` rejected
     identically), AND running the validator exercises production code on
-    every authored data point — bugs in resolve_entry surface here."""
+    every authored data point — bugs in resolve_entry surface here.
+
+    Beyond "does it resolve", require the name fields the transfer renderers
+    hard-subscript — ``name_ja`` (both models) + ``name_en`` (e235_1000,
+    transfer_info.py:283/305). A slug whose names live ONLY in its variants,
+    referenced plain (no `.variant`), resolves cleanly but yields a name-less
+    entry → the renderer KeyErrors at draw time, far from the data gate. Catch
+    it here, where the message can name the slug. This is validator-only:
+    production's badge/filter path calls ``resolve_entry`` directly and
+    tolerates name-less entries (``_resolve_badges`` reads only ``badges``), so
+    this never reaches it — the guard belongs at the data gate, not the shared
+    resolver."""
     from displays.transfer_info import resolve_entry
 
     try:
-        resolve_entry(ref, lines_data)
-        return True, ""
+        entry = resolve_entry(ref, lines_data)
     except (KeyError, ValueError) as e:
         return False, str(e).strip("'\"")
+    missing = [f for f in ("name_ja", "name_en") if f not in entry]
+    if missing:
+        return False, f"'{ref}' resolves but lacks {'/'.join(missing)} — reference it with a '.variant' that provides the name fields"
+    return True, ""
 
 
 def check_stations_transfers(stations_data: dict, lines_data: dict, issues: list) -> None:

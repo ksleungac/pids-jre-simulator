@@ -505,6 +505,27 @@ class CircularFullRouteDisplay:
     # Layout — sta_code → (x, y) precomputation
     # -------------------------------------------------------------------------
 
+    _BandGeom = namedtuple("_BandGeom", "cy v_outer border_outer")
+
+    def _band_geometry(self) -> "_BandGeom":
+        """The track-band constants shared by ``_build_positions`` (stops sit on
+        the drawn track) and ``_draw_track`` (draws it). One source so a
+        track-shape edit lands once — editing the formula in a single site would
+        desync the stops from the track. Returns RAW values: ``_draw_track``
+        keeps its own ``max(1, …)`` clamp for the ``border_radius`` draw arg, and
+        each caller keeps its OWN local derivations (``straight_left`` /
+        ``straight_w`` = stop layout; ``v_inner`` / ``border_inner`` = inner
+        white hole). Only the genuinely-shared three live here.
+        ``OpenRouteFullRouteDisplay`` extends this with ``straight_right`` (its
+        passed-band clips also key off the band)."""
+        v_outer = self.curve_v_radius + self.track_stroke_w // 2
+        border_outer = v_outer - self.vert_seg_h_outer // 2
+        return self._BandGeom(
+            cy=self.y_top + (self.track_top_y + self.track_bottom_y) // 2,
+            v_outer=v_outer,
+            border_outer=border_outer,
+        )
+
     def _build_positions(self) -> None:
         """Compute screen position for each station present in stops[].
 
@@ -526,15 +547,15 @@ class CircularFullRouteDisplay:
         # spans inward from each rect edge by that radius. Stations sit only
         # in the straight section between the corners; arc regions carry no
         # station positions.
-        v_outer = self.curve_v_radius + self.track_stroke_w // 2
-        border_outer = v_outer - self.vert_seg_h_outer // 2
+        g = self._band_geometry()
+        border_outer = g.border_outer
         straight_left = self.track_left_pad + border_outer
         straight_right = S_WIDTH - self.track_right_pad - border_outer
         straight_w = straight_right - straight_left
 
         # Row centerline y values — derived from cy ± curve_v_radius to match
         # _draw_track's cy (avoids odd-sum 1-pixel offset on the bottom row).
-        cy = self.y_top + (self.track_top_y + self.track_bottom_y) // 2
+        cy = g.cy
         top_row_y = cy - self.curve_v_radius
         bot_row_y = cy + self.curve_v_radius
 
@@ -626,16 +647,17 @@ class CircularFullRouteDisplay:
         So inner border_radius is automatically right when both rects are
         offset by stroke_w on every side.
         """
+        g = self._band_geometry()
         # fmt: off
         # --- Track draw params (adjust freely) ---
-        v_outer = self.curve_v_radius + self.track_stroke_w // 2
-        v_inner = max(1, self.curve_v_radius - self.track_stroke_w // 2)
-        border_outer = max(1, v_outer - self.vert_seg_h_outer // 2)
+        v_outer      = g.v_outer
+        v_inner      = max(1, self.curve_v_radius - self.track_stroke_w // 2)
+        border_outer = max(1, g.border_outer)  # clamp for border_radius (draw arg, not a coordinate)
         border_inner = max(1, v_inner - self.vert_seg_h_inner // 2)
         # -----------------------------------------
         # fmt: on
 
-        cy = self.y_top + (self.track_top_y + self.track_bottom_y) // 2
+        cy = g.cy
 
         # Outer green rounded-corner rectangle
         outer_rect = pygame.Rect(
@@ -1302,25 +1324,24 @@ class OpenRouteFullRouteDisplay(CircularFullRouteDisplay):
         Keihin-Tōhoku at 46 → 23/row; revisit if cramped).
     """
 
-    _BandGeom = namedtuple("_BandGeom", "cy v_outer border_outer straight_right")
+    _OpenBandGeom = namedtuple("_OpenBandGeom", "cy v_outer border_outer straight_right")
 
-    def _band_geometry(self) -> "_BandGeom":
-        """The four constants describing the ONE drawn folded track — shared by
-        ``_build_positions`` (stops sit on it), ``_draw_track`` (draws it), and
-        ``_draw_passed_band`` (its gray clips must align to it). One source so a
-        track-shape edit lands once; editing a formula in a single site would
-        desync the gray band from the track. Returns RAW values — ``_draw_track``
-        keeps its own ``max(1, …)`` clamp for the ``border_radius`` draw arg, and
-        each caller keeps its OWN local derivations (``straight_left`` / ``straight_w``
-        = stop layout, may reclaim the left margin later; ``v_inner`` / ``border_inner``
-        = the inner white hole). Only the genuinely-shared four live here."""
-        v_outer = self.curve_v_radius + self.track_stroke_w // 2
-        border_outer = v_outer - self.vert_seg_h_outer // 2
-        return self._BandGeom(
-            cy=self.y_top + (self.track_top_y + self.track_bottom_y) // 2,
-            v_outer=v_outer,
-            border_outer=border_outer,
-            straight_right=S_WIDTH - self.track_right_pad - border_outer,
+    def _band_geometry(self) -> "_OpenBandGeom":
+        """Extends the parent's shared band geometry (``cy`` / ``v_outer`` /
+        ``border_outer``) with ``straight_right`` — the open route's
+        ``_build_positions`` and ``_draw_passed_band`` (its gray clips must align
+        to the fold cap) both key off it. The shared three come from ``super()``
+        so a track-shape edit lands once for BOTH the circular and open
+        renderers; only ``straight_right`` (open-route-specific) is added here.
+        Callers keep their OWN local derivations (``straight_left`` /
+        ``straight_w`` = stop layout, may reclaim the left margin later;
+        ``v_inner`` / ``border_inner`` = the inner white hole)."""
+        base = super()._band_geometry()
+        return self._OpenBandGeom(
+            cy=base.cy,
+            v_outer=base.v_outer,
+            border_outer=base.border_outer,
+            straight_right=S_WIDTH - self.track_right_pad - base.border_outer,
         )
 
     def _build_positions(self) -> None:
@@ -2635,3 +2656,17 @@ class LowerDisplay(E235_1000_LowerDisplay):
         # top with THIS model's UPPER_HEIGHT (ARC_RECT.top = 130, not 1000's 117)
         # so the upper LCD is the same height across all three slots.
         self.transfer_display.upper_height = ARC_RECT.top
+
+    # E235-0's native norm is NO end-of-route lock. `_should_lock_to_eight` is a
+    # LINEAR end-of-route heuristic inherited from E235-1000 (it drops the FULL
+    # slot once the train is within LOCK_THRESHOLD stops of the route tail).
+    # Yamanote — this model's in-spec route — is a circular LOOP with no end for
+    # that heuristic to fire on, so no-lock IS E235-0's real default, not a
+    # special case. Keeping the borrowed lock for out-of-spec (best-effort)
+    # routes would ADD a non-native E235-1000 behavior — the opposite of
+    # best-effort, which is "the model's own native norm applied to whatever
+    # route is loaded, not a borrowed feature." So the lock is off for EVERY
+    # route here; the inherited LOCK_THRESHOLD (7) is never consulted (kept only
+    # to satisfy the LowerDisplayBase non-None CONTRACT — see displays/lower_lcd.py).
+    def _should_lock_to_eight(self, cursor_pos: int) -> bool:
+        return False

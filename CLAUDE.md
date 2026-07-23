@@ -100,6 +100,8 @@ The simulator accepts **any** route into **any** train model. Reality only const
 | **In-spec** (model's IRL lines) | Match real PIDS |
 | **Out-of-spec** | Best-effort: no crashes, no missing-key errors, no broken layouts. Not obligated to IRL-accurate fidelity. |
 
+**Best-effort = the model's OWN native norm applied to any route — never a borrowed behavior or bespoke feature propping up an out-of-spec route.** Adapt the model's own look to the route's shape (e235_0 opens its circular racetrack into a *horseshoe* for a non-loop line — native, adapted), but don't import another model's behavior (e235_0 drops e235_1000's inherited end-of-route *lock* — that lock is a linear heuristic foreign to a loop; no-lock is e235_0's native norm). *For the reviewer:* a cross-model divergence where each model expresses its own native norm is NOT sibling-drift — verify against this section before flagging; a borrowed foreign feature IS the violation. And out-of-spec renders (the horseshoe) are **transitional** — e235_1000 is the stable general model for all routes until per-line-native models land, and as those arrive out-of-spec best-effort support is *removed*, not grown.
+
 ### IRL display conventions
 
 Behaviors true on real trains, mirrored by the simulator:
