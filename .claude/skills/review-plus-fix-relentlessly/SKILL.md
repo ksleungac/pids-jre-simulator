@@ -131,6 +131,8 @@ done
 
 When you (main agent) decide to defer a finding rather than fix it during a cycle, file it as a **GitHub issue** (`gh issue create`) regardless of severity. The daily-log routing path (`memory/YYYY-MM-DD.md`) is **not used** — daily logs are narrative continuity / metacognitive observations only per `session-recap/SKILL.md`. Code-related obligations live as forward state in the issue backlog.
 
+**Exception — staleness/cleanup pass on your OWN just-landed refactor.** When the review is checking a refactor YOU just built for residue (stale comments/docs, dead code the deletion orphaned) — not triaging unfamiliar surfaces — prefer fixing EVERY finding inline; do NOT file follow-up issues for residue you can safely sweep now. Filing tickets for your own sweepable residue just grows the backlog with work you're already positioned to finish. (2026-07-23: user — *"don't spawn any more residue tasks to follow-up."*) The issue-filing default still holds for findings on code you DIDN'T build or can't safely fix blind (the fix-confidence gating above).
+
 ### Routing rule
 
 Every deferred finding → a GitHub issue with the `review-finding` label (plus the area label — `auto-input` / `display` / `chrome-i18n` / … — so it groups on the board).

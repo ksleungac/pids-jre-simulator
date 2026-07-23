@@ -198,9 +198,9 @@ _scroll_offset: int = 0
 # element_id → dict of: "candidates": list, "idx": int, "original": any.
 _candidate_state: dict = {}
 
-# Drag state for waypoint handles (arc element Phase 1b). Set on
-# MOUSEBUTTONDOWN over a handle; cleared on MOUSEBUTTONUP. While set,
-# MOUSEMOTION updates the underlying `arc_pN_x` / `arc_pN_y` values.
+# Drag state for waypoint handles (five_station m/g/v/a + transfer-panel tp). Set
+# on MOUSEBUTTONDOWN over a handle; cleared on MOUSEBUTTONUP. While set,
+# MOUSEMOTION updates the underlying `<prefix><idx>_x` / `_y` values.
 _dragging_waypoint: Optional[tuple] = None  # (prefix, idx) of dragged handle, or None
 # Grab offset (wp - mouse) captured at mousedown so dragging is relative —
 # without it, the generous hit radius makes every grab snap the waypoint to
@@ -643,8 +643,8 @@ def _on_click(pos, sim) -> bool:
             # Auto-switch to KANJI when focusing a lower-LCD element. The
             # EIGHT slot dispatches `japanese_eight_display` only in
             # KANJI/FURIGANA modes; ENGLISH falls through to the full-route
-            # renderer. Without this switch, clicking the arc in ENGLISH
-            # mode would hide it behind the full-route view.
+            # renderer. Without this switch, clicking a 5-station element in
+            # ENGLISH mode would hide it behind the full-route view.
             if cfg.get("target") == "lower":
                 from displays.base import DisplayMode
 
@@ -898,36 +898,12 @@ _EDGE_OFFSET_SUFFIXES = (
 )
 
 
-_WAYPOINT_RE = re.compile(r"_p\d+_(x|y)$")
-_STROKE_RE = re.compile(r"_p\d+_stroke$")
-
-
-def _is_waypoint_key(key: str) -> Optional[str]:
-    """Return 'x' or 'y' if key matches the `_p<N>_x|y` waypoint pattern, else None."""
-    m = _WAYPOINT_RE.search(key)
-    return m.group(1) if m else None
-
-
-def _is_stroke_key(key: str) -> bool:
-    """True if key matches the `_p<N>_stroke` per-waypoint thickness pattern."""
-    return bool(_STROKE_RE.search(key))
-
-
 def _param_kind_from_key(key: str):
     for suffix in _EDGE_OFFSET_SUFFIXES:
         if key.endswith(suffix):
             # Return edge label only — caller maps to indicator geometry.
             edge = suffix.rsplit("_", 1)[0].lstrip("_")  # _right_offset → right
             return f"edge_{edge}"
-    if _is_waypoint_key(key) is not None:
-        # Polyline waypoint coords (e.g. arc_p0_x) — indicator = dot at the
-        # waypoint's (px, py). Distinct from generic "x"/"y" which rulers
-        # from screen-edge.
-        return "waypoint"
-    if _is_stroke_key(key):
-        # Per-waypoint band half-width (arc_p0_stroke etc) — indicator =
-        # bar centered at the waypoint with length = stroke value.
-        return "stroke"
     if key.endswith("_x"):
         return "x"
     if key.endswith("_y"):
@@ -1138,33 +1114,6 @@ def _draw_indicator_at(screen) -> None:
             _draw_v_ruler(screen, color, rect.top, rect.top + val, ruler_x_left)
         elif edge == "bottom":
             _draw_v_ruler(screen, color, rect.bottom - val, rect.bottom, ruler_x_left)
-    elif kind == "waypoint":
-        # Polyline waypoint: highlight ring at (px, py). Resolve paired axis
-        # in same dict — arc_p0_x ↔ arc_p0_y.
-        axis = _is_waypoint_key(key)
-        if axis is None:
-            return
-        stem = key[: -len("_x")]  # both _x and _y are 2 chars
-        px_key = stem + "_x"
-        py_key = stem + "_y"
-        if px_key in d and py_key in d:
-            px = int(d[px_key])
-            py = int(d[py_key])
-            pygame.draw.circle(screen, color, (px, py), 8, 2)
-            pygame.draw.circle(screen, color, (px, py), 2)
-    elif kind == "stroke":
-        # Per-waypoint band thickness: horizontal bar centered at (px, py)
-        # with length = val. Resolves paired _x/_y from `arc_pN_stroke` →
-        # `arc_pN_x` / `arc_pN_y`.
-        stem = key[: -len("_stroke")]
-        px_key = stem + "_x"
-        py_key = stem + "_y"
-        if px_key in d and py_key in d:
-            px = int(d[px_key])
-            py = int(d[py_key])
-            half = max(1, int(val) // 2)
-            pygame.draw.line(screen, color, (px - half, py), (px + half, py), 3)
-            pygame.draw.circle(screen, color, (px, py), 2)
     elif kind == "radius":
         # Radial line from center going east, length = val. Center may sit
         # off-canvas (e.g. arc_center_x < 0); draw clips automatically.
@@ -1331,11 +1280,11 @@ def _apply_waypoint_drag(pos) -> None:
 def _draw_arc_polyline_preview(screen) -> None:
     """Small open-crosshair grab handles at each waypoint.
 
-    Renders only when arc element is focused (caller-gated). The smooth
-    Catmull-Rom band IS the preview — straight-line connector dropped
-    (would visibly diverge from the rendered curve). Handles use a generous
-    hit radius (_HANDLE_HIT_R) but a small, OPEN-centre crosshair visual so
-    the point being aligned (and any element underneath) stays visible.
+    Renders only when the focused element has a `waypoints` cfg (caller-gated) —
+    today the five_station handles (m/g/v/a) and the transfer-panel handles (tp).
+    No connector line is drawn (the element's own render shows the shape). Handles
+    use a generous hit radius (_HANDLE_HIT_R) but a small, OPEN-centre crosshair
+    visual so the point being aligned (and any element underneath) stays visible.
     """
     if not _handles_visible:
         return
@@ -1787,7 +1736,7 @@ def _swap_dict_literal(text: str, dict_name: str, new_values: dict, src_path: Pa
     lines = text.split("\n")
     # Walk keys in REVERSE so col-offset edits on later keys don't shift the
     # cols of earlier keys on the same line. Multi-key-per-line schemas
-    # (e.g. _TUNEABLES_ARC's `"arc_p0_x": ..., "arc_p0_y": ..., "arc_p0_stroke": ..."`
+    # (e.g. _TUNEABLES_FIVE_STATION's `"m1_x": ..., "m1_y": ..., "m1_r": ..."`
     # rows) require this — forward iteration corrupts the file the moment a
     # value's repr length differs from the original on a multi-key line.
     # Single-key-per-line dicts are also safe under reverse since each line

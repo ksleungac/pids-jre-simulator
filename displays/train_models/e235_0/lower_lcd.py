@@ -64,60 +64,11 @@ from displays.train_models.e235_1000.lower_lcd import (
 from displays.transfer_info import apply_transfer_filter, resolve_entry
 from displays.train_models.e235_1000.transfer_info import load_icon
 
-# =============================================================================
-# 5-station view — green curve band geometry (Phase 1 scaffold)
-#
-# Centerline = centripetal Catmull-Rom spline through 7 waypoints:
-#   p0          — band start end-cap (no station marker, taper)
-#   p1..p5      — 5 station slots, each rendered as a time-circle proxy.
-#                 p1 = current stop; p5 = furthest ahead.
-#   p6          — band end end-cap (no station marker, taper)
-#
-# Station positions ARE the geometry — the IRL band's shape is defined by
-# where the 5 station markers sit along it. End-caps extend the band a bit
-# past the outermost stations so the band visually terminates beyond the
-# station row rather than at it.
-#
-# Spline passes through every waypoint, gives C1 continuity at junctions,
-# and uses neighbor waypoints to compute tangents (endpoints get reflected
-# phantom neighbors). Each waypoint carries its own stroke (band thickness);
-# strokes linearly interpolate along the densified centerline.
-#
-# Tuned via the calibration editor (see _dev_scripts/calibration_editor.py).
-# IRL Yamanote band isn't a pure circular arc — Catmull-Rom + per-point
-# stroke matches the IRL DOFs (variable thickness, non-uniform curvature).
-# =============================================================================
-
-# fmt: off
-_TUNEABLES_ARC = {
-    # p0 — band start end-cap (just past current-stop side, no marker).
-    "arc_p0_x": 528,   "arc_p0_y": 480,   "arc_p0_stroke": 103,
-    # p1..p5 — 5 station slots, time-circle proxy renders at each.
-    "arc_p1_x": 467,   "arc_p1_y": 354,   "arc_p1_stroke": 100,   # current stop
-    "arc_p2_x": 417,   "arc_p2_y": 286,   "arc_p2_stroke":  85,
-    "arc_p3_x": 365,   "arc_p3_y": 234,   "arc_p3_stroke":  67,
-    "arc_p4_x": 299,   "arc_p4_y": 187,   "arc_p4_stroke":  56,
-    "arc_p5_x": 231,   "arc_p5_y": 154,   "arc_p5_stroke":  48,   # furthest stop
-    # p6 — band end end-cap (just past furthest stop, no marker).
-    "arc_p6_x":   2,   "arc_p6_y": 102,   "arc_p6_stroke":  25,
-    "arc_color": (116, 193, 30),  # Yamanote-green default
-    # Post-densification smoothing passes. 0 = pure Catmull-Rom (curve
-    # passes exactly through every waypoint). Higher = each iteration
-    # applies a 3-tap [1,2,1]/4 averaging filter to interior centerline
-    # samples (endpoints fixed) which relaxes the band away from precise
-    # waypoint pull, producing a more natural sweeping shape. Stroke
-    # taper is smoothed in the same pass. Try 3-10.
-    "arc_smoothing": 0,
-}
-# Indices of waypoints rendered as station markers (time-circle proxies).
-_ARC_STATION_SLOTS = (1, 2, 3, 4, 5)
-# fmt: on
-
-# Bounding rect (re-synced each frame from _TUNEABLES_ARC via ARC_RECT.update
-# in draw_arc). Calibration editor uses this as the hit-test rect when the
-# user clicks on the lower LCD. Sized to span the lower-LCD area by default;
-# editor doesn't need pixel-tight bounding since the arc is the only thing
-# on the lower LCD in Phase 1.
+# Lower-LCD bounding rect — clips/fills the 5-station view and anchors the
+# bottom disclaimer; the calibration editor also uses it as the hit-test rect
+# for clicks on the lower LCD. Spans the whole lower-LCD area. (The `ARC_`
+# prefix is historical — the retired Catmull-Rom arc geometry it once bounded
+# was replaced by the hand-drawn mask PNG + mask-derived fill centerline.)
 ARC_RECT = pygame.Rect(0, UPPER_HEIGHT, S_WIDTH, S_HEIGHT - UPPER_HEIGHT)
 
 # Hit-test rect for the inline transfer panel (left column). A sub-region of
@@ -166,10 +117,6 @@ _BAND_FILL_FEATHER = 18
 # exceed the band's widest half-thickness so the green reaches both edges;
 # over-coverage is harmless (clipped by the band PNG's own alpha).
 _BAND_FILL_HALF_WIDTH = 100
-# Centerline densification — Catmull-Rom samples per waypoint segment. Higher =
-# finer arc-length steps = smoother feather gradient + perpendicular front.
-# 40 ≈ 2-3 px steps → the feather still reads smooth without oversampling.
-_BAND_FILL_SAMPLES_PER_SEG = 40
 
 
 def _bake_band(color) -> pygame.Surface:
@@ -187,6 +134,30 @@ def _bake_band(color) -> pygame.Surface:
     rgb[is_fill] = color
     del rgb  # unlock before blitting
     return band
+
+
+def _extract_band_centerline() -> List[Tuple[float, float]]:
+    """Medial centerline of the band mask — one point per pixel row, the
+    horizontal centroid of the band's FILL in that row, ordered bottom → top
+    (the sweep direction). The mask is a SINGLE contiguous band per row
+    (verified: zero multi-segment rows over the shipped PNG), so a per-row
+    centroid is a faithful medial line — no parametric waypoints, no Catmull-Rom.
+
+    Loads the RAW mask (near-white fill, same test as ``_bake_band``): the baked
+    band is tinted, so its fill is no longer near-white — hence the fresh load.
+    ndarray methods only (``.nonzero()`` / ``.mean()``) — surfarray returns real
+    ndarrays, so no numpy import is needed (matches ``_bake_band``'s style)."""
+    band = pygame.image.load(str(_BAND_MASK_PATH)).convert_alpha()
+    rgb = pygame.surfarray.array3d(band)  # (w, h, 3)
+    alpha = pygame.surfarray.array_alpha(band)  # (w, h)
+    fill = (rgb.min(axis=2) >= _BAND_FILL_MIN) & (alpha > 10)
+    h = fill.shape[1]
+    pts: List[Tuple[float, float]] = []
+    for y in range(h - 1, -1, -1):  # bottom → top
+        xs = fill[:, y].nonzero()[0]
+        if xs.size:
+            pts.append((float(xs.mean()), float(y)))
+    return pts
 
 
 # =============================================================================
@@ -293,91 +264,6 @@ _TUNEABLES_TRANSFER_PANEL = {
     "tp_shink_wrap_x": 233, # shinkansen 2-line wrap right edge (NARROWER than curve; fixed cut at 北海道|上越)
 }
 # fmt: on
-
-
-def _build_catmull_rom_centerline(
-    pts: List[Tuple[float, float]],
-    strokes: List[float],
-    samples_per_seg: int,
-) -> Tuple[List[Tuple[float, float]], List[float]]:
-    """Densify waypoint polyline into a smooth centerline + per-sample strokes.
-
-    Centripetal Catmull-Rom (alpha=0.5) between each waypoint pair. The
-    spline passes through every waypoint. Endpoints use reflected phantom
-    neighbors (p_-1 = p0 + (p0 - p1)). Strokes linearly interpolate along
-    each segment. Returns (centerline_points, per_sample_strokes), both of
-    length n*samples_per_seg + 1, ending exactly on the last waypoint.
-    """
-    n = len(pts)
-    if n < 2:
-        return list(pts), list(strokes)
-
-    phantom_left = (2 * pts[0][0] - pts[1][0], 2 * pts[0][1] - pts[1][1])
-    phantom_right = (2 * pts[-1][0] - pts[-2][0], 2 * pts[-1][1] - pts[-2][1])
-    ext = [phantom_left] + list(pts) + [phantom_right]
-
-    alpha = 0.5
-    centerline: List[Tuple[float, float]] = []
-    sample_strokes: List[float] = []
-    for k in range(n - 1):
-        p0, p1, p2, p3 = ext[k], ext[k + 1], ext[k + 2], ext[k + 3]
-        s_a, s_b = strokes[k], strokes[k + 1]
-        t0 = 0.0
-        t1 = t0 + max(math.hypot(p1[0] - p0[0], p1[1] - p0[1]) ** alpha, 1e-9)
-        t2 = t1 + max(math.hypot(p2[0] - p1[0], p2[1] - p1[1]) ** alpha, 1e-9)
-        t3 = t2 + max(math.hypot(p3[0] - p2[0], p3[1] - p2[1]) ** alpha, 1e-9)
-        for s in range(samples_per_seg):
-            u = s / samples_per_seg
-            t = t1 + u * (t2 - t1)
-            a1x = (t1 - t) / (t1 - t0) * p0[0] + (t - t0) / (t1 - t0) * p1[0]
-            a1y = (t1 - t) / (t1 - t0) * p0[1] + (t - t0) / (t1 - t0) * p1[1]
-            a2x = (t2 - t) / (t2 - t1) * p1[0] + (t - t1) / (t2 - t1) * p2[0]
-            a2y = (t2 - t) / (t2 - t1) * p1[1] + (t - t1) / (t2 - t1) * p2[1]
-            a3x = (t3 - t) / (t3 - t2) * p2[0] + (t - t2) / (t3 - t2) * p3[0]
-            a3y = (t3 - t) / (t3 - t2) * p2[1] + (t - t2) / (t3 - t2) * p3[1]
-            b1x = (t2 - t) / (t2 - t0) * a1x + (t - t0) / (t2 - t0) * a2x
-            b1y = (t2 - t) / (t2 - t0) * a1y + (t - t0) / (t2 - t0) * a2y
-            b2x = (t3 - t) / (t3 - t1) * a2x + (t - t1) / (t3 - t1) * a3x
-            b2y = (t3 - t) / (t3 - t1) * a2y + (t - t1) / (t3 - t1) * a3y
-            cx = (t2 - t) / (t2 - t1) * b1x + (t - t1) / (t2 - t1) * b2x
-            cy = (t2 - t) / (t2 - t1) * b1y + (t - t1) / (t2 - t1) * b2y
-            centerline.append((cx, cy))
-            sample_strokes.append(s_a * (1.0 - u) + s_b * u)
-    centerline.append(pts[-1])
-    sample_strokes.append(strokes[-1])
-    return centerline, sample_strokes
-
-
-def _smooth_centerline(
-    centerline: List[Tuple[float, float]],
-    strokes: List[float],
-    iterations: int,
-) -> Tuple[List[Tuple[float, float]], List[float]]:
-    """Relax the centerline + strokes via repeated [1,2,1]/4 averaging.
-
-    Endpoints stay fixed (don't smooth the band's first/last terminations).
-    Interior samples blend with neighbors. Each iteration is a gentle
-    low-pass; piling on iterations approaches a globally smooth shape
-    that's less dominated by individual waypoint positions — Catmull-Rom
-    waypoints become guides, not strict pass-throughs.
-    """
-    n = len(centerline)
-    if n < 3 or iterations <= 0:
-        return centerline, strokes
-    cur_c = list(centerline)
-    cur_s = list(strokes)
-    for _ in range(iterations):
-        new_c = list(cur_c)
-        new_s = list(cur_s)
-        for i in range(1, n - 1):
-            new_c[i] = (
-                (cur_c[i - 1][0] + 2 * cur_c[i][0] + cur_c[i + 1][0]) / 4.0,
-                (cur_c[i - 1][1] + 2 * cur_c[i][1] + cur_c[i + 1][1]) / 4.0,
-            )
-            new_s[i] = (cur_s[i - 1] + 2 * cur_s[i] + cur_s[i + 1]) / 4.0
-        cur_c = new_c
-        cur_s = new_s
-    return cur_c, cur_s
 
 
 # =============================================================================
@@ -1716,30 +1602,17 @@ class JapaneseFiveStationDisplay:
         self._tp_icon_cache: dict = {}
 
     def _build_fill_centerline(self) -> None:
-        """Densify the band centerline the green fill sweeps along.
+        """Precompute the band centerline the green fill sweeps along.
 
-        Waypoints = the two band end-caps (retired `_TUNEABLES_ARC` p0/p6 — the
-        band terminations) bracketing the five live marker centres m0..m4. The
-        fill is parameterised by ARC LENGTH along this curve and cuts its front
-        perpendicular to the local tangent, so the leading edge stays diagonal
-        to the band at every height. Stores per-sample point / cumulative arc
-        length / unit-normal arrays + total length, all read each frame in
-        show_stops. Precomputed once (markers are fixed tuneables).
+        Derived DIRECTLY from the band mask's own geometry — the per-row
+        horizontal centroid of the fill, bottom → top (see
+        ``_extract_band_centerline``). The fill is parameterised by ARC LENGTH
+        along this curve and cuts its front perpendicular to the local tangent,
+        so the leading edge stays diagonal to the band at every height. Stores
+        per-sample point / cumulative arc length / unit-normal arrays + total
+        length, all read each frame in show_stops. Precomputed once at __init__.
         """
-        ta = _TUNEABLES_ARC
-        tf = _TUNEABLES_FIVE_STATION
-        waypoints = [
-            (ta["arc_p0_x"], ta["arc_p0_y"]),  # bottom end-cap (below current stop)
-            (tf["m0_x"], tf["m0_y"]),  # current stop
-            (tf["m1_x"], tf["m1_y"]),
-            (tf["m2_x"], tf["m2_y"]),
-            (tf["m3_x"], tf["m3_y"]),
-            (tf["m4_x"], tf["m4_y"]),  # furthest ahead
-            (ta["arc_p6_x"], ta["arc_p6_y"]),  # top end-cap (past furthest)
-        ]
-        # Strokes are unused here (the fill only needs the geometry); pass a
-        # dummy array to satisfy the helper signature and discard its output.
-        pts, _ = _build_catmull_rom_centerline(waypoints, [1.0] * len(waypoints), _BAND_FILL_SAMPLES_PER_SEG)
+        pts = _extract_band_centerline()
         # Cumulative arc length per sample.
         cum = [0.0]
         for i in range(1, len(pts)):
@@ -1906,8 +1779,11 @@ class JapaneseFiveStationDisplay:
                     # Digit size = per-station tuneable m<N>_ts (eyeball pass;
                     # radius→size law to be derived from the tuned values).
                     radius = t[f"m{k}_r"]
-                    digit_font = self._font("HelveticaNeue-Bold.otf", t[f"m{k}_ts"])
-                    self._draw_numbered_circle(pos, minutes[k - 1], radius, digit_font)
+                    m = minutes[k - 1]
+                    # Passing station (out-of-spec skip route) → m is None → empty
+                    # ring, no digit, no font needed.
+                    digit_font = self._font("HelveticaNeue-Bold.otf", t[f"m{k}_ts"]) if m is not None else None
+                    self._draw_numbered_circle(pos, m, radius, digit_font)
                 self._draw_jy_badge(stop, gpos, t[f"g{k}_b"])
                 self._draw_station_name(stop.get("name", ""), gpos, t[f"g{k}_ns"], t[f"g{k}_ni"])
 
@@ -1981,7 +1857,7 @@ class JapaneseFiveStationDisplay:
                 out.append(idx)
         return out
 
-    def _ahead_minutes(self, state, current_time: float, vis: List[int]) -> List[int]:
+    def _ahead_minutes(self, state, current_time: float, vis: List[int]) -> List[Optional[int]]:
         """Cumulative arrival minutes for the visible stops ahead of curr
         (E235-1000 draw_times accumulation). ``vis`` is the index sequence from
         ``_visible_stop_indices`` (curr first, then up to four ahead, wrapping on
@@ -1996,9 +1872,19 @@ class JapaneseFiveStationDisplay:
         Each visible stop's own ``time`` is the leg from its predecessor; this
         holds across the circular wrap because the doubled terminal shares the
         same leg (大崎→品川 is identical whether 大崎 is stops[0] or stops[-1])."""
-        mins: List[int] = []
+        mins: List[Optional[int]] = []
         cumulative = 0 if state.at_station else self._first_stop_minutes(state, current_time)
         for idx in vis[1:]:
+            # Passing station (empty `pa`) on an out-of-spec skip route: it takes
+            # no countdown number and contributes nothing to the cumulative chain
+            # — its `time` may be null, which would crash the sum. Marked None so
+            # the draw loop renders an empty ring in the slot. Best-effort only; a
+            # proper passing chevron (as the full-route open view draws) is a
+            # deferred ultra-low-priority follow-up — the 5-station view's fixed
+            # slots have no calibrated passing-marker treatment.
+            if not self.stops[idx].get("pa"):
+                mins.append(None)
+                continue
             cumulative += self.stops[idx].get("time", 0)
             mins.append(int(cumulative))
         return mins
@@ -2245,9 +2131,12 @@ class JapaneseFiveStationDisplay:
     # Marker primitives — copied from CircularFullRouteDisplay (same model).
     # -------------------------------------------------------------------------
 
-    def _draw_numbered_circle(self, pos: Tuple[int, int], minutes: int, radius: float, font: pygame.font.Font) -> None:
+    def _draw_numbered_circle(self, pos: Tuple[int, int], minutes: Optional[int], radius: float, font: Optional[pygame.font.Font] = None) -> None:
         """White countdown disk + dark minute digit. Green band shows as the
-        ring around the disk (no explicit ring drawn)."""
+        ring around the disk (no explicit ring drawn). ``minutes=None`` → an
+        empty ring with no digit: the 5-station view's best-effort marker for a
+        passing (out-of-spec skip) station, which has no calibrated chevron slot
+        here (a proper passing chevron is a deferred ultra-low-priority item)."""
         # fmt: off
         # --- Numbered circle params (adjust freely) ---
         disk_color = (245, 245, 250)   # near-white disk; green band peeks as ring
@@ -2257,6 +2146,8 @@ class JapaneseFiveStationDisplay:
         r = int(radius)
         pygame.gfxdraw.filled_circle(self.screen, cx, cy, r, disk_color)
         pygame.gfxdraw.aacircle(self.screen, cx, cy, r, disk_color)
+        if minutes is None:
+            return  # passing station — empty ring, no number
         # Centre the digit's INK on (cx, cy), not its rendered surface box: the
         # surface is a full font line-height tall and the font's ascent gap
         # above a digit exceeds its descent gap below, so box-centring parks the
