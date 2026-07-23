@@ -462,6 +462,16 @@ class _Detector:
     # silent-advance. None = no pending re-entry. Surfaced to the panel as the
     # "re-aligning…" indicator. See auto_input/README.md § "Re-entry".
     reentry_latch: Optional[str] = None
+    # Motion provenance: True while the current motion began with a WITNESSED
+    # STOPPED→(MOVING|PASSING) edge (a valid, cross-reject-passed badge read).
+    # Motion of known origin is a normal departure the audible primary owns —
+    # re-entry's BASE arming condition is `not motion_origin_known` (re-entry
+    # exists only for motion of unknown origin: cold boot mid-transit, or a
+    # post-jump history reset). Set at the edge, cleared on MOVING→STOPPED and
+    # by _reanchor_to_app. 2026-07-23 incident: on a segment shorter than the
+    # arrival lead, the 1B condition is true from the first moving frame of a
+    # perfectly normal departure — only provenance separates the two.
+    motion_origin_known: bool = False
 
     def inferred_state(self) -> str:
         """Return the canonical Layer 3 state for the current sample.
@@ -520,14 +530,31 @@ class _Detector:
                 self.departure_observed = False
                 self.arrival_observed = False
                 self.at_station_observed = False
+                # Witnessed edge — this motion has a known origin (a normal
+                # departure). Disarms re-entry for the segment; see the
+                # motion_origin_known field comment.
+                self.motion_origin_known = True
             elif self.prev_badge in ("MOVING", "PASSING") and badge == "STOPPED":
                 events.append("MOVING->STOPPED")
-        # CONTRACT: departure = LEVEL test in [SPEED_DEPARTURE_KMH, DEPARTURE_STALE_KMH),
-        # gated by departure_observed. Badge-independent, direction-agnostic, no prev_speed.
+                # Parked — the next motion must witness its own edge.
+                self.motion_origin_known = False
+        # CONTRACT: departure = LEVEL test speed >= SPEED_DEPARTURE_KMH, gated by
+        # departure_observed. Badge-independent, direction-agnostic, no prev_speed.
         # See auto_input/README.md § "Arrival and departure are level tests, not crossings".
         # Re-adding a crossing loses the departure whenever prev_speed is absent or stale-high.
+        #
+        # Upper bound (DEPARTURE_STALE_KMH) applies ONLY to unknown-origin motion —
+        # it reserves the >=60 cold-join case for re-entry's silent 1A (arrow (d)).
+        # On a WITNESSED departure edge (motion_origin_known) the segment just
+        # started, so the announcement is FRESH at any speed: fire with no ceiling,
+        # audibly (arrow (a) mimicking (d)). Without this, a platform dwell whose
+        # acceleration lands entirely inside an OCR dropout (badge/speed = ? through
+        # the whole [30,60) band, first valid read already >=60) loses the departure
+        # AND re-entry is disarmed by the witnessed edge → nothing catches it, app
+        # stuck at 1C (2026-07-24 01:36 log). Normal drive must never be compromised.
         if speed is not None and not self.departure_observed:
-            if SPEED_DEPARTURE_KMH <= speed < DEPARTURE_STALE_KMH:
+            ceiling_ok = speed < DEPARTURE_STALE_KMH or self.motion_origin_known
+            if SPEED_DEPARTURE_KMH <= speed and ceiling_ok:
                 events.append("FIRE_DEPARTURE")
                 self.departure_observed = True
         # Arrival: level test, gated on badge==MOVING. Skips PASSING (wrong distance ref);
@@ -536,18 +563,22 @@ class _Detector:
             if not self.arrival_observed and distance <= self.arrival_lead_m:
                 events.append("FIRE_ARRIVAL")
                 self.arrival_observed = True
-        # At-station: level test, gated on (badge==STOPPED AND arrival_observed).
-        # `arrival_observed` ensures the train *just* arrived in this segment —
-        # it rules out boot (parked at start station with no preceding approach)
-        # and post-jump_to_stop. Triggers the press that flips `at_station=True`
-        # on the simulator (no audio — unified state machine's APPROACHING→STOPPING
-        # transition is silent; pa_at_station cycling happens on subsequent presses).
+        # At-station: level test on badge==STOPPED alone — the reachability rule:
+        # "in 1A/1B, a new STOPPED badge is the arrival fact; the app must always
+        # reach the next stage." NOT gated on arrival_observed: a dropout that ate
+        # the arrival must not strand the app in transit (the fire-side drain
+        # normalizes cnt_pa — see _fire_at_station). Boot (parked at start with no
+        # preceding approach) is ruled out by _fire_at_station's app-parked skip;
+        # post-jump refire by _reanchor_to_app setting at_station_observed=True.
+        # Triggers the press that flips `at_station=True` on the simulator (no
+        # audio — unified state machine's APPROACHING→STOPPING transition is
+        # silent; pa_at_station cycling happens on subsequent presses).
         # DELIBERATELY badge-only — do NOT add a speed/distance gate here. The STOPPED
         # badge is canonical groundtruth (the game never shows it in motion) and is the
         # most reliable read on the HUD; the speed/distance digit reads are noisier, so
         # folding one in would only dilute an already-stable trigger. The stopping-offset
         # gate uses the same badge-only rule. Badge read > (distance, speed).
-        if badge == "STOPPED" and self.arrival_observed and not self.at_station_observed:
+        if badge == "STOPPED" and not self.at_station_observed:
             events.append("FIRE_AT_STATION")
             self.at_station_observed = True
         if speed is not None:
@@ -828,9 +859,10 @@ class AutoDriver:
                     # The user clicked a station on the lower LCD; App jumped to
                     # STOPPING@curr_stop (jump_to_stop). Mirror that into Layer 2 so
                     # subsequent fires track from the new position. Consumed before the
-                    # fresh OCR read so the re-anchored prev_badge="STOPPED" is in place
-                    # when detector.update() runs this cycle. Re-anchor has no failing
-                    # preconditions, so consume immediately.
+                    # fresh OCR read so the invalidated badge history (prev_badge=None,
+                    # motion_origin_known=False) is in place when detector.update()
+                    # runs this cycle. Re-anchor has no failing preconditions, so
+                    # consume immediately.
                     # Scope: resets OCR memory for the parked case (Layer 3
                     # STOPPED/IDLE). A click-jump mid-transit (Layer 3 driving) is
                     # then caught by _maybe_reentry below — the re-anchor zeroes the
@@ -1106,8 +1138,16 @@ class AutoDriver:
         else:  # "1A"
             # 3C CRUISING (speed ≥ DEPARTURE_STALE_KMH, MOVING or PASSING) → land 1A; seed dep.
             self._detector.departure_observed = True
-            self.sim.pending_silent_advance = "1A"
-            print(f"          [AD] >>> RE-ENTRY: silent advance to 1A (game CRUISING/PASSING, speed={speed})")
+            if self._next_stopping_pa_count() == 1:
+                # pa=1: the single announcement is NEVER stale — the catch-up
+                # plays it AUDIBLY (user rule: "pa=1 always play it"). Same
+                # press as a departure fire (pa_at_station backlog drains, app
+                # advances 1A playing pa[0]) instead of a silent advance.
+                self._fire_departure()
+                print(f"          [AD] >>> RE-ENTRY: audible catch-up to 1A (pa=1 — announcement never stale; speed={speed})")
+            else:
+                self.sim.pending_silent_advance = "1A"
+                print(f"          [AD] >>> RE-ENTRY: silent advance to 1A (game CRUISING/PASSING, speed={speed})")
         return target
 
     def _resolve_reentry_target(self, speed: Optional[int], distance: Optional[int]) -> Optional[str]:
@@ -1126,6 +1166,15 @@ class AutoDriver:
             return None
         if not self.sim.state.at_station:
             return None  # app already moving (1A/1B) — normal flow owns it
+        # BASE ARMING CONDITION — validated before any target resolution:
+        # re-entry handles only motion of UNKNOWN origin. A witnessed
+        # STOPPED→(MOVING|PASSING) edge means this is a normal departure the
+        # audible primary owns — re-entry never activates, whatever the
+        # speed/distance reads say (2026-07-23: a 703m segment < 900m lead made
+        # the 1B condition true from the first moving frame of a normal
+        # departure and silently ate the departure PA).
+        if self._detector.motion_origin_known:
+            return None
         inferred = self._detector.inferred_state()
         if inferred in (Layer3State.UNKNOWN, Layer3State.IDLE, Layer3State.STOPPED):
             return None  # OCR fail / first cycle / game parked — no desync
@@ -1137,13 +1186,44 @@ class AutoDriver:
         # audio) from "long into the segment, announcement stale" (at or above).
         badge = self._detector.prev_badge
         if badge == "MOVING" and distance is not None and distance <= self._detector.arrival_lead_m:
-            return "1B"
+            # pa=1 segments have NO distinct 1B — cnt_pa = len(pa)-1 = 0 makes
+            # 1A ≡ 1B the same AppState, and the single announcement must never
+            # be skipped by a silent landing. Only a pa>=2 landing stop (a real
+            # まもなく sub-state) is a 1B target; on pa=1 re-entry may only
+            # resolve 1A, and the STOPPING state is reached by the at-station
+            # transition edge itself (STOPPED badge → FIRE_AT_STATION).
+            next_pa = self._next_stopping_pa_count()
+            if next_pa is not None and next_pa >= 2:
+                return "1B"
         if speed is not None and speed >= DEPARTURE_STALE_KMH:
             return "1A"
         # Below DEPARTURE_STALE_KMH → no target: the audible primary owns [30, 60), this
         # silent fallback owns [60, ∞). PASSING is treated as MOVING here (the arrival lead
         # is the ONLY thing PASSING changes — the MOVING-only 1B branch above).
         # See auto_input/README.md § "Primary/fallback strictness must not invert".
+        return None
+
+    def _next_stopping_pa_count(self) -> Optional[int]:
+        """pa count of the stop a re-entry advance would land on, or None if no
+        advance is possible (parked at terminus, non-circular).
+
+        Mirrors app.py `_advance_to_next_stop`'s landing rule (its `_is_stopping`
+        predicate + the circular loop-back past duplicate idx 0) — that method is
+        the canonical source of the landing semantics; keep in sync.
+        """
+        stops = self.sim.stops
+        st = self.sim.state
+
+        def _is_stopping(stop) -> bool:
+            return bool(stop.get("pa")) or bool(stop.get("pa_at_station"))
+
+        for k in range(st.curr_stop + 1, len(stops)):
+            if _is_stopping(stops[k]):
+                return len(stops[k].get("pa", []))
+        if getattr(st, "circular", 0) == 1:
+            for k in range(1, len(stops)):
+                if _is_stopping(stops[k]):
+                    return len(stops[k].get("pa", []))
         return None
 
     def _reanchor_to_app(self) -> None:
@@ -1154,7 +1234,17 @@ class AutoDriver:
         *only* thing left for click-jump to do is reset the detector's OCR memory
         so a stale pre-jump read can't fire a spurious event on the next cycle:
 
-          - prev_badge="STOPPED"               (badge memory reflects platform)
+          - prev_badge=None                    (badge history INVALIDATED — a jump
+                                                 discards provenance. NOT a synthetic
+                                                 "STOPPED": that would fabricate a
+                                                 witnessed STOPPED→MOVING edge on the
+                                                 first post-jump MOVING read, setting
+                                                 motion_origin_known and wrongly
+                                                 disarming re-entry for the mid-transit
+                                                 jump case re-entry exists to catch)
+          - motion_origin_known=False          (re-entry re-armed: post-jump motion
+                                                 is motion of unknown origin until a
+                                                 real dwell + edge is witnessed)
           - prev_speed=None                    (UNREAD since #82 — not a guard, and not
                                                  logged either. It protected the old
                                                  departure CROSSING; the level test reads
@@ -1168,9 +1258,11 @@ class AutoDriver:
                                                  so no other gate stands in the way. Open
                                                  risk, tracked in #85)
 
-        The three observed-flags are also reset to a parked reading so Layer 3
-        shows IDLE (`prev_badge=STOPPED` + `arrival_observed=False`) instead of a
-        stale prior-segment state — cosmetic only; fire gating no longer reads them.
+        The three observed-flags are also reset so Layer 3 shows UNKNOWN
+        (`prev_badge=None`) instead of a stale prior-segment state — cosmetic
+        only; fire gating no longer reads them. (Pre-provenance this set a
+        synthetic `prev_badge="STOPPED"` for an IDLE reading; UNKNOWN is the
+        honest state and restores itself on the first clean badge read.)
 
         Scope: parked case (the realistic desync correction). Mid-transit
         click-jump (game still driving) is a Layer-1↔Layer-3 desync handled by
@@ -1180,9 +1272,16 @@ class AutoDriver:
         print(f"          [AD] >>> CLICK-JUMP re-anchor: OCR memory reset for App STOPPING@{target}")
         self._detector.departure_observed = False
         self._detector.arrival_observed = False
-        self._detector.at_station_observed = True
-        self._detector.prev_badge = "STOPPED"
+        # at_station_observed=False, NOT True: with prev_badge=None there is no
+        # STOPPED->MOVING edge post-jump, so nothing would ever reset a True here
+        # and the arrival STOPPED read at the segment's end would be suppressed
+        # (2026-07-24 log: click-jump @12 mid-transit → re-entry 1A@13 → arrived
+        # with NO at-station fire, app stranded at 1A). The parked-case refire
+        # this once guarded is covered by _fire_at_station's app-parked skip.
+        self._detector.at_station_observed = False
+        self._detector.prev_badge = None
         self._detector.prev_speed = None
+        self._detector.motion_origin_known = False
 
     def _fire_departure(self) -> None:
         # Coupling: departure is valid only at 1C (app parked, at_station=True) —
@@ -1265,10 +1364,10 @@ class AutoDriver:
         # is silent; this press just sets `state.at_station=True`. Subsequent
         # presses cycle pa_at_station (if any) then advance.
         #
-        # Coupling: valid only at 1B (app in final approach — at_station=False AND
-        # cnt_pa at the last approach PA). The two guards below enforce exactly
-        # that: at_station rules out 1C (already stopping); the cnt_pa check rules
-        # out 1A (still on an earlier approach PA).
+        # Coupling: valid from ANY in-transit state (1A or 1B) — the reachability
+        # rule: a STOPPED badge while the app is in transit IS the arrival fact,
+        # so the app must always reach STOPPING. at_station rules out 1C (already
+        # stopping / boot at the start station).
         if self.sim.state.at_station:
             print("          [AD] >>> SKIPPED at-station fire (sim already STOPPING)")
             return
@@ -1277,12 +1376,21 @@ class AutoDriver:
         if target is None:
             return
         pa = target.get("pa", [])
-        # cnt_pa must be at the last approach PA (or pa empty) — otherwise the
-        # press would play the next approach PA instead of entering STOPPING,
-        # leaving the display on "まもなく" while the train is parked.
+        # Silent approach-PA drain — if cnt_pa is not at the last approach PA
+        # (arrival fire was missed, e.g. OCR dropout through the lead), the press
+        # below would play the next approach PA instead of entering STOPPING,
+        # leaving the display on まもなく while the train is parked. Normalize
+        # cnt_pa to the last entry so the press lands as the STOPPING transition.
+        # Same pattern as _fire_departure's pa_at_station drain.
         if pa and self.sim.state.cnt_pa != len(pa) - 1:
-            print(f"          [AD] >>> SKIPPED at-station fire (cnt_pa={self.sim.state.cnt_pa}, expected={len(pa) - 1}; arrival likely missed)")
-            return
+            dropped = len(pa) - 1 - self.sim.state.cnt_pa
+            self.sim.state.cnt_pa = len(pa) - 1
+            # App invariant: is_last_pa ≡ cnt_pa >= len(pa)-1 — every other
+            # cnt_pa write maintains it (_next_in_approaching, _silent_advance_to).
+            self.sim.state.is_last_pa = True
+            print(
+                f"          [AD] >>> Silent drain: skipped {dropped} unplayed approach PA entr{'y' if dropped == 1 else 'ies'} (arrival missed; STOPPED badge is the arrival fact)"
+            )
         self.sim.pending_next_pa = True
         self._last_fire = {"ts": time.time(), "type": "at-station"}
         print("          [AD] >>> FIRED at-station (set pending_next_pa)")

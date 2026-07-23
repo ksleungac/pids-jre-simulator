@@ -15,10 +15,11 @@ _tests/README.md § "Build plan").
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from auto_input.driver import _Detector  # noqa: E402
+from auto_input.driver import AutoDriver, _Detector  # noqa: E402
 
 
 def run(samples, **detector_kw):
@@ -94,10 +95,11 @@ def main():
     d, ev = run([(2000, 35, "MOVING")], prev_badge="STOPPED", prev_speed=None)
     check(ev.count("FIRE_DEPARTURE") == 1, f"I absent-prev-speed: departure must fire with prev_speed=None, got {ev}")
 
-    # J. Ceiling: at or above the stale bound the PA is unrecoverable and re-entry's
-    #    SILENT 1A advance owns it — the level test must NOT fire. Cold boot mid-cruise.
+    # J. Ceiling (UNKNOWN origin): at or above the stale bound the PA is unrecoverable
+    #    and re-entry's SILENT 1A advance owns it — the level test must NOT fire. Cold
+    #    boot mid-cruise: fresh detector, prev_badge=None, no witnessed edge.
     d, ev = run([(2000, 86, "MOVING")])
-    check("FIRE_DEPARTURE" not in ev, f"J stale-ceiling: speed 86 is re-entry territory, must not fire departure ({ev})")
+    check("FIRE_DEPARTURE" not in ev, f"J stale-ceiling: speed 86 unknown-origin is re-entry territory, must not fire departure ({ev})")
     check(d.departure_observed is False, "J stale-ceiling: departure_observed should stay False")
 
     # K. Band edges are [30, 60). Literals DELIBERATELY hardcoded, not imported from
@@ -111,6 +113,49 @@ def main():
     d, ev = run([(2000, 60, "MOVING")])
     check("FIRE_DEPARTURE" not in ev, f"K upper-edge: speed == 60 must NOT fire ({ev})")
 
+    # L. Reachability rule: at-station fires on a STOPPED badge WITHOUT arrival_observed —
+    #    a dropout that ate the arrival must not strand the app in transit (the app-parked
+    #    skip in _fire_at_station handles boot; the fire-side drain normalizes cnt_pa).
+    #    Discriminates: restoring the old `and self.arrival_observed` gate fails this.
+    d, ev = run([(2000, 40, "MOVING"), (5, 0, "STOPPED")])
+    check(d.arrival_observed is False, f"L reachability: precondition — arrival must NOT have been observed ({ev})")
+    check("FIRE_AT_STATION" in ev, f"L reachability: STOPPED badge must fire at-station even with arrival missed ({ev})")
+    #    Debounce: a repeated STOPPED level read must not refire (at_station_observed).
+    d, ev = run([(2000, 40, "MOVING"), (5, 0, "STOPPED"), (5, 0, "STOPPED")])
+    check(
+        ev.count("FIRE_AT_STATION") == 1, f"L debounce: expected exactly 1 FIRE_AT_STATION across repeated STOPPED, got {ev.count('FIRE_AT_STATION')}"
+    )
+
+    # M. Post-click-jump segment arrives (the 2026-07-24 01:21 incident): _reanchor_to_app
+    #    sets prev_badge=None, so NO STOPPED->MOVING edge ever fires post-jump and nothing
+    #    resets the observed-flags — the reanchor itself must leave at_station_observed
+    #    False or the arrival STOPPED read is suppressed and the app strands at 1A.
+    #    Discriminates: reanchor setting at_station_observed=True fails this.
+    ad = object.__new__(AutoDriver)
+    ad._detector = _Detector()
+    ad.sim = SimpleNamespace(state=SimpleNamespace(curr_stop=12))
+    ad._reanchor_to_app()
+    ev = []
+    for sample in [(319, 61, "MOVING"), (100, 40, "MOVING"), (2, 0, "MOVING"), (None, 0, "STOPPED")]:
+        ev.extend(ad._detector.update(*sample))
+    check("FIRE_AT_STATION" in ev, f"M post-jump arrival: STOPPED after a post-reanchor transit must fire at-station ({ev})")
+
+    # N. Witnessed-edge NO ceiling (the 2026-07-24 01:36 incident): a platform dwell whose
+    #    acceleration lands entirely in an OCR dropout — badge/speed = None through the whole
+    #    [30,60) band, first valid read already >=60. The STOPPED->MOVING edge is witnessed
+    #    (prev_badge=STOPPED survives the None run, speed>0 passes cross-reject), so the
+    #    departure is FRESH and must fire despite speed>=60 — re-entry is disarmed here, so
+    #    nothing else catches it. Discriminates: reverting the ceiling relaxation fails this.
+    d, ev = run(
+        [(752, 0, "STOPPED"), (None, None, None), (None, None, None), (552, 65, "MOVING")],
+    )
+    check("STOPPED->MOVING" in ev, f"N witnessed-edge: edge must fire through the None run ({ev})")
+    check("FIRE_DEPARTURE" in ev, f"N witnessed-edge: fresh departure must fire at speed 65 (no ceiling on a witnessed edge) ({ev})")
+    #    Same speed, UNKNOWN origin (no preceding STOPPED) still declines — the relaxation is
+    #    provenance-gated, NOT a blanket removal of the ceiling.
+    d, ev = run([(552, 65, "MOVING")])
+    check("FIRE_DEPARTURE" not in ev, f"N unknown-origin control: speed 65 with no witnessed edge must NOT fire ({ev})")
+
     if failures:
         print("FAIL: detector update() direct-read sequences")
         print("\n".join(failures))
@@ -118,7 +163,8 @@ def main():
     print(
         "PASS: detector update() direct-read sequences (A departure, B debounce, C arrival, D passing-skip, "
         "E reset, F cross-reject, G passing-departure, H stale-prev-speed, I absent-prev-speed, "
-        "J stale-ceiling, K band-edges)"
+        "J stale-ceiling, K band-edges, L at-station-reachability, M post-jump-arrival, "
+        "N witnessed-edge-no-ceiling)"
     )
 
 
