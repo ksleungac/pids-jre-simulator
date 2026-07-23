@@ -3,9 +3,11 @@ name = "pids-jre-simulator"
 # Version source of truth for DEV: app_paths.display_version() reads this field to show the
 # version tag when NOT frozen (the exe instead reads its build-stamped PE metadata via
 # app_version()). /build stamps the same number into version_info.txt, and /release tags it —
-# keep all three in step (a future version-drift sensor guards this; see TODO). uv requires a
+# keep all three in step: the `ban-derivable-literals` pre-commit hook forbids a hardcoded version
+# literal elsewhere, and /release Step 6 bumps THIS field + commits before tagging, so
+# pyproject == version_info.txt == tag by construction (#36). uv requires a
 # static version field (`dynamic = ["version"]` forces package/build mode and breaks `uv run`).
-version = "0.6.0"
+version = "0.6.2"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"

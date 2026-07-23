@@ -279,7 +279,7 @@ Don't run `/release` automatically — wait for the user to invoke it. `/build` 
 
 - **GitHub release**: never run `gh release create` from this skill. That's `/release`'s job. If the user wants a release, point them at `/release <version>`.
 - **Committing/pushing**: do not touch git.
-- **Version bumping**: this skill does not modify `pyproject.toml` or any other source. The version is a build-time label only.
+- **Version bumping**: this skill does not modify `pyproject.toml` or any other source — it only stamps `version_info.txt` (the frozen-exe PE metadata). The `pyproject.toml` version bump happens in `/release` (its Step 6), which is the single source of truth for the dev-mode UI version tag (`app_paths.display_version()`).
 
 ## `_*` folder convention (preserved-but-not-shipped)
 
