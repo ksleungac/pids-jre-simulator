@@ -84,3 +84,9 @@ _sta_verify_*.json
 # runtime dep, not forced on clones. uvx fetches Serena from git on demand.
 /.mcp.json
 /.serena/
+
+# Narrative memory — canonical store is the origin/memory journal ref
+# (_harness/publish_memory.py); local files are the write queue. Untracked on
+# master so code history stays pure. (Historic memory/ tracking removed via
+# `git rm -r --cached memory/` in the migration commit.)
+/memory/
