@@ -151,6 +151,14 @@ class LowerDisplayBase:
         the end. Keying on cursor_pos means a departure that skips passing
         stations keeps FULL in rotation until the train is visually near the
         tail — not the instant curr_stop jumps to the next PA target."""
+        # CONTRACT: measures remaining to len(stops), NOT dest_stop_idx. On a
+        # reference-tail route (Keihin 727B: dest 磯子 @40, data runs to @45, tail
+        # all time:null) this locks ~6 stops "late" vs a terminus bound and trails
+        # past-terminus reference stops in the window. Whether the view SHOULD
+        # bound at the terminus is an OPEN FIDELITY question needing IRL reference
+        # (Sōbu, in-spec, same shape — not yet collected; #103), NOT a bug: the
+        # train-STOP terminus (dest_stop_idx, app.py) is a separate settled
+        # concern. Don't re-flag as len-vs-terminus drift.
         return (len(self.stops) - cursor_pos) <= self.LOCK_THRESHOLD
 
     def _in_transfer_window(self, state) -> bool:
@@ -314,9 +322,29 @@ class LowerDisplayBase:
         return (self._swap_arm_time + beats(self._SWAP_HOLD_BEATS)) - now
 
     def apply_slot(self, slot: int, now: float) -> None:
-        """Commit a slot change and restart its dwell timer."""
+        """Commit a slot change and restart its dwell timer.
+
+        A genuine slot-enter (the committed slot differs from the current one)
+        notifies ``_on_slot_entered`` so a renderer with a slot-enter animation
+        (the E235-0 5-station band fill) can restart it. Fired HERE — the
+        scheduler's single slot-commit funnel — never from ``draw`` (a pure
+        renderer: a trigger self-detected there cannot tell a draw stall or a
+        stopped→moving marker flip from a real re-enter). A same-slot re-anchor
+        (``reveal_slot`` restarting the dwell) is NOT an enter.
+        """
+        entered = slot != self._current_slot
         self._current_slot = slot
         self._slot_start = now
+        if entered:
+            self._on_slot_entered(slot, now)
+
+    def _on_slot_entered(self, slot: int, now: float) -> None:
+        """Hook — a NEW slot just became current (not a same-slot re-anchor).
+
+        Base no-op; a concrete whose renderer owns a slot-enter animation
+        overrides it. See DISPLAY_E235.md § "E235-0 — 5-station stopping view".
+        """
+        pass
 
     def update(self, state, now: float) -> bool:
         """Advance the through-service frame machine + restart transition.

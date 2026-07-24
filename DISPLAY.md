@@ -153,6 +153,8 @@ To freeze the language AND the lower's slot together, set `scheduler.enabled = F
 
 **Change** = discrete visible mutation: language flip OR slot rotation. Continuous content (clock, countdown, skip / breath / band-fill animation) is not a change — renders every frame, untouched.
 
+**But continuous content still needs a discrete TRIGGER owner.** A reveal/sweep that renders every frame (the E235-0 5-station band fill) restarts on a slot-enter — and that restart is a discrete event, fired from `LowerDisplayBase.apply_slot` (the sole slot-commit funnel, on a genuine `slot != _current_slot` enter), never self-detected by the renderer from a wall-clock draw-gap. Inside a pure renderer a draw stall (a window move freezes the main thread) is indistinguishable from a real re-enter, so a gap heuristic false-restarts on any stall — and coincidentally on a stopped→moving marker flip. Keeping the trigger on the scheduler side is what lets `draw()` stay pure. Per-sub-series instance: DISPLAY_E235.md § "E235-0 — 5-station stopping view".
+
 ### The schedule is authored in BEATS
 
 1 beat = `constants.BEAT_SECONDS` (4s) = the language cadence. Every duration is a whole beat count via `displays.base.beats(n)`, which rejects anything else:

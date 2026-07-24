@@ -1578,11 +1578,12 @@ class JapaneseFiveStationDisplay:
         # animation frame (avoids a per-frame full-screen surface allocation).
         self._fill_reveal = pygame.Surface((S_WIDTH, S_HEIGHT), pygame.SRCALPHA)
 
-        # Fill animation state — reset each time the EIGHT slot becomes active.
-        # _fill_start: current_time when this reveal began (None = not yet started).
-        # _fill_last_seen: current_time of the last show_stops call (None = first call).
+        # Fill animation state. _fill_start = current_time when the current reveal
+        # began (None = not entered yet → static full band). Restarted ONLY by
+        # on_slot_enter (the manager's slot-enter hook), never self-detected: the
+        # renderer cannot tell a draw stall or a stopped→moving marker flip from a
+        # real re-enter, which is exactly the second-clock bug this replaced.
         self._fill_start: Optional[float] = None
-        self._fill_last_seen: Optional[float] = None
 
         # Fonts are built per-station at base*scale sizes, so they're cached by
         # (filename, size) — keeps the editor responsive while dragging scale.
@@ -1642,6 +1643,13 @@ class JapaneseFiveStationDisplay:
             self._font_cache[key] = f
         return f
 
+    def on_slot_enter(self, current_time: float) -> None:
+        """Manager hook — the EIGHT (5-station) slot just genuinely became
+        visible; restart the bottom-up green band reveal from here. The manager
+        (``LowerDisplay._on_slot_entered`` → ``apply_slot``) is the SOLE trigger;
+        the renderer never self-detects re-entry (see ``__init__``)."""
+        self._fill_start = current_time
+
     # -------------------------------------------------------------------------
     # Main draw entry point
     # -------------------------------------------------------------------------
@@ -1657,13 +1665,9 @@ class JapaneseFiveStationDisplay:
         self.screen.set_clip(ARC_RECT)
         try:
             # --- Band fill animation (bottom-up green reveal on slot-enter) ---
-            # Detect re-activation: if last call was more than 0.5 s ago (or never),
-            # the slot was inactive — start a new reveal.
-            _INACTIVE_GAP = 0.5
-            if self._fill_last_seen is None or (current_time - self._fill_last_seen) > _INACTIVE_GAP:
-                self._fill_start = current_time
-            self._fill_last_seen = current_time
-
+            # _fill_start is set by on_slot_enter (the manager's slot-enter hook);
+            # this method only RENDERS the reveal, it never triggers it — a draw
+            # stall or a stopped→moving marker flip must not restart the sweep.
             if current_time <= 0:
                 progress = 1.0  # static/frozen frame (screenshot, --edit) → show full band
             elif self._fill_start is None:
@@ -2536,11 +2540,11 @@ class LowerDisplay(E235_1000_LowerDisplay):
         # Swap EIGHT slot renderer universally (Phase 1: arc-only scaffold).
         # E235-0 has NO 8-station view — the 5-station view owns the EIGHT slot in
         # ALL modes. Point english_eight_display at the SAME instance (not a new
-        # one): separate instances each carry their own fill-animation state, so
-        # cycling kanji→english within the slot would gap-detect and replay the
-        # fill every mode change. One shared instance fires the fill only on a
-        # real slot-enter. (5-station renders kanji names regardless of mode — IRL
-        # Yamanote stopping view is kanji-only.)
+        # one): the fill state (`_fill_start`) must stay consistent across modes
+        # within the EIGHT slot — a language flip does not re-enter the slot, so it
+        # must not reset the sweep, and both modes must render the same progress.
+        # One shared instance guarantees that. (5-station renders kanji names
+        # regardless of mode — IRL Yamanote stopping view is kanji-only.)
         self.japanese_eight_display = JapaneseFiveStationDisplay(screen, route_data, stops)
         self.english_eight_display = self.japanese_eight_display
         # Transfer slot is the e235_1000 concrete reused here; align its lower-LCD
@@ -2561,3 +2565,14 @@ class LowerDisplay(E235_1000_LowerDisplay):
     # to satisfy the LowerDisplayBase non-None CONTRACT — see displays/lower_lcd.py).
     def _should_lock_to_eight(self, cursor_pos: int) -> bool:
         return False
+
+    def _on_slot_entered(self, slot: int, now: float) -> None:
+        """Restart the 5-station band fill when its slot (EIGHT) is entered.
+
+        The fill replays on each genuine slot-enter (DISPLAY_E235.md § "E235-0 —
+        5-station stopping view"). ``english_eight_display`` is the SAME instance,
+        so one call covers both modes. Only a real slot change reaches here — a
+        draw stall or a stopped→moving marker flip keeps EIGHT current (no
+        ``apply_slot``), so neither refills the band."""
+        if slot == self._SLOT_EIGHT:
+            self.japanese_eight_display.on_slot_enter(now)
