@@ -100,7 +100,7 @@ The simulator accepts **any** route into **any** train model. Reality only const
 | **In-spec** (model's IRL lines) | Match real PIDS |
 | **Out-of-spec** | Best-effort: no crashes, no missing-key errors, no broken layouts. Not obligated to IRL-accurate fidelity. |
 
-**Best-effort = the model's OWN native norm applied to any route — never a borrowed behavior or bespoke feature propping up an out-of-spec route.** Adapt the model's own look to the route's shape (e235_0 opens its circular racetrack into a *horseshoe* for a non-loop line — native, adapted), but don't import another model's behavior (e235_0 drops e235_1000's inherited end-of-route *lock* — that lock is a linear heuristic foreign to a loop; no-lock is e235_0's native norm). *For the reviewer:* a cross-model divergence where each model expresses its own native norm is NOT sibling-drift — verify against this section before flagging; a borrowed foreign feature IS the violation. And out-of-spec renders (the horseshoe) are **transitional** — e235_1000 is the stable general model for all routes until per-line-native models land, and as those arrive out-of-spec best-effort support is *removed*, not grown.
+**Best-effort = the model's OWN native norm applied to any route — never a borrowed behavior or bespoke feature propping up an out-of-spec route.** Adapt the model's own look to the route's shape (e235_0 opens its circular racetrack into a *horseshoe* for a non-loop line — native, adapted), but don't import another model's behavior (e235_0 drops e235_1000's inherited end-of-route *lock* — that lock is a linear heuristic foreign to a loop; no-lock is e235_0's native norm). And when a route shape the view wasn't built for needs a marker the view has no calibrated slot for, reuse an EXISTING calibrated primitive degenerately — a passing station in the fixed-slot 5-station view renders the countdown ring *empty* (no digit), not an invented chevron (#66; the proper chevron is deferred as ultra-low-priority #99) — never a new uncalibrated marker, which is exactly the bespoke growth this bars. *For the reviewer:* a cross-model divergence where each model expresses its own native norm is NOT sibling-drift — verify against this section before flagging; a borrowed foreign feature IS the violation. And out-of-spec renders (the horseshoe) are **transitional** — e235_1000 is the stable general model for all routes until per-line-native models land, and as those arrive out-of-spec best-effort support is *removed*, not grown.
 
 ### IRL display conventions
 
@@ -162,7 +162,8 @@ pids_jre_simulator/
 │   ├── chrome.py                      # Shared vocabulary (PALETTE, button presets, role fonts)
 │   ├── band.py                        # Persistent status band (setup screens + live OCR panel)
 │   └── setup/                         # Setup/OOBE flow screens (tims.setup.run = entry)
-├── memory/                            # Daily logs + MEMORY.md curated index
+├── memory/                            # Daily logs + MEMORY.md index (untracked; canonical =
+│                                       #   origin/memory ref via _harness/publish_memory.py)
 └── audio/
     ├── [line]/[diagram]/route.json    # Real routes
     └── _mock/main/route.json          # Edge-case catalog for preview (not shipped)
