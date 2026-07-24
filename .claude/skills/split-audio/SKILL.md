@@ -25,7 +25,7 @@ The user points at a working folder like `audio_src_<line>_workflow/` containing
 
 ## Source folder layout
 
-Per line/diagram, working files live at the project root in their own folder. Splitter scripts stay with the source files — they document exactly how that diagram was sliced.
+Per line/diagram, working files live at the project root in their own folder. Splitter scripts stay with the source files — they document how that diagram was sliced.
 
 ```
 audio_src_sobu_workflow/
@@ -279,7 +279,7 @@ For non-Japanese names: lowercase, spaces → hyphens, strip apostrophes/most pu
 - **Unused-platform STA recordings** (other-platform takes for the train you're routing) belong in `audio/_archive/<line>/<diagram>/sta/`, NOT in the operational `sta/`. Tag them `"archive"` in the splitter's SEGMENTS so the script routes them automatically — don't mv them after the fact. The audio file is the atomic unit; route.json refs are the operational subset for THIS train.
 - **Trailing-chime gap < ~5s is suspicious** — the door chime portion of an STA (between `cut` and `end`) usually runs 5–20s. If you see only 2–3s of chime in the timestamps, double-check `end` against the source — likely a typo / off-by-a-few-seconds. Exception: known recurring tight-loop pattern at that station (rare, document if confirmed).
 - **Don't assume per-station PA count.** The timestamps file is ground truth. Count actual entries before sizing route.json `pa` arrays.
-- **Splitter scripts stay with their source folder** (`audio_src_<line>_workflow/`), not in a shared workflow folder. They document exactly how that batch was split.
+- **Splitter scripts stay with their source folder** (`audio_src_<line>_workflow/`), not in a shared workflow folder. They document how that batch was split.
 - **Formats vary between sources** — even within the same line/diagram, two STA recordings may use different timestamp conventions (3 timestamps vs 2 timestamps per line, etc.). Don't try to unify into "the splitter"; each source gets its own script reflecting its own format. Multiple sources in the same folder → name them `split_{type}_{describer}.py` (e.g., `split_sta_tokyo.py`, `split_sta_higashichiba.py`).
 - **Trailing digits in station romanization** (e.g., `airport-terminal-2`) are part of the station name, not platform. Filename position-parsing has no parser, so this is human-readable ambiguity only — not a bug to fix.
 - **Don't create a metadata JSON sidecar** for STA. The filename IS the metadata store. If `sta_meta.json` shows up, that's a previous experiment that should be removed.

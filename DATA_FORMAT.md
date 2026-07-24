@@ -276,7 +276,7 @@ Catalog of rail lines referenced as transfer entries on station displays. Stores
 - **Slug names don't carry codes** — `yokosuka_sobu` not `jo_through`. Codes = filter-machinery; names = human-readable. Variant names follow same rule (`tokaido`/`tohoku` not `jt`/`ju`).
 - **Naming asymmetry to watch**: route folder `audio/sobu/` ↔ lines slug `yokosuka_sobu`. Same physical line, different namespaces (route folder = sim-route diagram; lines slug = transfer catalog). Don't conflate when refactoring either.
 - **Icon slug = filename stem** under `data/line_icons/`. Convention: JR letter codes use bare code (`JY`, `JK`, `JT`, …); Tokyo Metro / Toei use operator-prefixed slugs (`metro_marunouchi`, `toei_asakusa`, …); descriptive for others; `_universal` for fallback. Source SVGs live in `lcd_references/line_badges/`, regenerate via `magick -background none <src.svg> -resize 128x128 <dst.png>`.
-- **Punctuation in `name_ja` is per-line IRL fidelity — match the real PIDS, don't normalize for consistency.** Width is NOT uniform across lines: `keihin_tohoku.oimachi_kamata` uses **full-width** brackets `（）` and dot `・` (`京浜東北線（大井町・蒲田方面）`) — this is IRL-special at 品川; a "consistency" pass that half-widthed it would be wrong. Other direction suffixes use **half-width** `()` (e.g. `宇都宮線(東北線)`). Shinkansen names use the **half-width** middle dot `･` (U+FF65), matching the destination-separator convention (`東北･山形･秋田･北海道･上越･北陸新幹線`) — the 5-station inline panel wraps on this exact codepoint (see [DISPLAY_E235.md § Inline transfer panel](DISPLAY_E235.md)).
+- **Punctuation in `name_ja` is per-line IRL fidelity — match the real PIDS, don't normalize for consistency.** Width is NOT uniform across lines: `keihin_tohoku.oimachi_kamata` uses **full-width** brackets `（）` and dot `・` (`京浜東北線（大井町・蒲田方面）`) — this is IRL-special at 品川; a "consistency" pass that half-widthed it would be wrong. Other direction suffixes use **half-width** `()` (e.g. `宇都宮線(東北線)`). Shinkansen names use the **half-width** middle dot `･` (U+FF65), matching the destination-separator convention (`東北･山形･秋田･北海道･上越･北陸新幹線`) — the 5-station inline panel wraps on this codepoint (see [DISPLAY_E235.md § Inline transfer panel](DISPLAY_E235.md)).
 
 ---
 
@@ -333,7 +333,7 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 ### Notes
 
 - Not every station needs an entry. Only add rows for stations with metadata to record.
-- Stations without 3-letter code simply omit `code_3` key.
+- Stations without 3-letter code omit `code_3` key.
 - 3-letter Roman codes (`code_3`) distinct from 2-character katakana telegraph codes (電略) — latter = separate internal JR system, not stored here.
 - `transfers` populated only for stations with `code_3` in v1 scope (the 22 major interchange catalog). Other stations may gain `transfers` later as data is collected.
 - **Typical category ordering** (within IRL reading order — use as starting guess, override per IRL reference photo): Shinkansen → own JR line → JR runners (other JR East lines through the station) → private operators (Tōkyū / Keiō / Odakyū / Tōbu / Seibu / Keisei / Tsukuba Express / Yurikamome / monorails) → Tokyo Metro → Toei. Sub-order *within* a category = IRL-driven, varies per station — don't enforce algorithmically. New stations: list candidates by category as draft, then reorder against reference photo.

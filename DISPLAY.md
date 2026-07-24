@@ -141,7 +141,7 @@ Because the lower display has its own internal state machine for alternating bet
 
 ### ⚠️ Cycler.enabled vs Cycler.paused
 
-ModeCycler has `enabled`, **not** `paused`. To freeze a forced mode (e.g. in preview scripts), set `cycler.enabled = False`. Assigning to `paused` silently creates a new attribute that `is_due()` never checks — the forced mode will un-freeze after the cadence elapses. This has burned us before.
+ModeCycler has `enabled`, **not** `paused`. To freeze a forced mode (e.g. in preview scripts), set `cycler.enabled = False`. Assigning to `paused` silently creates a new attribute that `is_due()` never checks — the forced mode will un-freeze after the cadence elapses.
 
 To freeze the language AND the lower's slot together, set `scheduler.enabled = False` — one switch for both axes (what `preview_display.py --lower-view` uses).
 
