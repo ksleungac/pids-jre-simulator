@@ -8,8 +8,14 @@ Click/key in PASS or FAIL per station; final report to stdout.
     uv run python _dev_scripts/verify_sta_listen.py audio/takasaki/3922E
 
 Keys: P=Pass  F=Fail  R=Replay  E=Edit note  N=Next without verdict  Q/Esc=Quit
-      [/] adjust start-trim  ,/. adjust end-trim  T apply trim  Z reset trim
+      ←/→ move sta_cut  C commit sta_cut
+      [/] adjust start-trim  ,/. adjust end-trim  T apply trim  Z reset pending
       (hold Shift while adjusting for fine 0.01s steps)
+
+Adjusting sta_cut: ←/→ nudge the cut marker, R replays so you hear the new
+placement, C writes it to route.json. No audio is modified — this only moves
+where the simulator jumps to. Contrast with the trim controls below, which
+splice the mp3 itself.
 
 Interactive trim: when an audio file has a stutter / extra content at the start
 or end that the propose+splice pipeline can't fix algorithmically, use the
@@ -34,6 +40,8 @@ import sys
 from pathlib import Path
 
 import pygame
+
+from audio_layout import discover_route_sources, order_by_reference_count
 
 WINDOW_W, WINDOW_H = 1040, 540
 LIST_W = 280  # left-column station list width
@@ -90,6 +98,7 @@ def draw_seek_bar(
     font: pygame.font.Font,
     trim_start: float = 0.0,
     trim_end: float | None = None,
+    cut_hot: bool = False,
 ) -> None:
     """Static colored regions for head/skipped/cut-lead/voice + sta_cut marker + live cursor.
 
@@ -125,8 +134,13 @@ def draw_seek_bar(
         pygame.draw.rect(screen, VOICE_TINT, (cut_x, rect.y, rect.right - cut_x, rect.h))
     # outline
     pygame.draw.rect(screen, (90, 90, 100), rect, width=1, border_radius=4)
-    # sta_cut marker — taller than the bar so it's obvious
-    pygame.draw.line(screen, CUT_MARKER, (cut_x, rect.y - 6), (cut_x, rect.bottom + 6), 2)
+    # sta_cut marker — taller than the bar so it's obvious. Thickens with a grab
+    # handle when the mouse is close enough to drag it (cut_hot).
+    if cut_hot:
+        pygame.draw.line(screen, CUT_MARKER, (cut_x, rect.y - 10), (cut_x, rect.bottom + 10), 4)
+        pygame.draw.circle(screen, CUT_MARKER, (cut_x, rect.y - 12), 5)
+    else:
+        pygame.draw.line(screen, CUT_MARKER, (cut_x, rect.y - 6), (cut_x, rect.bottom + 6), 2)
 
     # Pending-trim overlays: striped/dark hatch over regions that would be cut.
     trim_overlay = (200, 60, 60)
@@ -281,9 +295,46 @@ class Player:
         self.state = "DONE"
 
 
+def load_route_sources(work_dir: Path) -> tuple[list[Path], Path, list[dict]]:
+    """Resolve the route.json(s) + sta folder for either audio layout.
+
+    Per-diagram:  <work_dir>/route.json      + <work_dir>/sta/
+    Pooled line:  <work_dir>/*/route.json    + <work_dir>/sta/
+
+    A pooled line (route.json carries "audio_root": "..") shares one sta folder
+    across several diagrams, so one mp3 is referenced by several route.json
+    files and a sta_cut edit has to land in EVERY one of them — see
+    WIP_audio_pooling.md. The returned stop list is the union across diagrams,
+    ordered by the diagram that references the most STAs.
+
+    Raises FileNotFoundError when neither layout is present.
+    """
+    route_paths, sta_dir, loaded = discover_route_sources(work_dir, "sta")
+    if len(route_paths) == 1 and route_paths[0].parent == work_dir:
+        return route_paths, sta_dir, loaded[0][1]  # per-diagram: nothing to merge
+
+    merged: dict[str, dict] = {}
+    for p, stops in order_by_reference_count(loaded, ("sta",)):
+        for stop in stops:
+            cut = stop.get("sta_cut")
+            for sta in stop.get("sta", []):
+                if sta in merged:
+                    prev = merged[sta]["sta_cut"]
+                    if cut is not None and prev is not None and cut != prev:
+                        print(
+                            f"warning: {sta} has sta_cut {prev} and {cut} across diagrams " f"— the pool is desynced; fix before trusting this run",
+                            file=sys.stderr,
+                        )
+                    continue
+                merged[sta] = {"name": stop["name"], "sta": [sta], "sta_cut": cut}
+
+    print(f"pooled layout: {len(route_paths)} route.json, {len(merged)} STAs — " f"{', '.join(p.parent.name for p in route_paths)}")
+    return route_paths, sta_dir, list(merged.values())
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("work_dir", type=Path, help="audio/<line>/<diagram>")
+    ap.add_argument("work_dir", type=Path, help="audio/<line>/<diagram>, or audio/<line> for a pooled line")
     ap.add_argument(
         "--only",
         help="comma-separated sta basenames to test (e.g. 'kumagaya' or 'kumagaya,konosu'). Existing JSON verdicts for un-tested stations are preserved.",
@@ -291,15 +342,14 @@ def main() -> int:
     args = ap.parse_args()
     only: set[str] | None = set(s.strip() for s in args.only.split(",")) if args.only else None
 
-    route_path = args.work_dir / "route.json"
-    sta_dir = args.work_dir / "sta"
-    if not route_path.exists():
-        print(f"route.json not found: {route_path}", file=sys.stderr)
+    try:
+        route_paths, sta_dir, stops = load_route_sources(args.work_dir)
+    except (FileNotFoundError, KeyError) as e:
+        print(e, file=sys.stderr)
         return 1
 
-    route = json.loads(route_path.read_text(encoding="utf-8"))
     items: list[dict] = []
-    for stop in route["stops"]:
+    for stop in stops:
         sta_cut = stop.get("sta_cut")
         for sta in stop.get("sta", []):
             path = sta_dir / f"{sta}.mp3"
@@ -380,11 +430,11 @@ def main() -> int:
     player.begin(items[idx]["path"], items[idx]["sta_cut"])
 
     def begin_with_trim() -> None:
-        """Start playback for current item, applying any pending trim as preview."""
+        """Start playback for current item, previewing any pending trim + cut nudge."""
         item = items[idx]
         head_s = trim_start
         tail_e = item.get("duration", 0.0) - trim_end_offset if trim_end_offset > 0 else None
-        player.begin(item["path"], item["sta_cut"], head_start=head_s, tail_end=tail_e)
+        player.begin(item["path"], eff_cut(), head_start=head_s, tail_end=tail_e)
 
     btn_w, btn_h = 150, 56
     detail_x = LIST_W + 40
@@ -393,6 +443,12 @@ def main() -> int:
     replay_rect = pygame.Rect(detail_x + 2 * (btn_w + 20), WINDOW_H - 90, btn_w, btn_h)
     # Note row sits above the seek bar; click anywhere in this rect to edit.
     note_rect = pygame.Rect(detail_x, 134, WINDOW_W - detail_x - 20, 26)
+    # Seek bar geometry is fixed — hoisted out of the draw block so mouse handling
+    # (which runs earlier in the frame) can hit-test against it.
+    seek_rect = pygame.Rect(detail_x, 230, WINDOW_W - detail_x - 20, 18)
+    # Vertical grab band: the sta_cut marker is drawn taller than the bar itself.
+    seek_grab_rect = seek_rect.inflate(0, 24)
+    CUT_GRAB_PX = 14  # horizontal slop for grabbing the marker
 
     # Edit-mode state for in-app note editing
     edit_mode = False
@@ -400,6 +456,30 @@ def main() -> int:
     # Pending trim state (per-station, applied via T key)
     trim_start: float = 0.0  # seconds to trim from start (file head)
     trim_end_offset: float = 0.0  # seconds to trim from end (file tail)
+    # Pending sta_cut nudge (per-station, applied via C key). None = no pending change.
+    # Distinct from trim: this moves WHERE the cut lands and touches no audio.
+    cut_pending: float | None = None
+
+    dragging_cut = False  # True while the sta_cut marker is held with the mouse
+
+    def eff_cut() -> float:
+        """sta_cut in effect right now — the pending nudge if one is staged."""
+        return items[idx]["sta_cut"] if cut_pending is None else cut_pending
+
+    def cut_x_now() -> int:
+        """Screen x of the current cut marker on the seek bar."""
+        dur = items[idx].get("duration", 0.0)
+        if dur <= 0:
+            return seek_rect.x
+        return seek_rect.x + int(seek_rect.w * (max(0.0, min(dur, eff_cut())) / dur))
+
+    def time_at_x(x: int) -> float:
+        """Seek-bar x -> file time, clamped inside the file."""
+        dur = items[idx].get("duration", 0.0)
+        if dur <= 0 or seek_rect.w <= 0:
+            return 0.0
+        frac = (x - seek_rect.x) / seek_rect.w
+        return max(0.05, min(dur - 0.05, frac * dur))
 
     def current_verdict_for(sta: str) -> str:
         if sta in verdicts:
@@ -407,10 +487,11 @@ def main() -> int:
         return prior_verdicts.get(sta, "")
 
     def jump_to(new_idx: int) -> None:
-        nonlocal idx, edit_mode, trim_start, trim_end_offset, list_scroll
+        nonlocal idx, edit_mode, trim_start, trim_end_offset, list_scroll, cut_pending
         edit_mode = False  # cancel any in-progress edit on navigation
         trim_start = 0.0  # discard pending trim — moving on to new station
         trim_end_offset = 0.0
+        cut_pending = None  # discard pending cut nudge too
         idx = max(0, min(len(items) - 1, new_idx))
         # auto-scroll sidebar to keep idx in view
         if idx < list_scroll:
@@ -466,6 +547,41 @@ def main() -> int:
         except AttributeError:
             pass
 
+    def persist_cut(sta: str, new_cut: float) -> list[str]:
+        """Write sta_cut to EVERY route.json referencing this mp3.
+
+        On a pooled line several diagrams share one file, so patching a single
+        route.json desyncs the pool. Returns the diagram names written.
+        """
+        written = []
+        for rp in route_paths:
+            route_obj = json.loads(rp.read_text(encoding="utf-8"))
+            hit = False
+            for stop in route_obj["stops"]:
+                if sta in stop.get("sta", []):
+                    stop["sta_cut"] = new_cut
+                    hit = True
+                    break
+            if hit:
+                rp.write_text(json.dumps(route_obj, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
+                written.append(rp.parent.name)
+        return written
+
+    def commit_cut() -> bool:
+        """Persist the pending sta_cut nudge. Audio is untouched — this only moves
+        where the simulator jumps to."""
+        nonlocal cut_pending
+        if cut_pending is None:
+            return False
+        item = items[idx]
+        new_cut = round(cut_pending, 2)
+        old = item["sta_cut"]
+        item["sta_cut"] = new_cut
+        cut_pending = None
+        written = persist_cut(item["sta"], new_cut)
+        print(f"sta_cut {item['sta']}: {old} → {new_cut}  ({', '.join(written)})")
+        return True
+
     def apply_trim() -> bool:
         """Splice the current item's mp3 by trim_start/trim_end_offset, shift sta_cut
         by -trim_start, persist to route.json, and reload the player. Returns True on success."""
@@ -494,14 +610,8 @@ def main() -> int:
         new_cut = round(item["sta_cut"] - keep_start, 2)
         item["sta_cut"] = new_cut
         item["duration"] = new_dur
-        # Persist sta_cut to route.json
-        route_obj = json.loads(route_path.read_text(encoding="utf-8"))
-        for stop in route_obj["stops"]:
-            if item["sta"] in stop.get("sta", []):
-                stop["sta_cut"] = new_cut
-                break
-        route_path.write_text(json.dumps(route_obj, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
-        print(f"trimmed {item['sta']}: cut [0,{keep_start:.3f}] + [{keep_end:.3f},{dur:.3f}]  sta_cut → {new_cut}")
+        written = persist_cut(item["sta"], new_cut)
+        print(f"trimmed {item['sta']}: cut [0,{keep_start:.3f}] + [{keep_end:.3f},{dur:.3f}]  " f"sta_cut → {new_cut}  ({', '.join(written)})")
         # Reset pending trim, reload player
         trim_start = 0.0
         trim_end_offset = 0.0
@@ -555,16 +665,24 @@ def main() -> int:
                     elif ev.key == pygame.K_LEFTBRACKET:  # [
                         trim_start = max(0.0, trim_start - step)
                     elif ev.key == pygame.K_RIGHTBRACKET:  # ]
-                        trim_start = min(items[idx]["sta_cut"] - 0.05, trim_start + step)
+                        trim_start = min(eff_cut() - 0.05, trim_start + step)
                     elif ev.key == pygame.K_COMMA:
-                        trim_end_offset = min(cur_dur - items[idx]["sta_cut"] - 0.05, trim_end_offset + step)
+                        trim_end_offset = min(cur_dur - eff_cut() - 0.05, trim_end_offset + step)
                     elif ev.key == pygame.K_PERIOD:
                         trim_end_offset = max(0.0, trim_end_offset - step)
                     elif ev.key == pygame.K_t:
                         apply_trim()
+                    # sta_cut nudge: ←/→ move the cut, C commits (no audio change)
+                    elif ev.key == pygame.K_LEFT:
+                        cut_pending = max(trim_start + 0.05, eff_cut() - step)
+                    elif ev.key == pygame.K_RIGHT:
+                        cut_pending = min(cur_dur - 0.05, eff_cut() + step)
+                    elif ev.key == pygame.K_c:
+                        commit_cut()
                     elif ev.key == pygame.K_z:
                         trim_start = 0.0
                         trim_end_offset = 0.0
+                        cut_pending = None
             elif ev.type == pygame.TEXTINPUT and edit_mode:
                 edit_buffer += ev.text
             elif ev.type == pygame.MOUSEWHEEL:
@@ -578,6 +696,10 @@ def main() -> int:
                 else:
                     if note_rect.collidepoint(ev.pos):
                         start_edit()
+                    elif seek_grab_rect.collidepoint(ev.pos) and abs(ev.pos[0] - cut_x_now()) <= CUT_GRAB_PX:
+                        # Grabbed the sta_cut marker — drag to reposition.
+                        dragging_cut = True
+                        cut_pending = round(time_at_x(ev.pos[0]), 2)
                     else:
                         row = list_row_at(ev.pos)
                         if row is not None:
@@ -588,6 +710,12 @@ def main() -> int:
                             record("FAIL")
                         elif replay_rect.collidepoint(ev.pos):
                             begin_with_trim()
+            elif ev.type == pygame.MOUSEMOTION and dragging_cut:
+                cut_pending = round(time_at_x(ev.pos[0]), 2)
+            elif ev.type == pygame.MOUSEBUTTONUP and ev.button == 1 and dragging_cut:
+                dragging_cut = False
+                # Play the new placement straight away so the drag is self-verifying.
+                begin_with_trim()
 
         player.tick()
         item = items[idx]
@@ -632,8 +760,12 @@ def main() -> int:
         head = font_h1.render(f"{item['stop']}", True, FG)
         screen.blit(head, (detail_x, 72))
 
-        sub = font_body.render(f"{item['sta']}.mp3   sta_cut = {item['sta_cut']:.1f}s", True, DIM)
-        screen.blit(sub, (detail_x, 110))
+        if cut_pending is None:
+            sub_txt, sub_col = f"{item['sta']}.mp3   sta_cut = {item['sta_cut']:.1f}s", DIM
+        else:
+            sub_txt = f"{item['sta']}.mp3   sta_cut = {item['sta_cut']:.1f}s → {cut_pending:.2f}s"
+            sub_col = ACCENT
+        screen.blit(font_body.render(sub_txt, True, sub_col), (detail_x, 110))
 
         # Note row: ✎ icon + text. Click anywhere in the rect to edit.
         # States: editing (live buffer + cursor), resolved (dim + strike-through),
@@ -676,29 +808,38 @@ def main() -> int:
         # seek bar: full file timeline with head/cut-lead/voice tints, sta_cut marker, live cursor
         # Trim overlays (trim_start, trim_end_offset) show pending cuts; sta_cut display
         # is offset by trim_start so user can preview where the cut would land post-trim.
-        seek_rect = pygame.Rect(detail_x, 230, WINDOW_W - detail_x - 20, 18)
         cur_dur = item["duration"]
         trim_end_pos = max(trim_start + 0.1, cur_dur - trim_end_offset)
         # Display sta_cut adjusted by trim_start so the marker shows post-trim placement preview.
         # Internally the marker still represents the cut moment in the (current) file timeline.
-        draw_seek_bar(screen, seek_rect, cur_dur, item["sta_cut"], player.position(), font_small, trim_start=trim_start, trim_end=trim_end_pos)
+        cut_hot = dragging_cut or (seek_grab_rect.collidepoint(mouse) and abs(mouse[0] - cut_x_now()) <= CUT_GRAB_PX)
+        draw_seek_bar(
+            screen, seek_rect, cur_dur, eff_cut(), player.position(), font_small, trim_start=trim_start, trim_end=trim_end_pos, cut_hot=cut_hot
+        )
 
-        # Trim status line: only show if any pending trim
+        # Status line: pending trim and/or pending sta_cut nudge
+        status_y = 268
         if trim_start > 0 or trim_end_offset > 0:
-            preview_cut = round(item["sta_cut"] - trim_start, 2)
+            preview_cut = round(eff_cut() - trim_start, 2)
             preview_dur = trim_end_pos - trim_start
             trim_msg = f"pending trim: -{trim_start:.2f}s start, -{trim_end_offset:.2f}s end → new dur {preview_dur:.2f}s, sta_cut {preview_cut:.2f}s"
-            screen.blit(font_small.render(trim_msg, True, (250, 130, 130)), (detail_x, 268))
+            screen.blit(font_small.render(trim_msg, True, (250, 130, 130)), (detail_x, status_y))
+            status_y += 20
+        if cut_pending is not None:
+            delta = cut_pending - item["sta_cut"]
+            verb = "dragging" if dragging_cut else "pending"
+            cut_msg = f"{verb} sta_cut: {item['sta_cut']:.2f}s → {cut_pending:.2f}s " f"({delta:+.2f}s)   R to hear it, C to commit, Z to discard"
+            screen.blit(font_small.render(cut_msg, True, ACCENT), (detail_x, status_y))
 
         if edit_mode:
             hint = font_body.render("Enter save   Esc cancel", True, ACCENT)
         else:
             hint_lines = [
                 "P pass   F fail   R replay   E edit note   ↑↓ navigate   Q quit",
-                "Trim:  [/] start   ,/. end   T apply   Z reset   (Shift = fine 0.01s)",
+                "sta_cut: drag the marker or ←/→,  C commit    Trim [/] ,/.  T apply    Z reset",
             ]
-            screen.blit(font_body.render(hint_lines[0], True, DIM), (detail_x, WINDOW_H - 148))
-            screen.blit(font_body.render(hint_lines[1], True, DIM), (detail_x, WINDOW_H - 124))
+            for i, line in enumerate(hint_lines):
+                screen.blit(font_body.render(line, True, DIM), (detail_x, WINDOW_H - 148 + i * 24))
             hint = None
         if hint is not None:
             screen.blit(hint, (detail_x, WINDOW_H - 130))
@@ -743,7 +884,7 @@ def main() -> int:
 
     # build the full route's items list (unfiltered) so the JSON always reflects route order
     full_items = []
-    for stop in route["stops"]:
+    for stop in stops:
         sta_cut_v = stop.get("sta_cut")
         for sta in stop.get("sta", []):
             if sta_cut_v is None:

@@ -24,7 +24,7 @@ pool slugs that already exist.
 
 | line | diagrams | STA pooled | PA pooled | notes |
 |---|---|---|---|---|
-| chuo | 1654T, 916H | ☑ | ☑ | **done + verified in-app.** Pool holds 23 STA + 55 PA. Deletions pending — see below |
+| chuo | 1654T, 916H | ☑ | ☑ | **Done.** 23 STA + 55 PA (53 referenced); both trimmed, by-ear 23/23 + 53/53. Resolution re-verified through `resolve_audio_root` — see below. Deletions pending |
 | keihin | 1275A, 727B | ☐ | ☐ | 23.0 MB STA dupes — largest STA win |
 | tokaido | 1865E, 3535E | ☐ | ☐ | 11.9 MB; PA already descriptive in 3535E (underscore separator) |
 | nambu | 4027F, 603F | ☐ | ☐ | 7.6 MB |
@@ -100,37 +100,102 @@ file. `_dev_scripts/ab_audio_ui.py` is the browser chooser for making that call 
 
 ---
 
+## Tooling must be pool-aware
+
+Pooling breaks a per-diagram assumption baked into the audio tools: **one mp3 now has
+several referrers.** A tool that resolves `<work_dir>/route.json` cannot open a pooled
+line at all (the pool has `sta/` and `pa/` but no route.json beside them), and one that
+patches a single route.json silently desyncs the other diagrams — the pool's whole
+invariant is that a shared file carries one value everywhere.
+
+Two rules for any tool touching pooled audio:
+
+- **Read**: accept either layout — `<dir>/route.json`, or `<dir>/*/route.json` merged
+  into the union of referenced files.
+- **Write**: patch **every** route.json referencing the file, not the first match.
+  `verify_sta_listen.py` funnels both its writers through one `persist_cut()` helper so
+  there is a single place that knows about pooling.
+
+Status: `verify_sta_listen.py` is pool-aware (2026-07-25). **`verify_pa_listen.py` is
+not** — it will fail the same way on Chūō's pooled PA. `trim_sta_silence.py --route` and
+`trim_pa_silence.py` patch one file only; on a pooled line run them bare and write the
+values separately.
+
 ## Git state
 
-Deliberately left uncommitted on `master` — the user commits once every line is pooled.
-A branch was considered and deferred: a concurrent OCR session shares this working tree
-and has an unpushed commit plus a staged deletion, so `git switch -c` would isolate
-nothing and would mutate index state that session depends on.
+Lives on branch `feat/audio-pool`. The mechanism + the Chūō data landed in two commits
+(`audio_root` support, then the Chūō pool); the STA trim / `sta_cut` / loop-splice work
+on top is uncommitted.
 
-The audio-pooling file set, disjoint from the OCR work:
-
-```
-app.py  audio.py  route_loader.py  validate_data.py  .gitignore
-audio/chuo/1654T/route.json  audio/chuo/916H/route.json
-audio/chuo/pa/  audio/chuo/sta/
-WIP_audio_pooling.md
-_dev_scripts/ab_audio.py  _dev_scripts/ab_audio_ui.py
-```
-
-Split data from program when it does land — the commit-classification hook flags the mix.
+Split data from program when it lands — the commit-classification hook flags the mix.
+The `_dev_scripts/verify_sta_listen.py` changes are program; everything under
+`audio/chuo/` is data.
 
 ## Pending deletions (chuo)
 
 Superseded files still on disk — nothing references them, `validate_data` is clean
-with them present or absent. Left in place because the migration is uncommitted:
+with them present or absent. Left in place because the work is uncommitted:
 
 ```
 rm -rf audio/chuo/1654T/pa audio/chuo/1654T/sta audio/chuo/916H/pa audio/chuo/916H/sta
 rm audio/chuo/pa/nakano-arr-1654T.mp3 audio/chuo/pa/nakano-arr-916H.mp3
 ```
 
-The first frees ~93.5 MB (`audio/chuo` 172.8 → 79.4 MB); the second ~2.4 MB, left over
-after 中野 arr was collapsed onto the 916H take by ear.
+The first frees ~93.5 MB; the second ~2.4 MB, left over after 中野 arr was collapsed onto
+the 916H take by ear.
+
+The per-diagram `sta/` folders now hold the **pre-trim** originals, so they double as a
+backup of the STA work until it commits — `audio_src/chuo/sta.bak/` holds the same bytes.
+
+## Chūō STA — trimmed + verified (2026-07-25)
+
+Pooling was a pure move, so the STA arrived carrying whatever the original cuts had:
+leading silence 0.14–1.90 s, trailing 1.4–5.6 s, against a ~0.2 s convention. The pool
+had never been through `sta-make` Phase B. Running it: 19.7 → 9.6 MB, ~105 s of dead air
+removed, 20 `sta_cut` values recomputed to a 250–350 ms pre-voice pad and written to both
+diagrams, 23/23 passed by ear.
+
+Findings worth keeping:
+
+- **No KAK transients on this source.** A first measurement said 23/23, which was the
+  instrument — a ±1.5 s window around `sta_cut` catches the voice attack itself. Searched
+  strictly inside the music→voice silence, peaks read −33 to −47 dB. Skip Step 7.5 here.
+- **`detect_sta_cut.py` flagged 13/23, and 12 were the documented zero-gap false
+  positive** (`music_end == voice_start` exactly). Only 高尾 was a true EARLY.
+- **国立 carried an incomplete 2nd melody loop** (1.06 s = 12 % of the loop, r = 0.98
+  against the loop head) — spliced out, `sta_cut` 11.6 → 9.6. **新宿 (2 loops) and 立川
+  (3 loops) are complete and were kept.** The rule + detection method now lives in
+  `sta-make` § Pattern B.
+- **立川 has no closing announcement at all** — three melody loops then silence. Not a
+  cut-placement problem; the recording is missing content. Cut set to 21.0 by ear.
+- **高尾 and 立川 sit inside melody by choice**, not in a silence gap — set by ear so the
+  melody plays. Don't "correct" them back to the convention.
+
+## Chūō PA — trimmed + verified (2026-07-25)
+
+Lead-only trim (trailing silence is deliberately left alone — `pa-make` Step 7). 27 files
+trimmed for 22.5 s, then 10 more corrected by hand; 53/53 passed by ear.
+
+`trim_pa_silence.py`'s onset detector failed in **both** directions on this corpus and
+needed a snapshot diff to catch — the full account and the mandatory post-trim check now
+live in `pa-make` § Step 7.4. Short version: it ate 12.96 s of `tachikawa-dep-kaisoku`
+(loud source, gate above the speech) and left a 1670 ms lead on `kanda-arr-916H` (quiet
+source, a tick at 40 ms read as onset). Four loud-source `*-kaisoku` files were restored
+untrimmed; trim them by hand if their leads ever matter.
+
+## Resolution verified per diagram (2026-07-25)
+
+Run through the production path (`load_route_from_dir` → `resolve_audio_root`), not a
+reimplementation:
+
+- Both diagrams resolve `audio_root` to the same `audio/chuo` pool.
+- Every reference exists on disk — 1654T 32 PA + 23 STA, 916H 24 PA + 13 STA, 0 missing.
+- **No cross-contamination**: 1654T references no `*-916H` slug, 916H references no
+  `*-1654T` slug. The diagram suffix is what keeps two takes of the same announcement
+  apart inside one folder, so this is the property the whole PA naming rule exists to buy.
+- PA 29 exclusive / 21 exclusive / 3 shared — the 3 are the takes measured identical
+  (豊田 arr, 東京 arr) plus 中野 arr collapsed by ear. STA 13 shared / 10 exclusive to
+  1654T (the stations 916H skips) / 0 exclusive to 916H.
 
 ## Curating which take survives
 

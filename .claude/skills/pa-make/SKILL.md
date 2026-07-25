@@ -252,6 +252,32 @@ Top trimmed (lead removed):
 
 Construct by extracting `trim_lead Xms` from each line, sort descending, show all (or top ~12 if >30 files).
 
+#### Step 7.4 — Diff against the snapshot BEFORE trusting the trim
+
+**Mandatory.** `trim_pa_silence.py` reports what it *decided*, not what it *removed*, and its onset detector fails in both directions depending on the source's noise floor. Diff every file against the Step 7 snapshot and read the level of what was cut:
+
+```python
+removed = dur_backup - dur_live
+head = backup_samples[: int(removed * sr)]
+# genuine silence removals read -41 to -62 dB peak; anything above ~-35 dB is content
+```
+
+Two real failure modes, both from Chūō 2026-07-25 — same detector, opposite errors:
+
+| source | floor | gate (`floor+12`) | what happened |
+|---|---|---|---|
+| loud (train noise) | −24 to −29 dB | −12 to −17 dB | gate sits *above* quieter speech, so the detector skipped it and locked onto a louder moment later. `tachikawa-dep-kaisoku` lost **12.96 s of announcement**, reported as a normal `trim_lead`. |
+| very quiet | −60 dB | −48 dB | a sub-audible tick at 40 ms grazed the gate and was called the onset, so a **1670 ms** lead was reported `lead OK (40ms)` and left in place (`kanda-arr-916H`). |
+
+So: **restore loud-source files rather than trimming them** (hand-trim with the verifier's `[`/`]` + `T` if the lead genuinely bothers you), and **sweep for long leads the detector never saw** —
+
+```python
+lead = first frame above -40 dB      # flag anything > 200 ms
+cut_at = lead - 0.08                 # ffmpeg -ss <cut_at> -c copy
+```
+
+Level alone does not separate a good lead from a bad one: `kanda-arr-916H`'s 1670 ms lead sat 7.8 dB above its own floor, squarely inside the 4.7–10.7 dB range of nine leads the user passed by ear. **Duration is the usable signal, and the ear is the arbiter.**
+
 #### Step 7.5 — Final validate
 
 ```bash
@@ -264,13 +290,16 @@ Fast -40 dB gate after trimming. Expect 0 flags on low-noise files; a few flags 
 
 ```bash
 uv run python _dev_scripts/verify_pa_listen.py audio/<line>/<diagram>
+uv run python _dev_scripts/verify_pa_listen.py audio/<line>          # pooled line
 ```
 
 Plays first 3s of each PA segment (head), then last 3s before EOF (tail) — sequential auto-playback so you hear both ends. Seeks via `pygame.mixer.music.play(start=offset)` (same mechanism as STA verifier). PASS/FAIL per file, notes editable. Verdicts persist to `audio_src/<line>/<diagram>/pa_verify_results.json`. Includes both `pa` and `pa_at_station` entries.
 
 Keys: P pass  F fail  R replay  E edit note  ↑↓ navigate  Q/ESC quit
 
-**IMPORTANT: do not launch this from bash tool — pygame audio mixer won't reach the user's speakers.** Generate the `--only` filter from NOT_REVIEWED entries and present it; user runs it themselves.
+**Pooled lines**: pass the LINE folder. Layout discovery is shared with the STA verifier via `_dev_scripts/audio_layout.py`; entries are deduped so an mp3 referenced by several diagrams plays once. PA has no `sta_cut`, so nothing writes to route.json — the trim touches only the mp3.
+
+Launching it from the Bash tool works — audio reaches the speakers (2026-07-25, a full 53-file Chūō pass). Run it in the background so it doesn't block, and read the verdict counts from its stdout when it exits.
 
 ## Conventions
 

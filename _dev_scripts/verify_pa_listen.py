@@ -28,6 +28,8 @@ from pathlib import Path
 
 import pygame
 
+from audio_layout import discover_route_sources, order_by_reference_count
+
 WINDOW_W, WINDOW_H = 1040, 540
 LIST_W = 280
 LIST_TOP = 60
@@ -235,27 +237,36 @@ def main() -> int:
     args = ap.parse_args()
     only: set[str] | None = set(s.strip() for s in args.only.split(",")) if args.only else None
 
-    route_path = args.work_dir / "route.json"
-    pa_dir = args.work_dir / "pa"
-    if not route_path.exists():
-        print(f"route.json not found: {route_path}", file=sys.stderr)
+    try:
+        route_paths, pa_dir, loaded = discover_route_sources(args.work_dir, "pa")
+    except FileNotFoundError as e:
+        print(e, file=sys.stderr)
         return 1
 
-    route = json.loads(route_path.read_text(encoding="utf-8"))
+    pooled = not (len(route_paths) == 1 and route_paths[0].parent == args.work_dir)
+    if pooled:
+        print(f"pooled layout: {len(route_paths)} route.json — " f"{', '.join(p.parent.name for p in route_paths)}")
+
     items: list[dict] = []
+    seen: set[str] = set()
 
     def _add(stop: dict, pa_list: list[str]) -> None:
         for pa in pa_list:
+            # On a pool the same mp3 is referenced by several diagrams — play it once.
+            if pa in seen:
+                continue
             path = pa_dir / f"{pa}.mp3"
             if not path.exists():
                 continue
             if only is not None and pa not in only:
                 continue
+            seen.add(pa)
             items.append({"stop": stop["name"], "pa": pa, "path": path})
 
-    for stop in route["stops"]:
-        _add(stop, stop.get("pa", []))
-        _add(stop, stop.get("pa_at_station", []))
+    for _p, stops in order_by_reference_count(loaded, ("pa", "pa_at_station")):
+        for stop in stops:
+            _add(stop, stop.get("pa", []))
+            _add(stop, stop.get("pa_at_station", []))
 
     if not items:
         msg = f"no matching PAs (filter --only={args.only})" if only else "no playable PA entries"
@@ -673,11 +684,15 @@ def main() -> int:
             pass
 
     full_items = []
-    for stop in route["stops"]:
-        for pa_val in stop.get("pa", []):
-            full_items.append({"stop": stop["name"], "pa": pa_val})
-        for pa_val in stop.get("pa_at_station", []):
-            full_items.append({"stop": stop["name"], "pa": pa_val})
+    seen_full: set[str] = set()
+    for _p, stops in order_by_reference_count(loaded, ("pa", "pa_at_station")):
+        for stop in stops:
+            for key in ("pa", "pa_at_station"):
+                for pa_val in stop.get(key, []):
+                    if pa_val in seen_full:
+                        continue  # pooled: one entry per mp3, not per referring diagram
+                    seen_full.add(pa_val)
+                    full_items.append({"stop": stop["name"], "pa": pa_val})
 
     merged_items = []
     for fi in full_items:

@@ -333,7 +333,18 @@ Then proceed to Step 8 (trim) normally — the spliced files now have a clean mu
 
 Pattern: `music (1st loop) → tiny silence (~0.2 s, between-loops gap) → brief music pulse (0.1–0.7 s = start of 2nd loop) → silence (1–3 s) → voice`. The 2nd-loop pulse is real music, same melody, just truncated. If left in place, pressing PageUp during the 1st loop can land in the inter-loop silence and the simulator plays a confusing "music–silence–music(<0.5s)–silence–voice" sequence.
 
-Detection — *don't* try to do this algorithmically across a whole route; mid-loop pulses look just like voice fragments to amplitude detectors. Surface the pattern when the user reports it on a specific station, then probe that file's `[music_end, voice_start + 1 s]` window manually with finer-grained RMS (Step 12 recipe) to locate the snippet.
+**Remove an INCOMPLETE trailing loop; keep a COMPLETE one.** A full second (or third) loop is real content the melody legitimately has — Chūō's 新宿 carries 2 complete loops and 立川 carries 3. Only the truncated stub is a capture artifact.
+
+Detection — **amplitude alone cannot do this** (a mid-loop pulse looks like a voice fragment to any level detector), but **correlation against the first loop can**, and it separates cleanly enough to run over a whole line:
+
+1. `voice_onset` = first activity block starting at/after `sta_cut` (none ⇒ the file has no announcement — melody only).
+2. Music blocks = activity blocks before `voice_onset`, merged across sub-0.35 s gaps (melodies have internal breaks that are not loop boundaries). Ignore sub-0.5 s blips — a noise-floor tick at the file head otherwise becomes "block 1" and every downstream comparison is meaningless.
+3. Block 1 is the base loop. Correlate each later music block against the base loop's head of equal length using `scipy.signal.correlate(..., mode="full", method="fft")` — every lag, no threshold grid (per `principles.md § "A measurement is a claim until the instrument is calibrated"`; a strided lag scan scores identical audio near zero).
+4. `r ≥ 0.80` ⇒ a loop repeat. **Complete** if its duration ≥ 85 % of the base loop, else **incomplete**.
+
+Measured separation on Chūō: keeps landed at 100–102 % (r = 0.93–0.99), the one removal at 12 % (r = 0.98). Nothing sat near the boundary. Chroma-CQT agreed independently (0.958 vs a 0.490 voice control) — a useful second read when a waveform correlation is borderline.
+
+Surface the classified list before splicing anything (`critical_lessons.md § 1` — print the resolved target list, never drive a destructive loop off an unverified filter).
 
 Splice rule (handles both the snippet AND the long post-snippet silence in one pass):
 
@@ -359,6 +370,8 @@ PYTHONUTF8=1 uv run python _dev_scripts/trim_sta_silence.py audio/<line>/<diagra
 
 Idempotent — re-running on already-trimmed files is a no-op.
 
+**On a pooled line, omit `--route`.** It patches a single route.json, so on a shared pool it silently desyncs the other diagrams. Run the trim bare, then re-measure the trimmed files and write `sta_cut` to every diagram in one pass (Step 10). Re-measure rather than predicting: the script skips the mid-gap trim on files where its own confidence gate declines, so predicted post-trim coordinates do not hold — on Chūō it declined 9 of 23.
+
 ### Step 9 — Validate `sta_cut` placement
 
 Detector compares each `sta_cut` against the [`music_end`, `voice_start`] window it derives from the file. Flags EARLY (sta_cut in music) or LATE (sta_cut in voice) — both are illegal UX:
@@ -382,6 +395,15 @@ sta_cut = round(max(music_end, voice_start - 0.5), 1)
 ```
 
 (Sits 0.5 s pre-voice when the gap allows; falls back to `voice_start` when the gap is too narrow.)
+
+**Print the per-file structure once and read it — do not build a classifier.** A route is ~20 files; dumping each one's activity/silence timeline (start, end, duration, peak dB, with the current `sta_cut` marked) and reading it is faster and more reliable than any heuristic, and it yields the whole proposal table in one pass. Iterating detectors against files you have not looked at burns rounds and produces confident wrong numbers. (2026-07-25: three successive classifiers, all wrong, before the raw timeline made the structure obvious in one read.)
+
+**Identifying the music→voice gap is where this goes wrong.** Two heuristics that look obvious and both fail:
+
+- *"longest interior silence"* — correct on untrimmed files, wrong after trimming. Trim normalises the real gap to ~1.0 s while leaving the inter-announcement gaps untouched, so a 1.6–2.5 s pause between announcement clusters becomes the longest silence in the file. Four of Chūō's 23 landed 4–6 s late this way.
+- *"the block before the last activity"* — the closing announcement is **several short chunks** (0.8–1.3 s) separated by real 0.1–0.8 s breaks, not one block. Anchoring on the last chunk walks backwards into the middle of the voice. Chunk brevity is normal; do not treat a 1 s voice block as suspicious.
+
+What works: the gap is the one following the **first** sustained music block. Derive the window from the untrimmed file (where "longest interior silence" does hold), then map through the trim's reported shifts — `music_end − lead_trim`, `voice_onset − lead_trim − mid_trim` — and **verify against the trimmed audio** before writing: the span must read as silence and voice must resume at the onset. On Chūō that verification passed 20/20 and would have caught any mapping error.
 
 Surface the diff (current → proposed, with the [`music_end`, `voice_start`] window) as a table. **Do not auto-apply** — wait for user confirmation. If detector confidence < 0.7 OR the proposal looks wrong relative to the user's hand-set value → **flag for re-listen** instead of proposing.
 
@@ -408,7 +430,10 @@ The detector is a feature-based heuristic; the by-ear gate is the ground truth. 
 
 ```bash
 PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/<line>/<diagram>
+PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/<line>          # pooled line
 ```
+
+**Pooled lines**: pass the LINE folder. The verifier finds `<line>/*/route.json`, merges the STA union across diagrams (ordered by the diagram referencing the most), and warns if two diagrams disagree on a shared file's `sta_cut`. Every write — interactive trim or cut nudge — lands in **all** route.json files referencing that mp3; patching one desyncs the pool. See `WIP_audio_pooling.md § Tooling must be pool-aware`.
 
 Per station, the script:
 1. Plays `[0, 3 s]` — confirms the music head is intact (no clipped attack).
@@ -420,6 +445,14 @@ The window has a clickable sidebar listing all STAs with their current verdict (
 **Per-station notes** (✎ row above the seek bar): click or press **E** to add/edit a note (e.g. "look for double-loop at start", or a FAIL reason). Enter saves, Esc cancels. PASS auto-resolves the note (renders dim with strike-through). Notes persist in the results JSON across runs.
 
 **Cut-marker beep**: a short 880 Hz beep fires once per playback when the tail crosses sta_cut, marking the exact transition point so it's easy to hear whether the cut lands cleanly.
+
+**Adjusting `sta_cut` by ear** — the fastest path when the detector's placement is close but not right. **Drag the cut marker** on the seek bar (hover within ~14 px; it thickens and grows a grab handle). Releasing replays from the new position automatically, so the drag is self-verifying. `←`/`→` nudge by 0.1 s (Shift = 0.01 s) when you want exact steps. Nothing is written until `C`; `Z` discards. No audio is modified — this only moves where the simulator jumps to, unlike the trim controls below.
+
+| Key | Action |
+|---|---|
+| drag marker / `←` `→` | move `sta_cut` |
+| `C` | commit `sta_cut` to every route.json referencing the file |
+| `Z` | discard pending cut + trim |
 
 **Interactive trim** (for files where the propose+splice pipeline can't cleanly fix the issue — e.g., per-file stutters, duplicate intros, idiosyncratic snippets):
 
