@@ -26,8 +26,14 @@ def classify(path: str, status: str) -> str:
     if path.startswith("audio/_"):
         return "data_harness"
 
+    # Memory — narrative auto-publishes to the origin/memory journal ref via
+    # _harness/publish_memory.py. Never commit cargo: a dirty memory file is
+    # unpublished queue state, not a change.
+    if path.startswith("memory/"):
+        return "memory_pipe"
+
     # Program — docs/internal
-    if path.endswith(".md") or path.startswith(".claude/") or path.startswith("memory/"):
+    if path.endswith(".md") or path.startswith(".claude/"):
         return "program_docs"
     if path.startswith(".github/") or path == ".gitignore":
         return "program_docs"
@@ -60,6 +66,7 @@ def classify(path: str, status: str) -> str:
 BUCKET_LABELS = {
     "data_shipped": "Data (shipped)",
     "data_harness": "Data (harness)",
+    "memory_pipe": "Memory (auto-published — do NOT stage; publish_memory.py owns these)",
     "program_code": "Program (code)",
     "program_docs": "Program (docs)",
     "program_preview": "Program (preview)",
@@ -92,7 +99,16 @@ def main():
 
     today = datetime.date.today().isoformat()
     recap_path = Path("memory") / f"{today}.md"
-    recap_status = "found" if recap_path.exists() else "NOT FOUND"
+    if recap_path.exists():
+        recap_status = "found"
+    else:
+        # Canonical memory lives on the origin/memory ref (publish_memory.py) — a
+        # folder that didn't author today's block may still have it published there.
+        origin = subprocess.run(
+            ["git", "show", f"origin/memory:memory/{today}.md"],
+            capture_output=True,
+        )
+        recap_status = "found (published on origin/memory)" if origin.returncode == 0 else "NOT FOUND"
 
     buckets: dict[str, list[str]] = {}
     for line in lines:

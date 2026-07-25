@@ -54,7 +54,6 @@ Key naming drives **both** semantics AND the editor's free visualization. The ed
 | `_h`, `_height` | height (paired with `_y`) | ruler anchor_y → anchor_y + val |
 | `_color` | RGB tuple | 16px swatch in the row |
 | `_<edge>_offset` / `_<edge>_margin` (`<edge>` ∈ left/right/top/bottom) | edge-anchored offset | ruler at `rect.<edge> ± val` |
-| `_p<N>_x` / `_p<N>_y` | polyline waypoint (paired) | ring at `(px, py)` |
 | anything else (`_size`, `_pad`, `_power`, `_dur`, `_gap`, …) | recognized scalar | no indicator — nudge still works |
 
 Pair detection for `_w`/`_h`: same-stem `_x`/`_y` in the same dict. Dict-name suffix `_KANJI`/`_FURIGANA` → japanese family, `_ENGLISH` → english family (drives `L`).

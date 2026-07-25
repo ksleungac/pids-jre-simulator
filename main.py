@@ -41,12 +41,12 @@ def _run_tutorial(screen_size: tuple[int, int]) -> bool:
     return completed
 
 
-def _run_setup(args, settings, base_dir):
+def _run_setup(args, settings):
     """Show the setup flow (TIMS or classic) and return a launch config, or None to exit. Owns its own
     display creation so it can be re-entered after a drive returns Home (band Home button)."""
     if not args.classic:
-        # TIMS-console setup flow (setup_tims), own-window 730×610 — now the DEFAULT flow.
-        from setup_tims import run as run_tims
+        # TIMS-console setup flow (tims.setup), own-window 730×610 — now the DEFAULT flow.
+        from tims.setup import run as run_tims
 
         pygame.display.set_mode(TIMS_SIZE)
         pygame.display.set_caption("PA Simulator")
@@ -56,7 +56,6 @@ def _run_setup(args, settings, base_dir):
     screen = pygame.display.set_mode(SETUP_SIZE)
     pygame.display.set_caption("PA Simulator")
     setup = SetupScreen(screen, show_tutorial_button=settings.get("oobe_completed", False))
-    setup.scan_routes(os.path.join(base_dir, "audio"))
     while True:
         config = setup.run()
         if config is None:
@@ -80,7 +79,7 @@ def _run_drive(config):
     try:
         sim = PASimulator(config["work_dir"], config["route_data"], auto_input=auto_input, model=config.get("model"))
         start_idx = config.get("start_idx")
-        if start_idx is not None:  # setup_tims start-station selection → land there (classic setup has no start_idx); idx 0 is a valid target
+        if start_idx is not None:  # tims setup start-station selection → land there (classic setup has no start_idx); idx 0 is a valid target
             sim.jump_to_stop(start_idx)
         if auto_input:
             from auto_input import AutoDriver
@@ -108,7 +107,7 @@ def main():
     parser.add_argument(
         "--classic",
         action="store_true",
-        help="Launch the classic setup screen instead of the default TIMS-console setup flow (setup_tims)",
+        help="Launch the classic setup screen instead of the default TIMS-console setup flow (tims.setup)",
     )
     parser.add_argument(
         "--stream",
@@ -154,11 +153,6 @@ def main():
     # overlaps the setup screens; the setup screen polls the result.
     update_check.check_async()
 
-    # Repo root (dev) / alongside-exe (frozen) — single canonical helper.
-    from app_paths import project_root
-
-    BASE_DIR = str(project_root())
-
     # No premature window here — the setup flow (_run_setup) and the classic OOBE tutorial each create
     # their own correctly-sized window, so creating one now would only flash a blank frame before the
     # handoff. (Used to exist for the removed first-run LanguagePicker — critical_lessons §6.)
@@ -187,7 +181,7 @@ def main():
     # Setup ↔ drive loop. A drive's band Home button returns here to re-pick a route (run() → "home");
     # window close / ESC ends the drive with "quit" and exits. OCR Auto-PA stays opt-in inside setup.
     while True:
-        config = _run_setup(args, settings, BASE_DIR)
+        config = _run_setup(args, settings)
         if config is None:
             print("No route selected. Exiting.")
             frame_stream.stop()

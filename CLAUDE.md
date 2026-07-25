@@ -35,9 +35,9 @@ Test: *if I finish this, does what the user can do change?* No → it's a commit
 | **Parent + sub-issues** | outcome spans sessions/stages. `gh issue edit <parent> --add-sub-issue <N>` (gh ≥ 2.96). Parent tracks `completed/total` natively and closes when the outcome is real; each stage closes as it lands |
 | **Not an issue** | no user-visible change |
 
-**`Closes #N` only when you did everything #N describes.** Doing less is a signal the scope was wrong — fix by splitting a stage out **under** the outcome, never by closing it and opening a peer. A peer orphans the feature: the two tickets read as unrelated and the thing the user actually wants has no home. (2026-07-20: closed #71 "window mirroring" after shipping only its display-only stage and filed stage 2 as a sibling; user — *"can you not closes the issue just for a new stage?"*. Restructured to #71 parent → #77 stage 1 / #76 stage 2.)
+**`Closes #N` only when you did everything #N describes.** Doing less is a signal the scope was wrong — fix by splitting a stage out **under** the outcome, never by closing it and opening a peer. A peer orphans the outcome: the two tickets read as unrelated, so the feature has no single tracking home. (2026-07-20: closed #71 "window mirroring" after shipping only its display-only stage and filed stage 2 as a sibling; user — *"can you not closes the issue just for a new stage?"*. Restructured to #71 parent → #77 stage 1 / #76 stage 2.)
 
-Sub-issues beat a long-lived `Refs`-only ticket because progress stays legible — the parent shows a completion count instead of sitting `in-progress` for weeks with its state readable only from git log.
+A parent with sub-issues shows progress as a `completed/total` count; a long-lived `Refs`-only ticket keeps its state only in git log.
 
 Session start prints the open / in-progress / recently-closed / stale summary; `/session-recap` reconciles against `gh issue list` (closure is authoritative — no keyword guessing).
 
@@ -100,6 +100,8 @@ The simulator accepts **any** route into **any** train model. Reality only const
 | **In-spec** (model's IRL lines) | Match real PIDS |
 | **Out-of-spec** | Best-effort: no crashes, no missing-key errors, no broken layouts. Not obligated to IRL-accurate fidelity. |
 
+**Best-effort = the model's OWN native norm applied to any route — never a borrowed behavior or bespoke feature propping up an out-of-spec route.** Adapt the model's own look to the route's shape (e235_0 opens its circular racetrack into a *horseshoe* for a non-loop line — native, adapted), but don't import another model's behavior (e235_0 drops e235_1000's inherited end-of-route *lock* — that lock is a linear heuristic foreign to a loop; no-lock is e235_0's native norm). And when a route shape the view wasn't built for needs a marker the view has no calibrated slot for, reuse an EXISTING calibrated primitive degenerately — a passing station in the fixed-slot 5-station view renders the countdown ring *empty* (no digit), not an invented chevron (#66; the proper chevron is deferred as ultra-low-priority #99) — never a new uncalibrated marker — the bespoke growth this section bars. *For the reviewer:* a cross-model divergence where each model expresses its own native norm is NOT sibling-drift — verify against this section before flagging; a borrowed foreign feature IS the violation. And out-of-spec renders (the horseshoe) are **transitional** — e235_1000 is the stable general model for all routes until per-line-native models land, and as those arrive out-of-spec best-effort support is *removed*, not grown.
+
 ### IRL display conventions
 
 Behaviors true on real trains, mirrored by the simulator:
@@ -117,6 +119,22 @@ Behaviors true on real trains, mirrored by the simulator:
 Each stop: **APPROACHING_EARLY** → **APPROACHING_FINAL** → **STOPPING** → next stop. PageDown drives transitions; `jump_to_stop` lands in STOPPING@target. Full spec in [DISPLAY.md § Unified State Machine](DISPLAY.md).
 
 **Auto-fire asymmetry:** APPROACHING auto-fires `pa[0]` (passive-listening window). STOPPING has no auto-fire — every `pa_at_station` entry plays only on user press.
+
+## Writing tone
+
+Factual, nerd, non-performative. Same voice the release notes use — professional and factual, never editorial. Every prose surface: chat, docs, memory, commits.
+
+Not a brevity rule. Use as many words as the technical detail or logic needs. The cut targets performance, not length:
+
+- No words to show you understood, signal diligence, or project a personality.
+- No self-justifying scaffolding (arguing the point is right).
+- No intensifier filler (*exactly*, *the very*, *the tell is*); no throat-clearing hedge (*arguably*, *somewhat*, *tends to*).
+- "X, not Y" only when Y is a real wrong path worth flagging — else drop the shadow.
+- Never mark compliance. The instruction shapes the output and never appears in it.
+
+Be true. State what you know plainly; state real uncertainty just as plainly (*unverified*, *haven't checked X*). Don't inflate confidence, don't perform humility — confidence tracks truth.
+
+Orthogonal to the caveman chat style below (grammar compression, chat-only).
 
 ## Chat output style
 
@@ -155,7 +173,13 @@ pids_jre_simulator/
 │   ├── translations_app.json          # App-chrome strings (en / zh_HK / zh_CN)
 │   └── stations.json                  # Station metadata (3-letter codes)
 ├── auto_input/                        # OCR-driven auto-PA (driver + ocr + hud_layout)
-├── memory/                            # Daily logs + MEMORY.md curated index
+├── tims/                              # TIMS cab-console UI package (see APP.md)
+│   ├── widgets.py                     # Draw primitives (bevel buttons, AA-off low-res text)
+│   ├── chrome.py                      # Shared vocabulary (PALETTE, button presets, role fonts)
+│   ├── band.py                        # Persistent status band (setup screens + live OCR panel)
+│   └── setup/                         # Setup/OOBE flow screens (tims.setup.run = entry)
+├── memory/                            # Daily logs + MEMORY.md index (untracked; canonical =
+│                                       #   origin/memory ref via _harness/publish_memory.py)
 └── audio/
     ├── [line]/[diagram]/route.json    # Real routes
     └── _mock/main/route.json          # Edge-case catalog for preview (not shipped)

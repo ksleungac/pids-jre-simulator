@@ -88,7 +88,7 @@ git log --oneline "$prevTag..master"
 
 Surface this list to the user before drafting — gives them a chance to flag commits they don't want in the notes.
 
-**Read the commits CAREFULLY — reconstruct the timeline, don't skim.** A large release (50+ commits) is not licence to judge from subjects at a glance. Read the messages (bodies where they matter) to build the shape of the release: which commits are iterations of ONE body of work (many `feat(setup)` commits = one first-release feature, not many); what is a genuine fix to a PRE-EXISTING shipped feature versus polish on something new this release; and what a later commit superseded. That timeline judgment is what sets correct weighting and categorization — skimming is exactly what produces a one-line blurb for a huge feature and a "Fixes" bucket full of a new feature's internals. Per `principles.md § "Verify before claiming"` ("deriving release/history facts: read the commit messages in range").
+**Read the commits CAREFULLY — reconstruct the timeline, don't skim.** A large release (50+ commits) is not licence to judge from subjects at a glance. Read the messages (bodies where they matter) to build the shape of the release: which commits are iterations of ONE body of work (many `feat(setup)` commits = one first-release feature, not many); what is a genuine fix to a PRE-EXISTING shipped feature versus polish on something new this release; and what a later commit superseded. That timeline judgment is what sets correct weighting and categorization — skimming is what produces a one-line blurb for a huge feature and a "Fixes" bucket full of a new feature's internals. Per `principles.md § "Verify before claiming"` ("deriving release/history facts: read the commit messages in range").
 
 ### Step 4 — Draft release_notes.md
 
@@ -160,15 +160,29 @@ tag is created and no upload is queued.
 
 Don't tag, don't push, don't run gh in this step — the user owns the publish decision.
 
-### Step 6 — Tag (after user approval)
+### Step 6 — Bump pyproject version, then tag (after user approval)
 
+`pyproject.toml`'s `[project] version` is the single source of truth for the UI version tag in dev — `app_paths.display_version()` reads it (frozen exes read the build-stamped PE metadata instead). Bump it to this release and **commit before tagging**, so the tag annotates the SHA that carries the correct version. This also makes `pyproject == version_info.txt == tag` hold by construction (Step 2b already checked `version_info == $VERSION`), closing the version-drift gap (#36).
+
+```powershell
+# $V = $VERSION with any leading 'v' stripped (e.g. "0.6.2", or "0.6.2b").
+(Get-Content pyproject.toml) -replace '(?m)^version = ".*"', "version = `"$V`"" | Set-Content pyproject.toml -Encoding utf8
+```
+
+Commit the bump through the commit gate (a bare `git commit` is blocked without the marker — see `/commit`), then tag:
+
+```bash
+CLAUDE_COMMIT_VIA_SKILL=1 git commit -m "chore(release): bump version to v$VERSION" -- pyproject.toml
+```
 ```powershell
 git tag -a "v$VERSION" -m "v$VERSION"
 git push origin "v$VERSION"
 git push origin master
 ```
 
-Push the tag AND any unpushed master commits — the tag annotates a specific SHA, and that SHA must be on origin or `gh release create --verify-tag` will fail.
+Push the tag AND any unpushed master commits (including this bump) — the tag annotates a specific SHA, and that SHA must be on origin or `gh release create --verify-tag` will fail.
+
+**Subversion letters:** store the full string INCLUDING the letter (`0.6.2b`). `display_version()` reads it raw via `tomllib`, so the UI shows it verbatim. PEP 440 tooling (packaging / uv) reads a trailing letter as a pre-release tag — inert here (this project is never published to an index; the exe is stamped from `version_info.txt`, not pyproject), so no normalization step is needed.
 
 ### Step 7 — Hand off to user for upload
 
@@ -191,7 +205,7 @@ https://github.com/ksleungac/pids-jre-simulator/releases/tag/v<VERSION>
 
 - **Building**: that's `/build`. If artifacts are missing, halt; direct user.
 - **Running `gh release create`**: user runs it. Skill stops at handing off the command.
-- **Modifying `pyproject.toml` / source for version bump**: not needed; version is a build-time label only (per `/build` skill's stance).
+- **Modifying `pyproject.toml` for version bump**: DONE here (Step 6) — the bump is the dev-mode single source of truth for the UI version tag, committed before the tag. (This reverses the old "build-time label only" stance, which left pyproject drifting from the shipped version.) `/build` still never touches pyproject — it only stamps `version_info.txt`.
 - **Post-release announcements** (YouTube, Twitter, etc.): user-driven.
 
 ## Why these choices

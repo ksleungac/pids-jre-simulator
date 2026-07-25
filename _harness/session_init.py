@@ -20,8 +20,18 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 
 def git_sync():
-    """Fetch + fast-forward if possible; report divergence for manual resolution."""
+    """Fetch + fast-forward if possible; report divergence for manual resolution.
+
+    Branch-aware: on a non-master branch (worktree folder B), fetch only — the
+    master ff/divergence nag doesn't apply there; narrative flows via
+    publish_memory against the dedicated origin/memory ref either way."""
     subprocess.run(["git", "fetch", "origin"], capture_output=True)
+
+    branch_r = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True, encoding="utf-8")
+    branch = branch_r.stdout.strip() if branch_r.returncode == 0 else "?"
+    if branch != "master":
+        print(f"=== Git sync — on branch '{branch}' (fetched; master ff-sync skipped) ===\n")
+        return
 
     rev = subprocess.run(
         ["git", "rev-list", "--left-right", "--count", "HEAD...origin/master"],
@@ -53,17 +63,29 @@ def git_sync():
         )
 
 
-def read_if_exists(path, label):
-    """Print file contents with a header, or a 'not found' note."""
-    p = Path(path)
-    if p.exists():
-        content = p.read_text(encoding="utf-8").strip()
-        if content:
-            print(f"=== {label} ({p.name}) ===")
-            print(content)
-            print()
-            return
-    print(f"=== {label} — not found ===\n")
+def memory_text(rel_path):
+    """Canonical narrative view: origin/memory ∪ local files (publish_memory merge).
+
+    origin/memory (journal-only ref) is the canonical memory store — all writes
+    flow through publish_memory.py; the union covers the offline / unpublished-
+    queue case."""
+    from publish_memory import _norm, _origin_text, merged_view
+
+    origin = _origin_text(rel_path)
+    p = Path(rel_path)
+    local = _norm(p.read_bytes()) if p.exists() else None
+    return merged_view(origin, local, rel_path)
+
+
+def print_memory(rel_path, label):
+    """Print the merged narrative view with a header, or a 'not found' note."""
+    content = memory_text(rel_path)
+    if content and content.strip():
+        print(f"=== {label} ({Path(rel_path).name}) ===")
+        print(content.strip())
+        print()
+    else:
+        print(f"=== {label} — not found ===\n")
 
 
 def _gh():
@@ -145,15 +167,23 @@ def gh_backlog(stale_days=14, closed_lookback_days=3):
 def main():
     git_sync()
 
+    # Publish any narrative queued in the checkout (fail-soft; fetch already done).
+    try:
+        from publish_memory import sync as publish_sync
+
+        publish_sync(fetch=False)
+    except Exception as e:
+        print(f"[publish-memory] skipped ({e})\n")
+
     today = date.today()
     yesterday = today - timedelta(days=1)
 
-    read_if_exists(f"memory/{today.isoformat()}.md", "Today's memory")
-    read_if_exists(f"memory/{yesterday.isoformat()}.md", "Yesterday's memory")
+    print_memory(f"memory/{today.isoformat()}.md", "Today's memory")
+    print_memory(f"memory/{yesterday.isoformat()}.md", "Yesterday's memory")
     # MEMORY.md — only last 10 entries (older rarely matters for session pickup)
-    mem_path = Path("memory/MEMORY.md")
-    if mem_path.exists():
-        lines = mem_path.read_text(encoding="utf-8").strip().splitlines()
+    mem_text = memory_text("memory/MEMORY.md")
+    if mem_text:
+        lines = mem_text.strip().splitlines()
         # Find entry lines (start with "- [")
         entries = [(i, l) for i, l in enumerate(lines) if l.startswith("- [")]
         if len(entries) > 10:
@@ -169,7 +199,7 @@ def main():
             print()
         else:
             print(f"=== Memory index (MEMORY.md) ===")
-            print(mem_path.read_text(encoding="utf-8").strip())
+            print(mem_text.strip())
             print()
     else:
         print("=== Memory index — not found ===\n")

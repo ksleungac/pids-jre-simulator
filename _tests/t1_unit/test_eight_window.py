@@ -41,6 +41,7 @@ from displays.train_models.e235_1000.lower_lcd import (  # noqa: E402
     JapaneseEightStationDisplay,
     LowerDisplay,
 )
+from displays.train_models.e235_0.lower_lcd import LowerDisplay as E0LowerDisplay  # noqa: E402
 
 VC = JapaneseEightStationDisplay.VISIBLE_COUNT  # 8
 LOCK = JapaneseEightStationDisplay.LOCK_THRESHOLD  # 7
@@ -122,11 +123,31 @@ def main():
     check(w25 == list(range(24, 32)), f"window(32, cursor=25) locked expected [24..31]; got {w25}")
     check(31 in w25 and 25 in w25, f"window(32, cursor=25) must contain terminus AND cursor; got {w25}")
 
+    # --- E235-0 NEVER locks: no-lock is its native norm (#68/#81). Yamanote is a
+    #     circular LOOP with no end for the inherited linear end-of-route heuristic
+    #     to fire on, so the lock is off for EVERY route (in-spec AND out-of-spec
+    #     best-effort). Discriminates: delete the _should_lock_to_eight override on
+    #     e235_0's LowerDisplay and it falls back to the inherited
+    #     (len(stops)-cursor) <= LOCK_THRESHOLD → True near the tail → this fails.
+    def locked_e0(nstops, cursor):
+        fake = SimpleNamespace(stops=[{"_i": k} for k in range(nstops)], LOCK_THRESHOLD=E0LowerDisplay.LOCK_THRESHOLD)
+        return E0LowerDisplay._should_lock_to_eight(fake, cursor)
+
+    for nstops in (17, 30, 46):
+        for cur in range(nstops):
+            check(locked_e0(nstops, cur) is False, f"E235-0 lock n={nstops} cur={cur}: got True — e235_0 must NEVER lock (native no-lock norm)")
+    # Tail anchor + discrimination proof: at the exact tail position where
+    # e235_1000 DOES lock, e235_0 still returns False.
+    check(locked_e0(32, 31) is False, "REGRESSION #68/#81: e235_0 lock(32, cursor=31) must be False — the FULL-slot lock is off on e235_0")
+    check(locked(32, 31) is True, "sanity: e235_1000 DOES lock at the tail (32, cursor=31) — proves the e235_0 assertion discriminates")
+
     if failures:
         print("FAIL: 8-station window / FULL-slot lock")
         print("\n".join(failures))
         sys.exit(1)
-    print("PASS: 8-station window + lock (short/sliding/locked regimes, pointer-always-visible invariant, Chūō 新宿 regression)")
+    print(
+        "PASS: 8-station window + lock (short/sliding/locked regimes, pointer-always-visible invariant, Chūō 新宿 regression, e235_0 never-locks #68/#81)"
+    )
 
 
 if __name__ == "__main__":

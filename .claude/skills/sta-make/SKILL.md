@@ -346,7 +346,7 @@ Always preview after splicing — when the long post-snippet silence is genuinel
 
 ### Pattern C — duplicate intro / stutter / mid-music repeat
 
-Source recordings occasionally have a tiny stutter at the start (e.g., the first 0.1–0.3 s of music plays twice) or a fully-repeated melody (the entire melody plays twice back-to-back). These are fundamentally per-file issues — don't try to detect them. Hand off to the verifier's interactive trim (Step 11) and let the user nudge start/end markers by-ear.
+Source recordings occasionally have a tiny stutter at the start (e.g., the first 0.1–0.3 s of music plays twice) or a fully-repeated melody (the entire melody plays twice back-to-back). These are per-file issues — don't try to detect them. Hand off to the verifier's interactive trim (Step 11) and let the user nudge start/end markers by-ear.
 
 ### Step 8 — Trim silences (in-place, modifies files)
 

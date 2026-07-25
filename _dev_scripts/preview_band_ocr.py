@@ -1,6 +1,6 @@
 """DEV preview — the persistent TIMS top band driven by the OCR debug-panel mock scenarios.
 
-Wires `status_band.render` (status-driven) to a set of mock `status` dicts covering the
+Wires `tims.band.render` (status-driven) to a set of mock `status` dicts covering the
 realistic OCR states (boot / stopped / approaching / paused / fire), so the band can be iterated
 without the game. The mock fixtures (`_MockState` / `_STOPS` / `_scenarios`) are inlined below —
 self-contained, dev-only.
@@ -22,8 +22,8 @@ sys.path.insert(0, ".")
 
 import i18n  # noqa: E402
 from app_paths import project_root  # noqa: E402
-import status_band as band  # noqa: E402  (root module — the live OCR panel; dev preview reuses it)
-from setup_tims import dims  # noqa: E402  (setup-window dims — for the preview width)
+import tims.band as band  # noqa: E402  (the live OCR panel; dev preview reuses it)
+from tims.setup import dims  # noqa: E402  (setup-window dims — for the preview width)
 
 _LANGS = ("en", "zh_HK", "zh_CN")
 FOOTER_H = 96

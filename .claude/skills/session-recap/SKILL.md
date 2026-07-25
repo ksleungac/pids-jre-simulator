@@ -85,6 +85,8 @@ After approval, update only confirmed files. Each piece of information has ONE h
 
 **MEMORY.md always gets an entry** — one line per session block, written immediately after the daily log. Format at bottom of this file.
 
+**Publish narrative** — after the daily log + MEMORY.md writes, run `uv run _harness/publish_memory.py`. It appends the new blocks/entries to the dedicated `origin/memory` journal ref (works from any branch/folder; memory never rides code commits, master history stays pure code). Offline → it no-ops and the local files keep the queue; the next recap or session start publishes. Memory files are APPEND-ONLY — never reword an already-published block/entry (the publisher refuses edits with a warning).
+
 ---
 
 ## Where things live (single source of truth)

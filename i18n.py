@@ -117,7 +117,7 @@ def init(lang: str) -> None:
 def set_language(lang: str) -> None:
     """Switch the active in-memory language at runtime (e.g. the TIMS home
     language knobs). Does NOT persist — callers that need durability write
-    settings.json themselves (see setup_tims/home.py knob handler)."""
+    settings.json themselves (see tims/setup/home.py knob handler)."""
     global _current_lang
     if lang in SUPPORTED_LANGS:
         _current_lang = lang

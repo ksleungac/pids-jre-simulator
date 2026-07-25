@@ -20,7 +20,7 @@ sys.path.insert(0, ".")
 
 import i18n  # noqa: E402
 from app_paths import project_root  # noqa: E402
-from widgets import (  # noqa: E402
+from tims.widgets import (  # noqa: E402
     draw_lowres_text,
     draw_tims_button,
     tims_button_size,

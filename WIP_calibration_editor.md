@@ -52,8 +52,6 @@ Key naming drives **both** semantics AND free visualization. Editor infers param
 | `_h`, `_height` | height, paired with `_y` | vertical ruler from anchor_y → anchor_y + val |
 | `_color` | RGB tuple | 16px swatch in sidebar row |
 | `_<edge>_offset`, `_<edge>_margin` | edge-anchored offset (`<edge>` ∈ left / right / top / bottom) | ruler at `rect.<edge> ± val` |
-| `_p<N>_x`, `_p<N>_y` | polyline waypoint coord (paired with same-stem sibling) | highlighted ring at `(px, py)` — paired axis read from same dict |
-| `_p<N>_stroke` | per-waypoint band thickness (paired with same-stem `_x`/`_y`) | horizontal bar centered at the waypoint with length = stroke |
 | anything else (`_offset` without edge, `_size`, `_pad`, `_margin` without edge) | recognized but no indicator | tunable still works; no visual feedback — gentle convention pressure |
 
 Pair detection for `_w` / `_h`: same-stem `_x` / `_y` in same dict. Fallback strips `_max` (e.g. `two_line_max_w` → `two_line_x`).
@@ -178,7 +176,7 @@ The 7-waypoint Catmull-Rom approach was Phase 1b/2's attempt to encode the Yaman
 
 **Superseded by the mask PNG approach** (Tier 2, see above). Draw the shape in Photoshop at pixel precision → export white-on-transparent PNG → bake route color at `__init__` via `BLEND_RGBA_MULT`. Zero fidelity loss, color problem solved, no calibration loop.
 
-The `_TUNEABLES_ARC` dict, `_build_catmull_rom_centerline`, and `_draw_arc` are dead code once the arc element migrates to mask PNG — remove when porting to master. The drag-handle machinery is NOT dead: it was generalized (multi-prefix waypoints, per-station panel filter) and now drives the `five_station` element's marker/group handles.
+**Removed 2026-07-23** (#51): the `_TUNEABLES_ARC` dict, `_build_catmull_rom_centerline`, `_smooth_centerline`, and `_ARC_STATION_SLOTS` are gone — the 5-station green-fill sweep now derives its centerline directly from the mask PNG's own geometry (`_extract_band_centerline` = per-row fill centroid), retiring the last consumer of the arc waypoints. The editor's now-unreachable `_p<N>_` waypoint/stroke param-kind machinery (`_WAYPOINT_RE`/`_is_waypoint_key`/`_is_stroke_key` + branches) was swept in the same change. The drag-handle machinery is NOT dead: it was generalized (multi-prefix waypoints, per-station panel filter) and drives the `five_station` (m/g/v/a) + `transfer_panel` (tp) handles.
 
 ---
 

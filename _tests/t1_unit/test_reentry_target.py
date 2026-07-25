@@ -26,10 +26,17 @@ from auto_input.driver import AutoDriver, _Detector  # noqa: E402
 LEAD = 900
 
 
-def resolve(prev_badge, speed, distance, *, pending_next_pa=False, at_station=True, arr_obs=False, dep_obs=False, lead=LEAD):
-    det = _Detector(arrival_lead_m=lead, prev_badge=prev_badge, arrival_observed=arr_obs, departure_observed=dep_obs)
-    sim = SimpleNamespace(pending_next_pa=pending_next_pa, state=SimpleNamespace(at_station=at_station))
-    fake_self = SimpleNamespace(sim=sim, _detector=det)
+def resolve(
+    prev_badge, speed, distance, *, pending_next_pa=False, at_station=True, arr_obs=False, dep_obs=False, lead=LEAD, origin_known=False, next_pa=2
+):
+    det = _Detector(
+        arrival_lead_m=lead, prev_badge=prev_badge, arrival_observed=arr_obs, departure_observed=dep_obs, motion_origin_known=origin_known
+    )
+    # Parked at stop 0; the joined segment lands on stop 1 with `next_pa` approach
+    # PAs (default 2 — a real 1B exists; pa=1 collapses 1A ≡ 1B, see facet below).
+    stops = [{"pa": ["p"]}, {"pa": ["p"] * next_pa}]
+    sim = SimpleNamespace(pending_next_pa=pending_next_pa, state=SimpleNamespace(at_station=at_station, curr_stop=0), stops=stops)
+    fake_self = SimpleNamespace(sim=sim, _detector=det, _next_stopping_pa_count=lambda: AutoDriver._next_stopping_pa_count(fake_self))
     return AutoDriver._resolve_reentry_target(fake_self, speed, distance)
 
 
@@ -112,11 +119,55 @@ def main():
     if resolve("MOVING", 80, 2000, at_station=False) is not None:
         failures.append("  guard: at_station=False (app already moving) must return None")
 
+    # [Provenance facet] BASE ARMING CONDITION: motion of KNOWN origin (a witnessed
+    # STOPPED→(MOVING|PASSING) edge) never resolves to ANY target — the audible
+    # primary owns the whole segment. Every grid cell goes None, whatever the reads.
+    for badge, speed, dist, _expected in GRID:
+        got = resolve(badge, speed, dist, origin_known=True)
+        if got is not None:
+            failures.append(
+                f"  PROVENANCE: resolve({badge!r}, speed={speed}, dist={dist}, origin_known=True) = {got!r}, expected None — witnessed motion never re-enters"
+            )
+
+    # [pa=1 facet] A pa=1 landing stop has NO distinct 1B (cnt_pa = len(pa)-1 = 0 makes
+    # 1A ≡ 1B one AppState, and the single announcement must never be silently skipped):
+    # every 1B grid cell declines; the 1A (speed>=60) cells are unaffected. STOPPING on
+    # pa=1 is reached by the at-station transition edge itself, not a re-entry landing.
+    for badge, speed, dist, expected in GRID:
+        got = resolve(badge, speed, dist, next_pa=1)
+        if expected == "1B":
+            # 1B declines and falls THROUGH to the 1A speed test — "PA=1 case
+            # only re-entry to 1a" (60 hardcoded, not imported — see K-note).
+            want = "1A" if (speed is not None and speed >= 60) else None
+        else:
+            want = expected
+        if got != want:
+            failures.append(f"  PA1: resolve({badge!r}, speed={speed}, dist={dist}, next_pa=1) = {got!r}, expected {want!r} — pa=1 has no 1B target")
+    # Fall-through: pa=1, inside the lead, speed already stale-high → 1A (not None) —
+    # "PA=1 case only re-entry to 1a".
+    if resolve("MOVING", 80, 300, next_pa=1) != "1A":
+        failures.append("  PA1: resolve(MOVING, speed=80, dist=300, next_pa=1) must fall through to '1A'")
+
+    # Regression anchor — the 2026-07-23 Nambu incident: normal departure from 武蔵溝ノ口,
+    # segment 703m < 900m lead, first moving frames at speed 1-3. The witnessed edge
+    # must disarm re-entry entirely (the departure PA plays via the audible primary).
+    if resolve("MOVING", 1, 703, origin_known=True) is not None:
+        failures.append(
+            "  REGRESSION: resolve(MOVING, speed=1, dist=703, origin_known=True) must be None (2026-07-23: ate the departure PA on a short segment)"
+        )
+    # Discrimination check for the anchor above: the SAME reads with UNKNOWN origin
+    # (mid-transit join inside the lead) still resolve 1B — proves the provenance
+    # gate, not some other condition, is what suppresses the incident.
+    if resolve("MOVING", 1, 703, origin_known=False) != "1B":
+        failures.append(
+            "  DISCRIMINATION: resolve(MOVING, speed=1, dist=703, origin_known=False) must be '1B' (unknown-origin join inside the lead is re-entry's legitimate case)"
+        )
+
     if failures:
         print("FAIL: re-entry resolver")
         print("\n".join(failures))
         sys.exit(1)
-    print(f"PASS: re-entry resolver ({len(GRID)} grid cells + PASSING==MOVING facet + regression + guards)")
+    print(f"PASS: re-entry resolver ({len(GRID)} grid cells + PASSING==MOVING facet + provenance facet + regressions + guards)")
 
 
 if __name__ == "__main__":

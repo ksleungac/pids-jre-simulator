@@ -46,7 +46,7 @@ Auto-driver subsystem involves three distinct state machines. They align in norm
 | | **2D** = at-station | **3D** = `ARRIVING` |
 | | | **3E** = `STOPPED` |
 
-The Layer 1 ↔ Layer 2 coupling (1A⇒2B, 1B⇒2C, 1C⇒2A — Layer 2 derived from Layer 1) is implemented in `driver.py`: fire-gating reads the app sub-state directly (departure only at 1C, arrival only at 1A, at-station only at 1B), and the segment label derives from `curr_stop` each cycle. The observed-flags below stay OCR-driven for Layer 3. The separate Layer-1↔Layer-3 catch-up is handled by re-entry — see "Re-entry (Layer 3 → Layer 2 reconciliation)" below. Design-discussion rationale: `memory/2026-05-30.md` (coupling) + `memory/2026-05-31.md` (re-entry).
+The Layer 1 ↔ Layer 2 coupling (1A⇒2B, 1B⇒2C, 1C⇒2A — Layer 2 derived from Layer 1) is implemented in `driver.py`: fire-gating reads the app sub-state directly (departure only at 1C, arrival only at 1A, at-station at 1A/1B — any in-transit state), and the segment label derives from `curr_stop` each cycle. The observed-flags below stay OCR-driven for Layer 3. The separate Layer-1↔Layer-3 catch-up is handled by re-entry — see "Re-entry (Layer 3 → Layer 2 reconciliation)" below. Design-discussion rationale: `memory/2026-05-30.md` (coupling) + `memory/2026-05-31.md` (re-entry).
 
 ### Layer 1 — App (sim's own state machine)
 
@@ -54,7 +54,7 @@ State on `AppState` (`curr_stop`, `cnt_pa`, `cnt_pa_at_station`, `at_station`). 
 
 ### Layer 2 — AutoDriver belief
 
-Auto-driver's belief about where the train is in its segment — **derived from Layer 1, not stored.** Fire-gating reads the app sub-state directly (departure only at 1C, arrival only at 1A, at-station only at 1B), so the app advance is the debounce; `_segment_start_stop` is a display/log label recomputed from `curr_stop` each cycle (`_segment_from`). The `_Detector`'s `departure_observed` / `arrival_observed` / `at_station_observed` flags still live on this instance but now serve **Layer 3** (they feed `inferred_state()`); they are OCR-driven and reset on `STOPPED->(MOVING|PASSING)`, NOT reconciled from Layer 1 — except seeded directly on re-entry (see "Re-entry" below).
+Auto-driver's belief about where the train is in its segment — **derived from Layer 1, not stored.** Fire-gating reads the app sub-state directly (departure only at 1C, arrival only at 1A, at-station at 1A/1B), so the app advance is the debounce; `_segment_start_stop` is a display/log label recomputed from `curr_stop` each cycle (`_segment_from`). The `_Detector`'s `departure_observed` / `arrival_observed` / `at_station_observed` flags still live on this instance but now serve **Layer 3** (they feed `inferred_state()`); they are OCR-driven and reset on `STOPPED->(MOVING|PASSING)`, NOT reconciled from Layer 1 — except seeded directly on re-entry (see "Re-entry" below).
 
 ### Layer 3 — AutoDriver's inferred game state
 
@@ -100,6 +100,7 @@ Inference function pluggable; future cross-attribute hardening enriches it witho
 1. **Use Layer 1 / 2 / 3 named states verbatim** — say *"AutoDriver thinks the game is in `IDLE`"*, not *"badge is STOPPED"* or any invented parallel vocabulary. Badge = one input to the inference; inferred state = what design reasons about. Vocabulary separation lets us harden inference without re-litigating design conclusions.
 2. **Use arrow-flow notation for state progressions** — write `STOPPING(queue) → STOPPING(queue exhausted) → APPROACHING_EARLY`, not multi-column table. Tables fit orthogonal cross-products (Layer 3 × Layer 1 alignment table); progressions = sequence, read as arrows. Tables on transitions read as over-engineered.
 3. **Don't redesign the state machine** — named states already implemented in `_Detector.update`. Design how flows interact with them, not what they should be.
+4. **Discuss Layer 1 transitions against the canonical transition graph** — § "Layer 1 transition graph" below is the agreed discussion medium (2026-07-24): every proposed behavior change is located on that graph (which arrow, which guard) before code is discussed.
 
 ### Layer interaction
 
@@ -113,14 +114,14 @@ Layer 3 observation → event → fire gate (Layer 1 sub-state) → pending_next
                                               Layer 2 (re-)derived from Layer 1 next cycle
 ```
 
-Layer 3 (game observation) proposes a fire; the gate checks Layer 1's sub-state (departure only at 1C, arrival only at 1A, at-station only at 1B) and, if valid, advances Layer 1. **Layer 2 is derived from Layer 1, so it always follows Layer 1 and never drifts** — a manual PageDown that already advanced Layer 1 simply makes the gate skip the driver's own fire on the next cycle. The OCR observed-flags reset on the next `STOPPED->(MOVING|PASSING)`, for Layer 3 only.
+Layer 3 (game observation) proposes a fire; the gate checks Layer 1's sub-state (departure only at 1C, arrival only at 1A, at-station at 1A/1B) and, if valid, advances Layer 1. **Layer 2 is derived from Layer 1, so it always follows Layer 1 and never drifts** — a manual PageDown that already advanced Layer 1 simply makes the gate skip the driver's own fire on the next cycle. The OCR observed-flags reset on the next `STOPPED->(MOVING|PASSING)`, for Layer 3 only.
 
 ### When layers diverge
 
 | Cause | Effect | Reconciled by |
 |---|---|---|
 | Manual PageDown / auto-fire | Layer 1 advances | **Nothing to reconcile** — Layer 2 is derived from Layer 1 each cycle. Fire-gating reads the app sub-state, so a manual advance into 1A makes the driver skip its own departure; the segment label tracks `curr_stop` next cycle. |
-| Click-jump on lower LCD | Layer 1 jumps to STOPPING@target | Segment label + fire-gating derive from `curr_stop` automatically. `_reanchor_to_app` additionally resets OCR memory (`prev_badge=STOPPED` + the three observed-flags, a cosmetic Layer-3 reset to `IDLE`) so a stale badge read can't fire post-jump; signalled by single-shot `PASimulator.click_jump_pending`. It also nulls `prev_speed`, which since #82 protects nothing — the departure level test reads only the current speed (open risk, [#85](https://github.com/ksleungac/pids-jre-simulator/issues/85)). Parked case; mid-transit click-jump (game driving) is a Layer-1↔Layer-3 desync — see entry-point flow. |
+| Click-jump on lower LCD | Layer 1 jumps to STOPPING@target | Segment label + fire-gating derive from `curr_stop` automatically. `_reanchor_to_app` additionally invalidates OCR memory (`prev_badge=None` + the three observed-flags — a cosmetic Layer-3 reset to `UNKNOWN` — and `motion_origin_known=False`, re-arming re-entry: post-jump motion is motion of unknown origin) so a stale badge read can't fire post-jump; signalled by single-shot `PASimulator.click_jump_pending`. It also nulls `prev_speed`, which since #82 protects nothing — the departure level test reads only the current speed (open risk, [#85](https://github.com/ksleungac/pids-jre-simulator/issues/85)). Parked case; mid-transit click-jump (game driving) is a Layer-1↔Layer-3 desync — see entry-point flow. |
 | Toggle-ON mid-drive, mid-transit click-jump, or Layer 1 static while the game moved on | Layer 1 lags the game; the coupling has no Layer-1 change to ride | **Re-entry** — `_maybe_reentry` silent-advances Layer 1 up to the game AND seeds the observed-flags (one consistent snapshot). See "Re-entry (Layer 3 → Layer 2 reconciliation)" below. |
 
 Layer 3 stays accurate at all times — observes the game, not the sim. Layer 1 ↔ Layer 2 reconciliation is automatic (Layer 2 derived from Layer 1); Layer 1 ↔ Layer 3 reconciliation is handled by re-entry (`_maybe_reentry`) — see below.
@@ -129,21 +130,26 @@ Layer 3 stays accurate at all times — observes the game, not the sim. Layer 1 
 
 `AutoDriver._maybe_reentry` (runs after the event loop each cycle) catches Layer 1 up when belief lags the game — cold boot mid-drive, mid-transit click-jump, missed OCR. Pulls Layer 1 + Layer 2 up to the game as **one consistent snapshot**: silent-advances the app sub-state AND seeds the observed-flags together.
 
+**Base arming condition — motion provenance (2026-07-23/24).** Re-entry handles only **motion of UNKNOWN origin**. A witnessed `STOPPED→(MOVING|PASSING)` edge (a valid, cross-reject-passed badge read) sets `_Detector.motion_origin_known` — that motion is a normal departure the audible primary owns, and the resolver returns no target for the whole segment, whatever the speed/distance reads say. This is validated BEFORE any target resolution; the conditions below are secondary. The discriminator is history, not instantaneous reads: on a segment shorter than the arrival lead (the Yamanote norm; 武蔵溝ノ口→津田山 703m on Nambu, the incident) the 1B condition is true from the FIRST moving frame of a perfectly normal departure — only provenance separates that from a genuine mid-transit join. Unknown origin means: cold boot mid-transit (first-ever badge read is `MOVING`), or history invalidated by a click-jump (`_reanchor_to_app` sets `prev_badge=None` + clears the flag — deliberately NOT a synthetic `"STOPPED"`, which would fabricate a witnessed edge on the first post-jump `MOVING` read). Cleared on `MOVING->STOPPED`: each segment's motion must witness its own edge, so a dropout that eats the edge itself leaves re-entry legitimately armed.
+
 Gated on **app parked** (`at_station=True` ⇔ 1C) — when the app is already moving (1A/1B) normal flow owns it. Also stands down when `pending_next_pa` is already set: a live fire succeeded this cycle (it plays with audio), so re-entry would be a silent dup. That gate is the discriminator between the live 3B→3C departure (audio) and a re-entry 3C (silent) — the arriving-while-parked case is NOT suppressed, because there `_fire_arrival` skips and `pending_next_pa` stays False.
 
-Each cycle `_resolve_reentry_target` resolves a re-entry **target** (a pure read — no mutation), keyed on Layer 3:
+Each cycle `_resolve_reentry_target` resolves a re-entry **target** (a pure read — no mutation), keyed on Layer 3 — all rows conditional on motion origin UNKNOWN per the base condition above:
 
 | Layer 3 (game) | Target |
 |---|---|
+| any, motion origin KNOWN (witnessed edge) | none — normal departure; the audible primary owns the segment |
 | 3A/3E parked, `speed < DEPARTURE_STALE_KMH`, or speed unknown | none — normal flow owns it. In `[30, 60)` the AUDIBLE `FIRE_DEPARTURE` level test already played it |
 | 3C CRUISING (`speed ≥ DEPARTURE_STALE_KMH`, badge `MOVING` or `PASSING`) | 1A; commit seeds `departure_observed=True` |
-| 3D ARRIVING (`badge==MOVING` AND `dist≤lead`) | 1B; commit seeds `departure_observed=arrival_observed=True` |
+| 3D ARRIVING (`badge==MOVING` AND `dist≤lead`) AND landing stop has **pa≥2** | 1B; commit seeds `departure_observed=arrival_observed=True` |
+
+**pa=1 segments have no 1B target.** `cnt_pa = len(pa)-1 = 0` collapses 1A ≡ 1B into one AppState, and the single announcement must never be skipped by a silent landing — so on a pa=1 landing stop (`_next_stopping_pa_count`, mirroring `_advance_to_next_stop`'s landing rule) the 1B row declines and falls through to the 1A speed test; STOPPING is then reached by the at-station transition edge itself (STOPPED badge → `FIRE_AT_STATION`, unconditional per the reachability rule).
 
 **Two-probe consensus.** A target commits only after **two consecutive cycles resolve to the same target** — the `_Detector.reentry_latch` holds the prior cycle's target; a matching read commits, any *different* target (incl. 1A→1B mid-wait) or a no-op re-bases the latch. Rationale: re-entry is forward-only and irreversible (it never retreats Layer 1), so a lone transient misread while parked would stick the LCD +1 ahead of reality until the user click-jumps back. The genuine cases (cold boot, click-jump) pay one sample interval of latency — cheap, and the wait is shown as the amber **"Re-aligning…"** panel indicator (`reentry_pending` in the status dict) instead of an abrupt snap.
 
-Silent **because the announcement is stale** — conditional, not absolute. 1B commit = inside the approach window (まもなく already partway); 1A commit = at or above `DEPARTURE_STALE_KMH` (dep PA unrecoverable mid-segment). Below that bound the normal level test already fired the departure WITH audio, so re-entry never resolves a target there.
+Silent **because the announcement is stale** — conditional, not absolute. 1B commit = inside the approach window (まもなく already partway); 1A commit = at or above `DEPARTURE_STALE_KMH` (dep PA unrecoverable mid-segment). Below that bound the normal level test already fired the departure WITH audio, so re-entry never resolves a target there. **Exception: a pa=1 landing stop's 1A commit is AUDIBLE** — the single announcement is never stale ("pa=1 always play it"), so the commit routes through `_fire_departure`'s press (pa[0] plays, pa_at_station backlog drains) instead of `pending_silent_advance`.
 
-**Primary/fallback strictness must not invert.** Re-entry is silent AND forward-only-irreversible, so it must never be *easier* to satisfy than the audible path it replaces — else its domain becomes residual ("whatever the primary dropped") instead of principled. `DEPARTURE_STALE_KMH` partitions the speed axis so the two are disjoint by construction: `[30, 60)` audible primary, `[60, ∞)` silent fallback.
+**Primary/fallback strictness must not invert.** Re-entry is silent AND forward-only-irreversible, so it must never be *easier* to satisfy than the audible path it replaces — else its domain becomes residual ("whatever the primary dropped") instead of principled. Two partitions enforce it, one per axis: `DEPARTURE_STALE_KMH` partitions the **speed** axis (`[30, 60)` audible primary, `[60, ∞)` silent fallback — #82), and `motion_origin_known` partitions the **provenance** axis (witnessed edge → primary owns the whole segment; unknown origin → re-entry — the 2026-07-23 incident showed the speed partition alone left the 1B path satisfiable during a normal short-segment departure).
 
 A commit emits a `reentry_1a` / `reentry_1b` drive-log event; `reentry_pending` (the latch) rides on every sample line and drives the panel's amber "Re-aligning…" chip.
 
@@ -152,6 +158,47 @@ Mechanism: single-shot `PASimulator.pending_silent_advance` (`"1A"|"1B"`) writte
 **No feedback loop:** the Layer 1 ↔ Layer 2 coupling is read-only on Layer 1 (reads it for the segment label + fire-gate; never writes the observed-flags). Re-entry writes Layer 1 + flags as one snapshot; next cycle the coupling just re-reads (idempotent) and the seeded flags gate any re-fire.
 
 **Lockstep ±1:** advances one stop. No station-name OCR, so a cold boot multiple stops behind the game is NOT recoverable here — click-jump to the platform first.
+
+### Layer 1 transition graph (canonical)
+
+The agreed discussion medium (2026-07-24): design conversations about driver behavior locate every change on this graph — which arrow, which guard — in the vocabulary above. Update it in the same change as any transition-behavior edit.
+
+```
+ ┌────────┐ ──(a)──────────────► ┌────────┐ ──(b)──────────────► ┌────────┐ ──(c)──────────────► ┌─────────┐
+ │ 1C @N  │                      │   1A   │                      │   1B   │                      │ 1C @N+1 │
+ │ parked │                      │  次は  │                      │ まもなく │                      │ parked  │
+ └──┬──┬──┘                      └──┬──▲──┘                      └───▲────┘                      └───▲─────┘
+    │  │                            │  │                             │                               │
+    │  │         (d) silent 1A      │  │                             │                               │
+    │  ├────────────────────────────┼──┘                             │                               │
+    │  │         (e) silent 1B      │                                │                               │
+    │  └────────────────────────────┼────────────────────────────────┘                               │
+    │                               │                                                                │
+    │                               │    (f) at-station directly from 1A                             │
+    │                               └────────────────────────────────────────────────────────────────┘
+    │
+   (g) click-jump: user, from ANY state ────► 1C @ clicked stop
+```
+
+- **(a) `FIRE_DEPARTURE`** — audible PA · `spd ≥ 30` while parked · or manual PgDn. Upper bound `60` applies to unknown-origin motion only; on a **witnessed** edge (`motion_origin_known`) the ceiling lifts (fresh departure fires at any speed — catches a dwell whose whole `[30,60)` band was lost to an OCR dropout).
+- **(b) `FIRE_ARRIVAL`** — audible PA · `MOVING ∧ dist ≤ lead` · or manual PgDn.
+- **(c) `FIRE_AT_STATION`** — silent press · STOPPED badge · **ALWAYS** (reachability rule).
+- **(d) RE-ENTRY → 1A** — motion origin UNKNOWN ∧ `spd ≥ 60` · 2-probe consensus. Silent for pa≥2 (announcement stale); **AUDIBLE for pa=1** — the single announcement is never stale, the commit presses like a departure fire and pa[0] plays.
+- **(e) RE-ENTRY → 1B** — silent · motion origin UNKNOWN ∧ `MOVING ∧ dist ≤ lead` ∧ landing stop **pa≥2** · 2-probe consensus. The only arrow that skips 1A; pa=1 has no 1B (1A≡1B collapse) so (e) declines and (f) carries the arrival.
+- **(f) same `FIRE_AT_STATION` from 1A** — STOPPED badge, **ALWAYS**; a missed arrival's `cnt_pa` is silently drained so the press lands as STOPPING. For pa=1, 1A≡1B and this IS the normal path.
+- **(g) click-jump** — lands `1C @ target`; invalidates badge history (`prev_badge=None`, origin unknown) → re-entry (d)/(e) re-armed.
+
+Arming rule over (d)/(e): a witnessed `STOPPED→(MOVING|PASSING)` edge while parked (cross-reject passed) sets `motion_origin_known` — (d) and (e) vanish for that segment; the `MOVING->STOPPED` arrival clears it, so each segment's motion must witness its own edge. Driver start mid-transit and post-(g) history are the unknown-origin cases.
+
+From→to matrix (every reachable Layer 1 pair):
+
+| from \ to | **1A** | **1B** | **1C** |
+|---|---|---|---|
+| **1C** | audible `FIRE_DEPARTURE` · manual PgDn · re-entry silent (origin unknown ∧ spd≥60) | re-entry silent ONLY (origin unknown ∧ MOVING ∧ dist≤lead ∧ landing pa≥2) — the primary never lands 1B from parked (`_fire_arrival` skips at 1C); pa=1 has no 1B at all (1A≡1B collapse) | click-jump |
+| **1A** | — | audible `FIRE_ARRIVAL` · manual PgDn | at-station on STOPPED badge, **always** (reachability rule; missed-arrival `cnt_pa` silently drained) · click-jump |
+| **1B** | — | — | at-station on STOPPED badge, **always** · click-jump |
+
+Properties, by construction: a normal stopping pattern can never activate re-entry (witnessed edge disarms both silent arcs); re-entry achieves only 1A/1B, never 1C, never backward (click-jump is the only backward move); every state provably reaches the next stage (1C exits via the departure band, 1A/1B exit via the STOPPED badge).
 
 ## Architecture
 
@@ -245,7 +292,7 @@ Position invariant across language modes (EN/JA), game states (running/stopped/a
 import dxcam
 from auto_input.hud_layout import PROFILES
 profile = PROFILES[(desktop_w, desktop_h)]  # resolved at startup from bootstrap grab
-camera = dxcam.create(output_color="BGRA")  # native, skips cv2 conversion
+camera = _open_capture_camera(output_color="BGRA")  # adapter-enumerating; native BGRA
 frame = camera.grab(region=profile.capture_region)  # right-half quadrant, resolution-dependent
 ```
 
@@ -254,7 +301,7 @@ Notes:
 - `grab()` can return `None` (no new frame since last call) — retry with brief sleep
 - Game must be **rendering** (not minimized/alt-tabbed in a state where it pauses)
 - Top-right corner where HUD lives must not be covered by other windows
-- **Primary monitor only.** `dxcam.create()` is called with `output_idx=None` → dxcam auto-selects the output Windows flags Primary (device_idx 0, the first adapter). Both `capture_region` and the startup resolution probe are relative to that one monitor. See Limitations for the multi-monitor consequences.
+- **Adapter selection is enumerated, not hardcoded to device 0.** Capture opens via `_open_capture_camera` (`driver.py`), which walks every `(device_idx, output_idx)` dxcam exposes — primary output first — and returns the first whose `create()` succeeds (a successful create IS a live duplicator; `DuplicateOutput` runs inside it). A bare `dxcam.create()` addresses only adapter 0's primary output, which raises `DXGI_ERROR_UNSUPPORTED` (0x887A0004, a hard `COMError`) when the display is owned by a different adapter — the classic Microsoft-Hybrid (Optimus) case where DDA is unsupported against the discrete GPU. Enumeration finds the display's actual owner. On total failure the full traceback is printed (never muted — it is the only signal for the next machine) and the driver disables gracefully. Residual case: if the *only* adapter owning the display is the dGPU on a hybrid system, no dxgi combo works and the fallback is dxcam's `backend="winrt"` (needs the `winrt` package bundled) — see [#97](https://github.com/ksleungac/pids-jre-simulator/issues/97).
 
 ## OCR pipeline (digit cells)
 
@@ -393,11 +440,11 @@ State machine works in Layer 3 named-state vocabulary — see "State machine lay
 
 | Event | Trigger | Effect |
 |---|---|---|
-| `STOPPED->MOVING` | badge transition | New segment begins; reset all three observed-flags + segment_start_ts |
-| `MOVING->STOPPED` | badge transition | Train just arrived at platform (logged only — see `FIRE_AT_STATION`) |
-| `FIRE_DEPARTURE` | `SPEED_DEPARTURE_KMH ≤ speed < DEPARTURE_STALE_KMH` AND `departure_observed=False` | Fire departure PA, set `departure_observed=True` |
+| `STOPPED->MOVING` | badge transition | New segment begins; reset all three observed-flags; set `motion_origin_known=True` (witnessed edge — disarms re-entry for the segment, see § "Re-entry") |
+| `MOVING->STOPPED` | badge transition | Train just arrived at platform (logged only — see `FIRE_AT_STATION`); clear `motion_origin_known` (the next motion must witness its own edge) |
+| `FIRE_DEPARTURE` | `departure_observed=False` AND `SPEED_DEPARTURE_KMH ≤ speed` AND (`speed < DEPARTURE_STALE_KMH` OR `motion_origin_known`) | Fire departure PA, set `departure_observed=True`. Ceiling lifts on a witnessed edge — see § "Departure is a level test too" |
 | `FIRE_ARRIVAL` | `badge==MOVING` AND `distance ≤ arrival_lead_m` AND `arrival_observed=False` | Fire arrival PA, set `arrival_observed=True` |
-| `FIRE_AT_STATION` | `badge==STOPPED` AND `arrival_observed=True` AND `at_station_observed=False` | Fire silent press that flips sim into STOPPING (sets `state.at_station=True`); set `at_station_observed=True` |
+| `FIRE_AT_STATION` | `badge==STOPPED` AND `at_station_observed=False` | Fire silent press that flips sim into STOPPING (sets `state.at_station=True`); set `at_station_observed=True`. If the arrival was missed (`cnt_pa` not at the last approach PA), `_fire_at_station` silently drains to the last entry first so the press lands as the STOPPING transition |
 
 `arrival_lead_m` = base **900m**, adjusted on the setup-screen Lead stepper (range 500–1500, ±100m).
 
@@ -405,7 +452,7 @@ State machine works in Layer 3 named-state vocabulary — see "State machine lay
 
 **Per-segment observed flags** prevent double-firing within a single segment when OCR misreads transiently flip a trigger condition (e.g. speed misread as `7` between two real in-band reads would fire `FIRE_DEPARTURE` twice without the flag). All three flags (`departure_observed`, `arrival_observed`, `at_station_observed`) reset on `STOPPED->MOVING`. PASSING transitions do NOT reset flags — PASSING = transient sub-state of MOVING within a segment, not new segment.
 
-**`at_station_observed` gated on `arrival_observed`** so it only triggers in this segment's stopping moment. Without that gate, level test would fire on first capture cycle (train parked at session start with `badge==STOPPED`) and desync simulator before first real drive begins. Pa-empty stops still get the at-station fire — `_fire_at_station` accepts `pa==[]` because APPROACHING→STOPPING transition silent regardless of pa contents.
+**`at_station_observed` is NOT gated on `arrival_observed`** (gate removed 2026-07-24 — the reachability rule): a STOPPED badge while the app is in transit IS the arrival fact, and a dropout that ate the arrival must not strand the app at 1A/1B. The concerns the old gate carried are covered elsewhere: boot (parked at session start with `badge==STOPPED`) by `_fire_at_station`'s app-parked skip; post-jump refire by `_reanchor_to_app` setting `at_station_observed=True`; a missed arrival's stale `cnt_pa` by the fire-side approach-PA drain. Pa-empty stops still get the at-station fire — `_fire_at_station` accepts `pa==[]` because APPROACHING→STOPPING transition silent regardless of pa contents.
 
 ### Arrival and departure are level tests, not crossings
 
@@ -418,15 +465,15 @@ This matters because of PASSING. While badge reads PASSING, HUD distance is to t
 
 Speed/departure logic — speed = own-train and badge-independent.
 
-**Departure is a level test too, bounded above.** Fires whenever `departure_observed=False AND SPEED_DEPARTURE_KMH ≤ speed < DEPARTURE_STALE_KMH` — no `prev_speed`, no crossing. A crossing (`prev_speed < 30 ≤ speed`) loses the departure **permanently for that segment** whenever `prev_speed` is absent (thread start, post-click-jump) or stale at/above 30 — `prev_speed` only updates on a non-`None` read, so dropped reads through deceleration + dwell carry the pre-station cruise value into the next departure, i.e. **degraded arrival reads break the FOLLOWING departure**. Double-fire protection is the `departure_observed` flag + the app-sub-state gate in `_fire_departure`, never the test's shape. Upper bound reserves the stale case for re-entry — see § "Primary/fallback strictness must not invert".
+**Departure is a level test too, bounded above ONLY for unknown-origin motion.** Fires whenever `departure_observed=False AND SPEED_DEPARTURE_KMH ≤ speed AND (speed < DEPARTURE_STALE_KMH OR motion_origin_known)` — no `prev_speed`, no crossing. A crossing (`prev_speed < 30 ≤ speed`) loses the departure **permanently for that segment** whenever `prev_speed` is absent (thread start, post-click-jump) or stale at/above 30 — `prev_speed` only updates on a non-`None` read, so dropped reads through deceleration + dwell carry the pre-station cruise value into the next departure, i.e. **degraded arrival reads break the FOLLOWING departure**. Double-fire protection is the `departure_observed` flag + the app-sub-state gate in `_fire_departure`, never the test's shape.
+
+**The upper bound is provenance-gated (2026-07-24).** The `DEPARTURE_STALE_KMH` ceiling reserves the `≥60` case for re-entry's silent 1A (§ "Primary/fallback strictness must not invert") — but ONLY when the origin is unknown. On a **witnessed** `STOPPED→(MOVING|PASSING)` edge (`motion_origin_known`) the segment just started, so the announcement is fresh at any speed and the ceiling lifts: the departure fires audibly (transition-graph arrow (a) mimicking (d)). Without this a platform dwell whose acceleration lands entirely inside an OCR dropout — badge and speed both `None` through the whole `[30, 60)` band, first valid read already `≥60` — loses the departure, and the witnessed edge has disarmed re-entry, so nothing catches it and the app strands at 1C (the 2026-07-24 01:36 incident: 35s of black-screen at the platform, badge recovered at 64.8 km/h). This is a NORMAL-drive path (no click-jump, no re-entry), so the ceiling must never compromise it.
 
 **Direction-agnostic BY DESIGN — don't "fix" it back into a crossing.** The test fires on a DECELERATING pass through the band too. `departure_observed` bounds that correctly: in a segment watched from its start the acceleration already set the flag, so the flag is False while decelerating ONLY on a mid-segment join (cold boot, toggle-ON, click-jump) — exactly where the PA has not played. Direction was only ever a proxy for "fresh segment"; the flag is the real thing. Measured over 26 recorded drives: 42 segments, 0 decelerating fires.
 
-**What this does NOT fix — missed segment start.** If the `STOPPED->MOVING` transition is itself missed (badge dropout across the whole departure), the flags keep the PREVIOUS segment's `True`, so the departure is **suppressed** — silence, not a spurious fire. Consequence for the band: `[30, 60)` is covered by the audible primary ONLY while `departure_observed` is False; with it stale-True the level test declines too, and Layer 1 then sits at 1C until `dist ≤ arrival_lead_m` resolves the silent 1B. A steady in-band cruise therefore recovers later than it did when the resolver's bound was 30. Accepted trade — the alternative re-inverts the strictness. Tracked: [#84](https://github.com/ksleungac/pids-jre-simulator/issues/84).
+**What this does NOT fix — missed segment start.** If the `STOPPED->MOVING` transition is itself missed (badge dropout across the whole departure), the flags keep the PREVIOUS segment's `True`, so the departure is **suppressed** — silence, not a spurious fire. Re-entry stays legitimately armed here (the edge was never witnessed, so `motion_origin_known` stays False): Layer 1 sits at 1C until `speed ≥ 60` resolves the silent 1A, or `dist ≤ arrival_lead_m` resolves the silent 1B (pa≥2 landing stops only), or the STOPPED badge at the platform lands the at-station fire (pa=1's path). A steady in-band cruise therefore recovers later than it did when the resolver's bound was 30. Accepted trade — the alternative re-inverts the strictness. Tracked: [#84](https://github.com/ksleungac/pids-jre-simulator/issues/84).
 
-**Manual-press precedence.** When a `FIRE_DEPARTURE` / `FIRE_ARRIVAL` event would auto-send PageDown, dispatcher first checks `keys.last_user_pagedown_ts > detector.segment_start_ts`. If user already pressed PageDown manually since segment began, auto-fire skipped (logged as `SKIPPED auto-fire (user already pressed ...)`). This means: pressing PageDown manually always wins; auto-driver fills in only where you didn't.
-
-**Self-press guard.** `keyboard.on_press_key` global hook fires on ALL PageDown events including synthetic ones we send. Within `SELF_PRESS_GUARD_S` (500ms) of an auto-send, key callbacks ignore press as our own. Prevents self-detection that would mark segment as "user already pressed".
+**Manual-press precedence** is implicit in the Layer-1 fire gates: each `_fire_*` reads the app sub-state before sending its press (departure only at 1C, arrival only at 1A, at-station at 1A/1B), so a manual PageDown that already advanced the app makes the driver skip its own fire (`SKIPPED … already departed` etc.). Pressing PageDown manually always wins; the auto-driver fills in only where you didn't. (The old timestamp comparison + `SELF_PRESS_GUARD_S` self-press hook are gone — the app sub-state IS the precedence check.)
 
 `None` values for distance/speed/badge tolerated individually — OCR FAIL frames don't reset state, so transient unreadable frames don't break segment continuity.
 
@@ -440,15 +487,15 @@ Speed/departure logic — speed = own-train and badge-independent.
 
 When OCR Auto-PA enabled at setup screen, `PASimulator` allocates an extra `DEBUG_PANEL_HEIGHT` row above the LCD via pygame sub-surfaces. LCD code **completely unchanged** — it gets a sub-surface positioned at `(0, DEBUG_PANEL_HEIGHT)` and thinks it's drawing to a regular LCD-sized screen.
 
-**The panel IS the shared TIMS status band** (`status_band.render`, project root — the same band the `setup_tims` setup flow draws). `DEBUG_PANEL_HEIGHT` is re-exported from `status_band.BAND_H` (single source; the band owns its height). `app.py::_render_panel` feeds the band the live `auto_input_status` dict + stashes its returned `{home/save/pause}` hit-rects for the run-loop click handler (`_handle_band_click`: home stops PA + returns to setup, save = drive report, pause = auto-driver pause).
+**The panel IS the shared TIMS status band** (`tims.band.render` — the same band the `tims.setup` flow draws). `DEBUG_PANEL_HEIGHT` is re-exported from `tims.band.BAND_H` (single source; the band owns its height). `app.py::_render_panel` feeds the band the live `auto_input_status` dict + stashes its returned `{home/save/pause}` hit-rects for the run-loop click handler (`_handle_band_click`: home stops PA + returns to setup, save = drive report, pause = auto-driver pause).
 
-**Strict separation still holds:** `app.py` just hands the band a sub-surface + the status dict and knows nothing about layout / fonts / colors — only the render module moved (was `auto_input/driver.py::draw_debug_panel`, now `status_band.py`). The old `draw_debug_panel` + `handle_panel_click` have been **removed** — the band fully supersedes them; the band preview (`_dev_scripts/preview_band_ocr.py`) now carries its own mock fixtures.
+**Strict separation still holds:** `app.py` just hands the band a sub-surface + the status dict and knows nothing about layout / fonts / colors — only the render module moved (was `auto_input/driver.py::draw_debug_panel`, now `tims/band.py`). The old `draw_debug_panel` + `handle_panel_click` have been **removed** — the band fully supersedes them; the band preview (`_dev_scripts/preview_band_ocr.py`) now carries its own mock fixtures.
 
 ### Layout
 
-The live panel's layout (left OCR-state column / centre speed·limit·distance readout / message strips / [pause][save][home] cluster) lives in `status_band.py` + [APP.md § Persistent status band](../APP.md). It reads the status-dict fields below. The OCR-panel migration DROPPED the old confidence-colour tint (green/yellow/orange OCR-score) — too debug for the public band; the raw Layer-2 badge folds onto the state line instead.
+The live panel's layout (left OCR-state column / centre speed·limit·distance readout / message strips / [pause][save][home] cluster) lives in `tims/band.py` + [APP.md § Persistent status band](../APP.md). It reads the status-dict fields below. The OCR-panel migration DROPPED the old confidence-colour tint (green/yellow/orange OCR-score) — too debug for the public band; the raw Layer-2 badge folds onto the state line instead.
 
-The historical 3-line `draw_debug_panel` layout (ShinGoPr6N @ 14pt, `dep✓ arr·` flags, confidence colours) has been removed — `status_band.render` is now the sole panel renderer.
+The historical 3-line `draw_debug_panel` layout (ShinGoPr6N @ 14pt, `dep✓ arr·` flags, confidence colours) has been removed — `tims.band.render` is now the sole panel renderer.
 
 ### Width adaptivity
 
@@ -541,13 +588,13 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 |---|---|
 | `auto_input/` | Package — public surface re-exports `AutoDriver`, `generate_report` from `__init__.py`. Internal submodules below. |
 | `auto_input/driver.py` | **Primary** — `AutoDriver` class (in-process daemon thread) + `_Detector` state machine + `generate_report()` (drive-report trigger, called by the band Save button). All auto-input logic lives here. |
-| `status_band.py` | **Live OCR panel** (project root) — `render(surf, status, sim_state, stops)` draws the shared TIMS status band from the `auto_input_status` dict; returns `{home/save/pause}` hit-rects. `BAND_H` = the panel height (re-exported as `constants.DEBUG_PANEL_HEIGHT`). Shared with the `setup_tims` setup flow. |
+| `tims/band.py` | **Live OCR panel** — `render(surf, status, sim_state, stops)` draws the shared TIMS status band from the `auto_input_status` dict; returns `{home/save/pause}` hit-rects. `BAND_H` = the panel height (re-exported as `constants.DEBUG_PANEL_HEIGHT`). Shared with the `tims.setup` flow. |
 | `auto_input/hud_layout.py` | HUD + cell bbox constants for 2560×1440 (canonical desktop coords + region-cut derived coords) |
 | `auto_input/ocr.py` | OCR pipeline + badge classifier; runnable for offline validation (`uv run python -m auto_input.ocr`) |
 | `main.py` | Reads `auto_input` / `lead_m` / `interval_s` from setup-screen config dict. Spawns `AutoDriver` when `auto_input=True` and passes same flag to `PASimulator`. |
 | `setup.py` | OCR Auto-PA toggle pill + Lead/Interval steppers under route list. `_handle_band_click` updates state; selected route's Enter returns config dict including auto-input fields. |
-| `app.py` | `PASimulator`: allocates debug sub-surface in `_init_pygame`; `pending_next_pa` flag checked alongside keyboard in `_handle_input_main`; `auto_input_status` dict written by AutoDriver, read by `_render_panel()` which delegates to `status_band.render`. `MOUSEBUTTONDOWN` events in the panel area go to `_handle_band_click` (band's home/save/pause rects). `drive_log_path` attribute stashes live JSONL path so the report can find it. `run()` returns `"home"`/`"quit"`; band Home → return to setup. **No panel rendering logic lives in app.py.** |
-| `constants.py` | `DEBUG_PANEL_HEIGHT` — re-exported from `status_band.BAND_H` (single source; the band owns its height). |
+| `app.py` | `PASimulator`: allocates debug sub-surface in `_init_pygame`; `pending_next_pa` flag checked alongside keyboard in `_handle_input_main`; `auto_input_status` dict written by AutoDriver, read by `_render_panel()` which delegates to `tims.band.render`. `MOUSEBUTTONDOWN` events in the panel area go to `_handle_band_click` (band's home/save/pause rects). `drive_log_path` attribute stashes live JSONL path so the report can find it. `run()` returns `"home"`/`"quit"`; band Home → return to setup. **No panel rendering logic lives in app.py.** |
+| `constants.py` | `DEBUG_PANEL_HEIGHT` — re-exported from `tims.band.BAND_H` (single source; the band owns its height). |
 | `auto_input/sampling.py` | **THE per-cycle read path** — `read_hud()` (crop → 4 readers → 3 guards, in a load-bearing order) + `GuardState` / `Reading`. Called by BOTH `AutoDriver` and `ocr_observe.py`, so the diagnostic cannot drift from production. Carries a `# CONTRACT:` block on the ordering. |
 | `_dev_scripts/ocr_observe.py` | Standalone OCR corpus collector — calls `read_hud`, dumps full-HUD PNGs + `reads.jsonl` (RAW beside GUARDED). Observation only, fires nothing. |
 | `_dev_scripts/test_dxcam.py` | Diagnostic — full-desktop dxcam capture + brightness check |
@@ -579,7 +626,8 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 ## Limitations
 
 - **Supported resolutions**: 2560×1440 and 1920×1080. Adding new resolutions = `ResolutionProfile` entry + template extraction + validation. See "Recalibration".
-- **Primary monitor only**: capture targets the display Windows marks Primary (dxcam `output_idx=None`, `device_idx=0`). The game must run on the primary monitor, and the **primary monitor's own resolution** must be a supported one — a supported-resolution game on a *secondary* monitor is never captured, because the startup probe reads the primary's resolution and disables the driver if it isn't 2560×1440 or 1920×1080. A secondary monitor's placement does not offset the capture (region coords are output-local). Multi-GPU note: `device_idx=0` is fixed, so a primary display driven by a second adapter would mismatch.
+- **Primary monitor only**: capture targets the display Windows marks Primary (the primary output is tried first by `_open_capture_camera`). The game must run on the primary monitor, and the **primary monitor's own resolution** must be a supported one — a supported-resolution game on a *secondary* monitor is never captured, because the startup probe reads the primary's resolution and disables the driver if it isn't 2560×1440 or 1920×1080. A secondary monitor's placement does not offset the capture (region coords are output-local).
+- **Multi-GPU / hybrid graphics**: `_open_capture_camera` enumerates all adapters, so a primary display driven by a non-zero adapter is now found automatically. The unrecoverable case is a Microsoft-Hybrid (Optimus) system whose captured display is owned by the **discrete** GPU — DDA is unsupported against the dGPU by design, every dxgi combo raises `DXGI_ERROR_UNSUPPORTED`, and the driver disables (full traceback logged). User-side workarounds and the winrt fallback: [#97](https://github.com/ksleungac/pids-jre-simulator/issues/97).
 - **Game must be visible**: HUD area (top-right) must not be covered.
 - **Game must be actively rendering**: minimized/alt-tabbed games may stop rendering and produce stale captures.
 - **Scenery bleed**: HUD background is semi-transparent; very dark scenery behind reduces match scores (still reads correctly above ~0.7).

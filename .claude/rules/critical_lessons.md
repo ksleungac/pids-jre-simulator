@@ -1,6 +1,6 @@
 # Critical Lessons — DO NOT REPEAT
 
-Seven deployment-class incidents. Each locally defensible; each broke production. The shared root: **claude reasons about code as text rather than as a deployed artifact.**
+Eight deployment-class incidents. Each locally defensible; each broke production. The shared root: **claude reasons about code as text rather than as a deployed artifact.**
 
 ---
 
@@ -121,3 +121,36 @@ The 1080p speed OCR dropped the decimal on ~40% of a user's frames (19.1 → "19
 - A detector resting on a feature at the binarization floor (one-pixel margin) is a bug even when it passes on dev — widen the tolerance.
 
 **Scope:** all OCR / vision reads; anything whose correctness depends on input pixel fidelity.
+
+---
+
+## 8. Dev GPU topology masks capture-availability bugs (2026-07-23)
+
+A user's `AutoDriver` thread crashed on `dxcam.create()` with `DXGI_ERROR_UNSUPPORTED`
+(0x887A0004) from `IDXGIOutput1::DuplicateOutput`. Invisible on the dev machine, which has a
+discrete GPU that owns the display and is dxcam's `device_idx=0` — Desktop Duplication against
+an adapter's own output always succeeds there. The bug lives in the *topology*: on a Microsoft
+Hybrid (Optimus) system the captured display can be owned by a different adapter than device 0,
+and DDA against the discrete GPU on a hybrid system is unsupported by design. `dxcam.create()`
+defaulting to `device_idx=0` was a deployment-frame assumption, exactly like the `_MEIPASS`
+path (§4) and the crisp-capture assumption (§7) — reasoning from the developer's single-GPU box,
+not the user's.
+
+Two failures compounded: the assumption itself, and that the resulting `COMError` was
+**unhandled** — it killed the whole thread with a raw traceback instead of degrading, because
+the guard only covered `create()` *returning* None, not *raising*.
+
+**Rule:** any capture / GPU / display-topology assumption (`device_idx=0`, "the primary output",
+"one adapter", a single capture backend) is invisible on a dev box whose topology happens to make
+it hold. Enumerate the real hardware set and pick the combo that works; never trust index 0.
+
+**Pattern:**
+- Screen/GPU capture: enumerate adapters × outputs (`dxcam.output_info()`), try each until one
+  succeeds — don't hardcode device 0. `auto_input/driver.py::_open_capture_camera`.
+- Wrap the init in try/except so a topology mismatch degrades gracefully — but **print the full
+  original traceback**; muting it blinds the next report (user: *"if you mute the trace we cannot
+  debug such problem next time"*).
+- Residual (no working combo — e.g. dGPU-owned display on a hybrid system): a different backend
+  (`winrt` / Windows.Graphics.Capture) is the only lever; note it, don't pretend enumeration covers it.
+
+**Scope:** dxcam / DXGI Desktop Duplication, any GPU-adapter or monitor-topology-dependent code.

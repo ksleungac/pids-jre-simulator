@@ -170,14 +170,17 @@ class SetupScreen:
                         # Prefer folder name for diagram, fallback to JSON
                         diagram = folder_diagram if folder_diagram else route_data.get("diagram", "")
 
-                        # Line code (e.g. "JO", "JK") = first 2 chars of any
-                        # stop's sta_code. Used for the row-leading line badge.
-                        line_code = ""
-                        for stop in route_data.get("stops", []):
-                            sc = stop.get("sta_code")
-                            if sc and len(sc) >= 2:
-                                line_code = sc[:2]
-                                break
+                        # Line code (e.g. "JO", "JK") for the row-leading line badge. Prefer the
+                        # route.json's own line_code (correct for through-service / pre_stop routes,
+                        # where the first stop's sta_code belongs to a different line); fall back to
+                        # the first stop's sta_code[:2] heuristic.
+                        line_code = route_data.get("line_code", "")
+                        if not line_code:
+                            for stop in route_data.get("stops", []):
+                                sc = stop.get("sta_code")
+                                if sc and len(sc) >= 2:
+                                    line_code = sc[:2]
+                                    break
 
                         self.routes.append(
                             {

@@ -130,7 +130,7 @@ When a problem reveals a pattern of mistake, push past surface framings ("three 
 
 **How to apply:**
 - "Is this the actual cognitive failure, or a comfortable surface description?"
-- A list of contributing factors without a shared root is the smell.
+- A list of contributing factors without a shared root means the root is still missing.
 
 ### Implementation-completion-as-spec
 When the user states the positive shape of a rule but leaves edge cases / failure modes unstated, ask open questions to clarify. Never fill gaps autonomously.
@@ -225,7 +225,7 @@ At 3+ rounds of restating the same contested point with no convergence, offer `/
 - Offer only; don't unilaterally invoke.
 
 ### No filler narration
-Skip "got it / I have the picture / now updating X" turns when the next tool call says everything. A turn earns its tokens by surfacing new information, a question, or a finding.
+Skip "got it / I have the picture / now updating X" turns when the next tool call says everything. A turn must surface new information, a question, or a finding.
 
 **Why:** Pure status acknowledgments cost reading time + context tokens. Examples:
 - (2026-05-02) User: *"wasted me 30 seconds to read while you DO NOT save for the next session."*
@@ -399,7 +399,18 @@ A recovery / degraded / catch-up path that is *quieter* or *less reversible* tha
 **How to apply:**
 - Write the primary's and the fallback's trigger conditions next to each other and ask which needs more evidence. If it's the primary, that's the bug — independent of whichever symptom brought you here.
 - Prefer partitioning the input domain (disjoint bands) over ordering the checks; ordering relies on the earlier check firing, partitioning cannot invert.
-- Frequency of fallback engagement is a *metric*, not noise — instrument it, since it counts exactly the primary's misses.
+- Frequency of fallback engagement is a *metric*, not noise — instrument it, since it counts the primary's misses.
+
+### A "bonus" feature that writes the sovereign state is not a bonus
+When a secondary / recovery / catch-up feature shares the SAME state and gates as the primary path — not just reads them, WRITES them — it cannot be reasoned about as an isolated add-on. Every rule added to make the secondary smarter becomes a new way to corrupt the primary, because they mutate one thing. The frustration signal is a run of regressions where fixing the secondary keeps breaking the base.
+
+**Why:** the entanglement is invisible while you reason about the secondary on its own axis; it only shows when a primary-path regression traces back to a secondary-motivated edit. Examples:
+- (2026-07-24) Auto-driver re-entry was framed as "a bonus re-aligning feature," but it silently advances the app's Layer 1 sub-state through the same fire gates the normal drive owns. Across one session, re-entry-motivated edits caused: a stranded-at-1A bug (re-anchor set `at_station_observed=True` while a sibling change removed the edge that reset it), and a lost-departure bug (a provenance gate I added disarmed the fallback on a case the primary's speed ceiling then dropped). Each was locally correct and broke the base. User: *"re-entry was supposed to be a bonus … however it is breaking the normal drive multiple times now."*
+
+**How to apply:**
+- Before adding a secondary path that WRITES shared state, ask: can the primary path stand entirely on its own, with the secondary removed? If not, they're one feature, not two — design the primary to be sovereign FIRST, then make the secondary structurally incapable of touching it (a flag defaulting off, a separate signal the primary can ignore), never merely "careful."
+- A run of "fixed X, broke Y in the base": stop patching the secondary and isolate it (or cut it), don't add the next rule.
+- When the user themselves calls it a "bonus," honor that literally: the base must pass with it disabled. Ship the sovereign base; make the bonus opt-in.
 
 ### Validate against the outcome, not a proxy
 Pick the metric that IS the thing you care about. A proxy that correlates in the normal regime can invert exactly where the change bites, and a good change then looks like a regression.
@@ -444,6 +455,7 @@ Each rule has exactly one home. Don't create aggregator files.
 Mental model (what it models, scope, IRL framing) → pre-loaded files. Implementation details (draw-method gotchas, JSON-field minutiae) → domain docs, read on demand.
 
 - **Token-cost asymmetry.** Preloaded rules (`.claude/rules/*`) burn tokens every turn — compress aggressively, strip rationale to one-liners. On-demand skills load only when invoked — can afford fuller rationale. Mechanical classification work (commit file sorting) can offload to PostToolUse hooks entirely.
+- **Corpus out-competes a lone rule.** A preloaded rule that keeps getting violated is out-voted by the always-loaded docs modeling the counter-behavior — remove the counter-examples, don't restate the rule harder. (2026-07-24: the editorial-tone preference stuck only after de-polluting every rules/doc file, not after a stronger rule.)
 
 ### Single source of truth
 Don't duplicate facts across docs. Cross-reference instead.

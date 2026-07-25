@@ -55,8 +55,8 @@ SMALL_HEIGHT = 200
 SMALL_Y = 100
 
 # Auto-input debug panel — shown above the LCD when OCR Auto-PA is enabled. The panel IS the TIMS
-# status band (status_band.py); its height is the single source, re-exported here for the window carve.
-# NOTE: this makes constants.py import status_band's stack (pygame / i18n / widgets / tims_chrome). No
+# status band (tims/band.py); its height is the single source, re-exported here for the window carve.
+# NOTE: this makes constants.py import tims.band's stack (pygame / i18n / tims.widgets / tims.chrome). No
 # cycle today (none of those import constants); do NOT add `import constants` inside that stack — it now
-# sits ABOVE status_band, so a back-edge would deadlock the import graph.
-from status_band import BAND_H as DEBUG_PANEL_HEIGHT  # noqa: E402
+# sits ABOVE tims.band, so a back-edge would deadlock the import graph.
+from tims.band import BAND_H as DEBUG_PANEL_HEIGHT  # noqa: E402

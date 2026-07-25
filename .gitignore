@@ -85,3 +85,9 @@ _sta_verify_*.json
 /.mcp.json
 /.serena/
 _audio_backup/
+
+# Narrative memory — canonical store is the origin/memory journal ref
+# (_harness/publish_memory.py); local files are the write queue. Untracked on
+# master so code history stays pure. (Historic memory/ tracking removed via
+# `git rm -r --cached memory/` in the migration commit.)
+/memory/

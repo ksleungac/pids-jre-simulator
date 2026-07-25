@@ -11,7 +11,7 @@ import pygame
 sys.path.insert(0, ".")
 
 import i18n  # noqa: E402
-from widgets import (  # noqa: E402
+from tims.widgets import (  # noqa: E402
     _TUNEABLES_TIMS_BUTTON as T,
     draw_lowres_text,
     draw_tims_button,

@@ -55,7 +55,7 @@ That change belongs to the **reactive-window** roadmap item, where its real deli
 
 Per the user (*"if enabled it copies whatever the app is on PC and on remote device"*), the stream mirrors the **entire app window** — TIMS setup, tutorial, and drive alike — not just the LCD region.
 
-This is what collapsed the design. pygame has exactly **one** display surface globally, so the server reads `pygame.display.get_surface()` directly. No frame-source registration, no `PASimulator` involvement, **zero touches to the render path**. The surface changes size across `set_mode` calls (setup 730×610, drive 730×420+band, tutorial 1100×500); an `<img>` re-renders at the new size and CSS handles it.
+This is what collapsed the design. pygame has **one** display surface globally, so the server reads `pygame.display.get_surface()` directly. No frame-source registration, no `PASimulator` involvement, **zero touches to the render path**. The surface changes size across `set_mode` calls (setup 730×610, drive 730×420+band, tutorial 1100×500); an `<img>` re-renders at the new size and CSS handles it.
 
 ### Scaffolding that IS in scope
 
@@ -147,7 +147,7 @@ LAN ships **off by default**, opt-in, with the URL surfaced in-app. Bind-address
 
 ### D10. Bind failure must be loud
 
-A declined firewall prompt, or a public-Wi-Fi profile block, leaves a dead port. `except: pass` here would be a textbook `critical_lessons §2` silent-skip. Bind failure surfaces a visible state (console + status band) and never fails silently.
+A declined firewall prompt, or a public-Wi-Fi profile block, leaves a dead port. `except: pass` here would be a `critical_lessons §2` silent-skip. Bind failure surfaces a visible state (console + status band) and never fails silently.
 
 ### D11. Connection hygiene
 
@@ -161,7 +161,7 @@ Mobile browsers reconnect aggressively on screen-lock and network roam; each rec
 
 `main.py` (setup→drive) and `app.py:879` (`cleanup` on home-return) both call `pygame.display.quit()`, freeing the surface a streaming thread may be about to copy — a read-after-free race.
 
-`frame_stream.install_display_quit_guard()` wraps `pygame.display.quit` so every teardown holds the frame lock, mirroring `window_utils.install_topmost_hook`. That codebase already learned this lesson once: the topmost pin regressed precisely because it was scattered across `set_mode` sites instead of hooked. Guarding the call itself means a future teardown site cannot forget.
+`frame_stream.install_display_quit_guard()` wraps `pygame.display.quit` so every teardown holds the frame lock, mirroring `window_utils.install_topmost_hook`. That codebase already learned this lesson once: the topmost pin regressed because it was scattered across `set_mode` sites instead of hooked. Guarding the call itself means a future teardown site cannot forget.
 
 **Rejected:** wrapping each site by hand (two today, and the next one silently races) · importing `frame_stream` into `app.py` (couples the sim to an optional feature).
 
@@ -177,7 +177,7 @@ The LAN port is unauthenticated. Acceptable for an opt-in, off-by-default, home-
 
 ## Known cosmetic issue
 
-`press_transition` (`widgets.py:404-410`) blocks ~130 ms with `pygame.time.delay` and its own `display.flip()`. The stream visibly freezes on every band button press. Cosmetic, not worth fixing for stage 1 — recorded so it is not mistaken for a streaming bug.
+`press_transition` (`tims/widgets.py:404-410`) blocks ~130 ms with `pygame.time.delay` and its own `display.flip()`. The stream visibly freezes on every band button press. Cosmetic, not worth fixing for stage 1 — recorded so it is not mistaken for a streaming bug.
 
 ---
 
@@ -201,7 +201,7 @@ T3 stream-liveness is the one that matters: the realistic silent failure is the 
   - **Coordinate-frame trap:** `_handle_lcd_click` takes *window* coords and subtracts the panel offset itself (`app.py:481`). A streamed frame has no such offset. The touch path must call `_click_target` directly rather than reuse the window-coord contract, or clicks land on the wrong station. Same trap the reactive-window work has to solve — shared solution.
 - **Do NOT synthesize OS keystrokes.** `_handle_input_main` polls globally via `keyboard.is_pressed()` (`app.py:539`) because the app is a companion overlay while the *game* holds focus. `keyboard.press()` would inject a real keypress straight into JRE Train Sim Real.
 - **Reuse the existing pending-flag channel.** `pending_next_pa` is the proven background-thread → main-thread signal (the OCR driver sets it; `_handle_input_main` consumes it behind the audio-busy gate from `critical_lessons §5`). A tap sets the same flag and inherits the retry semantics. Add symmetric `pending_next_sta` / `pending_pause`.
-- **Virtual buttons render in pygame, into the streamed frame** — reusing `widgets.draw_tims_button` + `tims_chrome` presets — with the web client staying a dumb image + coordinate reporter. HTML/CSS buttons would be a second UI toolkit and a second design language, destined to drift from the TIMS conventions. Same "do not own two renderers" argument that decided the whole feature.
+- **Virtual buttons render in pygame, into the streamed frame** — reusing `tims.widgets.draw_tims_button` + `tims.chrome` presets — with the web client staying a dumb image + coordinate reporter. HTML/CSS buttons would be a second UI toolkit and a second design language, destined to drift from the TIMS conventions. Same "do not own two renderers" argument that decided the whole feature.
 - **Press-flash over a stream** may be swallowed by latency. Plan local optimistic flash on tap, with the pygame-rendered flash as authoritative confirmation.
 
 ---

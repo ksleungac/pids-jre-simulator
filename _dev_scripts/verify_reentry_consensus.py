@@ -31,7 +31,9 @@ def _make_driver() -> AutoDriver:
     ad.sim = SimpleNamespace(
         pending_next_pa=False,
         pending_silent_advance=None,
-        state=SimpleNamespace(at_station=True),
+        state=SimpleNamespace(at_station=True, curr_stop=0),
+        # Landing stop has pa=2 so the 1B target is resolvable (pa=1 has no 1B).
+        stops=[{"pa": ["p"]}, {"pa": ["p", "p"]}],
     )
     return ad
 

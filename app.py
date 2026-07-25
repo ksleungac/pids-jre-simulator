@@ -16,7 +16,7 @@ from displays.base import ChangeScheduler
 from displays.train_models import get_train_model
 from displays.utils import draw_text
 import i18n
-import status_band
+import tims.band as status_band
 
 
 class AppState:
@@ -890,35 +890,3 @@ class PASimulator:
             pygame.quit()
         else:
             pygame.display.quit()
-
-    def small_size(self) -> None:
-        """Switch to small window mode."""
-        from constants import SMALL_WIDTH, SMALL_HEIGHT, SMALL_Y, LIGHT_GRAY
-
-        pygame.display.set_mode((SMALL_WIDTH, SMALL_HEIGHT))
-        try:
-            info = pygame.display.get_wm_info()
-            win32gui.SetWindowPos(info["window"], -1, 400, SMALL_Y, 0, 0, 1)
-        except Exception:
-            pass
-
-        self.screen.fill(LIGHT_GRAY)
-
-        # Draw mini display
-        pygame.draw.rect(self.screen, (240, 240, 240), pygame.Rect(0, 0, SMALL_WIDTH, 120))
-        pygame.draw.rect(self.screen, self.color, pygame.Rect(20, 10, 10, 55))
-
-        from app_paths import project_root
-
-        font_n = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 20)
-        draw_text = lambda t, f, c, x, y: self.screen.blit(f.render(t, True, c), (x, y))
-
-        draw_text(self.route_name, font_n, (0, 0, 0), 40, 10)
-        draw_text(self.train_type, font_n, (0, 0, 0), 40, 45)
-
-        dest_text = self.dest
-        dest_width, _ = font_n.size(dest_text)
-        draw_text(dest_text, font_n, (0, 0, 0), SMALL_WIDTH - dest_width - 55, 27)
-
-        suffix = "方面" if self.route_name == "山手線" else "行"
-        draw_text(suffix, font_n, (0, 0, 0), SMALL_WIDTH - 55, 27)

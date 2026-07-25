@@ -297,7 +297,7 @@ def _fmt_elapsed(seconds: float) -> str:
 def _disp_speed(s: dict):
     """Report display speed: decimal-precision (`speed_decimal`) when the log carries it,
     else the integer `speed` (older logs). The report shows decimal; the live status band
-    stays integer by design (see auto_input/driver.py + status_band.py)."""
+    stays integer by design (see auto_input/driver.py + tims/band.py)."""
     d = s.get("speed_decimal")
     return d if d is not None else s.get("speed")
 
