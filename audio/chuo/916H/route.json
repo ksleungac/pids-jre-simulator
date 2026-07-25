@@ -2,63 +2,102 @@
     "route": "中央線快速",
     "line_code": "JC",
     "audio_root": "..",
-    "color": [233, 91, 31],
-    "contrast_color": [0, 92, 0],
+    "color": [
+        233,
+        91,
+        31
+    ],
+    "contrast_color": [
+        0,
+        92,
+        0
+    ],
     "type": "中央特快",
     "remarks": {
         "direction": "上り",
         "through": "",
         "note": ""
     },
-    "type_color": [45, 0, 255],
+    "type_color": [
+        45,
+        0,
+        255
+    ],
     "dest": "東京",
     "stops": [
         {
             "name": "高尾",
             "pa": [],
-            "sta": ["JC24"],
+            "sta": [
+                "JC24"
+            ],
             "sta_code": "JC24",
-            "sta_cut": 9,
+            "sta_cut": 8.3,
             "time": 0
         },
         {
             "name": "西八王子",
-            "pa": ["takao-dep-chuo-tokkai", "nishi-hachioji-arr-916H"],
-            "sta": ["JC23"],
+            "pa": [
+                "takao-dep-chuo-tokkai",
+                "nishi-hachioji-arr-916H"
+            ],
+            "sta": [
+                "JC23"
+            ],
             "sta_code": "JC23",
-            "sta_cut": 12,
+            "sta_cut": 10.6,
             "time": 3
         },
         {
             "name": "八王子",
-            "pa": ["nishi-hachioji-dep-916H", "hachioji-arr-916H"],
-            "sta": ["JC22"],
+            "pa": [
+                "nishi-hachioji-dep-916H",
+                "hachioji-arr-916H"
+            ],
+            "sta": [
+                "JC22"
+            ],
             "sta_code": "JC22",
-            "sta_cut": 8,
+            "sta_cut": 7.9,
             "time": 3
         },
         {
             "name": "豊田",
-            "pa": ["hachioji-dep-chuo-tokkai", "toyoda-arr"],
-            "sta": ["JC21"],
+            "pa": [
+                "hachioji-dep-chuo-tokkai",
+                "toyoda-arr"
+            ],
+            "sta": [
+                "JC21"
+            ],
             "sta_code": "JC21",
-            "sta_cut": 21,
+            "sta_cut": 19.8,
             "time": 5
         },
         {
             "name": "日野",
-            "pa": ["toyoda-dep-916H", "hino-arr-916H"],
-            "sta": ["JC20"],
+            "pa": [
+                "toyoda-dep-916H",
+                "hino-arr-916H"
+            ],
+            "sta": [
+                "JC20"
+            ],
             "sta_code": "JC20",
-            "sta_cut": 9,
+            "sta_cut": 8.7,
             "time": 2
         },
         {
             "name": "立川",
-            "pa": ["hino-dep-916H", "tachikawa-arr-916H"],
-            "sta": ["JC19"],
+            "pa": [
+                "hino-dep-916H",
+                "tachikawa-arr-916H"
+            ],
+            "sta": [
+                "JC19"
+            ],
             "sta_code": "JC19",
-            "sta_cut": 22,
+            "sta_cut": 21.0,
             "time": 4
         },
         {
@@ -73,10 +112,15 @@
         },
         {
             "name": "国分寺",
-            "pa": ["tachikawa-dep-chuo-tokkai", "kokubunji-arr-916H"],
-            "sta": ["JC16"],
+            "pa": [
+                "tachikawa-dep-chuo-tokkai",
+                "kokubunji-arr-916H"
+            ],
+            "sta": [
+                "JC16"
+            ],
             "sta_code": "JC16",
-            "sta_cut": 6,
+            "sta_cut": 5.9,
             "time": 5
         },
         {
@@ -96,10 +140,15 @@
         },
         {
             "name": "三鷹",
-            "pa": ["kokubunji-dep", "mitaka-arr-916H"],
-            "sta": ["JC12"],
+            "pa": [
+                "kokubunji-dep",
+                "mitaka-arr-916H"
+            ],
+            "sta": [
+                "JC12"
+            ],
             "sta_code": "JC12",
-            "sta_cut": 10,
+            "sta_cut": 9.1,
             "time": 7
         },
         {
@@ -129,10 +178,15 @@
         },
         {
             "name": "中野",
-            "pa": ["mitaka-dep-chuo-tokkai", "nakano-arr"],
-            "sta": ["JC06"],
+            "pa": [
+                "mitaka-dep-chuo-tokkai",
+                "nakano-arr"
+            ],
+            "sta": [
+                "JC06"
+            ],
             "sta_code": "JC06",
-            "sta_cut": 10,
+            "sta_cut": 8.7,
             "time": 2
         },
         {
@@ -147,10 +201,15 @@
         },
         {
             "name": "新宿",
-            "pa": ["nakano-dep-916H", "shinjuku-arr-916H"],
-            "sta": ["JC05_SJK"],
+            "pa": [
+                "nakano-dep-916H",
+                "shinjuku-arr-916H"
+            ],
+            "sta": [
+                "JC05_SJK"
+            ],
             "sta_code": "JC05",
-            "sta_cut": 23,
+            "sta_cut": 20.1,
             "time": 4
         },
         {
@@ -170,10 +229,15 @@
         },
         {
             "name": "四ツ谷",
-            "pa": ["shinjuku-dep-chuo-tokkai", "yotsuya-arr-916H"],
-            "sta": ["JC04"],
+            "pa": [
+                "shinjuku-dep-chuo-tokkai",
+                "yotsuya-arr-916H"
+            ],
+            "sta": [
+                "JC04"
+            ],
             "sta_code": "JC04",
-            "sta_cut": 14,
+            "sta_cut": 11.6,
             "time": 4
         },
         {
@@ -193,23 +257,34 @@
         },
         {
             "name": "御茶ノ水",
-            "pa": ["yotsuya-dep-916H", "ochanomizu-arr-916H"],
-            "sta": ["JC03"],
+            "pa": [
+                "yotsuya-dep-916H",
+                "ochanomizu-arr-916H"
+            ],
+            "sta": [
+                "JC03"
+            ],
             "sta_code": "JC03",
             "sta_cut": 10,
             "time": 5
         },
         {
             "name": "神田",
-            "pa": ["kanda-arr-916H"],
-            "sta": ["JC02"],
+            "pa": [
+                "kanda-arr-916H"
+            ],
+            "sta": [
+                "JC02"
+            ],
             "sta_code": "JC02",
-            "sta_cut": 12,
+            "sta_cut": 10.1,
             "time": 3
         },
         {
             "name": "東京",
-            "pa": ["tokyo-arr"],
+            "pa": [
+                "tokyo-arr"
+            ],
             "sta_code": "JC01",
             "time": 1
         }

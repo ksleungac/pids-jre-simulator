@@ -2,167 +2,259 @@
     "route": "中央線快速",
     "line_code": "JC",
     "audio_root": "..",
-    "color": [233, 91, 31],
-    "contrast_color": [0, 92, 0],
+    "color": [
+        233,
+        91,
+        31
+    ],
+    "contrast_color": [
+        0,
+        92,
+        0
+    ],
     "type": "快速",
     "remarks": {
         "direction": "上り",
         "through": "",
         "note": ""
     },
-    "type_color": [233, 91, 31],
+    "type_color": [
+        233,
+        91,
+        31
+    ],
     "dest": "東京",
     "stops": [
         {
             "name": "高尾",
             "pa": [],
-            "sta": ["JC24"],
+            "sta": [
+                "JC24"
+            ],
             "sta_code": "JC24",
-            "sta_cut": 9,
+            "sta_cut": 8.3,
             "time": 0
         },
         {
             "name": "西八王子",
-            "pa": ["takao-dep-kaisoku", "nishi-hachioji-arr-1654T"],
-            "sta": ["JC23"],
+            "pa": [
+                "takao-dep-kaisoku",
+                "nishi-hachioji-arr-1654T"
+            ],
+            "sta": [
+                "JC23"
+            ],
             "sta_code": "JC23",
-            "sta_cut": 12,
+            "sta_cut": 10.6,
             "time": 3
         },
         {
             "name": "八王子",
-            "pa": ["nishi-hachioji-dep-1654T", "hachioji-arr-1654T"],
-            "sta": ["JC22"],
+            "pa": [
+                "nishi-hachioji-dep-1654T",
+                "hachioji-arr-1654T"
+            ],
+            "sta": [
+                "JC22"
+            ],
             "sta_code": "JC22",
-            "sta_cut": 8,
+            "sta_cut": 7.9,
             "time": 3
         },
         {
             "name": "豊田",
-            "pa": ["hachioji-dep-kaisoku", "toyoda-arr"],
-            "sta": ["JC21"],
+            "pa": [
+                "hachioji-dep-kaisoku",
+                "toyoda-arr"
+            ],
+            "sta": [
+                "JC21"
+            ],
             "sta_code": "JC21",
-            "sta_cut": 21,
+            "sta_cut": 19.8,
             "time": 5
         },
         {
             "name": "日野",
-            "pa": ["toyoda-dep-1654T", "hino-arr-1654T"],
-            "sta": ["JC20"],
+            "pa": [
+                "toyoda-dep-1654T",
+                "hino-arr-1654T"
+            ],
+            "sta": [
+                "JC20"
+            ],
             "sta_code": "JC20",
-            "sta_cut": 9,
+            "sta_cut": 8.7,
             "time": 2
         },
         {
             "name": "立川",
-            "pa": ["hino-dep-1654T", "tachikawa-arr-1654T"],
-            "sta": ["JC19"],
+            "pa": [
+                "hino-dep-1654T",
+                "tachikawa-arr-1654T"
+            ],
+            "sta": [
+                "JC19"
+            ],
             "sta_code": "JC19",
-            "sta_cut": 22,
+            "sta_cut": 21.0,
             "time": 4
         },
         {
             "name": "国立",
-            "pa": ["tachikawa-dep-kaisoku", "kunitachi-arr"],
-            "sta": ["JC18"],
+            "pa": [
+                "tachikawa-dep-kaisoku",
+                "kunitachi-arr"
+            ],
+            "sta": [
+                "JC18"
+            ],
             "sta_code": "JC18",
-            "sta_cut": 12,
+            "sta_cut": 9.6,
             "time": 3
         },
         {
             "name": "西国分寺",
-            "pa": ["nishi-kokubunji-arr"],
-            "sta": ["JC17"],
+            "pa": [
+                "nishi-kokubunji-arr"
+            ],
+            "sta": [
+                "JC17"
+            ],
             "sta_code": "JC17",
-            "sta_cut": 6,
+            "sta_cut": 5.1,
             "time": 3
         },
         {
             "name": "国分寺",
-            "pa": ["kokubunji-arr-1654T"],
-            "sta": ["JC16"],
+            "pa": [
+                "kokubunji-arr-1654T"
+            ],
+            "sta": [
+                "JC16"
+            ],
             "sta_code": "JC16",
-            "sta_cut": 6,
+            "sta_cut": 5.9,
             "time": 2
         },
         {
             "name": "武蔵小金井",
-            "pa": ["musashi-koganei-arr"],
-            "sta": ["JC15"],
+            "pa": [
+                "musashi-koganei-arr"
+            ],
+            "sta": [
+                "JC15"
+            ],
             "sta_code": "JC15",
             "sta_cut": 6,
             "time": 2
         },
         {
             "name": "東小金井",
-            "pa": ["higashi-koganei-arr"],
-            "sta": ["JC14"],
+            "pa": [
+                "higashi-koganei-arr"
+            ],
+            "sta": [
+                "JC14"
+            ],
             "sta_code": "JC14",
-            "sta_cut": 12,
+            "sta_cut": 9.4,
             "time": 3
         },
         {
             "name": "武蔵境",
-            "pa": ["musashi-sakai-arr"],
-            "sta": ["JC13"],
+            "pa": [
+                "musashi-sakai-arr"
+            ],
+            "sta": [
+                "JC13"
+            ],
             "sta_code": "JC13",
-            "sta_cut": 8,
+            "sta_cut": 5.9,
             "time": 2
         },
         {
             "name": "三鷹",
-            "pa": ["mitaka-arr-1654T"],
-            "sta": ["JC12"],
+            "pa": [
+                "mitaka-arr-1654T"
+            ],
+            "sta": [
+                "JC12"
+            ],
             "sta_code": "JC12",
-            "sta_cut": 10,
+            "sta_cut": 9.1,
             "time": 3
         },
         {
             "name": "吉祥寺",
-            "pa": ["kichijoji-arr-kaisoku"],
-            "sta": ["JC11"],
+            "pa": [
+                "kichijoji-arr-kaisoku"
+            ],
+            "sta": [
+                "JC11"
+            ],
             "sta_code": "JC11",
-            "sta_cut": 11,
+            "sta_cut": 9.3,
             "time": 2
         },
         {
             "name": "西荻窪",
-            "pa": ["nishi-ogikubo-arr"],
-            "sta": ["JC10"],
+            "pa": [
+                "nishi-ogikubo-arr"
+            ],
+            "sta": [
+                "JC10"
+            ],
             "sta_code": "JC10",
-            "sta_cut": 15,
+            "sta_cut": 11.8,
             "time": 2
         },
         {
             "name": "荻窪",
-            "pa": ["nishi-ogikubo-dep"],
-            "sta": ["JC09"],
+            "pa": [
+                "nishi-ogikubo-dep"
+            ],
+            "sta": [
+                "JC09"
+            ],
             "sta_code": "JC09",
-            "sta_cut": 9,
+            "sta_cut": 9.6,
             "time": 3
         },
         {
             "name": "阿佐ヶ谷",
-            "pa": ["asagaya-arr"],
-            "sta": ["JC08"],
+            "pa": [
+                "asagaya-arr"
+            ],
+            "sta": [
+                "JC08"
+            ],
             "sta_code": "JC08",
-            "sta_cut": 18,
+            "sta_cut": 16.2,
             "time": 2
         },
         {
             "name": "高円寺",
-            "pa": ["koenji-arr"],
-            "sta": ["JC07"],
+            "pa": [
+                "koenji-arr"
+            ],
+            "sta": [
+                "JC07"
+            ],
             "sta_code": "JC07",
-            "sta_cut": 14,
+            "sta_cut": 11.6,
             "time": 2
         },
         {
             "name": "中野",
-            "pa": ["nakano-arr"],
-            "sta": ["JC06"],
+            "pa": [
+                "nakano-arr"
+            ],
+            "sta": [
+                "JC06"
+            ],
             "sta_code": "JC06",
-            "sta_cut": 10,
+            "sta_cut": 8.7,
             "time": 2
         },
         {
@@ -177,10 +269,15 @@
         },
         {
             "name": "新宿",
-            "pa": ["nakano-dep-1654T", "shinjuku-arr-1654T"],
-            "sta": ["JC05_SJK"],
+            "pa": [
+                "nakano-dep-1654T",
+                "shinjuku-arr-1654T"
+            ],
+            "sta": [
+                "JC05_SJK"
+            ],
             "sta_code": "JC05",
-            "sta_cut": 23,
+            "sta_cut": 20.1,
             "time": 4
         },
         {
@@ -200,10 +297,15 @@
         },
         {
             "name": "四ツ谷",
-            "pa": ["shinjuku-dep-kaisoku", "yotsuya-arr-1654T"],
-            "sta": ["JC04"],
+            "pa": [
+                "shinjuku-dep-kaisoku",
+                "yotsuya-arr-1654T"
+            ],
+            "sta": [
+                "JC04"
+            ],
             "sta_code": "JC04",
-            "sta_cut": 14,
+            "sta_cut": 11.6,
             "time": 4
         },
         {
@@ -223,23 +325,34 @@
         },
         {
             "name": "御茶ノ水",
-            "pa": ["yotsuya-dep-1654T", "ochanomizu-arr-1654T"],
-            "sta": ["JC03"],
+            "pa": [
+                "yotsuya-dep-1654T",
+                "ochanomizu-arr-1654T"
+            ],
+            "sta": [
+                "JC03"
+            ],
             "sta_code": "JC03",
             "sta_cut": 10,
             "time": 5
         },
         {
             "name": "神田",
-            "pa": ["kanda-arr-1654T"],
-            "sta": ["JC02"],
+            "pa": [
+                "kanda-arr-1654T"
+            ],
+            "sta": [
+                "JC02"
+            ],
             "sta_code": "JC02",
-            "sta_cut": 12,
+            "sta_cut": 10.1,
             "time": 3
         },
         {
             "name": "東京",
-            "pa": ["tokyo-arr"],
+            "pa": [
+                "tokyo-arr"
+            ],
             "sta_code": "JC01",
             "time": 1
         }
