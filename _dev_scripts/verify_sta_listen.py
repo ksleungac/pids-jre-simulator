@@ -39,6 +39,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import numpy as np
 import pygame
 
 from audio_layout import discover_route_sources, order_by_reference_count
@@ -87,6 +88,76 @@ def draw_button(screen: pygame.Surface, rect: pygame.Rect, label: str, color: tu
     pygame.draw.rect(screen, (255, 255, 255), rect, width=2, border_radius=8)
     txt = font.render(label, True, (255, 255, 255))
     screen.blit(txt, txt.get_rect(center=rect.center))
+
+
+_WAVE_CACHE: dict[tuple[str, float], np.ndarray] = {}
+
+
+def wave_peaks(path: Path, columns: int) -> np.ndarray:
+    """(2, columns) min/max envelope of the file, for the waveform strip.
+
+    Cached per (path, mtime) so a splice invalidates it automatically. Decoding is via
+    ffmpeg to mono f32 — the same route every other tool here uses.
+    """
+    key = (str(path), path.stat().st_mtime)
+    hit = _WAVE_CACHE.get(key)
+    if hit is not None and hit.shape[1] == columns:
+        return hit
+    try:
+        raw = subprocess.run(
+            [_find_ffmpeg(), "-v", "error", "-i", str(path), "-f", "f32le", "-ac", "1", "-ar", "8000", "-"],
+            capture_output=True,
+            check=True,
+        ).stdout
+    except (subprocess.CalledProcessError, OSError):
+        return np.zeros((2, columns), dtype=np.float32)
+    y = np.frombuffer(raw, dtype=np.float32)
+    if y.size < columns:
+        y = np.pad(y, (0, columns - y.size))
+    step = y.size // columns
+    body = y[: step * columns].reshape(columns, step)
+    out = np.vstack([body.min(axis=1), body.max(axis=1)]).astype(np.float32)
+    _WAVE_CACHE.clear()
+    _WAVE_CACHE[key] = out
+    return out
+
+
+def draw_wave(
+    screen: pygame.Surface,
+    rect: pygame.Rect,
+    path: Path,
+    duration: float,
+    sel: tuple[float, float] | None,
+    cut: float,
+    font: pygame.font.Font,
+) -> None:
+    """Waveform strip spanning the same [0, duration] as the seek bar.
+
+    Exists so a KAK can be found by eye and removed by hand: on hot/limited sources the
+    click is often QUIETER than the melody, so no automatic threshold separates them.
+    """
+    pygame.draw.rect(screen, (22, 26, 32), rect, border_radius=3)
+    if duration <= 0 or rect.w <= 2:
+        return
+    peaks = wave_peaks(path, rect.w)
+    mid = rect.y + rect.h // 2
+    half = rect.h // 2 - 1
+    for i in range(rect.w):
+        lo, hi = float(peaks[0, i]), float(peaks[1, i])
+        pygame.draw.line(screen, (86, 150, 200), (rect.x + i, mid - int(hi * half)), (rect.x + i, mid - int(lo * half)))
+    if sel:
+        a, b = sorted(sel)
+        xa = rect.x + int(rect.w * max(0.0, min(1.0, a / duration)))
+        xb = rect.x + int(rect.w * max(0.0, min(1.0, b / duration)))
+        ov = pygame.Surface((max(1, xb - xa), rect.h), pygame.SRCALPHA)
+        ov.fill((255, 70, 70, 90))
+        screen.blit(ov, (xa, rect.y))
+        for xx in (xa, xb):
+            pygame.draw.line(screen, (255, 90, 90), (xx, rect.y), (xx, rect.y + rect.h), 1)
+        label = font.render(f"{(b - a) * 1000:.0f} ms", True, (255, 140, 140))
+        screen.blit(label, (min(xa, rect.right - label.get_width() - 2), rect.y - 15))
+    cx = rect.x + int(rect.w * max(0.0, min(1.0, cut / duration)))
+    pygame.draw.line(screen, CUT_MARKER, (cx, rect.y), (cx, rect.y + rect.h), 1)
 
 
 def draw_seek_bar(
@@ -449,6 +520,12 @@ def main() -> int:
     # Vertical grab band: the sta_cut marker is drawn taller than the bar itself.
     seek_grab_rect = seek_rect.inflate(0, 24)
     CUT_GRAB_PX = 14  # horizontal slop for grabbing the marker
+    # Waveform strip, same [0, duration] span as the seek bar. Drag on it to select a
+    # region, X/DEL to splice that region out — the manual path for artifacts (KAK) that
+    # no automatic detector separates reliably on a hot source.
+    wave_rect = pygame.Rect(detail_x, 178, WINDOW_W - detail_x - 20, 44)
+    wave_sel: list[float] | None = None
+    dragging_sel = False
 
     # Edit-mode state for in-app note editing
     edit_mode = False
@@ -472,6 +549,13 @@ def main() -> int:
         if dur <= 0:
             return seek_rect.x
         return seek_rect.x + int(seek_rect.w * (max(0.0, min(dur, eff_cut())) / dur))
+
+    def wave_time_at_x(x: int) -> float:
+        """Screen x on the waveform strip -> time. Same span as the seek bar."""
+        dur = items[idx].get("duration", 0.0)
+        if dur <= 0 or wave_rect.w <= 0:
+            return 0.0
+        return max(0.0, min(dur, (x - wave_rect.x) / wave_rect.w * dur))
 
     def time_at_x(x: int) -> float:
         """Seek-bar x -> file time, clamped inside the file."""
@@ -618,6 +702,61 @@ def main() -> int:
         player.begin(src, new_cut)
         return True
 
+    def splice_selection() -> bool:
+        """Delete the highlighted region from the mp3 and shift sta_cut per sta-make Step 7.5.
+
+        kak_end <= cut -> cut - width ; kak_start >= cut -> unchanged ;
+        straddling -> snap to kak_start.
+        """
+        nonlocal wave_sel
+        if not wave_sel:
+            return False
+        a, b = sorted(wave_sel)
+        item = items[idx]
+        dur = item.get("duration", 0.0)
+        a, b = max(0.0, a), min(dur, b)
+        if b - a < 0.005:
+            print("selection too short to splice", file=sys.stderr)
+            return False
+        src = Path(item["path"])
+        # keep an original so a bad cut is recoverable outside this session too
+        bak_dir = Path("audio_src") / src.parent.parent.name / "sta_wave_backup"
+        bak_dir.mkdir(parents=True, exist_ok=True)
+        if not (bak_dir / src.name).exists():
+            shutil.copy2(src, bak_dir / src.name)
+        player.stop()
+        pygame.mixer.music.unload()
+        tmp = src.with_suffix(".tmp.mp3")
+        cmd = [
+            _find_ffmpeg(),
+            "-y",
+            "-loglevel",
+            "error",
+            "-i",
+            str(src),
+            "-filter_complex",
+            f"[0]atrim=0:{a:.3f},asetpts=N/SR/TB[p];[0]atrim={b:.3f},asetpts=N/SR/TB[q];" f"[p][q]concat=n=2:v=0:a=1[o]",
+            "-map",
+            "[o]",
+            str(tmp),
+        ]
+        try:
+            subprocess.run(cmd, check=True)
+            shutil.move(str(tmp), str(src))
+        except (subprocess.CalledProcessError, OSError) as e:
+            print(f"splice failed for {src.name}: {e}", file=sys.stderr)
+            return False
+        width = b - a
+        cut = item["sta_cut"]
+        new_cut = round(cut - width, 2) if b <= cut else (round(a, 2) if a < cut < b else cut)
+        item["sta_cut"] = new_cut
+        item["duration"] = max(0.1, dur - width)
+        written = persist_cut(item["sta"], new_cut)
+        print(f"spliced {item['sta']}: removed [{a:.3f},{b:.3f}] ({width*1000:.0f}ms)  " f"sta_cut {cut} → {new_cut}  ({', '.join(written)})")
+        wave_sel = None
+        player.begin(src, new_cut)
+        return True
+
     def list_row_at(pos: tuple[int, int]) -> int | None:
         x, y = pos
         if x >= LIST_W or y < LIST_TOP:
@@ -679,10 +818,13 @@ def main() -> int:
                         cut_pending = min(cur_dur - 0.05, eff_cut() + step)
                     elif ev.key == pygame.K_c:
                         commit_cut()
+                    elif ev.key in (pygame.K_x, pygame.K_DELETE):
+                        splice_selection()
                     elif ev.key == pygame.K_z:
                         trim_start = 0.0
                         trim_end_offset = 0.0
                         cut_pending = None
+                        wave_sel = None
             elif ev.type == pygame.TEXTINPUT and edit_mode:
                 edit_buffer += ev.text
             elif ev.type == pygame.MOUSEWHEEL:
@@ -696,6 +838,10 @@ def main() -> int:
                 else:
                     if note_rect.collidepoint(ev.pos):
                         start_edit()
+                    elif wave_rect.collidepoint(ev.pos):
+                        t0 = wave_time_at_x(ev.pos[0])
+                        wave_sel = [t0, t0]
+                        dragging_sel = True
                     elif seek_grab_rect.collidepoint(ev.pos) and abs(ev.pos[0] - cut_x_now()) <= CUT_GRAB_PX:
                         # Grabbed the sta_cut marker — drag to reposition.
                         dragging_cut = True
@@ -712,10 +858,17 @@ def main() -> int:
                             begin_with_trim()
             elif ev.type == pygame.MOUSEMOTION and dragging_cut:
                 cut_pending = round(time_at_x(ev.pos[0]), 2)
+            elif ev.type == pygame.MOUSEMOTION and dragging_sel and wave_sel:
+                wave_sel[1] = wave_time_at_x(ev.pos[0])
             elif ev.type == pygame.MOUSEBUTTONUP and ev.button == 1 and dragging_cut:
                 dragging_cut = False
                 # Play the new placement straight away so the drag is self-verifying.
                 begin_with_trim()
+            elif ev.type == pygame.MOUSEBUTTONUP and ev.button == 1 and dragging_sel:
+                dragging_sel = False
+                # a click (not a drag) clears the selection rather than leaving a zero-width one
+                if wave_sel and abs(wave_sel[1] - wave_sel[0]) < 0.004:
+                    wave_sel = None
 
         player.tick()
         item = items[idx]
@@ -812,6 +965,7 @@ def main() -> int:
         trim_end_pos = max(trim_start + 0.1, cur_dur - trim_end_offset)
         # Display sta_cut adjusted by trim_start so the marker shows post-trim placement preview.
         # Internally the marker still represents the cut moment in the (current) file timeline.
+        draw_wave(screen, wave_rect, Path(item["path"]), cur_dur, tuple(wave_sel) if wave_sel else None, eff_cut(), font_small)
         cut_hot = dragging_cut or (seek_grab_rect.collidepoint(mouse) and abs(mouse[0] - cut_x_now()) <= CUT_GRAB_PX)
         draw_seek_bar(
             screen, seek_rect, cur_dur, eff_cut(), player.position(), font_small, trim_start=trim_start, trim_end=trim_end_pos, cut_hot=cut_hot

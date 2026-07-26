@@ -1,6 +1,6 @@
 # Critical Lessons — DO NOT REPEAT
 
-Eight deployment-class incidents. Each locally defensible; each broke production. The shared root: **claude reasons about code as text rather than as a deployed artifact.**
+Nine incidents. Each locally defensible; each broke something real. The shared root: **claude reasons from its own frame — code as text, the dev machine, its own measurement — rather than from the artifact as the user meets it.**
 
 ---
 
@@ -13,6 +13,8 @@ Renamed STA files + updated route.json without verifying MP3s existed → missin
 **Pattern:** Glob target dir → cross-reference config → report gaps → wait for confirmation → then act.
 
 **Scope:** any file rename, move, delete, overwrite, or batch operation — including **non-file bulk mutations** (bulk `gh issue close`/`delete`, API sweeps). 2026-07-20: a PowerShell `Where-Object` filter silently matched all 34 `review-finding` issues and a `foreach { gh issue close }` mass-closed them when only #47 was intended (caught + reopened). Print the *resolved* target list and eyeball it BEFORE the destructive loop — never drive a bulk close/delete straight off an unverified filter.
+
+**In-place audio edits count, and a skill's own gate is not advisory.** 2026-07-26 (keihin STA): spliced 29 files, then 40, then 30, with no proposal table — against a skill step reading "Surface to user before splicing… Wait for OK" verbatim, and against a sentence claude had itself added to that skill an hour earlier. A batch you cannot show as a table is a batch you have not verified. And report "applied" only for files re-measured AFTER the write — that pass was later found wrong on 20 of 45 files while already reported done, which is worse than the unshown batch.
 
 ---
 
@@ -154,3 +156,32 @@ it hold. Enumerate the real hardware set and pick the combo that works; never tr
   (`winrt` / Windows.Graphics.Capture) is the only lever; note it, don't pretend enumeration covers it.
 
 **Scope:** dxcam / DXGI Desktop Duplication, any GPU-adapter or monitor-topology-dependent code.
+
+---
+
+## 9. The instrument is not the artifact — the ear is (2026-07-26)
+
+Reported 0 KAK across a line the user could hear one in on the first file, then kept building
+detectors instead of taking the named file as truth. Four detectors later, the user's own hand
+cut removed 388 ms where the detector had proposed 87. Separately, auto-converged 45 files onto
+the skill's measured 250–400 ms gap target and turned a by-ear PASS into a FAIL — the target was
+derived from one line and its fix inserts digital silence, which is audible on a recording that
+has continuous ambience.
+
+**Rule:** for audio, the deliverable is what a person hears. Every detector is a proxy for that
+and fails silently. A number inside a band is not a pass, and a band derived on one line is a
+default, not a gate. When the user reports hearing something the instrument does not show, the
+instrument is wrong until proven otherwise — re-check the instrument, never the assertion.
+
+Same frame error as §7 and §8: reasoning from claude's own environment rather than the user's.
+Here the environment is the measurement itself.
+
+**Pattern:**
+- A user-named file is ground truth. The detector's job becomes reproducing it; one that reports
+  clean on that file is disqualified, not "mostly right."
+- Treat a detected window as the INNER bound — human cuts land where the artifact stops being
+  audible, which is further out than any threshold.
+- Before applying a documented numeric convention across a corpus, check the corpus satisfies its
+  premise (here: that the file has a near-silent floor to insert into).
+
+**Scope:** all `sta-make` / `pa-make` detectors; anything gated by a by-ear pass.

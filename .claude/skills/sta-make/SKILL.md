@@ -17,6 +17,33 @@ triggers:
 
 Take STA recordings (raw or already split) and produce simulator-ready per-segment mp3s with `sta_cut` values that land cleanly in the music→voice silence gap. Each STA is one departure: melody (varies by station/platform) → silence pad → closing-door announcement (staff voice).
 
+## STA anatomy — what a raw recording actually contains
+
+Read this before touching any detector. The shape above is the **finished** article; a raw capture has more in it, and every artifact pattern below is a piece of this one sequence:
+
+```
+music (loop 1)  →  [music (loop 2, often UNFINISHED)]  →  [silence]  →  KAK  →  silence  →  voice
+        └── Pattern B removes an unfinished loop ──┘         └─ Pattern A removes this ─┘
+                                                                              ↑
+                                                                    sta_cut belongs HERE
+```
+
+**The melody loops until someone stops it.** A departure melody is played on a loop by a platform machine; a station attendant switches it off when the doors are about to close. So the recording ends the melody wherever the attendant happened to press — which is why a **2nd loop is usually unfinished**, and why the **KAK sits immediately after it**.
+
+**Pattern A and Pattern B are the same physical event seen from two sides.** The attendant's switch-off produces *both* the truncated loop (Pattern B) *and* the click of the switch itself (Pattern A). A file showing one very often has the other — check for both rather than splicing one and moving on.
+
+Which parts are optional:
+
+| element | optional? | notes |
+|---|---|---|
+| music loop 2 | yes | absent if the attendant cut during loop 1; may be complete (keep — real content) or a stub (remove) |
+| silence before KAK | **yes** | `music → KAK` with no gap is normal — the switch was thrown as the melody ended |
+| KAK | yes | absent on clean sources; present across a whole line when the capture rig picked up the switch |
+| silence after KAK | **no** | if the burst runs straight into speech it is the voice's own onset, not a KAK |
+| voice | yes | some stations have no closing announcement at all (Chūō 立川: three loops then silence) |
+
+**`sta_cut` belongs in the silence between KAK and voice** — after every artifact, before the first syllable. This is why **artifacts are spliced BEFORE `sta_cut` is validated** (Step 7.5 → 8 → 9): an unspliced KAK makes `detect_sta_cut.py` report `music_end == voice_start` (it flips at the click) and every LATE/EARLY verdict downstream is measured against the wrong landmark. A whole line reporting zero-gap is a **KAK diagnosis**, not a broken detector.
+
 Two entry points — both are in scope:
 
 - **Phase A (first-time split)**: source mp3 + hand-written timestamps exist; cut into per-segment files + write route.json.
@@ -272,13 +299,48 @@ Some source recordings include capture artifacts that the standard trim/validate
 
 **Pattern A — KAK transient** (physical staff-machine cut captured in audio):
 
+**The sequence — memorise this, it is what the detector is looking for:**
+
+```
+music  →  silence (OPTIONAL)  →  KAK  →  silence  →  voice
+```
+
+**What it is: a station attendant physically switching the melody machine OFF.** The KAK *is* that switch — which is why it always lands after the music has stopped and before the closing announcement begins, never inside either. The melody does not fade; it stops dead, because power was cut mid-note.
+
+Two consequences that decide how to find it:
+
+- **The KAK is a position, not a level.** It is the only event in the music→voice window. Locate the window first, then take the burst inside it. Do not scan a blind `±1.5 s` around `sta_cut` — that straddles the voice attack and reports a hit on every file (Chūō: a false 23/23).
+- **The silence before it is optional; the silence after it is not.** `music → KAK` with no gap is normal (the switch was thrown the instant the melody ended). `KAK → voice` with no gap is not — if the burst runs straight into speech, it is the voice's own onset, not a KAK.
+
 Loud transient peaking near digital ceiling (-4 to -7 dB), brief (0.2–0.5 s), sits between music end and voice start.
+
+Because the KAK's own silence boundary reads as `music_end` to a level detector, an unspliced KAK produces the **zero-gap false positive** in `detect_sta_cut.py` (`music_end == voice_start`). A whole line reporting zero-gap is therefore *evidence of KAK*, not a broken measurement — see Gotchas.
 
 Only run this step if the user mentions it OR you spot the pattern: a single very loud short event near `sta_cut` on most files. Skip otherwise.
 
 **Detection.** For each file, find the loudest 25 ms peak in `[sta_cut − 1.5 s, sta_cut + 1.5 s]`. If peak amplitude ≥ -15 dB (vs. typical music -20 to -25 dB), it's a KAK. Walk outward from the peak using a 25 ms peak-amplitude envelope until amplitude drops below -25 dB; that defines the splice window. Reject results with width > 1.5 s — the walk escaped into music content.
 
 **Why raw peak amplitude, not RMS:** RMS averaging over 5–10 ms windows dilutes transient peaks down to -18 to -22 dB, indistinguishable from music. Use raw `max(|y|)` over a short window.
+
+**Amplitude detection fails entirely on a limited/hot source — use the HF/LF ratio instead.** The method above assumes the KAK is *louder* than the music (-4 to -7 dB against music at -20 to -25 dB). On a hot source that inverts: keihin's STA is limited flat (music at ~0 dB, loudest peak in a file +2.7 dB — 0.9 dB of total range), and its KAK is **quieter than the music it interrupts** (-9 dB). No amplitude threshold can separate them, and the walk-outward step never terminates, so every candidate is rejected by `MAX_WIDTH` — a clean sheet that means "thresholds don't fit", not "no KAK". Check the corpus first: if `max_peak - music_level < ~6 dB`, skip Pattern A's amplitude path.
+
+What survives limiting is the **spectral shape**, because a KAK is a broadband click and a melody is tonal. Take `hf = sum(|S|[f > 5 kHz])` and `lf = sum(|S|[f < 2 kHz])` from a short-hop STFT (`n_fft=512, hop=128` ≈ 5.8 ms — a KAK is ~0.15–0.5 s, so a 25 ms hop smears it):
+
+| content | `hf/lf` |
+|---|---|
+| melody | 0.03–0.09 |
+| closing announcement | 0.2–0.5 |
+| **KAK** | **1.0–1.3** |
+
+On keihin's 大宮 melody the transition reads unambiguously — music stops dead (`lf` 146 → 37 in two frames), then `hf` jumps 13× the music median with `hf/lf` 1.31. A 20×+ separation from the melody, immune to the limiting.
+
+**The trap: `hf/lf` explodes in quiet passages** — the denominator collapses, so silence between melody and voice reads 13–18, *higher than a real KAK*, with no click present. A detector ranking on the ratio alone picks the gap every time. Gate on absolute broadband energy as well (`hf > ~3 × hf_median_of_music_region`) so only frames carrying real HF content qualify.
+
+**Calibrate on a known-positive before trusting any of it.** Ask the user which file has an audible KAK, probe THAT file at 5 ms resolution, and print the profile (amplitude, `hf`, `lf`, ratio) so the transient is *visible* rather than inferred. Even with the ratio + energy gate, separating melody / voice / click across a whole corpus stayed unreliable — treat the output as a **candidate list for the by-ear verifier**, not as input to an automatic splice.
+
+**A user-named file outranks the detector — no exceptions, no second opinion.** When the user says "this file has a KAK," that file IS ground truth: the detector's job is now to REPRODUCE it, and a detector that reports clean on it is disqualified, not "mostly right." Do not build another detector to adjudicate — probe that one file at 5 ms and read the numbers. (2026-05-09 JY29_SMB, 2026-07-26 JK47_OMY-south @ 11.51 — same error, same correction, both times after claude had reported zero KAK.)
+
+**Detector windows run ~4× tighter than a hand cut.** A burst walk stops at its threshold; a human cuts where the artifact stops being *audible*, which is further out (keihin: hand 388 ms vs detector 87 ms on STA; 0.9–2.0 s deeper on PA). Treat the detected window as the INNER bound and widen before proposing — a splice a little too wide runs into silence and is inaudible, one a little too tight leaves the click.
 
 **Detection script template:**
 
@@ -330,6 +392,8 @@ for stop in route["stops"]:
 Then proceed to Step 8 (trim) normally — the spliced files now have a clean music→silence→voice structure that trim_sta_silence + detect_sta_cut handle correctly.
 
 **Pattern B — "2nd-loop snippet"** (recording captured the start of a 2nd melody loop before the staff cut):
+
+The other half of Pattern A — the same attendant switch-off, seen as the truncated loop rather than as the click. Expect them together: if a file has an unfinished 2nd loop, look for the KAK right behind it, and vice versa. See § "STA anatomy".
 
 Pattern: `music (1st loop) → tiny silence (~0.2 s, between-loops gap) → brief music pulse (0.1–0.7 s = start of 2nd loop) → silence (1–3 s) → voice`. The 2nd-loop pulse is real music, same melody, just truncated. If left in place, pressing PageUp during the 1st loop can land in the inter-loop silence and the simulator plays a confusing "music–silence–music(<0.5s)–silence–voice" sequence.
 
@@ -554,6 +618,8 @@ Then update `sta_cut` to `<music_cut>` (= start of inserted silence).
 Before declaring a route done, audit the pre-voice gap (sta_cut → first sample > −8 dB) across **every** stop, including the originally-PASSed ones. The FAIL-driven workflow only fixes the obvious ones; the PASSed files often have widely varying gaps (anything from 50 ms to 900 ms) just because their natural silence floors happen to be different lengths. That variance is audible — a PageUp on station X feels snappier than station Y on the same line.
 
 Target: all stops within ~250–400 ms of `sta_cut → voice attack`. Two cheap fixes converge them:
+
+**The 250–400 ms band is a Yamanote-derived default, not a gate.** It was measured on one line (2026-05-09) and does not generalise. The SHORT fix inserts `anullsrc` **digital** silence, so on a recording carrying continuous ambience (keihin: floor −15 to −37 dB) the insert is an audible dropout — 2026-07-26 it converted a by-ear PASS into a FAIL across the line. **Check the file's noise floor before inserting**; if the floor is not near-silent, move `sta_cut` only and leave the audio alone. A by-ear PASS at 30 ms outranks the band.
 
 - **LONG (gap > 400 ms)**: route.json edit only. Set `new_sta_cut = round(voice_attack_time − 0.30, 1)`. No audio change. Files with deep silence floors before voice (`sta_cut` placed where music decay just ended) tend to land here — moving `sta_cut` later gets the simulator to start playback closer to voice.
 - **SHORT (gap < 250 ms)**: insert artificial silence AT `sta_cut` position (no splice junction needed if the file is otherwise clean — typical for originally-PASSed files). Use:

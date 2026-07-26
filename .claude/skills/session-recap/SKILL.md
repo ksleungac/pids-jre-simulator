@@ -42,6 +42,14 @@ Every bullet = one of:
 
 No destination → OMIT the bullet entirely.
 
+### Prior-session graduation check
+
+For each learning this session, ask: **did a past daily log already contain it?** If yes, that fact was stranded — codify it now, and name the log line that held it.
+
+Cheapest form: grep `memory/` for the session's domain nouns (a detector name, a line name, an artifact pattern) before writing the recap. A hit older than ~2 weeks with no canonical home is a stranded fact by definition — the log is the only reason you know it.
+
+Rule of thumb: **a fact about how a TOOL behaves on real data never belongs only in a log.** Its home is the skill step that runs that tool. (2026-05-09 recorded "yamanote is normalized hot, so the detectors bracketed the music instead of the KAK"; it reached no skill, and 2026-07-26 spent a session re-deriving it on keihin.)
+
 ### Corrections / preferences this session
 
 Classify each and propose canonical home. Every entry promotes or is omitted.
