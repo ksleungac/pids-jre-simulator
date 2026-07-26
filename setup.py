@@ -541,6 +541,23 @@ class SetupScreen:
             screen.blit(img, (pad, intro_y))
             intro_y += img.get_height() + 2
 
+        # Extended tier, dim under the amber tested tier: every other 16:9 at 1080p or above,
+        # geometry interpolated from the ratio (hud_layout's `verified` flag is the same split).
+        for line in wrap_text(body_font, i18n.t("setup.ocr_disclaimer.resolution_extended"), left_col_w):
+            img = body_font.render(line, True, self.dim_color)
+            screen.blit(img, (pad, intro_y))
+            intro_y += img.get_height() + 2
+
+        # Hybrid-GPU note: the lines above say whether the feature applies to your machine,
+        # this one is the recovery step when it applies but capture is blocked (issue #97).
+        # Row height already takes max(text, screenshot), so the extra lines grow the row
+        # rather than overrunning the section below.
+        intro_y += 8
+        for line in wrap_text(body_font, i18n.t("setup.ocr_disclaimer.dual_gpu"), left_col_w):
+            img = body_font.render(line, True, self.dim_color)
+            screen.blit(img, (pad, intro_y))
+            intro_y += img.get_height() + 2
+
         # Right: screenshot + HUD pulse
         if self._disclaimer_screenshot is not False:
             raw = self._disclaimer_screenshot

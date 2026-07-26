@@ -94,7 +94,12 @@ def _img(name):
 
 
 def _wrap(text, font, max_w):
-    """Greedy pixel wrap (CJK char-by-char; blank line preserved). Caller owns the paragraph split."""
+    """Greedy pixel wrap (CJK char-by-char; blank line preserved). Caller owns the paragraph split.
+
+    A Latin run backtracks to its last space so a word is never cut mid-run ("Windo / ws"),
+    while CJK keeps breaking at the column edge — the same rule the classic panel's wrap_text
+    uses. A single Latin word wider than the column still hard-breaks rather than overflowing.
+    """
     lines = []
     for para in text.split("\n"):
         if not para:
@@ -104,6 +109,18 @@ def _wrap(text, font, max_w):
         for ch in para:
             if font.size(cur + ch)[0] <= max_w or not cur:
                 cur += ch
+                continue
+            if ch == " ":
+                lines.append(cur)
+                cur = ""
+                continue
+            sp = cur.rfind(" ")
+            tail = cur[sp + 1 :] if sp >= 0 else ""
+            # Backtrack only when the carried tail is Latin: a CJK continuation has no word
+            # boundary worth preserving, and moving it would just ragged the column for nothing.
+            if sp > 0 and tail and ord(tail[0]) < 0x3000:
+                lines.append(cur[:sp])
+                cur = tail + ch
             else:
                 lines.append(cur)
                 cur = ch
@@ -162,7 +179,17 @@ def _build_content(w):
     right_w = w - CONTENT_PAD - right_x
     paragraph("setup.ocr_disclaimer.intro", max_w=LEFT_COL_W)
     y += 6
+    # Two support tiers, mirroring hud_layout's `verified` flag: AMBER = the resolutions a live
+    # drive has actually run on (PROFILES entries), DIM = every other 16:9 at 1080p or above,
+    # whose geometry is interpolated from the ratio and expected-but-unproven.
     paragraph("setup.ocr_disclaimer.resolution", color=AMBER, max_w=LEFT_COL_W)
+    paragraph("setup.ocr_disclaimer.resolution_extended", color=DIM, max_w=LEFT_COL_W)
+    y += 8
+    # Hybrid-GPU note. DIM, not amber: the lines above state whether the feature applies to your
+    # machine at all; this one is the recovery step for the machines where it applies but capture
+    # is blocked (issue #97 — DDA refuses when the process runs on the discrete GPU of a Microsoft
+    # Hybrid system, and no adapter we can address from inside the process changes that).
+    paragraph("setup.ocr_disclaimer.dual_gpu", color=DIM, max_w=LEFT_COL_W)
     text_bottom = y
 
     shot = _img("game_screenshot.png")

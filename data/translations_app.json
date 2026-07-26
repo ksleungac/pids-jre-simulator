@@ -80,9 +80,19 @@
     "zh_CN": "功能说明"
   },
   "setup.ocr_disclaimer.resolution": {
-    "en": "Preview · 1080P / 1440P (16:9) only",
-    "zh_HK": "此功能仍在預覽階段，目前僅支援 1080P / 1440P（16:9）解像度",
-    "zh_CN": "此功能仍在预览阶段，目前仅支持 1080P / 1440P（16:9）分辨率"
+    "en": "Preview · tested on 1080P / 1440P / 4K (16:9)",
+    "zh_HK": "此功能仍在預覽階段，已測試 1080P / 1440P / 4K（16:9）",
+    "zh_CN": "此功能仍在预览阶段，已测试 1080P / 1440P / 4K（16:9）"
+  },
+  "setup.ocr_disclaimer.resolution_extended": {
+    "en": "Other 16:9 resolutions at 1080P or higher also work, but are not yet tested.",
+    "zh_HK": "其他 1080P 或以上的 16:9 解像度同樣可用，但未經測試。",
+    "zh_CN": "其他 1080P 或以上的 16:9 分辨率同样可用，但未经测试。"
+  },
+  "setup.ocr_disclaimer.dual_gpu": {
+    "en": "Laptops with two graphics chips: Windows may run this app on the high-performance GPU, which blocks screen capture and leaves Auto-PA with nothing to read. If Auto-PA never starts, set this app to Power saving under Windows Settings > System > Display > Graphics, then restart it.",
+    "zh_HK": "雙顯示卡手提電腦：Windows 可能會以獨立顯示卡執行本程式，這會令畫面擷取無法運作，自動報站便讀不到畫面。若自動報站一直沒有反應，請在 Windows 設定 > 系統 > 顯示器 > 顯示卡 中將本程式設為「省電」，然後重新啟動本程式。",
+    "zh_CN": "双显卡笔记本电脑：Windows 可能会以独立显卡运行本程序，这会令画面截取无法运作，自动报站便读不到画面。若自动报站一直没有反应，请在 Windows 设置 > 系统 > 显示 > 显卡 中将本程序设为「节能」，然后重新启动本程序。"
   },
   "setup.ocr_disclaimer.intro": {
     "en": "OCR Auto-PA compares the game HUD (upper-right) against local OCR templates to determine train position, then fires announcements automatically.",

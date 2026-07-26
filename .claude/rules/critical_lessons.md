@@ -144,13 +144,24 @@ the guard only covered `create()` *returning* None, not *raising*.
 "one adapter", a single capture backend) is invisible on a dev box whose topology happens to make
 it hold. Enumerate the real hardware set and pick the combo that works; never trust index 0.
 
+**Corollary (2026-07-26) — check the restriction's SCOPE before assuming enumeration covers it.**
+Walking a per-call parameter cannot fix a constraint scoped to the PROCESS. DDA's hybrid rule is
+about which GPU the calling process runs on, so when Windows launches the app on the dGPU every
+combo the walk tries raises `UNSUPPORTED` and it exhausts. The reporter fixed it by setting the
+app's Windows GPU preference to power saving — no adapter, monitor or cable changed. The fix
+above is still correct; it just addresses the other half.
+
 **Pattern:**
 - Screen/GPU capture: enumerate adapters × outputs (`dxcam.output_info()`), try each until one
   succeeds — don't hardcode device 0. `auto_input/driver.py::_open_capture_camera`.
 - Wrap the init in try/except so a topology mismatch degrades gracefully — but **print the full
   original traceback**; muting it blinds the next report (user: *"if you mute the trace we cannot
   debug such problem next time"*).
-- Residual (no working combo — e.g. dGPU-owned display on a hybrid system): a different backend
-  (`winrt` / Windows.Graphics.Capture) is the only lever; note it, don't pretend enumeration covers it.
+- Residual (no working combo — the process is on the dGPU, or the display's only owner is): the
+  levers are the per-app GPU preference (`HKCU\Software\Microsoft\DirectX\UserGpuPreferences`) or a
+  different backend (`winrt` / Windows.Graphics.Capture); note it, don't pretend enumeration covers it.
+- A graceful-degradation path that re-prints the original traceback reads IDENTICALLY to the crash
+  it replaced, so "same error" in a user report distinguishes nothing. Keep the trace, and give the
+  degraded path a distinct leading line to ask the reporter to quote.
 
 **Scope:** dxcam / DXGI Desktop Duplication, any GPU-adapter or monitor-topology-dependent code.
