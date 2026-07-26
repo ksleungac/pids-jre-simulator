@@ -134,7 +134,7 @@ Apply ALL 13 categories from `.claude/skills/vibe-check/SKILL.md` Step 2:
 
 **On Lens 2 categories #11 + #12 — pre-flight grep**: when reviewing a diff that introduces a small utility helper or a deployment-frame primitive, do a `grep -rn` cross-codebase pass for sibling implementations BEFORE approving. The duplication isn't visible from the diff alone — it's visible only from the codebase view.
 
-If uncertain whether a finding is a real smell or known-dead-feature / dormant-scaffolding, flag at severity `info` and ASK rather than confidently red-flagging.
+If uncertain whether a finding is a real smell or known-dead-feature / dormant-scaffolding, still REPORT it — at severity `info`, with the question attached. Uncertainty lowers the severity; it never suppresses the finding. Triage filters, the reviewer does not.
 
 ### Lens 3 — Architectural / convention adherence
 Cite specific rules from the pre-read. When a finding violates:

@@ -14,7 +14,7 @@ App-level runtime + the setup / chrome flow. Canonical home for app-level specs 
 > - Speculative future designs ("when X is implemented …") — GitHub Issues is the home
 > - Facts already in [CLAUDE.md](CLAUDE.md) mental model — cross-reference, don't restate
 >
-> **Voice:** reference-shaped entries (runtime map, screen table, flow contracts) — caveman-full voice (drop articles, fragments OK, `=` for definitional equivalence). Rationale-shaped passages (incident traces, "why" framings) — stay normal voice. See [CLAUDE.md § Chat output style](CLAUDE.md).
+> **Voice:** reference-shaped entries (runtime map, screen table, flow contracts) stay compressed — tables, `=` for definitional equivalence, no narrative padding. Rationale-shaped passages (incident traces, "why" framings) run as ordinary prose. Both in complete sentences where they use prose at all, per [CLAUDE.md § Writing tone](CLAUDE.md).
 >
 > **Before adding:** name the section your edit merges into OR the content it replaces. If neither — you're appending, which is the failure mode this contract fights.
 >

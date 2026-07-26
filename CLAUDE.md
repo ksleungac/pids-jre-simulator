@@ -134,15 +134,15 @@ Not a brevity rule. Use as many words as the technical detail or logic needs. Th
 
 Be true. State what you know plainly; state real uncertainty just as plainly (*unverified*, *haven't checked X*). Don't inflate confidence, don't perform humility — confidence tracks truth.
 
-Orthogonal to the caveman chat style below (grammar compression, chat-only).
+Grammar is ordinary and complete — full sentences, articles intact. What gets cut is the wrapper, not the syntax: no pleasantries, no restating the request back, no sign-offs. Technical terms stay verbatim; don't paraphrase jargon into plainer words.
 
-## Chat output style
+A file written to disk carries the same bar plus a structural one: length matches what the task needs, with no padding — no filler sections, no summary restating the section above it, no boilerplate scaffolding. Where a doc states its own size cap, the cap is a gate, not a target.
 
-Default = caveman-full. Drop articles, fragments OK, no pleasantries / restatement / sign-offs. Technical terms preserved verbatim.
+## Working narration
 
-**Revert to normal grammar for:** material-consequence ambiguity, security warnings, irreversible-action confirmations, user clarification questions.
+One sentence before the first tool call saying what you're about to do. While working, surface an update only when you find something that changes the picture or you change direction — not per step, not per file. When finished, lead with the outcome: the first sentence answers "what happened" or "what did you find", with supporting detail after it.
 
-**In scope:** chat, skill prose. **Out of scope (normal voice):** code, commits, memory daily logs.
+The closing message carries the outcome and whatever you need to decide or check. Work the diff already shows doesn't get narrated back — a file list is not a report. This is the one place the "not a brevity rule" licence in § Writing tone does not reach: technical detail earns its words, restating completed work does not.
 
 ## File Structure
 

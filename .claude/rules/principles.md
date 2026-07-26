@@ -48,6 +48,7 @@ Present findings/learnings before making documentation updates or non-trivial ch
 - **Co-designing a state machine / rule set: walk it one rule at a time.** Lay the shared vocabulary out first, then build a rule per turn and let the user confirm before the next — don't open with a full multi-axis case matrix + forks + questions. (2026-05-31) Front-loaded a triggers×states table for auto-driver re-entry; user: *"Kind of too complicated, overwhelmed my. Let's discuss rule by rule like yesterday."*
 - **Data work specifically** — present the parse + flag uncertainties before generating splitter scripts or touching `route.json`.
 - **Don't mix discussion and implementation questions.** Keep "was that the intent?" separate from "OK to apply?" — a bundled question makes Yes ambiguous. Ask discussion first; implementation as a separate explicit question.
+- **A clarifying question about a proposal is not approval of it.** When the user engages with a proposal's details — scope, mechanism, edge cases — that is them understanding it, not authorizing it. Engagement reads like buy-in and isn't. Wait for the answer to the apply question you actually asked. (2026-07-25) Offered a publish-time memory gate and asked yes/no; user replied *"i believe the gate is only about the memory index? not actual date files"*; I built it. User: *"i didn't tell you to do it, i am just wondering if opus blown past it all the time?"* — the real question went unanswered while the work landed.
 
 ### Skip-confirmation when explicitly signaled
 When the user says "push directly" / "skip my confirmation", bypass per-file gates. Still split commits logically — just don't pause between them.
@@ -89,7 +90,7 @@ Before claiming "X is a bug" or "X works like Y", read the call sites and trace 
 - (2026-05-08 PM) Defended green ring on Yamanote time circle across multiple pushbacks; user: *"there is NO green ring."* Code and doc were stale relative to user's IRL mental model.
 - (2026-07-22) Took an OCR frame's "true" value from the NEIGHBOURING frame's filename instead of rendering its glyphs; invented a non-existent digit-confusion bug, filed it as an issue, and wrote it into the README and a test docstring. Rendering the pixels took one command and showed the read was already correct. A neighbouring sample is not the sample.
 - (2026-05-29) Concluded a feature "already shipped at v0.5.3a" from `git log -S` string-match + tag ancestry; correct method = read commit messages `v<prev>..HEAD` + code at the tag. User lost confidence in release-note drafting.
-- (2026-06-12) Theorized SVG-deployment risk across ~2 rounds; the user had already shipped that exact pattern (`data/line_icons/` SVG-sourced PNGs). Resolved only after reading `setup.py`. Don't raise a hypothetical risk the repo may have already solved.
+- (2026-07-25) Attributed this project's MEMORY.md bloat and long final responses to the Opus 5 upgrade, twice, without checking dates. Measuring all 143 index entries showed the cap had been blown 97–100% of the time since May, under every prior model. A behavior noticed right after a change is not caused by it until the dates say so.
 - (2026-07-16) Reasoned about the auto-driver layer model from a stale preloaded `conventions.md` binding that mislabelled badge reads as "Layer 2"; the canonical `auto_input/README.md` has them as Layer 3 inputs. Trusted the preloaded summary over the doc for several rounds. A preloaded rules-file summary of a domain model may have drifted — read the canonical doc before reasoning about the model, not after being told.
 
 **How to apply:**
@@ -295,10 +296,28 @@ Before writing a function that "feels generic," grep the codebase for an existin
 - Trigger: function < 20 lines, stdlib-only body, name like `load_*` / `resolve_*` / `_*_root`.
 - `grep -rn "<name-stem>" --include="*.py" .` excluding `.venv/`. If found, extend rather than fork.
 
-### Dispatch independent work to parallel subagents
-When subtasks have no data dependency (separate searches, reads, verifications, asset hunts), fan them out to parallel subagents in ONE message — don't run them sequentially in the main thread. Still verify each subagent's output before acting (cf. § "Verify before claiming"). 2026-06-27: user — *"you need to actively dispatch subagents to do tasks in parallel."*
+### Delegate only genuinely independent, sizeable work
+Fan out to subagents for large parallel tracks with no data dependency — a wide multi-file investigation, several unrelated searches. Don't delegate what you'd finish in a handful of tool calls, don't use a subagent to verify your own work, and when one agent suffices don't spawn several. A subagent's output is still yours to verify before acting (cf. § "Verify before claiming").
 
-**Scope: read-only fan-out + self-contained research/doc — NOT cross-file code surgery.** A subagent is safe where its output is reviewable in one read (searches, codebase mapping, a contained doc edit). The main thread drives anything that rewires code across call sites / multiple files: a subagent's "looks done" self-check (grep says zero refs, imports OK) gives false confidence on mechanical edits. 2026-06-28: an i18n subagent deleted per-module label dicts but left ~26 dangling refs across 5 modules + broke button calls, then reported "imports + render OK" (imports pass because Python doesn't run function bodies at import) — reverted, redone inline. User: *"subagents doesn't seem to be good idea, breaking things."*
+**Why:** the delegation reflex over-fires, and the model the original steer was written against under-fired. Examples:
+- (2026-06-27) User: *"you need to actively dispatch subagents to do tasks in parallel"* — the original steer, against a too-sequential default.
+- (2026-06-28) An i18n subagent deleted per-module label dicts, left ~26 dangling refs across 5 modules, then reported "imports + render OK" (imports pass because Python doesn't run function bodies at import). Reverted, redone inline. User: *"subagents doesn't seem to be good idea, breaking things."*
+- (2026-07-25) Opus 5 delegates more readily than the model the 06-27 steer targeted; the standing harness default is now don't-delegate-unless-asked.
+
+**How to apply:**
+- Read-only fan-out and self-contained research/doc only — searches, codebase mapping, a contained doc edit, where the output is reviewable in one read.
+- NOT cross-file code surgery. The main thread drives anything rewiring call sites across files; a subagent's "looks done" self-check gives false confidence on mechanical edits.
+
+### Fresh context is the review instrument — no model generation beats it
+A reviewer holding no prior context and no momentum sees blindspots the author structurally cannot, however strong the author's model is. Delegation caps and "don't use a subagent to check your own work" guidance target SELF-verification — re-reading your own work inside your own context. They do not reach `/review-plus-fix-relentlessly`'s Ralph loop or `/third-man`, whose whole value is the absent context.
+
+**Why:** the two are indistinguishable from outside — both spawn an agent to look at work just finished — so a cap written for one gets applied to the other. Examples:
+- (2026-07-25) User: *"the value in review+fix is the ralph, fresh context … no opus 5,6,7 can win fresh context. imagine a human world. you ask your colleagues who has no prior context and momentum to review your work, you find blindspots."*
+- (2026-07-25) Reviewing the corpus against Anthropic's Opus 5 prompting guidance, I read its subagent cap as reaching the review loop and proposed cutting its cycle count.
+
+**How to apply:**
+- Distinguish by what the second agent LACKS. Same context re-reading itself → self-verification, cut it. Fresh context → an instrument, keep it.
+- A model upgrade never retires it. A stronger author has stronger blindspots, not fewer.
 
 ### Natural adoption gates tool value — push through the harness, don't add a pull-MCP
 A tool's worth is capped by whether it gets used *naturally*, and naturalness = **who owns the context-injection step**. A **pull** tool (an MCP the model must choose to call) loses to the reflex and sits unused — Serena is installed, `conventions.md` says "use it going forward," and grep still wins. To get used, the output must be **pushed**: a **skill step** (orchestrated work — the skill invokes it, so it can't be forgotten) or a **harness hook** (free-form work — injected at the decision). Judge a candidate by delivery shape FIRST, capability second.
@@ -319,6 +338,28 @@ Write the minimum code that solves the problem. No speculative additions.
 **How to apply:**
 - No features beyond what was asked. No abstractions for single-use code. No error handling for impossible scenarios.
 - The test: would a senior engineer call it overcomplicated?
+
+### A rule is not a licence to expand scope
+Citing a principle to justify work the user did not ask for inverts what the corpus is for. Every rule here exists to make the REQUESTED deliverable trustworthy; none of them authorises a new artifact. When a rule seems to demand more scope ("verify before claiming", "test the change", "calibrate the instrument"), it is asking for confidence in what was asked, not for a tool, a harness, or a benchmark that was not.
+
+**Why:** each increment is individually defensible, so nothing feels wrong until the pile is visible — and the justification comes from the user's own corpus, which makes it feel sanctioned. Examples:
+- (2026-07-26) Asked to adapt the 1440p OCR pipeline to downscaling as a PoC. Built it, then added a two-pipeline comparison script, then a validation harness, then metadata plumbing to support them — each step citing a real rule. The WIP doc's stated goal was to REDUCE per-resolution measurement burden; I manufactured new measurement burden, which pointed directly away from the purpose. User: *"review and fucking clean up the garbage that you've made."* Everything but the pipeline was deleted.
+
+**How to apply:**
+- The deliverable is what was asked for. Verification serves it and ships inside it — a new script, harness or fixture is its own deliverable and needs its own ask.
+- Scratch work that answers a question is scratch: run it, report the number, don't graduate it to `_dev_scripts/` unless asked.
+- **Repeated pushback on SCOPE is the same stop signal as pushback on a value** (cf. § "Converge on the model, not the next correction"). "Don't I already have that?", "what is this thing you're building?" — that is a second opinion arriving twice. Stop and cut, don't explain and continue.
+
+### Match the user's vocabulary for their own domain
+Use the words the user uses for concepts they own. Introducing a new term for their concept forces them to learn your name for their own thing, and the name then propagates into code, flags and docs where it is expensive to unpick.
+
+**Why:** Examples:
+- (2026-07-26) Named the OCR downscale approach "canonical" — from a WIP doc I had written, never from the user. It reached `CANONICAL_PROFILE`, `to_canonical_hud`, `--canonical-ocr` and three doc sections before they said: *"opus 5 had get ahead of me in a sense that it created a lot of names not in my brain before, like i never mentioned the canonical ocr name for ocr."* Their words throughout were "downscale", "old path / new path", "the 1080p model". Renamed to match.
+
+**How to apply:**
+- Take identifiers from how the user described the thing, not from how a doc or the literature describes it.
+- A term you introduced and they never echoed back is a rename waiting to happen — check before it reaches an identifier or a CLI flag.
+- Also holds for structure: match an existing convention rather than inventing a parallel one (`live_captures/1440p/`, matching `_tests/fixtures/ocr/1440p/`, not a new `2560x1440/` scheme).
 
 ### Reusable code = flexible primitive
 When factoring shared code (helper / utility / chrome layer), design a portable, options-customized interface — keyword options for variants, parameters over hardcoded constants — so it's callable from many sites with different inputs. NOT license for speculative generality (cf. Simplicity First — no abstraction for single-use, no option without a second caller); the flexibility serves reuse you can point to.
@@ -417,11 +458,13 @@ Pick the metric that IS the thing you care about. A proxy that correlates in the
 
 **Why:** the proxy is usually easier to compute, which is why it gets chosen — and why it goes unquestioned. Examples:
 - (2026-07-22) Judged an OCR matching change by the top-2 template MARGIN: it collapsed (glyphs under 0.10 margin went 51 → 381) and I called the change net-negative and nearly reverted it. Measuring the real metric — read accuracy under degradation — showed 92.8% → 100%. Tolerance lifts the runner-up along with the winner, so margin compresses while the ORDERING, which is what determines the read, improves.
+- (2026-07-26) Picked a resampler on SYNTHETIC gaussian blur. An area+unsharp variant won across a broad parameter plateau (193 vs 178) — no knife-edge, so the method looked robust — then destroyed the decimal digit on 145 of 792 REAL driven frames. Uniform low-pass is something re-sharpening recovers from; real capture degradation is not. A degradation MODEL is a proxy for degradation, and a plateau proves only that the tuning is stable, never that the model is right.
 
 **How to apply:**
 - Name the outcome first ("does it read the right digit"), then ask whether the metric you are about to compute can move opposite to it. If it can, it is a proxy — go get the outcome.
 - A proxy that is a *component* of the outcome (a score, a margin, a distance) is the most dangerous kind: it looks causal.
 - When a measurement contradicts a change you reasoned carefully about, suspect the measurement once before suspecting the reasoning — then test both.
+- **Synthesized inputs are a proxy for real ones.** Gate anything tuned on them against real captured samples before it ships; hold the real set back as the arbiter rather than folding it into the tuning.
 
 ### Construction-proof model beats the next repro theory
 When static analysis keeps contradicting a reproducible observation across 2+ rounds — your trace says the bug can't happen, the user keeps seeing it — stop generating repro theories. Either instrument for ground truth, or redesign the invariant so the whole bug CLASS is impossible by construction. The Nth theory has diminishing value once analysis and observation disagree.

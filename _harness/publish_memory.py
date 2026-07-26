@@ -131,6 +131,18 @@ def merge_daily(origin_text, local_text):
     return merged, new_blocks, warnings
 
 
+# Progressive disclosure, enforced: MEMORY.md is the pointer layer, the daily log it
+# links to is the detail layer. One capped line per session block keeps the index a
+# lookup surface instead of a second copy of the recap. The cap has been stated in
+# session-recap/SKILL.md since the index existed and never once bound — measured
+# 2026-07-25 across all 143 entries: 0% over cap in Mar-Apr, then 97% / 100% / 100%
+# for May / Jun / Jul, with the median rising 135 -> 313 -> 783 -> 1538. A stated rule
+# is not a control surface here, so the refusal lives at the publish boundary. Entries
+# already on origin are grandfathered: publishing is append-only, and the bootstrap
+# path takes existing history verbatim.
+MAX_INDEX_ENTRY_CHARS = 150
+
+
 def _entry_label(line: str):
     """The [label] of a MEMORY.md entry line, or None."""
     if line.startswith("- [") and "](" in line:
@@ -143,7 +155,9 @@ def merge_index(origin_text, local_text):
 
     Returns (merged_text, new_entries, warnings). Entries dedup on exact line;
     a local entry whose [label] exists on origin with different text is skipped
-    with a warning (edited, not appended).
+    with a warning (edited, not appended). A new entry over MAX_INDEX_ENTRY_CHARS
+    is skipped the same way — the index is the pointer layer, so the overflow
+    belongs in the daily log the entry links to.
     """
     warnings = []
     if origin_text is None:
@@ -163,6 +177,12 @@ def merge_index(origin_text, local_text):
         label = _entry_label(line)
         if label in origin_labels:
             warnings.append(f"edited index entry NOT published (label exists on origin with different text): [{label}]")
+            continue
+        if len(line.rstrip()) > MAX_INDEX_ENTRY_CHARS:
+            warnings.append(
+                f"over-cap index entry NOT published ({len(line.rstrip())} chars > {MAX_INDEX_ENTRY_CHARS}): "
+                f"[{label}] — the index is a pointer line; move the detail into the daily log it links to"
+            )
             continue
         new_entries.append(line)
 

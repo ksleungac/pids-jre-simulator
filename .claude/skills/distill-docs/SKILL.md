@@ -167,7 +167,7 @@ Recognize these patterns and don't flag them:
 - **Recently-added content** (within the last ~2 weeks of git log on the file) — too soon to know if it's bloat. Let one cycle pass.
 - **Small redundancies that aid skimmability** — a 1-line restatement at the top of a section that re-introduces a concept defined elsewhere is acceptable; the cost is low and locality helps the reader.
 - **Cross-references** — explicit `see CLAUDE.md § X` links are *good*, even if they technically restate the topic name.
-- **Voice mismatch within a doc** — rationale-shaped passages staying in normal grammar within an otherwise-caveman-voice doc is per the Voice rule in `EDIT-CONTRACT § Voice`, NOT bloat. Specifically: "Convention rationale" / "Mental model:" / "burned us before" / "why this matters" framings explicitly carved out by the Voice rule. Don't flag voice differences alone.
+- **Voice mismatch within a doc** — rationale-shaped passages running as fuller prose inside an otherwise compressed reference doc is per the Voice rule in `EDIT-CONTRACT § Voice`, NOT bloat. Specifically: "Convention rationale" / "Mental model:" / "burned us before" / "why this matters" framings explicitly carved out by the Voice rule. Don't flag voice differences alone.
 
 ## Rules
 

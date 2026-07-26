@@ -16,7 +16,7 @@ Train-family scope and in-spec/best-effort policy live in [CLAUDE.md](CLAUDE.md)
 > - Design-discussion rationale (multi-paragraph framings of *why* a model exists) — the rule lives here; the rationale lives in `memory/YYYY-MM-DD.md`
 > - Facts already in [CLAUDE.md](CLAUDE.md) mental model / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
 >
-> **Voice:** new reference-shaped entries (cross-model invariants, contracts, recipes, mode-system rules, state-machine spec, edge-case tables) — caveman-full voice (drop articles, fragments OK, `=` for definitional equivalence). Rationale-shaped passages (incident warnings, "Mental model:" framings, narrative examples) — stay normal voice. See [CLAUDE.md § Chat output style](CLAUDE.md).
+> **Voice:** new reference-shaped entries (cross-model invariants, contracts, recipes, mode-system rules, state-machine spec, edge-case tables) stay compressed — tables, `=` for definitional equivalence, no narrative padding. Rationale-shaped passages (incident warnings, "Mental model:" framings, narrative examples) run as ordinary prose. Both in complete sentences where they use prose at all, per [CLAUDE.md § Writing tone](CLAUDE.md).
 >
 > **Before adding:** name the section your edit merges into OR the content it replaces. If neither — you're appending, which is the failure mode this contract fights.
 >

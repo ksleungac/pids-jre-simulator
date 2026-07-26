@@ -8,7 +8,7 @@ Per-line PA + STA audio + `route.json`. Line-specific IRL/sim mental model lives
 > - Recording-chain how-to (splitting / trimming / verifier) → `/pa-make` / `/sta-make` skills
 > - Stale content — drop bullets when reality changes; no accumulated history
 >
-> Voice: caveman-full per [CLAUDE.md § Chat output style](../CLAUDE.md).
+> Voice: compressed reference entries — tables and short complete sentences, no narrative padding. Per [CLAUDE.md § Writing tone](../CLAUDE.md).
 
 ---
 
