@@ -55,6 +55,8 @@ Ordered by JR EAST line code. Standard fields omitted (= follows convention). En
 - **Name:** 京浜東北線 / Keihin-Tōhoku Line
 - **Diagrams:** `1275A`, `727B`
 - **Sim quirks:** `727B` extends `stops[41..45]` past route-level `dest` (磯子, idx 40) to 大船 — operational reference for through-running. Sim terminates at 磯子 (route-level dest), not at `len(stops) - 1`. See [DISPLAY.md § Unified State Machine](../DISPLAY.md).
+- **Audio quirks — this line defeats every absolute-dB threshold in the toolchain.** The recordings carry continuous train ambience at **−15 to −37 dB** and are limited flat (PA peaks above 0 dBFS on 59 of 78 files; STA music sits at ~0 dB with under 1 dB of range). Three separate tools produced confident nonsense before this was noticed: `validate_pa.py` flags 74/78 (its −40 dB gate is *below* the noise floor, so files never trimmed are flagged too); `trim_pa_silence.py`'s `floor+12` gate lands at −3.6 to −25 dB, i.e. above ordinary speech, exactly the Step 7.4 failure mode; and `sta-make` Step 7.5's peak-amplitude KAK detector cannot fire because the KAK here is *quieter* than the music. **Use relative / spectral measures on this line, and treat any absolute-dB verdict as unverified.** Per-file loudness also splits hard by diagram — 1275A median −10.3 LUFS vs 727B −23.2 — but `audio.py` normalizes every file to −15 LUFS at playback, so that gap is inaudible in the app and only shows up in the raw-mp3 verifiers.
+- **Audio layout:** pooled — `audio/keihin/{pa,sta}/` with `"audio_root": ".."` in both diagrams. PA slugs carry a direction token (`-south`) and a train-type tier only where the two diagrams keep distinct takes (`-kaisoku` / `-kakueki`). See [WIP_audio_pooling.md](../WIP_audio_pooling.md).
 
 ### JN — Nambu (南武線)
 

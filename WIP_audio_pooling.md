@@ -24,8 +24,8 @@ pool slugs that already exist.
 
 | line | diagrams | STA pooled | PA pooled | notes |
 |---|---|---|---|---|
-| chuo | 1654T, 916H | ☑ | ☑ | **Done.** 23 STA + 55 PA (53 referenced); both trimmed, by-ear 23/23 + 53/53. Resolution re-verified through `resolve_audio_root` — see below. Deletions pending |
-| keihin | 1275A, 727B | ☐ | ☐ | 23.0 MB STA dupes — largest STA win |
+| chuo | 1654T, 916H | ☑ | ☑ | **Done + committed.** 23 STA + 55 PA (53 referenced); both trimmed, by-ear 23/23 + 53/53. Every pair is a genuine separate take — re-verified 2026-07-26 |
+| keihin | 1275A, 727B | ☑ | ☑ | **Pooled 2026-07-26**, 192 → 123 files. 45 STA (35 identical pairs collapsed) + 78 PA (30 pairs are ONE recording, 4 more collapsed by ear). PA trim still to do; legacy folders still on disk |
 | tokaido | 1865E, 3535E | ☐ | ☐ | 11.9 MB; PA already descriptive in 3535E (underscore separator) |
 | nambu | 4027F, 603F | ☐ | ☐ | 7.6 MB |
 | saikyo | 1349F, 759K | ☐ | ☐ | 2.0 MB |
@@ -62,10 +62,37 @@ path and a loud failure. Do not reintroduce a fallback.
 
 ## Naming rules
 
-### STA — no renaming
+### Direction is the outermost token — always, even on a one-direction line
+
+**The pool is per LINE, and a line runs both ways.** Direction partitions it absolutely:
+the opposite direction uses the other platform, so every STA melody differs, and every PA
+names a different next station and a different transfer set. A pool built without the
+token silently collides the day a reverse diagram lands — `JK12_YHM.mp3` northbound is not
+`JK12_YHM.mp3` southbound. Stamp it during the migration, when the whole line is already
+being rewritten; retrofitting it later means touching every file and every `pa`/`sta` array
+a second time.
+
+Take the token from the route's own `remarks.direction` — never pick one. JR runs three
+different axes and which one a line uses is a property of that line:
+
+| `remarks.direction` | token | lines |
+|---|---|---|
+| 上り | `up` | chuo, keiyo |
+| 下り | `down` | sobu, nambu, saikyo, tokaido, takasaki |
+| 南行 / 北行 | `south` / `north` | keihin |
+| 内回り / 外回り | `inner` / `outer` | yamanote |
+
+`south`/`north` also match the `transfer_view` vocabulary already in `data/stations.json`
+(`JK_south`, `JA_north`, `JO_north`), so this is existing spelling, not a new one.
+
+### STA — direction appended, nothing else touched
 
 STA filenames are already station-derived (`JC02.mp3`), so the same name means the same
-station and pooling is a pure file move. `sta` arrays in `route.json` are untouched.
+station **within one direction**, and pooling is a pure move plus the direction token:
+`JK12_YHM` → `JK12_YHM-south`. Hyphen, so `_` keeps meaning "station code" and everything
+before the `-` stays the legacy name verbatim. STA takes no train-type token — a melody is
+a property of the platform, not the service (measured: all 35 STA shared between keihin's
+快速 and 各駅停車 diagrams are sample-identical).
 
 Chūō's STA follow the legacy `sta_code` style. Newer lines (e.g. takasaki) use the richer
 `{station}_{platform}_{song-id}` slug — **do not retrofit that during pooling.** It's an
@@ -74,13 +101,33 @@ independent change; pooling must stay a move.
 ### PA — rename to descriptive slugs
 
 Legacy numeric PA slugs (`1.mp3`…) are diagram-local and collide in a shared pool, so a
-pooled line must move to `{station}-{dep|arr}`, then disambiguate variants:
+pooled line must move to `{station}-{dep|arr}-{direction}`, then disambiguate variants:
 
 | form | when |
 |---|---|
-| `{station}-{dep\|arr}` | only one recording of this announcement exists on the line |
-| `{station}-{dep\|arr}-{type}` | content differs **by train type** — 「快速です」 vs 「中央特快です」 |
-| `{station}-{dep\|arr}-{diagram}` | anything else that must stay distinct — a different skip set within the same type, a different courtesy notice, different transfer ordering, **or the same words captured as a separate take** |
+| `{station}-{dep\|arr}-{dir}` | one recording of this announcement serves the whole line — including a take **shared by several diagrams** |
+| `{station}-{dep\|arr}-{dir}-{type}` | content differs **by train type** — 「快速です」 vs 「中央特快です」 |
+| `{station}-{dep\|arr}-{dir}-{diagram}` | anything else that must stay distinct — a different skip set within the same type, a different courtesy notice, different transfer ordering, **or the same words captured as a separate take** |
+
+A tier token is earned by a **measured** difference, never applied pre-emptively for
+symmetry: a file two diagrams share cannot carry either diagram's type, so a uniform
+"tier everything" scheme is not expressible. Bare therefore reads as "one file serves the
+line" — which is the signal a later diagram needs.
+
+`{station}` on a `-dep` slug is the previous **stopping** station, not the previous array
+element. Where diagrams skip differently the slugs then diverge on their own and need no
+tier at all: keihin's 上野 approach is `tabata-dep-south-kaisoku` on the 快速 (which skips
+西日暮里/日暮里/鶯谷) but `uguisudani-dep-south` on the 各駅停車.
+
+**Known weakness — a `-dep` slug names the station DEPARTED, but the audio announces the
+station AHEAD.** So two diagrams that leave the same station for a *different* next stop
+produce the same slug for different announcements. On keihin the three such cases
+(tabata, ueno, tokyo) happen to be separated anyway, because each earned a type token for
+an unrelated reason — the uniqueness is accidental, not structural. The doc's own
+counter-case defeats it: **1034T is 快速 exactly like 1654T** but skips 西荻窪/阿佐ヶ谷/高円寺,
+so it would earn no type token and collide. Until the naming encodes the next station, a
+migration must **check** this rather than assume it: no shared pool file may be referenced
+from a different stop in different diagrams. Surfaced by `/third-man`, 2026-07-26.
 
 Per `DATA_FORMAT.md`: `{prev}-dep` (announced after leaving the previous station) lives in
 **this** stop's `pa` array; `{this}-arr` is the approach announcement.
@@ -89,14 +136,36 @@ The type tier cannot carry the whole load: **1034T is 快速 exactly like 1654T*
 西荻窪/阿佐ヶ谷/高円寺, so its departure announcements near those stations differ despite an
 identical train type.
 
-**Do not merge PA takes.** Unlike STA — which the user copy-reused, so the files are
-literally identical — Chūō's PA was sourced per diagram from *different recordings*. Of
-25 916H PA files only **2** are the same audio as a 1654T file (豊田 arr, 東京 arr); the
-other 11 transcript-matched pairs say the same words in a different take. User:
-*"yes, it is indeed different recordings, i took them from different sources"*. Both takes
-are kept under `-{diagram}` slugs; a later diagram picks whichever it wants and adds no
-file. `_dev_scripts/ab_audio_ui.py` is the browser chooser for making that call per pair
-(`--manifest` of `{label, a, b}`; writes `<manifest>.choices.json`).
+**Whether PA is shared or re-recorded is a per-line fact — measure it, never assume.**
+The two lines migrated so far land on opposite answers, so neither generalises:
+
+- **Chūō — every pair is a separate take.** Sourced per diagram from different recordings
+  (user: *"yes, it is indeed different recordings, i took them from different sources"*).
+  Of 25 916H files only **2** are the same audio as a 1654T file (豊田 arr, 東京 arr);
+  re-measured 2026-07-26 with the overlap instrument below, **0 of the 15 pairs still
+  split score above 0.45**. Both takes stay under `-{diagram}` slugs.
+- **Keihin — the same recording is reused wherever content allows.** **30 of 47** shared
+  events score 1.000, with 1275A's cut wholly inside 727B's (727B starts 0.13–1.86 s
+  earlier), so they collapse to one file taken from **727B, the superset**. The 17 that
+  differ are almost all explained by content: 9 name line+type+destination, 2 name the
+  stop after next (the 快速 skip pattern), 2 say 終点 because 727B terminates at 磯子.
+  Only **4** say the same words in two takes. User, before the measurement:
+  *"most of them are the same, just at the large stations where the PA announces the train
+  type and the destinations."*
+
+Where a pair genuinely is two takes, keeping both is a valid end state — it costs nothing
+a later diagram would not already pay. Collapsing one onto the other is a by-ear
+preference: `_dev_scripts/ab_audio_ui.py` is the browser chooser (`--manifest` of
+`{label, a, b}`; writes `<manifest>.choices.json`; keys `1`/`2`/`3` = keep A / B / both).
+Run it **only on the pairs the instrument leaves undecided** — a difference readable in
+the content (type, destination, terminus, skip set) needs no ear, and a measured 1.000
+needs no ear either.
+
+**Which cut survives is a measurement, not a preference.** Before discarding the loser,
+align the pair and check what each holds that the other does not: trimming can remove a
+lead later, nothing can restore audio truncated away now. Keep the cut that contains the
+other (`critical_lessons.md §1`). Duration alone does not decide it — a longer file can be
+longer at the wrong end.
 
 ---
 
@@ -116,36 +185,52 @@ Two rules for any tool touching pooled audio:
   `verify_sta_listen.py` funnels both its writers through one `persist_cut()` helper so
   there is a single place that knows about pooling.
 
-Status: `verify_sta_listen.py` is pool-aware (2026-07-25). **`verify_pa_listen.py` is
-not** — it will fail the same way on Chūō's pooled PA. `trim_sta_silence.py --route` and
-`trim_pa_silence.py` patch one file only; on a pooled line run them bare and write the
-values separately.
+Status: **both verifiers are pool-aware** — `verify_sta_listen.py` (2026-07-25) and
+`verify_pa_listen.py`, which share layout discovery through `_dev_scripts/audio_layout.py`
+and dedupe entries so an mp3 with several referrers plays once. Pass the LINE folder.
+`trim_sta_silence.py --route` and `trim_pa_silence.py` patch one file only; on a pooled
+line run them bare and write the values separately.
 
 ## Git state
 
-Lives on branch `feat/audio-pool`. The mechanism + the Chūō data landed in two commits
-(`audio_root` support, then the Chūō pool); the STA trim / `sta_cut` / loop-splice work
-on top is uncommitted.
+Lives on branch `feat/audio-pool`. Chūō is **done and committed** — `audio_root` support,
+the pool itself, the pool-aware verifiers, the trim/`sta_cut` pass, and the drop of the
+superseded per-diagram folders. `audio/chuo/{1654T,916H}/` now hold only `route.json`.
 
 Split data from program when it lands — the commit-classification hook flags the mix.
-The `_dev_scripts/verify_sta_listen.py` changes are program; everything under
-`audio/chuo/` is data.
+Verifier / tooling changes are program; everything under `audio/<line>/` is data.
 
-## Pending deletions (chuo)
+## Keihin — pooled 2026-07-26
 
-Superseded files still on disk — nothing references them, `validate_data` is clean
-with them present or absent. Left in place because the work is uncommitted:
+Both diagrams are 南行 on the same 46-stop spine: 1275A 快速 → 大船 (skips 西日暮里, 日暮里,
+鶯谷, 御徒町, 有楽町, 新橋), 727B 各駅停車 → 磯子 (stops 41–45 are operational reference past
+its `dest`, so they carry no audio). 192 files → **123** (78 PA + 45 STA).
+
+- **STA — all 35 same-named pairs are sample-identical**, `sta_cut` agrees on every shared
+  code, so it was a pure move plus `-south`. 45 distinct melodies.
+- **PA — 30 of the 47 shared events are ONE recording**, kept from 727B (whose cut contains
+  1275A's whole, starting 0.13–1.86 s earlier). Nothing scores between 0.42 and 0.95, so
+  the split needed no threshold judgment. 13 stay split on content grounds. The remaining
+  **4 went to the ear and all resolved to 1275A's take** (`kannai-dep`, `negishi-arr`,
+  `ishikawacho-dep`, `yamate-dep`), so 727B now plays the 快速 recording at 石川町/山手/根岸
+  — verified free of type-, destination- and skip-specific wording before adopting.
+- The mapping was hand-authored per § "Do this by hand"; a checker verified totality, ref
+  coverage, collisions, type crossover, 次は/まもなく agreement, and that each `-dep` slug
+  names the station `route.json` independently says is the previous stopping station.
+
+Still to do: STA KAK splice + `sta_cut` re-validation (see below), then drop the legacy
+folders:
 
 ```
-rm -rf audio/chuo/1654T/pa audio/chuo/1654T/sta audio/chuo/916H/pa audio/chuo/916H/sta
-rm audio/chuo/pa/nakano-arr-1654T.mp3 audio/chuo/pa/nakano-arr-916H.mp3
+rm -rf audio/keihin/1275A/pa audio/keihin/1275A/sta audio/keihin/727B/pa audio/keihin/727B/sta
 ```
 
-The first frees ~93.5 MB; the second ~2.4 MB, left over after 中野 arr was collapsed onto
-the 916H take by ear.
+Snapshot at `_audio_backup/keihin_pre_pool/` (112 MB, 192 files) until that lands.
 
-The per-diagram `sta/` folders now hold the **pre-trim** originals, so they double as a
-backup of the STA work until it commits — `audio_src/chuo/sta.bak/` holds the same bytes.
+Two PA files peak above 0 dBFS (`1275A/48` +2.7, `727B/39` +2.5 pre-pool) — pre-existing
+clipping, noted for the trim pass. Whisper garbled four files (`727B/39`, `50`, `53`,
+`1275A/45`); all four measure as normal-level full-length audio, so it is a transcription
+artefact, not damaged content.
 
 ## Chūō STA — trimmed + verified (2026-07-25)
 
@@ -259,12 +344,25 @@ lose time. Three methods failed here before one worked:
   reported 3 pairs as "different recordings" that are sample-identical.
 - **Whole-file comparison — wrong question for STA.** STA files run melody → `sta_cut` →
   closing announcement, so comparing whole files conflates the two.
+- **Silence-trim + PCM hash — sound, but NOT the general test this doc once called it.**
+  It was listed here as "exact identity, threshold-free". The *hash* is threshold-free;
+  the silence-trim that ALIGNS the two cuts is not — it carries a gate (−60 dB), and the
+  test only works when everything differing between the two files falls below it. Two cuts
+  of one recording that differ by a lead of *content* never get aligned, so the hash
+  reports "different" with full confidence and no diagnostic. **2026-07-26: it called all
+  112 keihin PA files distinct; 30 pairs are sample-identical.** Their extra lead read −8
+  to −23 dB — far above the gate. Use it to CONFIRM a positive cheaply, never to establish
+  a negative.
 
-**What works:**
+**What works — the primary test is the overlap correlation; everything else is a shortcut:**
 
-- *Exact identity* — decode to PCM, trim leading/trailing silence, hash. Threshold-free.
 - *Alignment-tolerant identity* — `scipy.signal.correlate(a, b, mode="full", method="fft")`
-  evaluates every lag; take the peak and normalise over the overlap.
+  evaluates every lag; take the peak, then **re-score on the actual overlap** and require
+  ~1.0. This is the one to reach for first. Do not assume the sign of the resulting shift:
+  score both `+s` and `−s` on the overlap and keep the winner. (Getting that backwards
+  makes every non-overlap region read full-scale, which looks like "both files hold unique
+  content" for every pair — a plausible answer that is entirely an artefact.)
+- *Exact identity* — silence-trim + PCM hash, subject to the limit above.
 - *Same tune, different take* — chroma-CQT + DTW (`librosa.sequence.dtw`, cosine). Same
   melody ≈ 0.99, unrelated ≈ 0.70–0.86. Roll the chroma over 12 rotations for
   transposition invariance.

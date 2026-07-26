@@ -1,6 +1,7 @@
 {
     "route": "京浜東北線",
     "line_code": "JK",
+    "audio_root": "..",
     "transfer_view": "JK_south",
     "color": [
         29,
@@ -19,10 +20,10 @@
             "name": "大宮",
             "pa": [],
             "pa_at_station": [
-                "omiya_stopping"
+                "omiya-stopping-south"
             ],
             "sta": [
-                "JK47_OMY"
+                "JK47_OMY-south"
             ],
             "sta_cut": 12,
             "time": 0,
@@ -31,10 +32,10 @@
         {
             "name": "さいたま 新都心",
             "pa": [
-                "1"
+                "omiya-dep-south-kaisoku"
             ],
             "sta": [
-                "JK46"
+                "JK46-south"
             ],
             "sta_cut": 9,
             "time": 3,
@@ -43,10 +44,10 @@
         {
             "name": "与野",
             "pa": [
-                "2"
+                "saitama-shintoshin-dep-south"
             ],
             "sta": [
-                "JK45"
+                "JK45-south"
             ],
             "sta_cut": 8,
             "time": 2,
@@ -55,10 +56,10 @@
         {
             "name": "北浦和",
             "pa": [
-                "3"
+                "yono-dep-south"
             ],
             "sta": [
-                "JK44"
+                "JK44-south"
             ],
             "sta_cut": 9,
             "time": 2,
@@ -67,10 +68,10 @@
         {
             "name": "浦和",
             "pa": [
-                "4"
+                "kita-urawa-dep-south"
             ],
             "sta": [
-                "JK43_URW"
+                "JK43_URW-south"
             ],
             "sta_cut": 17,
             "time": 2,
@@ -79,10 +80,10 @@
         {
             "name": "南浦和",
             "pa": [
-                "5"
+                "urawa-dep-south"
             ],
             "sta": [
-                "JK42"
+                "JK42-south"
             ],
             "sta_cut": 11,
             "time": 3,
@@ -91,11 +92,11 @@
         {
             "name": "蕨",
             "pa": [
-                "6",
-                "7"
+                "minami-urawa-dep-south-kaisoku",
+                "warabi-arr-south"
             ],
             "sta": [
-                "JK41"
+                "JK41-south"
             ],
             "sta_cut": 11,
             "time": 4,
@@ -104,11 +105,11 @@
         {
             "name": "西川口",
             "pa": [
-                "8",
-                "9"
+                "warabi-dep-south",
+                "nishi-kawaguchi-arr-south"
             ],
             "sta": [
-                "JK40"
+                "JK40-south"
             ],
             "sta_cut": 10,
             "time": 2,
@@ -117,11 +118,11 @@
         {
             "name": "川口",
             "pa": [
-                "10",
-                "11"
+                "nishi-kawaguchi-dep-south",
+                "kawaguchi-arr-south"
             ],
             "sta": [
-                "JK39"
+                "JK39-south"
             ],
             "sta_cut": 11,
             "time": 3,
@@ -130,11 +131,11 @@
         {
             "name": "赤羽",
             "pa": [
-                "12",
-                "13"
+                "kawaguchi-dep-south",
+                "akabane-arr-south"
             ],
             "sta": [
-                "JK38_ABN"
+                "JK38_ABN-south"
             ],
             "sta_cut": 10,
             "time": 3,
@@ -143,10 +144,10 @@
         {
             "name": "東十条",
             "pa": [
-                "14"
+                "akabane-dep-south-kaisoku"
             ],
             "sta": [
-                "JK37"
+                "JK37-south"
             ],
             "sta_cut": 10,
             "time": 3,
@@ -155,10 +156,10 @@
         {
             "name": "王子",
             "pa": [
-                "15"
+                "higashi-jujo-dep-south"
             ],
             "sta": [
-                "JK36"
+                "JK36-south"
             ],
             "sta_cut": 10,
             "time": 2,
@@ -167,10 +168,10 @@
         {
             "name": "上中里",
             "pa": [
-                "16"
+                "oji-dep-south"
             ],
             "sta": [
-                "JK35"
+                "JK35-south"
             ],
             "sta_cut": 10,
             "time": 2,
@@ -179,10 +180,10 @@
         {
             "name": "田端",
             "pa": [
-                "17"
+                "kami-nakazato-dep-south-kaisoku"
             ],
             "sta": [
-                "JK34"
+                "JK34-south"
             ],
             "sta_cut": 6,
             "time": 3,
@@ -206,11 +207,11 @@
         {
             "name": "上野",
             "pa": [
-                "18",
-                "19"
+                "tabata-dep-south-kaisoku",
+                "ueno-arr-south"
             ],
             "sta": [
-                "JK30_UEN"
+                "JK30_UEN-south"
             ],
             "sta_cut": 5,
             "time": 4,
@@ -224,10 +225,10 @@
         {
             "name": "秋葉原",
             "pa": [
-                "20"
+                "ueno-dep-south-kaisoku"
             ],
             "sta": [
-                "JK28_AKB"
+                "JK28_AKB-south"
             ],
             "sta_cut": 8,
             "time": 3,
@@ -236,10 +237,10 @@
         {
             "name": "神田",
             "pa": [
-                "21"
+                "akihabara-dep-south"
             ],
             "sta": [
-                "JK27_KND"
+                "JK27_KND-south"
             ],
             "sta_cut": 9,
             "time": 2,
@@ -248,10 +249,10 @@
         {
             "name": "東京",
             "pa": [
-                "22"
+                "kanda-dep-south-kaisoku"
             ],
             "sta": [
-                "JK26_TYO"
+                "JK26_TYO-south"
             ],
             "sta_cut": 9,
             "time": 2,
@@ -270,11 +271,11 @@
         {
             "name": "浜松町",
             "pa": [
-                "23",
-                "24"
+                "tokyo-dep-south-kaisoku",
+                "hamamatsucho-arr-south"
             ],
             "sta": [
-                "JK23_HMC"
+                "JK23_HMC-south"
             ],
             "sta_cut": 9,
             "time": 4,
@@ -283,10 +284,10 @@
         {
             "name": "田町",
             "pa": [
-                "25"
+                "hamamatsucho-dep-south"
             ],
             "sta": [
-                "JK22"
+                "JK22-south"
             ],
             "sta_cut": 9,
             "time": 2,
@@ -295,10 +296,10 @@
         {
             "name": "品川",
             "pa": [
-                "27"
+                "tamachi-dep-south"
             ],
             "sta": [
-                "JK20_SGW"
+                "JK20_SGW-south"
             ],
             "sta_cut": 6,
             "time": 3,
@@ -307,11 +308,11 @@
         {
             "name": "大井町",
             "pa": [
-                "28",
-                "29"
+                "shinagawa-dep-south-kaisoku",
+                "oimachi-arr-south"
             ],
             "sta": [
-                "JK19"
+                "JK19-south"
             ],
             "sta_cut": 11,
             "time": 4,
@@ -320,11 +321,11 @@
         {
             "name": "大森",
             "pa": [
-                "30",
-                "31"
+                "oimachi-dep-south",
+                "omori-arr-south"
             ],
             "sta": [
-                "JK18"
+                "JK18-south"
             ],
             "sta_cut": 9,
             "time": 2,
@@ -333,11 +334,11 @@
         {
             "name": "蒲田",
             "pa": [
-                "32",
-                "33"
+                "omori-dep-south",
+                "kamata-arr-south"
             ],
             "sta": [
-                "JK17"
+                "JK17-south"
             ],
             "sta_cut": 11,
             "time": 4,
@@ -346,11 +347,11 @@
         {
             "name": "川崎",
             "pa": [
-                "34",
-                "35"
+                "kamata-dep-south",
+                "kawasaki-arr-south"
             ],
             "sta": [
-                "JK16_KWS"
+                "JK16_KWS-south"
             ],
             "sta_cut": 10,
             "time": 5,
@@ -359,11 +360,11 @@
         {
             "name": "鶴見",
             "pa": [
-                "36",
-                "37"
+                "kawasaki-dep-south-kaisoku",
+                "tsurumi-arr-south"
             ],
             "sta": [
-                "JK15"
+                "JK15-south"
             ],
             "sta_cut": 19,
             "time": 4,
@@ -372,11 +373,11 @@
         {
             "name": "新子安",
             "pa": [
-                "38",
-                "39"
+                "tsurumi-dep-south",
+                "shin-koyasu-arr-south"
             ],
             "sta": [
-                "JK14"
+                "JK14-south"
             ],
             "sta_cut": 13,
             "time": 3,
@@ -385,11 +386,11 @@
         {
             "name": "東神奈川",
             "pa": [
-                "40",
-                "41"
+                "shin-koyasu-dep-south",
+                "higashi-kanagawa-arr-south"
             ],
             "sta": [
-                "JK13"
+                "JK13-south"
             ],
             "sta_cut": 14,
             "time": 3,
@@ -398,10 +399,10 @@
         {
             "name": "横浜",
             "pa": [
-                "42"
+                "higashi-kanagawa-dep-south"
             ],
             "sta": [
-                "JK12_YHM"
+                "JK12_YHM-south"
             ],
             "sta_cut": 19,
             "time": 4,
@@ -410,10 +411,10 @@
         {
             "name": "桜木町",
             "pa": [
-                "43"
+                "yokohama-dep-south-kaisoku"
             ],
             "sta": [
-                "JK11"
+                "JK11-south"
             ],
             "sta_cut": 10,
             "time": 3,
@@ -422,10 +423,10 @@
         {
             "name": "関内",
             "pa": [
-                "44"
+                "sakuragicho-dep-south"
             ],
             "sta": [
-                "JK10"
+                "JK10-south"
             ],
             "sta_cut": 14,
             "time": 3,
@@ -434,10 +435,10 @@
         {
             "name": "石川町",
             "pa": [
-                "45"
+                "kannai-dep-south"
             ],
             "sta": [
-                "JK09"
+                "JK09-south"
             ],
             "sta_cut": 20,
             "time": 2,
@@ -446,10 +447,10 @@
         {
             "name": "山手",
             "pa": [
-                "46"
+                "ishikawacho-dep-south"
             ],
             "sta": [
-                "JK08"
+                "JK08-south"
             ],
             "sta_cut": 20,
             "time": 2,
@@ -458,11 +459,11 @@
         {
             "name": "根岸",
             "pa": [
-                "47",
-                "48"
+                "yamate-dep-south",
+                "negishi-arr-south"
             ],
             "sta": [
-                "JK07"
+                "JK07-south"
             ],
             "sta_cut": 7,
             "time": 3,
@@ -471,11 +472,11 @@
         {
             "name": "磯子",
             "pa": [
-                "49",
-                "50"
+                "negishi-dep-south-kaisoku",
+                "isogo-arr-south-kaisoku"
             ],
             "sta": [
-                "JK06"
+                "JK06-south"
             ],
             "sta_cut": 10,
             "time": 3,
@@ -484,10 +485,10 @@
         {
             "name": "新杉田",
             "pa": [
-                "51"
+                "isogo-dep-south"
             ],
             "sta": [
-                "JK05"
+                "JK05-south"
             ],
             "sta_cut": 7,
             "time": 3,
@@ -496,11 +497,11 @@
         {
             "name": "洋光台",
             "pa": [
-                "52",
-                "53"
+                "shin-sugita-dep-south",
+                "yokodai-arr-south"
             ],
             "sta": [
-                "JK04"
+                "JK04-south"
             ],
             "sta_cut": 7,
             "time": 3,
@@ -509,11 +510,11 @@
         {
             "name": "港南台",
             "pa": [
-                "54",
-                "55"
+                "yokodai-dep-south",
+                "konandai-arr-south"
             ],
             "sta": [
-                "JK03"
+                "JK03-south"
             ],
             "sta_cut": 18,
             "time": 3,
@@ -522,11 +523,11 @@
         {
             "name": "本郷台",
             "pa": [
-                "56",
-                "57"
+                "konandai-dep-south",
+                "hongo-dai-arr-south"
             ],
             "sta": [
-                "JK02"
+                "JK02-south"
             ],
             "sta_cut": 19,
             "time": 3,
@@ -535,8 +536,8 @@
         {
             "name": "大船",
             "pa": [
-                "58",
-                "59"
+                "hongo-dai-dep-south",
+                "ofuna-arr-south"
             ],
             "time": 4,
             "sta_code": "JK01"
