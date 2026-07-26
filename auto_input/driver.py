@@ -37,8 +37,8 @@ import numpy as np
 import pygame
 import soundfile as sf
 
-from .hud_layout import PROFILES
-from .sampling import GuardState, Reading, read_hud  # noqa: F401  (Reading re-exported for the 1b diagnostic)
+from .hud_layout import DOWNSCALE_PROFILE, PROFILES, profile_for
+from .sampling import GuardState, Reading, downscale_hud, read_hud  # noqa: F401  (Reading re-exported for the 1b diagnostic)
 from .ocr import (
     DEFAULT_TEMPLATES_DIR,
     MAX_DRIVABLE_SPEED_KMH,
@@ -178,15 +178,13 @@ def _build_stops_meta(sim) -> list[dict]:
     return out
 
 
-def _open_drive_log(sim, probe_wh, profile) -> tuple[Optional[TextIO], Optional[Path]]:
+def _open_drive_log(sim, probe_wh, read_profile, legacy: bool = False) -> tuple[Optional[TextIO], Optional[Path]]:
     """Open a fresh JSONL log for this drive session and write the meta header.
 
-    ``probe_wh`` is the raw dxcam desktop probe ``(w, h)``; ``profile`` is the
-    ResolutionProfile selected from it. Both are recorded in the meta header so a
-    "problematic OCR" report is self-diagnosing — the log alone tells whether the
-    OCR ran at the resolution the user thinks it did (they are equal by
-    construction today; recorded separately so any future divergence — windowed
-    capture, multi-monitor, DPI — is attributable without re-driving).
+    ``probe_wh`` is the raw dxcam desktop probe ``(w, h)``; ``read_profile`` is the profile
+    the READERS ran under — normally the 1080p model the HUD was downscaled into, so the two
+    differ on any larger desktop. Both are recorded so a "problematic OCR" report is
+    self-diagnosing: the log alone says what was captured, what read it, and which path ran.
 
     Returns (file_handle, path) or (None, None) if anything goes wrong.
     Caller is responsible for closing the handle on shutdown.
@@ -206,11 +204,13 @@ def _open_drive_log(sim, probe_wh, profile) -> tuple[Optional[TextIO], Optional[
             "diagram": diagram,
             "route": sim.route_data.get("route", ""),
             "dest": sim.route_data.get("dest", ""),
-            # Resolution self-diagnosis: raw desktop probe vs the OCR profile it
-            # selected (profile.scale drives every seg threshold). See docstring.
+            # Resolution self-diagnosis: what was captured vs what read it (read scale
+            # drives every seg threshold). These differ whenever the HUD was downscaled.
             "desktop_resolution": [probe_wh[0], probe_wh[1]],
-            "ocr_profile_resolution": [profile.desktop_w, profile.desktop_h],
-            "ocr_scale": profile.scale,
+            "ocr_profile_resolution": [read_profile.desktop_w, read_profile.desktop_h],
+            "ocr_scale": read_profile.scale,
+            # True only when --legacy-ocr forced the per-resolution path (debug).
+            "ocr_legacy": legacy,
             "stops": _build_stops_meta(sim),
         }
         f.write(json.dumps(meta, ensure_ascii=False) + "\n")
@@ -675,6 +675,11 @@ class AutoDriver:
     # status flag — last OCR readings stay frozen on screen so the user can
     # inspect them without the live stream overwriting.
     paused: bool = False
+    # Debug lever (main.py --legacy-ocr): read at the capture's own resolution using its
+    # per-resolution templates, instead of downscaling into the 1080p model. Only for
+    # isolating a downscale-side fault — it is the approach the downscale path replaces,
+    # and it only works on a resolution that already has a hand-calibrated profile.
+    legacy_ocr: bool = False
 
     # Internal state — set by _run on thread start
     _detector: _Detector = field(init=False)
@@ -782,12 +787,36 @@ class AutoDriver:
             print("[AutoDriver] dxcam returned None on resolution probe — auto-driver disabled.")
             return
         ph, pw = probe.shape[:2]
-        profile = PROFILES.get((pw, ph))
+        profile = profile_for(pw, ph)
         if profile is None:
-            supported = ", ".join(f"{w}×{h}" for w, h in sorted(PROFILES))
-            print(f"[AutoDriver] FATAL: desktop resolution {pw}×{ph} not supported. " f"Supported: {supported}. Auto-driver disabled.")
+            tested = ", ".join(f"{w}×{h}" for w, h in sorted(PROFILES))
+            print(
+                f"[AutoDriver] FATAL: desktop resolution {pw}×{ph} is outside the supported scope "
+                f"(16:9 at 1080p or larger). Live-tested: {tested}. Auto-driver disabled."
+            )
             return
-        seg = seg_for_scale(profile.scale)
+        if not profile.verified:
+            print(
+                f"[AutoDriver] NOTE: {pw}×{ph} has no live-tested profile — geometry interpolated "
+                f"from the 16:9 fractions (HUD {profile.hud_bbox}). Expected to be correct; watch the reads."
+            )
+        if self.legacy_ocr and not profile.verified:
+            # Legacy reads natively and needs a template set extracted at THIS resolution.
+            # An interpolated profile has none, so every read would silently fail.
+            print(f"[AutoDriver] --legacy-ocr is not available at {pw}×{ph} (no native template set). Using the downscale path.")
+            self.legacy_ocr = False
+
+        # `profile` always describes the CAPTURE — which region to grab and where the HUD
+        # sits in it. The READ side (cell bboxes, seg thresholds, templates, anchors) is
+        # normally DOWNSCALE_PROFILE: the HUD is shrunk into the one 1080p model, so a new
+        # desktop resolution needs no profile and no templates of its own.
+        #
+        # `legacy_ocr` reads at the capture's own resolution with its per-resolution
+        # templates instead — a debug lever for isolating a downscale-side fault, not a
+        # supported path. Keeping capture and read as SEPARATE variables is what stops a
+        # cell being cropped at one geometry and thresholded at another.
+        read_profile = profile if self.legacy_ocr else DOWNSCALE_PROFILE
+        seg = seg_for_scale(read_profile.scale)
 
         # Dark digit templates: always load from 1440p set. The resize-in-compare
         # approach (compare() in ocr.py) handles cross-resolution matching without
@@ -802,11 +831,13 @@ class AutoDriver:
         # Red digit templates: prefer resolution-specific set; fall back to the
         # global cache (1440p) via None so read_speed_limit uses _get_red_digit_templates().
         red_dir = (
-            DEFAULT_TEMPLATES_DIR / profile.templates_subdir / "digits_red" if profile.templates_subdir else DEFAULT_TEMPLATES_DIR / "digits_red"
+            DEFAULT_TEMPLATES_DIR / read_profile.templates_subdir / "digits_red"
+            if read_profile.templates_subdir
+            else DEFAULT_TEMPLATES_DIR / "digits_red"
         )
         red_templates: Templates | None = build_templates(red_dir) if red_dir.exists() else None
 
-        badges_dir = DEFAULT_TEMPLATES_DIR / profile.badges_subdir
+        badges_dir = DEFAULT_TEMPLATES_DIR / read_profile.badges_subdir
         badge_anchors = load_badge_anchors(badges_dir)
         if not any(badge_anchors.values()):
             print(f"[AutoDriver] FATAL: no badge anchors at {badges_dir} — auto-driver disabled.")
@@ -816,6 +847,12 @@ class AutoDriver:
             f"[AutoDriver] Started {pw}×{ph}. Lead {self.lead_m}m, interval {self.interval_s}s. "
             f"Capture region {profile.capture_region} (top-right quadrant)."
         )
+        hw, hh = profile.hud_bbox_in_capture[2], profile.hud_bbox_in_capture[3]
+        rw, rh = read_profile.hud_bbox_in_capture[2], read_profile.hud_bbox_in_capture[3]
+        if self.legacy_ocr:
+            print(f"[AutoDriver] LEGACY OCR (debug): reading the HUD at its native {hw}×{hh} with the {profile.desktop_h}p template set.")
+        else:
+            print(f"[AutoDriver] OCR: HUD {hw}×{hh} -> {rw}×{rh}, read by the {read_profile.desktop_h}p model.")
 
         # Probe arrival-PA durations once → the long-approach set. These stops
         # fire arrival LONG_APPROACH_BUMP_M earlier so their long guides finish
@@ -830,7 +867,7 @@ class AutoDriver:
         # each sample below appends a line + flushes for crash safety. Path is
         # also stashed on the simulator so the debug-bar Report button can find
         # the live log to render.
-        log_file, log_path = _open_drive_log(self.sim, (pw, ph), profile)
+        log_file, log_path = _open_drive_log(self.sim, (pw, ph), read_profile, self.legacy_ocr)
         if log_path is not None:
             print(f"[AutoDriver] Recording drive log -> {log_path}")
             self.sim.drive_log_path = log_path
@@ -897,10 +934,16 @@ class AutoDriver:
                     # load-bearing; the contract lives in auto_input/sampling.py. `prev_badge` is
                     # the PRIOR frame's badge (detector.update runs after), which is what the
                     # distance guard needs as its reference-frame signal.
+                    # Downscale BEFORE the read so every cell this cycle is cropped from one
+                    # frame at one geometry (sampling.py CONTRACT step 0). At 1080p this is a
+                    # plain copy; under --legacy-ocr the native frame goes through untouched.
+                    if not self.legacy_ocr:
+                        frame = downscale_hud(frame, profile)
+
                     sample_ts = time.time()
                     r = read_hud(
                         frame,
-                        profile,
+                        read_profile,
                         templates,
                         red_templates,
                         badge_anchors,

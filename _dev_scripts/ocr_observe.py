@@ -22,7 +22,7 @@ Flags:
   --interval N   seconds between samples, fractions ok (default 1.0)
   --res 1080p|1440p   override resolution (default: auto-detect from first frame)
   --no-dump      console only, write no PNGs (quick sanity check)
-  --out DIR      output dir (default _experiments/live_captures/<timestamp>/)
+  --out DIR      output dir (default _experiments/live_captures/<res>/<timestamp>/)
 Stop: Ctrl+C
 """
 
@@ -47,33 +47,39 @@ from auto_input.driver import (  # noqa: E402
     _crop_cell,
     guard_distance,
 )
-from auto_input.hud_layout import PROFILES  # noqa: E402
+from auto_input.hud_layout import DOWNSCALE_PROFILE, PROFILES, profile_for  # noqa: E402
 from auto_input.ocr import DEFAULT_TEMPLATES_DIR, build_templates, load_badge_anchors, seg_for_scale  # noqa: E402
-from auto_input.sampling import GuardState, read_hud  # noqa: E402
+from auto_input.sampling import GuardState, downscale_hud, read_hud  # noqa: E402
 
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(2)
 except (AttributeError, OSError):
     ctypes.windll.user32.SetProcessDPIAware()
 
-_RES_FLAG_MAP = {"1080p": (1920, 1080), "1440p": (2560, 1440)}
+_RES_FLAG_MAP = {"1080p": (1920, 1080), "1440p": (2560, 1440), "2160p": (3840, 2160)}
 DEFAULT_OUT = Path(__file__).parent.parent / "_experiments" / "live_captures"
 
 
 def resolve_profile(camera, forced: str | None):
-    """Same startup contract as AutoDriver: probe a full frame, look up PROFILES, fail loud."""
+    """Same startup contract as AutoDriver: probe a full frame, resolve a profile, fail loud.
+
+    `profile_for` returns a live-tested profile when one exists and interpolates any other
+    16:9 desktop >= 1080p; None means outside that scope.
+    """
     if forced:
-        key = _RES_FLAG_MAP[forced]
-        if key not in PROFILES:
-            sys.exit(f"no ResolutionProfile for {key}")
-        return PROFILES[key]
+        prof = profile_for(*_RES_FLAG_MAP[forced])
+        if prof is None:
+            sys.exit(f"no profile for {forced}")
+        return prof
     for _ in range(10):
         probe = camera.grab()
         if probe is not None:
             h, w = probe.shape[:2]
-            prof = PROFILES.get((w, h))
+            prof = profile_for(w, h)
             if prof is None:
-                sys.exit(f"desktop is {w}x{h} — no ResolutionProfile. Supported: {sorted(PROFILES)}")
+                sys.exit(f"desktop is {w}x{h} — outside the supported scope (16:9, 1080p or larger). Live-tested: {sorted(PROFILES)}")
+            if not prof.verified:
+                print(f"[note] {w}x{h} has no live-tested profile — geometry interpolated from the 16:9 fractions (HUD {prof.hud_bbox}).")
             return prof
         time.sleep(0.2)
     sys.exit("dxcam returned no frame on the resolution probe — is the game rendering on the primary monitor?")
@@ -84,7 +90,7 @@ def main() -> int:
     ap.add_argument("--interval", type=float, default=1.0, help="seconds between samples, fractions ok (default 1.0)")
     ap.add_argument("--res", choices=sorted(_RES_FLAG_MAP), help="override resolution (default: auto-detect)")
     ap.add_argument("--no-dump", action="store_true", help="console only, write no PNGs")
-    ap.add_argument("--out", type=Path, help="output dir (default _experiments/live_captures/<timestamp>/)")
+    ap.add_argument("--out", type=Path, help="output dir (default _experiments/live_captures/<res>/<timestamp>/)")
     args = ap.parse_args()
 
     pygame.init()
@@ -93,9 +99,12 @@ def main() -> int:
         sys.exit("dxcam.create() returned None — DXGI capture unavailable.")
     profile = resolve_profile(camera, args.res)
 
+    # `profile` is what to CAPTURE; DOWNSCALE_PROFILE is what READS it — production
+    # downscales the HUD into the 1080p model, so this must too or the corpus describes a
+    # pipeline nobody runs.
     templates = build_templates()
-    seg = seg_for_scale(profile.scale)
-    badges_dir = DEFAULT_TEMPLATES_DIR / profile.badges_subdir if profile.badges_subdir else None
+    seg = seg_for_scale(DOWNSCALE_PROFILE.scale)
+    badges_dir = DEFAULT_TEMPLATES_DIR / DOWNSCALE_PROFILE.badges_subdir if DOWNSCALE_PROFILE.badges_subdir else None
     badge_anchors = load_badge_anchors(badges_dir)
     try:
         from auto_input.ocr import _get_red_digit_templates
@@ -104,7 +113,10 @@ def main() -> int:
     except Exception:
         red_templates = None
 
-    out_dir = args.out or (DEFAULT_OUT / time.strftime("%Y%m%d-%H%M%S"))
+    # Split by capture resolution — cell geometry is resolution-specific and nothing IN the
+    # PNGs says which. `<height>p` to match every other per-resolution dir in the project
+    # (_tests/fixtures/ocr/1440p/, ocr_templates/1080p/, the --res choices above).
+    out_dir = args.out or (DEFAULT_OUT / f"{profile.desktop_h}p" / time.strftime("%Y%m%d-%H%M%S"))
     if not args.no_dump:
         out_dir.mkdir(parents=True, exist_ok=True)
     reads_path = out_dir / "reads.jsonl"
@@ -140,10 +152,12 @@ def main() -> int:
                 time.sleep(args.interval)
                 continue
 
+            # Downscale into the model before reading, exactly as production does. `frame`
+            # stays the native capture so the dump below keeps full-resolution pixels.
             ts = time.time()
             r = read_hud(
-                frame,
-                profile,
+                downscale_hud(frame, profile),
+                DOWNSCALE_PROFILE,
                 templates,
                 red_templates,
                 badge_anchors,
