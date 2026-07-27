@@ -132,14 +132,20 @@ def main():
     )
     args = parser.parse_args()
 
+    # DPI awareness FIRST — before pygame creates any window, and before anything can import dxcam
+    # (which declares it as an import side effect, so the app used to be unaware for setup and aware
+    # for an OCR drive). Must precede pygame.init(); awareness is one-way and only takes effect for
+    # windows created after it. See window_utils.declare_dpi_awareness.
+    import window_utils
+
+    window_utils.declare_dpi_awareness()
+
     # Initialize pygame for the setup screen
     pygame.init()
     pygame.mixer.init()
 
     # Pin every window created from here on (setup flow, tutorials, sim) always-on-top — the app is a
     # companion overlay for the game. One seam wraps set_mode so no screen has to remember to re-pin.
-    import window_utils
-
     window_utils.install_topmost_hook()
 
     # Window mirroring (opt-in, off by default). Owned HERE rather than by PASimulator: the setup<->drive
