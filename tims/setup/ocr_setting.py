@@ -93,13 +93,29 @@ def _img(name):
     return _load(project_root() / "data" / "disclaimer" / name)
 
 
+_WRAP_CACHE = {}  # (font, max_w, text) -> [line, ...]; see _wrap
+_WRAP_CACHE_MAX = 512  # inputs are a fixed string set x 3 locales; the cap is a runaway backstop
+
+
 def _wrap(text, font, max_w):
     """Greedy pixel wrap (CJK char-by-char; blank line preserved). Caller owns the paragraph split.
 
     A Latin run backtracks to its last space so a word is never cut mid-run ("Windo / ws"),
     while CJK keeps breaking at the column edge — the same rule the classic panel's wrap_text
     uses. A single Latin word wider than the column still hard-breaks rather than overflowing.
+
+    MEMOIZED. The consent view rebuilds its whole body every frame, and this loop measures
+    `font.size()` once per CHARACTER — 1737 calls per build, 48% of the frame cost, all of it
+    re-deriving identical breaks (#60). The result depends only on (text, font, max_w), so it is
+    cached on exactly those. The font object IS the key, which both keys per-locale correctly and
+    holds a reference so its id can never be reused by a later font. Callers must treat the
+    returned list as read-only — it is the cached instance, not a copy.
     """
+    key = (font, max_w, text)
+    cached = _WRAP_CACHE.get(key)
+    if cached is not None:
+        return cached
+
     lines = []
     for para in text.split("\n"):
         if not para:
@@ -125,11 +141,24 @@ def _wrap(text, font, max_w):
                 lines.append(cur)
                 cur = ch
         lines.append(cur)
+
+    if len(_WRAP_CACHE) >= _WRAP_CACHE_MAX:
+        _WRAP_CACHE.clear()
+    _WRAP_CACHE[key] = lines
     return lines
 
 
 # ── consent view ───────────────────────────────────────────────────────────────
 _DIGIT_KEYS = ["0", "1", "2", "8", "9"]  # cycled digit templates for the 'match' flow step
+
+# Scratch height for the scrollable body. NOT a measured bound — headroom over the tallest real
+# locale, which is en at 912px (zh_HK 870, zh_CN 849). Kept generous because the body grows with
+# every locale edit; _build_content warns if a body ever outgrows it (a silent clip otherwise).
+_CONTENT_H_MAX = 2600
+# One reusable scratch per panel width. The body is rebuilt every frame, so allocating 1.8M pixels
+# per frame was pure churn — the surface is fully repainted by the fill below, never read stale.
+# Safe because _build_content has exactly one caller (render_consent) which blits before returning.
+_CONTENT_SCRATCH = {}  # w -> Surface
 
 
 def _build_content(w):
@@ -143,7 +172,9 @@ def _build_content(w):
     cap_font = i18n.pixel_font_for_lang(ACTIVE_LANG, CAP_NATIVE)
     body_lh = lowres_text_size("永", body_font, 1, 0)[1]
 
-    surf = pygame.Surface((w, 2600))
+    surf = _CONTENT_SCRATCH.get(w)
+    if surf is None:
+        surf = _CONTENT_SCRATCH[w] = pygame.Surface((w, _CONTENT_H_MAX))
     surf.fill(PANEL_BG)
     x = CONTENT_PAD
     y = CONTENT_PAD
@@ -240,6 +271,8 @@ def _build_content(w):
     bullets("setup.ocr_disclaimer.privacy")
     y += 4 + CONTENT_PAD  # bottom padding — the scroll-to-accept hint moved OUT of the scroll box (see render_consent)
 
+    if y > _CONTENT_H_MAX:  # body outgrew the scratch: the tail is silently clipped, so say so
+        print(f"[ocr_setting] consent body is {y}px, over the {_CONTENT_H_MAX}px scratch — raise _CONTENT_H_MAX")
     return surf, y
 
 
