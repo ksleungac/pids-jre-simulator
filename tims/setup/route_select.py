@@ -783,6 +783,20 @@ def _run_diagram(screen, route_name, start_name, end_name, variants, *, preselec
                         break
 
 
+def _start_station_labels(variant):
+    """Stopping-station names offered as a drive START — the variant's stopping stations
+    with the TERMINUS excluded.
+
+    The terminus is never a valid start (picking it leaves zero stops to drive), and
+    excluding it also drops the second occurrence a LOOP route carries at both ends —
+    yamanote lists 大崎 at index 0 and 29. That duplicate is what made the grid unsafe:
+    ``pa_setting._build_config`` resolves the picked name with ``stops.index()``, which
+    takes the FIRST match, so choosing the end-of-loop 大崎 silently started the drive a
+    full loop early (#59). Offering the name once keeps that resolution unambiguous.
+    """
+    return [variant["stops"][i] for i in variant["stop_idxs"]][:-1]
+
+
 def run_on(screen):
     """Drive the full route → start-station → run-pattern flow on an existing display ``screen``.
 
@@ -801,9 +815,7 @@ def run_on(screen):
         sel_route_idx = res
         name, variants = groups[res]
         v0 = variants[0]  # station list comes from the first variant (draft: stations precede pattern)
-        all_stops = v0["stops"]
-        stop_idxs = v0["stop_idxs"]  # indices of STOPPING stations (passing stations excluded)
-        station_labels = [all_stops[i] for i in stop_idxs]  # start grid shows stopping stations only
+        station_labels = _start_station_labels(v0)  # stopping stations, terminus excluded
         end_name = v0["end"]
         sel_start = None  # filtered-space index into station_labels
         sel_var = None
@@ -864,7 +876,7 @@ def save_screenshot(path):
     nambu = next((i for i, name in enumerate(route_labels) if name == "南武線"), 0)
     name, variants = groups[nambu]
     v0 = variants[0]
-    station_labels = [v0["stops"][i] for i in v0["stop_idxs"]]  # stopping stations only (match run_on)
+    station_labels = _start_station_labels(v0)  # match run_on (stopping stations, terminus excluded)
     box_font = i18n.pixel_font_for_lang("en", BOX_NATIVE)
     btn_font = i18n.pixel_font_for_lang(ACTIVE_LANG, BTN_NATIVE)
 
