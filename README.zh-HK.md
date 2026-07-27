@@ -55,3 +55,11 @@ JR 東日本風格列車廣播與車內 LCD 顯示模擬器。
 - 更多路線及班次
 - 更多 LCD 樣式(E233-0 番台、E231 系列等)
 - 強化下部 LCD
+
+---
+
+## 鳴謝
+
+路線及營運商標誌均取自 [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:Rapid_transit_icons_of_Japan)，感謝繪製及維護這些圖示的貢獻者，其中新幹線與東京櫻花電車標誌來自 Carnby、Perhelion、KANAO22 及東京都交通局。
+
+完整鳴謝及素材資料：[THIRD-PARTY.md](THIRD-PARTY.md)。

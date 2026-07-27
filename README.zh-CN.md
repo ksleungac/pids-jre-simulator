@@ -55,3 +55,11 @@ JR 东日本风格列车广播与车内 LCD 显示模拟器。
 - 更多线路及车次
 - 更多 LCD 样式(E233-0 番台、E231 系列等)
 - 强化下部 LCD
+
+---
+
+## 鸣谢
+
+线路及运营商标志均取自 [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:Rapid_transit_icons_of_Japan)，感谢绘制及维护这些图标的贡献者，其中新干线与东京樱花电车标志来自 Carnby、Perhelion、KANAO22 及东京都交通局。
+
+完整鸣谢及素材资料：[THIRD-PARTY.md](THIRD-PARTY.md)。

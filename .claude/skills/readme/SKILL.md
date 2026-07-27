@@ -38,7 +38,9 @@ The project ships with three READMEs — English, Traditional Chinese (zh-HK), S
 
 ### Step 1 — Update English first
 
-All changes land in `README.md` first. Discuss wording with the user; get it to "happy with this" before translating. The current English README's section order — **Download → Usage → Planned Features** — is the canonical shape; don't invent new sections unless the user asks.
+All changes land in `README.md` first. Discuss wording with the user; get it to "happy with this" before translating. The current English README's section order — **Download → Usage → Planned Features → Credits** — is the canonical shape; don't invent new sections unless the user asks.
+
+**`## Credits` is thanks only — licensing does NOT go in the README.** The grant lives in `LICENSE`, the asset carve-out in `THIRD-PARTY.md`, and GitHub shows the license in its own sidebar, so a README licensing section is redundant. Credits name who to thank (and thereby satisfy any attribution obligation — CC BY-SA §3(a)(2) allows attribution by linking to a resource that carries the detail), then point at `THIRD-PARTY.md`. Don't add "code is MIT, assets are not" breakdowns. 2026-07-27, over two rounds: user — *"don't need to be super clear like to draft in readme"*, then *"no need to say which part are in which license, only just credits are enough"*.
 
 ### Step 2 — Extract anything language-agnostic
 
@@ -125,6 +127,9 @@ Keep this list updated whenever a new term is coined. Translate once, reuse ever
 | 5-station view (LCD) | 5-station view | 5 站顯示 | 5 站显示 |
 | Supported Routes (top-bar label) | Supported Routes | 對應路線 | 支持的路线 |
 | Planned Features (section heading) | Planned Features | 計劃中的功能 | 计划中的功能 |
+| Credits (section heading) | Credits | 鳴謝 | 鸣谢 |
+| line symbol / operator logo | line symbol, operator logo | 路線標誌、營運商標誌 | 线路标志、运营商标志 |
+| icon (UI asset) | icon | 圖示 | 图标 |
 
 ## Things to NOT do
 
