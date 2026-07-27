@@ -37,10 +37,22 @@ OCR templates in `game_references/` never committed. User deleted them as dev cr
 
 **Rule:** dep classification follows call-graph reachability, not file location or import timing. Production-reachable code path imports a library → that library is a runtime dep. "Lazy" = when it loads (perf); "optional" = whether it must exist (contract). Not interchangeable.
 
+**Corollary (2026-07-27) — a lazy import also defers the library's SIDE EFFECTS, so process-global
+state becomes feature-flag-dependent.** `dxcam` calls `SetProcessDpiAwareness(2)` at import time
+(`dxcam/__init__` builds a `DXFactory()` at module scope → `dxcam/core/output.py`), and
+`auto_input` is imported lazily — only with OCR enabled, or on the Report button. So the app ran
+DPI-unaware through setup and became aware on entering an OCR drive, and awareness is one-way, so
+it never reverted: same build, same machine, two different window scalings decided by which
+features the user turned on. Nothing errors; it just looks different. Fixed by declaring the state
+deliberately at entry (`window_utils.declare_dpi_awareness`) instead of inheriting it by accident.
+
 **Pattern:**
 - Trace call graph from the import site to entry points. Any production path reaches it → `dependencies`.
 - `try: import X except ImportError` is NEVER a substitute for correct classification.
 - File under `_*/` that production code imports → promote out of `_*/`.
+- A library that mutates PROCESS-global state at import (DPI awareness, locale, signal handlers,
+  COM apartment) must be imported at a deterministic point, or that state silently tracks whichever
+  optional feature pulled it in. Hook the setter and print the stack when you need to find one.
 
 **Scope:** all `pyproject.toml` deps, all `_*/` file placements, all defensive imports.
 
