@@ -1,6 +1,6 @@
 # Critical Lessons — DO NOT REPEAT
 
-Eight deployment-class incidents. Each locally defensible; each broke production. The shared root: **claude reasons about code as text rather than as a deployed artifact.**
+Nine deployment-class incidents. Each locally defensible; each broke production or was caught only at the last gate before it. The shared root: **claude reasons about code as text rather than as a deployed artifact.**
 
 ---
 
@@ -177,3 +177,37 @@ above is still correct; it just addresses the other half.
   degraded path a distinct leading line to ask the reporter to quote.
 
 **Scope:** dxcam / DXGI Desktop Duplication, any GPU-adapter or monitor-topology-dependent code.
+
+---
+
+## 9. A gate built from an enumeration cannot see a gap in that enumeration (2026-07-30)
+
+The font atlas derived its coverage by sweeping LCD state — routes × stops × modes × views × PA
+phases, from tuples typed into the baker. `sobu/1217F` is a through-service whose route bar windows
+per `frames`, and pinning the lower view disabled the scheduler, so `_active_frame_idx` never left 0.
+Result: **no raster at any size for the 7 stations interior to frame 1** — a `KeyError` the moment a
+real drive passed 千葉, on the one route that has frames.
+
+**All three verification gates passed on it.** `--verify` re-drove the *identical* sweep, so an
+unvisited state was symmetrically absent from both the bake and the check — it reported `0 raised`
+while the names were provably missing. `--pixel-verify` compared two renders of the same unvisited
+set. The third gate sampled 36 states. The bug was found by a fresh-context agent reading the
+manifest, not by any gate.
+
+**Rule:** a check that consumes the same enumeration the artifact was built from verifies *fidelity*,
+never *coverage*. If a generator and its verifier share the list of cases, neither can report a case
+missing from the list. The oracle must be independent of the generator — and the generator's inputs
+must not be a hand-typed description of what production supports.
+
+**Pattern:**
+- Derive every axis from production, never from a tuple in the tool: `TRAIN_MODELS`, `_SLOT_BEATS`,
+  `_frame_count`, `DisplayMode`. A hand-written axis list is `principles.md § "A second implementation
+  of a production decision drifts silently"` wearing a different hat, and it fails silently the same way.
+- Better: remove the enumeration from the correctness path. Coverage keyed on *declared data sources*
+  rather than reachable states cannot be short a case, because there is no case list to be short of.
+- Make the failure loud where it CAN be seen: the shipped build has no font files, so `--verify` now
+  runs with the baked faces unreadable. The dev tree has every face, so nothing else surfaces it.
+- Ask of any new gate: what class of defect is this structurally unable to detect? Write the answer down.
+
+**Scope:** any bake / codegen / fixture-generation with a paired verifier; asset pipelines; snapshot
+tests whose snapshot set is produced by the code under test.

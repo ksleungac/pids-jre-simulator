@@ -35,6 +35,17 @@ import pygame
 import pygame.gfxdraw
 import pygame.surfarray
 
+import font_atlas
+from font_atlas import (
+    STATION_NAMES,
+    STATION_NAMES_EKI,
+    at,
+    lit,
+)
+
+# The route-map disclaimer. One constant so the `draws=` declarations name the
+# same string the renderers draw, instead of a fourth hand-typed copy.
+_DISCLAIMER = "のりかえ、待合せ時間は含まれません。電車により多少時間が異なります。"
 from app_paths import project_root
 from constants import (
     CURRENT_COLOR,
@@ -375,11 +386,11 @@ class CircularFullRouteDisplay:
         # Major station names use Heavy weight; the rest use Medium. The
         # bold set is hardcoded at module scope (MAJOR_STATION_NAMES_BOLD) —
         # not derived from code_3 since IRL Yamanote PIDS bolds a narrower set.
-        self.font_station = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 19)
-        self.font_station_bold = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Heavy.otf"), 19)
-        self.font_circle = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 15)
-        self.font_minute = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 10)
-        self.font_disclaimer = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 9)
+        self.font_station = font_atlas.lcd_font("ShinGoPr6N-Medium.otf", 19, draws=STATION_NAMES)
+        self.font_station_bold = font_atlas.lcd_font("ShinGoPr6N-Heavy.otf", 19, draws=STATION_NAMES)
+        self.font_circle = font_atlas.lcd_font("HelveticaNeue-Bold.otf", 15)
+        self.font_minute = font_atlas.lcd_font("ShinGoPr6N-Medium.otf", 10, draws=lit("分", "(分)"))
+        self.font_disclaimer = font_atlas.lcd_font("ShinGoPr6N-Medium.otf", 9, draws=lit(_DISCLAIMER))
 
         # =====================================================================
         # Build per-sta_code position table (screen coordinates)
@@ -1137,7 +1148,7 @@ class CircularFullRouteDisplay:
         # (Yamanote always shows times — no "some sections don't display times" caveat).
         # fmt: off
         # --- Disclaimer params (adjust freely) ---
-        disclaimer_text = "のりかえ、待合せ時間は含まれません。電車により多少時間が異なります。"
+        disclaimer_text = _DISCLAIMER
         left_x      = 8   # left margin from screen edge
         bottom_pad  = 4   # gap between disclaimer baseline and bottom of lower LCD
         # -----------------------------------------
@@ -1524,7 +1535,7 @@ class OpenRouteFullRouteDisplay(CircularFullRouteDisplay):
         # 7. Disclaimer — left-bottom-anchored (standard text; non-Yamanote may
         # have non-time sections, so the full disclaimer is kept).
         # fmt: off
-        disclaimer_text = "のりかえ、待合せ時間は含まれません。電車により多少時間が異なります。"
+        disclaimer_text = _DISCLAIMER
         left_x      = 8
         bottom_pad  = 4
         # fmt: on
@@ -1585,10 +1596,6 @@ class JapaneseFiveStationDisplay:
         # real re-enter, which is exactly the second-clock bug this replaced.
         self._fill_start: Optional[float] = None
 
-        # Fonts are built per-station at base*scale sizes, so they're cached by
-        # (filename, size) — keeps the editor responsive while dragging scale.
-        self._font_cache: Dict[Tuple[str, int], pygame.font.Font] = {}
-
         # Inline transfer panel — data path mirrors the parent
         # TransferInfoDisplay so the filtered entry ORDER matches the
         # horizontal slot. Pure-function reuse (apply_transfer_filter /
@@ -1635,13 +1642,16 @@ class JapaneseFiveStationDisplay:
         self._fill_normal = normals
         self._fill_len = cum[-1] if cum else 0.0
 
-    def _font(self, name: str, size: float) -> pygame.font.Font:
-        key = (name, max(1, int(round(size))))
-        f = self._font_cache.get(key)
-        if f is None:
-            f = pygame.font.Font(str(project_root() / "fonts" / name), key[1])
-            self._font_cache[key] = f
-        return f
+    def _font(self, name: str, size: float, draws=None):
+        """Resolve a font by filename + size. Caching lives in `font_atlas`.
+
+        # CONTRACT: every font in this module resolves here or through
+        # font_atlas.lcd_font() directly — never a bare pygame.font.Font().
+        # ShinGo is served from the baked atlas in a build shipping no font
+        # files; a bare construct works in dev and raises there.
+        # See WIP_font_atlas.md.
+        """
+        return font_atlas.lcd_font(name, size, draws=draws)
 
     def on_slot_enter(self, current_time: float) -> None:
         """Manager hook — the EIGHT (5-station) slot just genuinely became
@@ -1800,12 +1810,12 @@ class JapaneseFiveStationDisplay:
         # CircularFullRouteDisplay. Drawn after the clip restore so it sits
         # unclipped at the very bottom of the lower LCD.
         # fmt: off
-        disc_text  = "のりかえ、待合せ時間は含まれません。電車により多少時間が異なります。"
+        disc_text  = _DISCLAIMER
         disc_x     = ARC_RECT.left + 8   # left margin from screen edge
         disc_pad_b = 4                   # gap from the bottom edge
         disc_size  = 9                   # ShinGoPr6N point size (matches full-route)
         # fmt: on
-        disc_font = self._font("ShinGoPr6N-Medium.otf", disc_size)
+        disc_font = self._font("ShinGoPr6N-Medium.otf", disc_size, draws=lit(_DISCLAIMER))
         disc_img = disc_font.render(disc_text, True, DARK_BG)
         disc_y = ARC_RECT.bottom - disc_pad_b - disc_img.get_height()
         self.screen.blit(disc_img, (disc_x, disc_y))
@@ -1928,13 +1938,13 @@ class JapaneseFiveStationDisplay:
         px = int(t["tp0_x"])
 
         # Header: {station}駅 — ShinGo Heavy (most bold).
-        header_font = self._font("ShinGoPr6N-Heavy.otf", t["tp_header_size"])
+        header_font = self._font("ShinGoPr6N-Heavy.otf", t["tp_header_size"], draws=STATION_NAMES_EKI)
         header_img = header_font.render(station_name + "駅", True, DARK_BG)
         hy = int(t["tp0_y"])
         self.screen.blit(header_img, (px, hy))
 
         # Subtitle: 乗換えのご案内 — ShinGo Light (thin).
-        sub_font = self._font("ShinGoPr6N-Light.otf", t["tp_sub_size"])
+        sub_font = self._font("ShinGoPr6N-Light.otf", t["tp_sub_size"], draws=lit("乗換えのご案内"))
         sub_img = sub_font.render("乗換えのご案内", True, DARK_BG)
         sy = hy + header_img.get_height() + int(t["tp_sub_gap"])
         self.screen.blit(sub_img, (px, sy))
@@ -1945,7 +1955,14 @@ class JapaneseFiveStationDisplay:
         # fit a half-column — short pairs share a row (IRL layout, and halves
         # vertical use so dense stations fit). A non-shinkansen too wide to share
         # takes a full row alone, still single line. At most 2 entries per row.
-        name_font = self._font("ShinGoPr6N-Medium.otf", t["tp_name_size"])
+        name_font = self._font(
+            "ShinGoPr6N-Medium.otf",
+            t["tp_name_size"],
+            # Shinkansen names wrap to <=2 lines at `･`, keeping
+            # the separator on the leading line (see the wrap
+            # note in _draw_transfer_panel).
+            draws=at("data/lines.json:*.name_ja", wrap="･"),
+        )
         line_h = name_font.get_height()
         badge_h = int(t["tp_badge"])
         badge_gap = int(t["tp_badge_gap"])
@@ -2466,7 +2483,7 @@ class JapaneseFiveStationDisplay:
         """
         if not name:
             return
-        font = self._font("ShinGoPr6N-Medium.otf", name_size)
+        font = self._font("ShinGoPr6N-Medium.otf", name_size, draws=(STATION_NAMES, lit("永")))
         width = font.size("永")[0] * 3
         nx = int(gpos[0]) + int(inset)
         ny = int(gpos[1]) - font.get_height() // 2  # center on gpos_y == badge center
@@ -2486,7 +2503,7 @@ class JapaneseFiveStationDisplay:
         for k, idx in enumerate(vis):
             mx0, my0 = t[f"m{k}_x"], t[f"m{k}_y"]
             gx, gy = t[f"g{k}_x"], t[f"g{k}_y"]
-            name_font = self._font("ShinGoPr6N-Medium.otf", t[f"g{k}_ns"])
+            name_font = self._font("ShinGoPr6N-Medium.otf", t[f"g{k}_ns"], draws=(STATION_NAMES, lit("永")))
             name_w = name_font.size("永")[0] * 3  # fixed 3-char name width — matches _draw_station_name
             name_h = name_font.get_height()
             left = min(mx0 - MARKER_R, gx)

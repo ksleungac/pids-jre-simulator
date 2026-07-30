@@ -180,6 +180,7 @@ When working through user-stated logic, reason strictly in the vocabulary and fr
 **Why:** Imported context shifts the frame off the user's logic. Examples:
 - (2026-05-02) Reached conclusion via "opaque badge paints over text"; user never mentioned opacity. User: *"just dead logic to follow."*
 - (2026-06-12) "the dot is obstructing" → resolved "dot" to the rendered marker dot (I'd just merged the m0/d0 dots, so that frame was top-of-mind) and built a hide-toggle; user meant the editor drag handle. Built + reverted the wrong fix.
+- (2026-07-30) User named the frame — *"at the end it's a collaboration of both sides"* — and I re-presented it a turn later as my own finding ("neither alone is complete; together they are"). User: *"you see, that i mentioned it a two side efforts."* Re-deriving a frame the user already stated reads as not having heard it, and it costs them a turn to re-assert. When a design frame lands, name it back in their words and build on it, rather than arriving at it again independently.
 
 **How to apply:**
 - If a justification uses vocabulary the user didn't introduce, stop and ask.
@@ -320,6 +321,13 @@ A reviewer holding no prior context and no momentum sees blindspots the author s
 **How to apply:**
 - Distinguish by what the second agent LACKS. Same context re-reading itself → self-verification, cut it. Fresh context → an instrument, keep it.
 - A model upgrade never retires it. A stronger author has stronger blindspots, not fewer.
+- **It also measures ERGONOMICS, not just correctness.** Hand a blind agent an ordinary task on the
+  thing just built and watch what it reaches for — that answers "is this seam discoverable?", which the
+  author cannot self-assess at all. (2026-07-30) Two agents given routine LCD edits, told nothing about
+  the font atlas: one adopted the new seam correctly and then said *"nothing in CLAUDE.md says a bare
+  `pygame.font.Font` is now wrong"* — `conventions.md` was in fact still instructing the OLD pattern.
+  The other found that a font size is part of the atlas key and proved the failure rather than
+  inferring it. Neither finding was visible from inside the author's context.
 
 ### Natural adoption gates tool value — push through the harness, don't add a pull-MCP
 A tool's worth is capped by whether it gets used *naturally*, and naturalness = **who owns the context-injection step**. A **pull** tool (an MCP the model must choose to call) loses to the reflex and sits unused — Serena is installed, `conventions.md` says "use it going forward," and grep still wins. To get used, the output must be **pushed**: a **skill step** (orchestrated work — the skill invokes it, so it can't be forgotten) or a **harness hook** (free-form work — injected at the decision). Judge a candidate by delivery shape FIRST, capability second.
@@ -387,8 +395,35 @@ A tool's output is not the fact it was meant to establish. Before a comparison /
 **Why:** every method has a failure mode that looks like a confident answer. Examples:
 - (2026-07-22) "Are these two mp3s the same recording" answered three times by three instruments, each wrong the same way: byte hash (ID3 tags + encoder padding → 9/13 pairs called "different"), strided cross-correlation (5 ms lag grid at 48 kHz → sample-identical audio scored 0.03, and a false "PA is 0% shareable across all 32×25 pairs"), whole-file chroma (conflated the melody with the station-specific announcement after it). Every report was faithful to its tool; no tool could answer the question. Resolved by threshold-free methods — silence-trimmed PCM hash, plus FFT correlation which evaluates every lag.
 
+- (2026-07-27) An exhaustive LIVE-vs-ATLAS frame comparison reported ~1150 of 10476 frames
+  mismatched, and a DIFFERENT ~1150 on each run. Freezing Python's `time` was not enough: the
+  multi-PA hint blinks on `pygame.time.get_ticks()`, SDL's own counter, which patching the `time`
+  module cannot reach — so the two passes caught the blink in opposite phases depending on how long
+  the first pass took. **Freeze every clock the platform exposes, not just the language's.** A
+  set of failures that changes between runs is the instrument, not the subject; localising one and
+  finding zero difference in isolation confirms it in one command.
+- (2026-07-27) The same harness compared three trees pairwise and gated BOTH pairs on all three
+  rendering successfully. Every state failed in the third tree, which silently emptied the first
+  pair's sum — it printed `0 differing pixels` and read as a pass. **Score each pair on its own
+  availability, and print the denominator**, so an empty sum cannot impersonate a clean one.
+
+- (2026-07-30) Four more in one session, same shape every time — the subject was correct and the
+  measurement was wrong. A lint ban written `pygame\.font\.Font\([^)]*ShinGoPr6N` fired on **nothing**:
+  every real call site has `project_root()` inside the parens, so the paren-excluding class stopped
+  before the face name. A "how many call sites are still undeclared" count read 26 because the
+  measuring step *itself* created 26 undeclared entries in the thing it was counting. Both looked like
+  clean results. → **A check that has never been observed to fail has not been shown to work**, and a
+  measurement taken AFTER a step that also writes the measured state is counting the instrument.
+
 **How to apply:**
 - Feed it a known-same and a known-different case first. A method that can't return "same" on a known-same is measuring something else.
+- **Mutation-prove a new gate at birth** — not only regression fixtures (§ "Test real logic"), but every
+  linter rule, assertion, coverage count and staleness guard. Break the thing it guards, confirm it
+  fires, restore. A gate that reports clean on its first run has told you nothing until it has also
+  reported dirty on demand.
+- **Snapshot a metric BEFORE anything that writes what it measures.** If the measuring pass shares
+  state with the measured system, order decides the answer.
+- Print N alongside every aggregate. A total with no count attached cannot be distinguished from a total over nothing.
 - Similarity / threshold methods fail toward "different": a negative is weak evidence, a positive is strong. Prefer an exact, thresholdless method where one exists.
 - The user asserting a contrary fact about their own domain outranks the instrument — re-check the instrument, not the assertion.
 - **A comparison rendered for the USER to judge is an instrument too.** Before presenting arms side by side, confirm they actually differ — print the sizes, the parameters, the diff count. (2026-07-27) A four-row scaling comparison had rows 1 and 2 produced by the identical `transform.scale` call; the user picked a filter from two copies of one image, and only caught it by noticing they looked the same.
@@ -422,6 +457,32 @@ Companion bound on the above: the "ships with a test" bar is for the **silent-fa
 - A regression fixture must DISCRIMINATE — fail when the fix is reverted; verify it does. A downstream backstop can mask a naive one (2026-07-21: a `19.1→19` speed-cell passed with AND without the decimal fix because `_rectify_speed(191)=19`; swapped for a rectify-proof `5.3→5`).
 - **Discrimination decays — re-run the mutation after ANY later change to the guarded code, its constants, or the fixture.** Verified-once is not verified. (2026-07-21) A logo-suppression assertion was mutation-proven, then a floor retune (2s→4s) plus a `reveal_slot` semantic change silently made it inert; the review caught it, and the first repair was ALSO inert (it sampled the guard state *after* the stepped frame, so it already held the mutated value).
 - Never read the constant under test into the test — pin the expected value literally. A fixture that imports `FLOOR` scales its own expectations with any mutation of `FLOOR` and stops discriminating.
+
+### A second implementation of a production decision drifts silently
+When a tool, test, harness, baker or proof needs to know what production does, it must CALL
+production, not restate it. A restatement is correct the day it is written and diverges thereafter,
+and its output looks plausible the whole time — the copy is exercised, so nothing errors.
+
+**Why:** the copy is usually the cheap way to get moving, and the drift surfaces as content that is
+subtly wrong rather than as a failure. Examples:
+- (2026-07-27) Font atlas. Three separate copies of a production decision, each caught only by
+  accident: a proof script re-derived `draw_train_type`'s box geometry and branch condition, so
+  two-character train types rendered without their `exp=7` spread while the script reported zero
+  pixel difference (the user spotted the spacing by eye); a baker declared a combo table, which
+  missed all nine transfer-panel sizes; a baker derived its text domain from `route.json`, which
+  missed the 18 stations in `sobu/1217F`'s `pre_stops`. Fixed structurally — one layout function
+  with a `# CONTRACT:` block, the baker drives the real app and stores what it returns, and nothing
+  outside production reasons about layout at all. User: *"if you did this then theres multiple code
+  paths that leaked failures like this"*, *"architectural mishaps"*.
+
+**How to apply:**
+- Needing a production value in a tool → import and call the production function. If it is not
+  callable (blits straight to a surface, buried in a loop), extract a seam so it is; that extraction
+  is the fix, not a workaround.
+- A tool that "knows" which cases exist — a declared table, an enumerated domain, a branch condition
+  restated — is the smell. Drive the real thing and record what it asked for.
+- Enumeration by SAMPLING is the other half: if coverage comes from driving, the drive must be
+  exhaustive over the state space, and a mechanical gate must fail on a gap rather than trusting it.
 
 ### A simplification must carry its constraints forward
 When a design collapses to something simpler, re-derive which parts of the original were load-bearing. A constraint that was correct in the complex design is still correct in the simple one — dropping it alongside the scaffolding it lived in is silent, and only surfaces as a user-visible defect.

@@ -10,7 +10,9 @@ the train-type box is now plain DARK_BG; no other elements reflow.
 import pygame
 import time
 
-from app_paths import load_json_relative, project_root
+import font_atlas
+from font_atlas import DESTINATIONS, STATION_NAMES, STATION_READINGS, lit
+from app_paths import load_json_relative
 from displays.base import DisplayMode, ModeCycler
 from displays.utils import clip, draw_text_given_width, draw_station_code_badge
 
@@ -56,18 +58,17 @@ from displays.train_models.e235_0 import (
     WHITE_BG,
 )
 
-# Cached pygame.font.Font factory. Used by draw methods that pull their font
-# size from a tuneable dict — pygame.font.Font constructs are not free at 15
-# FPS so cache by (filename, size). Lazy: never called at module load (pygame
-# may not be initialized yet); only inside draw methods.
-_font_cache: dict = {}
 
+def _font(filename: str, size: int, draws=None):
+    """Resolve a font by filename + size. Caching lives in `font_atlas`.
 
-def _font(filename: str, size: int) -> pygame.font.Font:
-    key = (filename, size)
-    if key not in _font_cache:
-        _font_cache[key] = pygame.font.Font(str(project_root() / "fonts" / filename), size)
-    return _font_cache[key]
+    # CONTRACT: every font in this module resolves here, and here delegates to
+    # font_atlas.lcd_font() — never a bare pygame.font.Font(). ShinGo is served
+    # from the baked atlas in a build that ships no font files; a bare construct
+    # keeps working in dev and raises FileNotFoundError in that build.
+    # See WIP_font_atlas.md.
+    """
+    return font_atlas.lcd_font(filename, size, draws=draws)
 
 
 # =============================================================================
@@ -282,8 +283,8 @@ class JapaneseDisplay:
     def draw_destination(self, dest_text: str, route_name: str) -> None:
         """Draw destination with suffix (ゆき/方面)."""
         t = _TUNEABLES_DEST_KANJI
-        font_dest = _font("ShinGoPr6N-Medium.otf", t["font_dest_size"])
-        font_suffix = _font("ShinGoPr6N-Medium.otf", t["font_suffix_size"])
+        font_dest = _font("ShinGoPr6N-Medium.otf", t["font_dest_size"], draws=DESTINATIONS)
+        font_suffix = _font("ShinGoPr6N-Medium.otf", t["font_suffix_size"], draws=lit("方面", "ゆき"))
         with clip(self.screen, DEST_RECT):
             # Per-region bg fill (DARK_BG / debug-grid tint).
             pygame.draw.rect(self.screen, _bg("dest"), DEST_RECT)
@@ -304,7 +305,7 @@ class JapaneseDisplay:
         tr = _TUNEABLES_PREFIX_RECT
         PREFIX_RECT.update(tr["prefix_x"], tr["prefix_y"], tr["prefix_w"], tr["prefix_h"])
         t = _TUNEABLES_PREFIX_KANJI
-        font_prefix = _font("ShinGoPr6N-Medium.otf", t["font_size"])
+        font_prefix = _font("ShinGoPr6N-Medium.otf", t["font_size"], draws=lit("次は", "まもなく", "ただいま", "つぎは"))
         with clip(self.screen, PREFIX_RECT):
             pygame.draw.rect(self.screen, _bg("prefix"), PREFIX_RECT)
             prefix_img = font_prefix.render(prefix_text, True, WHITE_BG)
@@ -318,7 +319,7 @@ class JapaneseDisplay:
         tr = _TUNEABLES_STATION_RECT
         STATION_RECT.update(tr["station_x"], tr["station_y"], tr["station_w"], tr["station_h"])
         t = _TUNEABLES_STATION_KANJI
-        font_station = _font("ShinGoPr6N-Medium.otf", t["font_size"])
+        font_station = _font("ShinGoPr6N-Medium.otf", t["font_size"], draws=(STATION_NAMES, STATION_READINGS))
         with clip(self.screen, STATION_RECT):
             _, name_h = font_station.size(station_text)
             name_y = STATION_RECT.bottom - name_h - t["text_bottom_margin"]

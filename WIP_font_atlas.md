@@ -1,157 +1,520 @@
 # WIP — Pre-rendered font atlas (drop proprietary font software from the ship)
 
-**Tracking:** not yet filed. Outcome is user-visible (the shipped build stops carrying font
-software), so it wants a parent issue + stages rather than a `Refs`-only ticket.
+**Tracking:** [#114](https://github.com/ksleungac/pids-jre-simulator/issues/114) (parent outcome —
+the shipped build stops carrying font software) → [#115](https://github.com/ksleungac/pids-jre-simulator/issues/115)
+ShinGo atlas, [#116](https://github.com/ksleungac/pids-jre-simulator/issues/116) Helvetica/Frutiger
+(`deferred`, so `fonts/` still ships).
 
-**Status:** design only, nothing built. Feasibility measured 2026-07-27 — see § Measured.
-Sequenced after the licensing work (`LICENSE` / `THIRD-PARTY.md`, landed 2026-07-27).
+**Status:** built and passing its gates for E235-1000 / ShinGo. Author has visually checked the
+per-route sheets and accepted them (2026-07-30). Next work is the single-path rewrite in
+§ Next — one path, not two. Nothing is committed yet.
 
 ---
 
 ## EDIT-CONTRACT
 
-- **Holds:** the design, the measured numbers it rests on, the rejected alternatives, and the
-  gate the approach requires. Transitional notes while in flight.
+- **Holds:** the goals in priority order, the design, the numbers the design rests on, the rejected
+  alternatives, and the gates. Transitional notes while in flight.
 - **Does NOT hold:** anything already true of shipped code — that belongs in
   `conventions.md § Tooling` (font rules) and `/build`. Measurements that stop being
   decision-relevant get cut, not archived.
-- **Graduation trigger:** when the atlas is the shipped path and the proprietary faces are out
-  of the tracked tree, dissolve into `conventions.md § Tooling` (replacing the "TIMS chrome
-  text" / font-loading rules where they change) + `/build` (the generation step) and delete
-  this doc.
+- **Graduation trigger:** when the atlas is the shipped path and the proprietary faces are out of
+  the tracked tree, dissolve into `conventions.md § Tooling` + `/build` and delete this doc.
 
 ---
+
+## Goals, in priority order
+
+Stated by the author 2026-07-27. This ordering decides every trade-off below — do not re-rank it.
+
+1. **The atlas produces 100% identical output to current rendering.** Binary bar, not a tolerance.
+   Zero pixel difference.
+2. **The development flow is exactly the same.** Editing an LCD — position, font size — behaves as
+   it does today with direct font rendering. No regeneration step in the iteration loop.
+3. **The problematic fonts leave shipping and distribution.**
+
+Everything else is a bonus and must never be traded against those three. Atlas byte size is **not**
+a goal — author: *"no matter how you compress it's not going to be bigger than a font file, even it
+is bigger i don't care"* — conditional on only what is needed going in, not an indiscriminate dump.
 
 ## Why
 
-Two drivers, either sufficient on its own.
+`fonts/` holds three commercial families — `ShinGoPr6N` (Morisawa), `HelveticaNeue` and
+`NeueFrutigerWorld-Bold` (Monotype), 17.0 MB across 7 files, all seven in the release zip. A licence
+was bought for the ShinGo but does not extend to redistribution.
 
-**Licensing.** `fonts/` holds three commercial faces — `ShinGoPr6N` (Light/Medium/Heavy,
-Morisawa), `HelveticaNeue` (Roman/Medium/Bold) and `NeueFrutigerWorld-Bold` (Monotype), 17.0 MB
-across 7 files. A licence was bought for the ShinGo but does not extend to redistribution, and
-the ~629 MB release zip ships all seven. Copyright protects font **software** — the outlines and
-hinting as a program — not the typeface **design**, which is unprotected in the US and sits below
-Japan's high bar for logos and applied art. So shipping the `.otf` redistributes the protected
-artifact and is hash-identifiable; shipping raster glyphs of the same design is a materially
-different act with nothing matchable in it. History is not being rewritten (decided
-2026-07-27) — this is a forward-clean measure.
-
-**Engineering, independent of the above:**
-
-- **Pixel determinism.** Fidelity currently depends on the end user's SDL_ttf/freetype hinting
-  and AA matching the dev box. A version bump can move a stroke on a machine we never see, and
-  there is no test for it. A baked atlas ships the calibrated pixels.
-- **Removes a live crash class.** All 76 call sites are bare `pygame.font.Font(path)` with no
-  existence check — a mis-staged `fonts/` is an unhandled exception, the `critical_lessons.md §4`
-  deployment-frame mode.
-- No `SysFont` path can ever regress back in for these faces (`conventions.md § Tooling`).
-- **−17.0 MB shipped**, plus no 17 MB CJK parse at startup.
-
----
-
-## Measured (2026-07-27)
-
-Method: monkeypatch `pygame.font.Font` to record `(filename, size)`, run `preview_display.py`
-headless across the matrix, accumulate. Throwaway probe, not a committed harness.
-
-**43 distinct (face, size) pairs, and the set is CLOSED.** Invariant across 2 models × 3 modes ×
-3 lower-views, then 5 routes (`sobu/1217F`, `yamanote`, `chuo/1654T`, `keihin/1275A`,
-`_mock/main`) × 4 stops. Cumulative never moved off 43 — nothing sizes itself off content.
-
-| Face | n | Sizes |
-|---|---|---|
-| `ShinGoPr6N-Medium` | 14 | 9 10 11 14 18 19 25 26 30 35 40 42 78 84 |
-| `ShinGoPr6N-Heavy` | 2 | 19 26 |
-| `HelveticaNeue-Bold` | 11 | 11 14 15 17 21 22 31 42 68 75 88 |
-| `HelveticaNeue-Medium` | 5 | 9 20 24 27 28 |
-| `HelveticaNeue-Roman` | 2 | 27 31 |
-| `NeueFrutigerWorld-Bold` | 9 | 8 11 13 14 15 17 18 20 22 |
-
-**849 unique characters across all committed data** (`data/*.json` + every `audio/**/route.json`):
-643 kanji, 65 hiragana, 37 katakana, 83 ASCII, 21 other.
-
-So the atlas is ~16k glyph bitmaps (ShinGo 16 pairs × ~849, Helvetica 18 × ~110, Frutiger 9 ×
-~40) — single-digit MB packed as alpha PNGs, i.e. **smaller than the fonts it replaces**.
-
-**Glyph coverage is not a constraint anywhere.** Every bundled face, including the Noto subsets,
-renders the full 41-char station-kanji/kana probe plus Latin and digits (checked via
-`Font.metrics()` returning non-None).
-
-**Call sites: 76 across 9 files** — `e235_1000/lower_lcd.py` 16, `e235_0/lower_lcd.py` 14,
-`e235_1000/upper_lcd.py` 13, `e235_0/upper_lcd.py` 11, `e235_1000/transfer_info.py` 7,
-`setup.py` 6, `i18n.py` 5, `displays/utils.py` 3, `tutorial.py` 1.
-
-**Not probed:** `setup.py`, `tutorial.py`, the `auto_input/driver.py` debug panel. Latin chrome
-mostly, and TIMS chrome is already Noto. Treat 43 as the LCD floor plus a handful, not a
-different order of magnitude.
+Copyright protects font **software** — outlines and hinting as a program — not the typeface
+**design**. Shipping the `.otf` redistributes the protected artifact and is hash-identifiable;
+shipping raster output of the same design is a materially different act. No history rewrite (decided
+2026-07-27) — forward-clean only.
 
 ---
 
 ## Design
 
-**Generate at build time from the local licensed fonts. Dev keeps rendering live.**
+**The atlas stores what the production code produced.** Not glyphs, not a layout model, not a
+declaration of what text exists. That single rule is what the design is, and everything below
+follows from it.
 
-The `.otf` files stay on the dev machine, gitignored. `preview_display.py`, the calibration
-editor and every dev run load them as today, so tuneable font sizes remain discoverable AND
-reactive (`conventions.md § UI code style`) and the calibration loop is untouched. Only the
-shipped artifact is pre-rendered. The repo carries neither the fonts nor the atlas — the atlas
-is build output, so nothing derivative enters the tree either.
+**One layout implementation.** `displays/utils.py::compose_text_parts` is the only place LCD text
+layout exists — the four branches (latin, compression, collapse, even-spacing-with-`exp`) live there
+and nowhere else. It carries a `# CONTRACT:` block saying so. `draw_text_given_width` blits what it
+returns.
 
-**One funnel.** `text_font(role, size)` returns either a real `pygame.font.Font` (dev) or an
-atlas-backed shim duck-typing enough of the `Font` API that call sites cannot tell. The 76 sites
-change once, mechanically, and never again. This funnel is the enabling refactor regardless of
-which direction the font question ultimately goes.
+**The unit of storage is that function's return value: a part list.** `[(offset_from_x, surface)]`,
+each surface already coloured and already scaled, each offset an integer. Runtime blits them in
+order — the same sequence of blits the LCD has always performed — so LIVE and ATLAS differ only in
+where the surfaces came from.
 
-**Scope: proprietary faces only.** Noto is OFL and free to ship; leaving chrome on live font
-rendering keeps i18n flexible. Bake ShinGo, Helvetica Neue, Frutiger.
+**Deliberately not flattened into one block surface.** Measured: flattening cost **90 differing
+pixels across 36 frames.** The compression branch can place adjacent characters a pixel apart from
+their scaled widths, and compositing an overlap onto transparency then blitting the result is not
+the same operation as blitting each part onto the background in turn. Handing back the parts makes
+the atlas exact by construction instead of by measurement.
 
-**Known cost.** Per-glyph blitting loses kerning and shaping. Near-invisible for Japanese
-(roughly uniform advances); Helvetica Neue does kern, so Latin runs will not be pixel-identical
-unless kerning pairs are baked into the advance table. Wants a side-by-side before commitment.
+**Everything the renderers ask a font for is recorded, not just layout.** Several elements bypass
+`compose_text_parts` and call the font directly, so the atlas also holds `render` output, the opaque
+`render(..., background)` form as SDL composited it, `size` results, per-character `metrics`, and the
+`get_height` / `get_ascent` scalars.
+
+Two constraints that are load-bearing rather than incidental:
+
+- **`metrics` must never conflate "no glyph in this face" with "not baked".**
+  `transfer_info.py:86` uses `metrics(ch)[0] is None` as a live coverage probe driving CJK fallback.
+  An unbaked character raises; it does not return `None`.
+- **Font identity travels ON the font object** (`font_atlas.LcdFont`, a `pygame.font.Font`
+  subclass). A side table keyed by `id(font)` looked equivalent and was not: `force_mode` clears the
+  font cache, CPython reuses the freed address, and the stale entry claimed an unrelated font — a
+  bare `HelveticaNeue-Medium@24` was identified as `ShinGoPr6N-Medium@11` and routed into the atlas.
+  Subclassing is what makes the attribute possible; the C type rejects attributes directly.
+
+**Colour is part of the key** rather than reapplied at blit time. The part surfaces are already
+coloured, several of them scaled; re-deriving a flat colour from that is an argument that would have
+to keep being made, and the colour set is small.
+
+**Dev renders live, so goal 2 holds by construction.** Mode is chosen by what exists: `fonts/`
+present → LIVE, absent → ATLAS. Every dev run, `preview_display.py` and the calibration editor load
+the real fonts as before; a nudged size renders immediately with no atlas in the loop. Only the
+shipped artifact reads the atlas, and a layout edit is a re-bake at build time.
+
+**Nothing in `_dev_scripts/` reasons about layout or text sources.** The baker drives the real app
+and keeps what it gets. Two earlier versions did reason for themselves — a declared combo table and
+a text domain read out of `route.json` — and both were wrong in ways that render as plausible-looking
+output. The failure they share is a second implementation of a production decision, which is the same
+shape as a proof script that re-derived `draw_train_type`'s box geometry and consequently showed
+two-character train types without their `exp=7` spread while reporting zero pixel difference.
+
+**Coverage rests on the sweep being exhaustive, not on a declaration.** Every shipped route × every
+stop × every mode × every view × every PA phase = **10,476 states**. Sampling cannot substitute: a
+61-state sweep missed all nine transfer-panel sizes because no sampled stop had an interchange in
+window, and a data-derived domain missed the 18 stations in `sobu/1217F`'s `pre_stops`.
+
+**Staleness is loud.** The manifest carries a fingerprint of `data/*.json` + every shipped
+`audio/**/route.json`. On mismatch the atlas refuses to load and names the fix, so new route or
+transfer data cannot silently render as tofu. Author's stated requirement: *"if i add new
+informations in transfer or audio data that covers outside yout atlas, it must fail loud or
+automatically refresh."*
+
+### Current numbers
+
+16 combos, **2.1 MB**, 14 sheets + manifest, one sheet per combo named for the face and size. The
+route-bar labels (Medium@25/@30) come through as direct `render` calls per character; the station
+names (Medium@78) as 366 laid-out texts totalling 1366 parts.
 
 ---
 
-## The gate this approach requires
+## The gates
 
-A frozen atlas introduces two failures that are invisible in dev and only appear in the shipped
-build — this project's recurring silent-drift class, so it needs a mechanical gate, not
-discipline:
+Three, all mechanical, all required. Goal 1 is binary so its test is binary.
 
-1. A font size is retuned and the atlas is not regenerated → no atlas entry for that size.
-2. A new route adds a station whose kanji is outside the 849 → tofu in the exe, correct in dev.
+1. **`--verify`** — re-drive all 10,476 states in ATLAS mode. Any missing entry is a failure, so an
+   incomplete recording stops the build rather than shipping a crash. *Currently: 0 raised.*
+2. **`--pixel-verify`** — render every state twice, LIVE then ATLAS, and compare frame digests.
+   Coverage says an entry existed; this says it was the right pixels. *Currently: 0 of 10,476
+   differ.*
+3. **Against pre-atlas code** — a detached `git worktree` at the pre-atlas commit renders the same
+   states with the original per-character blits; three-way diff pre-atlas / LIVE / ATLAS.
+   *Currently: 0 differing pixels over 36/36 states on both pairs.* This is the gate that catches a
+   refactor that changed rendering and then got faithfully stored.
 
-Gate: `/build` regenerates unconditionally, plus a build-time check that every (face, size) the
-code requests and every character the committed data contains exists in the atlas manifest.
-Same tier as `check_deps.py` (`conventions.md § Tooling`, automated sensor tiers).
+**Both sweeps must pin every clock, including SDL's.** Freezing Python's `time` is not enough:
+the multi-PA hint blinks on `(pygame.time.get_ticks() // 500) % 2`
+(`e235_1000/upper_lcd.py:709`), which patching the `time` module cannot reach. Unpinned, the two
+passes catch the blink in opposite phases and the run reports ~1150 phantom mismatches — a
+*different* ~1150 each time. Localising one of them showed zero difference when that state was
+rendered in isolation.
+
+**A multi-pair comparison must score each pair on its own availability.** Gating both pairs on all
+three trees succeeding let a failure in the third empty the first pair's sum, which then printed `0`
+and read as a pass.
 
 ---
 
 ## Rejected
 
-- **Substitute open fonts in the public build.** No open ShinGo analogue exists; Noto Sans JP and
-  Source Han Sans do not read as ShinGo, and station names are the most prominent element on the
-  upper LCD. Also fights `conventions.md`'s fixed-badge-typeface rule, which exists because a
-  wrong face already shipped once. Helvetica Neue would have been easy (Nimbus Sans is
-  metric-compatible); the Japanese face is what kills it.
-- **Ship the fonts and rely on the repo being small.** The release zip is the larger exposure,
-  not the tree; removing from `git` while continuing to ship the zip fixes the scannable half
-  only.
-- **Tell users to obtain the fonts themselves.** Morisawa sells by subscription, so this is not a
-  path a hobbyist user can walk, and all 76 sites are unguarded — absence is a crash, not
-  degradation.
-- **Pre-render whole strings rather than glyphs.** Preserves kerning perfectly but explodes
-  combinatorially across sizes, and the long tail (numbers, 3-locale chrome, debug panels) has no
-  closed enumeration the way the glyph set does.
+- **Substitute open fonts in the public build.** No open ShinGo analogue; Noto Sans JP and Source
+  Han Sans do not read as ShinGo, and station names are the most prominent element on the upper LCD.
+  Fails goal 1 outright. (BIZ UDGothic was compared side by side and parked by the author on feel;
+  weight-matching first — Regular reads too thin against ShinGo Medium.)
+- **Ship the fonts and rely on the repo being small.** Rejected, but the reason first given —
+  *"the release zip is the larger exposure"* — is wrong and worth correcting, because it
+  under-states what goal 3 needs. **`fonts/` is tracked**: `git ls-files fonts` lists 13 files, 7 of
+  them the proprietary faces, on a public repo. That is at least as exposed as a zip and arguably
+  more — clonable, indexable, and permanent in history by the no-rewrite decision (2026-07-27).
+  So goal 3 takes three things, not one: the atlas (ShinGo done), `'fonts'` added to `/build`'s
+  `$shipExclude`, and `git rm -r --cached fonts/` on master. History keeps them by choice.
+- **Tell users to obtain the fonts themselves.** Not a path a hobbyist can walk, and every load site
+  is unguarded — absence is a crash, not degradation.
+- **A glyph atlas — per-character bitmaps recomposed at runtime.** Recomposing from individual glyph
+  renders at `metrics()` advances is 26–100% pixel-exact depending on size, collapsing at small
+  sizes because adjacent antialiased ink overlaps. Storing output sidesteps the whole question.
+- **Character-level storage with runtime layout.** Workable and proven on one element, but it leaves
+  `size()` lookups, the compression `smoothscale` and the spacing arithmetic running at blit time —
+  three things that have to be argued correct separately. Storing the laid-out parts leaves nothing
+  to argue. The author's framing: pre-rendered means no blit-time layout at all.
+- **Compression / sheet-packing optimisation.** Not a goal; see § Goals.
 
 ---
 
-## Open
+## State — pick up here
 
-- **`/third-man` on the shim interface** before touching 76 sites — offered, not yet taken. The
-  question worth a second opinion: how much of the `pygame.font.Font` surface the shim must
-  implement. Call sites are known to use `render`, `size`, `get_height`, `get_ascent` and
-  `metrics`; needs a survey rather than a guess, since a missing method fails at a render path
-  that may not be exercised in dev.
-- Whether the atlas ships as one packed sheet per (face, size) or one sheet per face with a
-  size-indexed offset table.
-- Kerning: bake pairs into the advance table, or accept the Latin difference.
+**Nothing is committed.** On `master`, tree dirty:
+
+| path | state |
+|---|---|
+| `font_atlas.py` | new — the seam |
+| `_dev_scripts/bake_font_atlas.py` | new — driver + all three gate entry points |
+| `font_atlas/` | baked output, 26 combos, 4.5 MB — now **gitignored**: a build artifact `/build` re-bakes, never a committed asset |
+| `displays/utils.py` | `compose_text_parts` extracted out of `draw_text_given_width` |
+| `preview_display.py` | `apply_state` / `render_frame` extracted out of `main()` |
+| `displays/train_models/e235_1000/{upper_lcd,lower_lcd,transfer_info}.py` | loads moved to `lcd_font`; `role=` and the `set_bold`/`set_italic` calls removed; `lower_lcd` + `transfer_info` carry `draws=` declarations |
+| `displays/train_models/e235_0/{upper_lcd,lower_lcd}.py` | 14 bare ShinGo loads (incl. `Light`) moved onto the seam — its `_font` helpers now delegate to `lcd_font` |
+| `.claude/skills/build/SKILL.md` | step 2a bakes + runs all three gates; explicit `font_atlas/` stage copy; the `'fonts'` exclusion documented as the final step |
+| `.gitignore` | `/font_atlas/` |
+| `CLAUDE.md`, `DISPLAY.md`, `DATA_FORMAT.md`, `.claude/rules/{principles,conventions}.md` | codifications |
+
+Session narrative + codification list for the first block are published on `origin/memory`
+(`memory/2026-07-27.md`, *"font atlas built"*). The 2026-07-30 work is not yet recapped.
+
+**Commands, and where they stood when last run** (both models, 21,978 states):
+
+```
+uv run _dev_scripts/bake_font_atlas.py                  # cook   -> 26 combos, 4.5 MB
+uv run _dev_scripts/bake_font_atlas.py --verify         # cover  -> 0 raised
+uv run _dev_scripts/bake_font_atlas.py --pixel-verify   # ident  -> 0 frames differ
+```
+
+Both sweeps need `python -u` to see progress, and output goes through
+`PYTHONIOENCODING=utf-8` (Japanese in the report crashes a cp1252 pipe). `libpng warning: iCCP` lines
+are the transfer icons and are pre-existing noise — filter them, don't chase them.
+
+**The migration's finish line is printed by the bake**, not tracked here: `N combo(s) cooked from a
+`draws=` declaration, M from sweep provenance`, with the M listed by face and size. **Currently 11
+declared / 10 provenance.** A provenance-cooked combo still owes its coverage to some state being
+reachable, which is the dependency being removed; zero means the atlas no longer cares what the LCD
+can be driven to. The 10 outstanding are the E235-1000 upper faces (Heavy@26bi train type,
+Medium@35 dest, Medium@78 station), the 8-station label (Medium@30), and E235-0's set
+(19/28/38/40/42/84).
+
+**Gate 3 (against pre-atlas code) is not a committed script.** Reconstruct it with a detached
+worktree at the last pre-atlas commit `385727f`, render matched states there and here under a frozen
+clock, and diff. It found the one thing the other two cannot — a refactor that changed rendering and
+then got faithfully stored (the 90-pixel flattening cost). `git worktree list` will show the
+worktree if it still exists; `git worktree remove` when done.
+
+**Code map:**
+
+- `displays/utils.py::compose_text_parts` — the only layout implementation, with the `# CONTRACT:`
+  block. `draw_text_given_width` blits the parts it returns.
+- `font_atlas.py` — `lcd_font` (the seam, `draws=` declares text), `ATLAS_FACES` (the one place
+  deciding which families are baked), `Source` / `at` / `lit` / `resolve` / `STATION_NAMES` (the
+  declaration vocabulary), `check_declared` (validates every dev draw against its declaration),
+  `walk_shipped_json` (total JSON traversal, naming no key), `data_fingerprint` +
+  `code_fingerprint` (staleness on data AND on renderer source), `text_parts`, `LcdFont`,
+  `AtlasFont`, `RecordingFont`, `force_mode`, `_suppress`.
+- `_dev_scripts/bake_font_atlas.py` — `sweep` (routes × **models** × stops × modes × **slots** × PA
+  × **frames**, every axis read from production: `TRAIN_MODELS`, `_SLOT_BEATS`, `_frame_count`,
+  `DisplayMode`), `cook_from_data` (declaration-first, provenance fallback),
+  `audit_source_literals` (fails the bake on a Japanese literal no state drew), `bake`, `verify`,
+  `pixel_verify`, `freeze_clock`.
+- Iteration loop while migrating declarations: a scratch `declcheck.py` drives ONE route in LIVE mode
+  and reports every string outside its declaration — seconds, versus minutes for a bake. Scratchpad
+  only, deliberately not graduated to `_dev_scripts/`.
+
+**Loose end:** the Yamanote contact sheet took 駒込 for its transfer row — nearest-to-midpoint stop
+with transfers, which on a loop is a thin one. Re-shoot at 池袋 or 新宿 if a richer panel is wanted.
+
+---
+
+## Decided — cook from the data, verify by the sweep
+
+Author delegated the design 2026-07-30: *"whatever design you like … I only care the things i've
+mentioned to you, as for how it's implemented i don't care. i just want the whole thing used as it
+is, and i accept a bit more time in baking, but if that can be speed up i am more happy."* Their
+framing, same day: *"this is not a shader, we are cooking, baking the texture"* and *"i think just a
+mechanism that ensures nothing fails to ship."*
+
+**The inversion: coverage comes from the DATA, not from the state sweep.**
+
+### Why the sweep cannot be the coverage mechanism
+
+It shipped a crash. `sobu/1217F` carries a `frames` array — frame 0 is 久里浜→千葉, frame 1 is
+千葉→成田空港 — and the atlas has **no lower-LCD raster at any size for 7 of the route's 37 station
+names** (東千葉, 都賀, 四街道, 物井, 佐倉, 酒々井, 空港第2ビル). That set is exactly frame 1's
+interior; the three frame-1 names that survive leak in from elsewhere (千葉 is the shared junction,
+成田空港 is the destination at size 35). Mechanism: the sweep pins the lower view by writing
+`_current_slot`, which sets `scheduler.enabled = False`, so `lower.update()` never runs,
+`_advance_frame` never fires, and `_active_frame_idx` never leaves 0. In a fontless build, driving
+past 千葉 flips the frame and the route bar raises `KeyError` on 東千葉 at size 25.
+
+**All three gates passed on it**, and that is the structural point rather than the bug: `--verify`
+re-drives *the same sweep*, so it can only confirm the atlas covers what the sweep visited — a
+tautology against its own coverage. `--pixel-verify` compares two renders of the same unvisited set.
+Gate 3 sampled 36 states. A mechanism that ensures nothing fails to ship therefore cannot be another
+sweep.
+
+### The cook
+
+**Total traversal, never a named key.** Walk every string value in every shipped JSON
+(`data/*.json` + `audio/**/route.json`, skipping `_`-prefixed). Measured: 19 files → 1789 distinct
+strings, 754 containing CJK, **821 distinct CJK characters**. This is the repair of attempt 3, which
+read `stops` and missed `pre_stops` — naming keys was the failure, so the walk names none and found
+both arrays without knowing either existed.
+
+**Provenance binds text to combos.** The walk gives totality but not which sizes a string needs. For
+each text the sweep observed at a combo, reverse-map it to the JSON paths that contain it; the union
+of those paths is that combo's domain; bake every value at those paths. Derived, not declared —
+`remarks` never reaches size 78 because no observed 78-text maps to a `remarks` path. A blind full
+cross-product would instead bake 20-character remark strings at 78px, which is the indiscriminate
+dump § Goals bars.
+
+**Cost.** Layout path measured at 561 cross-product vs 398 stored (**1.4×**) because width and
+colour are 1 and 1–6 per combo. Character path at size 25 goes 223 → up to 821 (**3.7×**). Content-
+hash dedup of identical part surfaces is what keeps this cheap: parts are stored per character, so
+the same glyph currently repeats once per string it appears in.
+
+**This makes the author's contract structurally true rather than guarded.** *"If i add new
+informations in transfer or audio data that covers outside your atlas, it must fail loud or
+automatically refresh"* — under a data-driven cook there is no outside, because new data IS the
+cook's input. The fingerprint stays as a cheap second net, no longer the primary guard.
+
+### What the sweep becomes
+
+**Parameter discovery, not coverage.** It remains the only honest source for the role→size mapping
+and for width / colour / collapse / script, and each combination needs observing exactly **once** —
+so discovery can be a small sample instead of 10,476 states. The frame hole is not fixed; it stops
+mattering, because frame 1 uses frame 0's sizes and 四街道 is baked from `route.json` whether or not
+any state reaches it. Unreachable state goes from *shipped crash* to *nothing at all*.
+
+Residual, stated rather than assumed: a data *location* never observed feeding a combo is outside the
+domain, because the location→combo binding is still learned by watching the sweep draw. Adding a
+station to an existing location is covered; a wholly new drawn field is not. **This residual is what
+§ Side 2 removes.**
+
+### Side 2 — the code declares its needs
+
+Author's call, 2026-07-30: *"the architecture should not fail on like slot change, these kind of LCD
+things, it should be LCD invariant, unaware to LCD. maybe better i think is the LCD declares what
+kind of font it needs"*, and earlier — *"at the end it's a collaboration of both sides."*
+
+The evidence for it is the day's own history: three axes were patched in sequence — through-service
+frames, train models, lower-LCD slots — and each was a hole that had shipped or would have. An axis
+list is never provably complete, so any design where coverage depends on **traversing LCD state** is
+one new view away from a fontless-build crash. The `駅` finding is the same thing in miniature:
+`e235_0/lower_lcd.py:1932` draws `station_name + "駅"`, a composed string in no JSON file, covered
+only because the sweep reached every station that can be a current stop.
+
+**Each renderer declares, at the point it loads the font, what it draws:** face, size, and the
+*source* of the text — a data location (`audio/*/route.json:stops[].name`), a literal set, or a
+derivation of one (`stops[].name + "駅"`). A source, never a state. The cook joins the declarations
+against the § The cook walk; nothing about LCD state is in the correctness path.
+
+**What stops this being the declared table that failed three times.** That is the real objection —
+`_dev_scripts` tables are exactly what produced the missed transfer sizes and the missed `pre_stops`.
+The difference is *where it lives* and *when it is checked*: the declaration sits at the call site,
+and is **validated at use**. In dev, `lcd_font` / `text_parts` check that the face, size and text
+being drawn fall inside the declaring renderer's declaration, and drawing something undeclared raises
+on the first frame that does it. A declaration cannot drift from the code it sits in when using
+something undeclared is an error at the moment of use rather than a gap found at ship time. Same
+shape as a pipeline validating a shader's declared resource bindings.
+
+**The sweep then keeps only goal 1** — zero pixel difference LIVE vs ATLAS — and stops being
+load-bearing for coverage. A new slot, view, frame, mode or model can no longer break coverage; it
+can only go un-pixel-verified, which is a weaker and honest failure. That is what "LCD invariant,
+unaware to LCD" buys: a display author writes a renderer, declares its text sources, and never thinks
+about the atlas. The three axis patches stay in the pixel gate, where breadth is still worth having,
+and stop being mistaken for coverage.
+
+**The vocabulary** (`font_atlas.at` / `lit`). `at()` takes fnmatch patterns over the walk's own
+location keys, so `data/lines.json:*.name_ja` covers every line id without naming one. Options exist
+only for text a renderer DERIVES, which is text present in no JSON and therefore covered by
+reachability alone if undeclared. Applied in order — `replace=(a, b)`, `wrap="sep"`,
+`split=True | "sep"`, `prefix=/suffix=` — because a renderer that substitutes and then splits is
+splitting on the substituted character. Recurring declarations are named once (`STATION_NAMES`,
+`STATION_NAMES_EKI` reusing its locations) so two models cannot hold diverging copies of a location
+list.
+
+Every option exists because a real renderer forced it, and each was found by the validator rather
+than by reading:
+
+| option | the derivation it covers |
+|---|---|
+| `replace=` | transfer panel swaps the JSON's `・` for a narrower `·` before drawing |
+| `split="·"` | then splits on it, rendering each part **and** the `·` alone |
+| `split=True` | a space inside a station name is the data format's line-break marker — and the two LCDs disagree, the lower route bar honouring it (`さいたま` over `新都心`) while the upper station name strips it (`さいたま新都心`). Both are declared by one source. |
+| `wrap="･"` | shinkansen names wrap to ≤2 lines at a width-dependent boundary, keeping the separator on the leading line, so every boundary is a possible cut |
+| `suffix="駅"` | E235-0's transfer header composes `{name}駅` at draw time |
+
+**The cook reads declarations; shape is still observed.** A declared combo's domain comes from
+`resolve()`, never from what the sweep drew. *How* it is drawn — laid-out parts, per character, whole
+string — is read off the observed texts that declaration covers, so ShinGo Medium @25 renders
+route-bar names per character and PA prefixes whole rather than applying both shapes to the union of
+the two roles it serves. A declaration covering nothing yet drawn (the transfer panel's `name_en` CJK
+fallback) bakes as a whole string, so its first real fire is not its first miss. The bake prints how
+many combos are still cooked from provenance; **zero is the finish line**, and until then those
+combos still owe their coverage to reachability.
+
+**What it caught in its first hour**, each a text in no JSON that was previously covered only because
+some state happened to reach it:
+
+- `さいたま` / `新都心` — a space inside a station name is the data format's own two-line break marker
+  (author, 2026-07-30). Was undocumented; now in `DATA_FORMAT.md`, and `STATION_NAMES` carries
+  `split=True`.
+- `·` and the `·`-split parts of a line name — `compact_dots` swaps the JSON's `・` for a narrower
+  U+00B7 and `render_with_dot_pad` then renders each part *and* the dot alone. Neither the substituted
+  whole nor the parts are values anywhere.
+- `station_name + "駅"` — the E235-0 transfer-panel header, composed at draw time.
+
+Mutation-tested rather than assumed: narrowing `STATION_NAMES` to drop `pre_stops` took a route from
+1026 clean states to 912 and named 久里浜; dropping the dot substitution took 810 to 783 and named
+日暮里.
+
+### Atlas every face, swap nothing
+
+*"The whole thing used as it is"* — so all three families go through the seam and none is
+substituted. That keeps goal 1 (zero pixel difference) for Helvetica and Frutiger too, and removes
+every appearance decision from the author's plate. It also retires the open-face swap track: no
+Nimbus Sans, no BIZ UDGothic.
+
+The continuous-value objection dissolves for the current app: the clock and countdown are Helvetica
+digits, and digits are 10 characters. Enumerable trivially. **The constraint on future LCDs is
+therefore narrow — atlas-backed text must be traceable to a shipped file or to a closed character
+set; genuinely open runtime text needs a shippable face.**
+
+### Gates
+
+Keep both sweeps, exhaustive, and keep `force_mode(LIVE)` as a verification arm rather than the dev
+default (third-man, 2026-07-30: collapsing to one path does not make agreement true by construction,
+it makes disagreement *unobservable*, and goal 1 is a binary bar only a second arm can falsify).
+Their job changes from *providing* coverage to *verifying* it. Gate 3 expires structurally once a
+model is authored after the atlas — no pre-atlas commit exists to diff against — so commit it as a
+script, spend it on the E235-0 conversion, then retire it.
+
+Two gates were added that fail in the opposite direction from the sweeps, so they can over-report but
+not miss:
+
+- **`--verify` runs with the baked faces unreadable.** Coverage alone was not the whole risk: the
+  shipped build has no ShinGo *files*, so a path that constructs one is a `FileNotFoundError` there
+  even though the atlas could have served it. The pass patches `pygame.font.Font` to raise on a face
+  in `ATLAS_FACES`, which makes that unmissable — the dev tree has every face, so it is otherwise
+  invisible (`critical_lessons.md §4`).
+- **The source-literal audit** (`audit_source_literals`) fails the bake on a Japanese literal in
+  display code that no swept state drew. It found two real cases on its first runs: `・`, which
+  `compact_dots` substitutes away before rendering (a predicate — marked `# not-drawn`), and `駅`,
+  composed into `{name}駅`.
+
+A third, still unbuilt: assert every text in the cooked domain has a raster at every size its
+declaration binds it to.
+
+### Speed
+
+Bake gets *faster*, not slower: discovery drops from 10,476 states to a small sample, and cooking
+821 characters plus the bound strings is seconds. The exhaustive dual-arm pixel gate keeps the
+10,476-state cost, and it parallelises per route across cores — 14 routes, embarrassingly parallel.
+
+## Superseded — the write-through memo cache
+
+Considered and dropped 2026-07-30. Kept because the reasoning error is instructive.
+
+**Design.** The atlas becomes a write-through memo cache of `compose_text_parts`, and the read path
+is the only path. Always read from the atlas. On a miss: dev composes, stores, and serves from
+storage; ship treats a miss as a hard error. One rendering path in both; the only difference is
+absence handling, not how pixels are produced.
+
+This retires two gates — `--pixel-verify` and the pre-atlas diff both go vacuous, with no second
+path left to disagree. What remains is the build-time exhaustive bake plus miss-is-fatal.
+
+**Incremental, not compile-on-launch.** A full sweep is minutes, so it cannot gate every
+`uv run preview_display.py` without breaking goal 2. A miss costs exactly one `compose_text_parts`
+call — what live rendering costs today — so the dev loop and the calibration editor stay as fast as
+they are, paying one compose per nudge.
+
+**The hazard the single path introduces, and its guard.** The key covers face, size, style, text,
+colour, width, collapse and script, so editing a size or a position misses and self-heals. Editing
+the *arithmetic inside* `compose_text_parts` (`exp = 7` → `8`) changes no key, so dev would serve
+stale pixels and look correct. Fingerprint the layout source into the manifest alongside the data
+fingerprint; touching the function invalidates everything. Without this the single-path design has a
+silent-staleness hole the dual-path one does not.
+
+## Open — to discuss before the single-path rewrite lands
+
+Author, 2026-07-30: the design choices and the state sweep need discussing explicitly, *"because it
+deeply changes how our later LCD designs direction as well."* Correct — under a stored-output atlas
+the sweep is the coverage mechanism, so it quietly constrains what a future LCD may render. Not
+decided; this is the agenda.
+
+**1. The sweep's axis list is hand-declared, which is the smell we just codified.**
+`MODES` / `VIEWS` / `PA_PHASES` are tuples typed into the baker, and `model` is hardcoded
+`"e235_1000"`. That is a declared table describing what production supports — the same shape as the
+combo table and the text domain that both failed. Adding a view, a mode or a model silently leaves
+the sweep behind. The axis list should come from production (the model's registered modes and
+slots), not from the baker.
+
+**2. What an enumerable state space costs the LCD design.** A stored-output atlas needs the set of
+`(text, colour, width, collapse, script)` tuples to be finite and reachable. Two future designs
+would break that rather than merely enlarge it: text derived from a *continuous* value rendered in a
+proprietary face (a live speed or clock readout in ShinGo — today the clock and countdown are
+Helvetica, so this is not yet a problem), and a width derived from something outside the state tuple.
+Worth deciding whether that is an accepted constraint on future LCDs or whether the atlas must
+eventually handle open text.
+
+**3. Exhaustive enumeration vs. recording a soak run.** Enumeration is provable and is why coverage
+is currently 0 misses; a long fuzz/soak recording is easier to grow but proves nothing. Related:
+whether the sweep stays a build-time cost that scales with models × routes × stops (today 10,476
+states for one model) or gets partitioned.
+
+**4. Miss behaviour in a shipped build.** Currently fatal, which is honest but is a crash for a
+user. The alternative is degrading to Noto (already shipped, OFL) with a loud log — graceful, but
+silently the wrong face. The single-path rewrite makes this the *only* remaining difference between
+dev and ship, so it wants a deliberate answer rather than the current default.
+
+**5. Animation and the clock stay live** — they are the one part of the LCD that is not a pure
+function of persistent state, and they are also why any frame-comparison harness has to pin both
+Python's clock and SDL's. Worth stating as a boundary the atlas never crosses.
+
+## Also remaining
+
+**ShinGo leaves the shipped build (2026-07-30).** `/build` stages `fonts/` then deletes
+`ShinGoPr6N-*.otf` from it and throws if any survive. Everything that drew ShinGo now resolves from
+the atlas, and `i18n._LANG_CHROME_FONT["zh_HK"]` — the last reference outside the LCD, reachable only
+via `--classic` — moved to `NotoSansTC`, which also stops classic and TIMS disagreeing about zh_HK
+chrome (TIMS already used a Noto TC face there). `font_for_lang` synthesizes bold for a locale whose
+face ships in one weight, so bold labels do not silently become regular.
+
+Because `fonts/` still *exists* in the staged folder, `mode()` returns LIVE there, so a stray ShinGo
+load is a `FileNotFoundError` at construction rather than a silent fallback. That is the wanted
+failure, and it is what the `lint_primitives` ban and `--verify`'s unreadable-faces pass exist to
+prevent reaching a user.
+
+Remaining, deliberately:
+
+- **`HelveticaNeue` and `NeueFrutigerWorld-Bold` stay in `fonts/` and stay shipped** — author's call,
+  2026-07-30 (*"leave helvetica and frtiger still"*). Baking them is mechanically identical (add the
+  family to `font_atlas.ATLAS_FACES`, extend the `lint_primitives` alternation, declare the sites);
+  no swap to an open face is needed or wanted, so the earlier Nimbus Sans / BIZ UDGothic track is
+  retired. Until then `fonts/` ships and the folder cannot be dropped wholesale.
+- **`fonts/` stays tracked, by decision, not by omission.** Author 2026-07-30: *"they can still exist
+  there until the time we fill comfortable."* So the proprietary faces remain in the public repo and in
+  history (§ Rejected records why that is the larger exposure). Not a pending task — do not re-propose
+  `git rm -r --cached fonts/` as cleanup; it happens when the author says so.
+- **Recap + commit.** Nothing from 2026-07-30 is committed or recapped.

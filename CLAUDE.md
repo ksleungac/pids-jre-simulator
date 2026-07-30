@@ -155,9 +155,10 @@ pids_jre_simulator/
 ├── audio.py                           # AudioPlayer: play_pa/sta, pause, is_playing
 ├── constants.py                       # Cross-model only: TIME_SCALE=60, FRAME_RATE=15, audio, setup palette
 ├── app_paths.py                       # Canonical project_root() — sole PyInstaller path resolver
+├── font_atlas.py                      # LCD font seam: live fonts (dev) or pre-rendered atlas
+│                                       #   (ship). lcd_font() + text_parts(). WIP_font_atlas.md
 ├── i18n.py                            # App-chrome i18n: settings, locale detect, t(), font helper
 ├── frame_stream.py                    # Opt-in window mirroring over HTTP (--stream / --stream-lan)
-├── setup.py                           # Route selection screen
 ├── route_loader.py                    # finalize_route: JSON → runtime closure with derived fields
 ├── preview_display.py                 # Audio-free preview entry (PASimulator(preview=True))
 ├── displays/

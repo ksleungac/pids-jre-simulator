@@ -435,6 +435,13 @@ Each stop in `stops` array:
 }
 ```
 
+**`name` — a space means "break here".** A space inside a station name is a layout instruction, not
+part of the name: the route-bar label renders the space-separated parts on two vertical lines
+(`"さいたま 新都心"` → `さいたま` over `新都心`). Same class of in-band layout convention as `&` /
+`\n` in a compound `dest` above. Consequence worth knowing: the drawn strings are the PARTS, which
+exist nowhere in the JSON — so anything enumerating renderable text from the data has to apply the
+same split (`font_atlas.STATION_NAMES` declares `split=True` for exactly this).
+
 **Note:** `time` field = scheduled **incoming** travel time — minutes from previous PA station's departure to this stop's arrival. Display semantics (countdown formula, floor division, forced "1" on last PA, STOPPING blanking, `TIME_SCALE` constant) live at inline `# CONTRACT:` on `displays/train_models/e235_1000/lower_lcd.py` `draw_times` per [CLAUDE.md](CLAUDE.md). State-machine interaction → [DISPLAY.md § Unified State Machine](DISPLAY.md).
 
 **Convention rationale:** the field is anchored on the destination station, not the source — `stops[N].time` answers "how long does it take to reach N?" (= travel from N−1 → N), not "how long until I leave N?". Verified via Tokaido 1865E: 新橋.time=2 matches IRL 東京→新橋 (~2 min), 品川.time=5 matches 新橋→品川 (~5 min). 東京.time=0 because there's no previous station.
