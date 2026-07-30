@@ -41,7 +41,7 @@ def main():
     surf.fill((12, 26, 36))  # TIMS dark slate
 
     def cap(text, x, y):
-        surf.blit(i18n.font_for_lang("zh_HK", 14).render(text, True, (150, 175, 190)), (x, y))
+        surf.blit(i18n.pixel_font_for_lang("zh_HK", 14).render(text, True, (150, 175, 190)), (x, y))
 
     # states — three button states, content-sized
     cap("states: normal / pressed / waiting", 26, 14)

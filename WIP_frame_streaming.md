@@ -46,7 +46,7 @@ An earlier draft made a standalone offscreen `pygame.Surface` a prerequisite. Th
 
 Two justifications for bundling it in also failed against the code:
 
-- **"Headless operation"** — empty. The setup flow (`main.py` → `setup_tims`) calls `set_mode` unconditionally and `convert()`/`convert_alpha()` throughout `setup.py` require a display. The app also runs beside a PC game; the PC has a screen.
+- **"Headless operation"** — empty. The setup flow (`main.py` → `tims.setup`) calls `set_mode` unconditionally and `convert()`/`convert_alpha()` throughout it require a display. The app also runs beside a PC game; the PC has a screen.
 - **"Renderers need no changes, so it's free"** — true but misleading. `_handle_lcd_click` (`app.py:480-482`) and `_update_hover_cursor` (`app.py:495-498`) map window→LCD coords by subtracting a fixed `panel_h`. The moment the window blits a *scaled* surface, click-to-jump and the hover cursor silently misfire. Converting the surface does not do that work — it only makes the bug reachable.
 
 That change belongs to the **reactive-window** roadmap item, where its real deliverable is a shared window↔LCD coordinate transform consumed by both call sites, and where its cost is visible and paid deliberately. Filed separately.

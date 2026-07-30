@@ -141,7 +141,7 @@ Each sub-series's `lower_lcd.py` declares its own renderer set:
 - `draw_times(...)` — cumulative travel times with floor-division countdown.
 - `show_stops(state, current_time)` — entry point. Reads from passed-in AppState; **does not mutate**.
 
-Lower-LCD fonts load in `JapaneseDisplay.__init__` (locale-safe). Sizes live in `constants.py` (`FONT_STOPS_SIZE`, `FONT_TIME_SIZE`, `FONT_STOPS_MINUTE_SIZE`) — shared across mode renderers because both Japanese and the future English use the same metrics. Per-display-module sizes go inline; `constants.py` is for values genuinely shared across modules.
+Lower-LCD fonts load in `JapaneseDisplay.__init__` via `font_atlas.lcd_font` (see DISPLAY.md § Code Style Conventions). Sizes live in `constants.py` (`FONT_STOPS_SIZE`, `FONT_TIME_SIZE`, `FONT_STOPS_MINUTE_SIZE`). **Not because the mode renderers share them** — `EnglishDisplay` hardcodes its own Helvetica `17`, so `FONT_STOPS_SIZE` has exactly one consumer and by the `constants.py` rule below it is misfiled. Left in place rather than moved; noted so the next reader doesn't infer a sharing that isn't there. Per-display-module sizes go inline; `constants.py` is for values genuinely shared across modules.
 
 ---
 

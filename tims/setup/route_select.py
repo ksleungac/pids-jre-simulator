@@ -9,7 +9,7 @@ page's 選擇路綫 button:
 Both screens share ONE grid template: fat screen-code + green heading, a blue TIMS-button grid filled
 COLUMN-major (down a column, then the next — as the real screen does), a 戻る button bottom-left and a
 設定 button bottom-right. Each route box is loaded from audio/**/route.json (sampling
-setup.SetupScreen.scan_routes); station boxes are the chosen route's stops.
+the retired classic screen's scan_routes); station boxes are the chosen route's stops.
 
 NOTE — yellow selection: the shared press model (conventions.md § UI code style) reserves
 yellow for the MOMENTARY press beat. This grid additionally uses yellow (the button "pressed" state) as
@@ -190,7 +190,7 @@ MARQUEE_DWELL_MS   = 1300                 # pause at each end (start shows direc
 
 
 def load_routes():
-    """Scan audio/**/route.json → a list of route dicts (samples setup.SetupScreen.scan_routes, kept lean
+    """Scan audio/**/route.json → a list of route dicts (was sampled from the retired classic screen's scan_routes, kept lean
     + dependency-free so the draft doesn't pull update_check / pygame display setup from setup.py).
 
     Each dict: path (route folder = work_dir) / name (line, e.g. 南武線) / diagram (4027F) / type (快速) /

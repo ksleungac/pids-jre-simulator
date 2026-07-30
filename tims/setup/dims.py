@@ -7,7 +7,7 @@ surface; SCREEN_W/H is the SETUP window size, never a band concept). Every
 
 from .. import chrome
 
-# setup is its OWN window — taller than the 420 LCD-sized one (main.py SETUP_SIZE);
+# setup is its OWN window — taller than the 420 LCD-sized one the retired classic screen used;
 # height is a free knob. 610 keeps the 2/3-height buttons clear of the top-corner
 # lang strip.
 SCREEN_W, SCREEN_H = 730, 610
