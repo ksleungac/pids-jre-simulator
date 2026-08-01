@@ -553,6 +553,20 @@ def bake(outdir: Path) -> int:
     print(f"  {n_dec} combo(s) cooked from a `draws=` declaration; " f"{len(prod_undeclared)} production call site(s) still undeclared")
     for face, sz, b, i in prod_undeclared:
         print(f"    UNDECLARED  {face} @{sz}{'b' if b else ''}{'i' if i else ''}")
+    if prod_undeclared:
+        # A RATCHET, not a progress report. The migration reached zero, and an
+        # undeclared site silently reverts this combo to coverage-by-reachability
+        # -- baked only for text some swept state happened to draw, which is the
+        # dependency the declarations exist to remove and the shape that shipped
+        # sobu/1217F's frame-1 KeyError (critical_lessons.md § 9).
+        #
+        # This is the gate a NEW TRAIN MODEL meets: forking a model adds a dozen
+        # lcd_font sites at once, and the fork-the-sibling convention copies the
+        # renderer, not the judgement about where its text comes from. Failing here
+        # is what makes "wire the declarations" impossible to forget rather than
+        # merely documented.
+        print("  Each is baked only for text some swept state drew. Add `draws=` at the")
+        print("  lcd_font() call, or list the module in UNCONVERTED if it cannot carry one.")
 
     missing, skipped = audit_source_literals(sink)
     if skipped:
@@ -647,10 +661,75 @@ def bake(outdir: Path) -> int:
         )
 
     (outdir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+
+    # Runs against the manifest just written, so the packing and write path are
+    # inside the check rather than trusted. See verify_declared_coverage.
+    uncovered = verify_declared_coverage(sink, walk, manifest)
+    if uncovered:
+        print(f"\n{len(uncovered)} declared text(s) absent from the baked atlas:")
+        for ident, text in uncovered[:20]:
+            print(f"  {combo_slug(ident):22} {text!r}")
+        if len(uncovered) > 20:
+            print(f"  ... and {len(uncovered) - 20} more")
+        print("  A declaration promising text the bake did not store is a KeyError in a")
+        print("  build that ships no font files — the sweep cannot see this, because a")
+        print("  text no state reaches is missing from the check for the same reason it")
+        print("  is missing from the bake.")
+    else:
+        print("\ndeclared coverage: every text the call sites declare is in the atlas")
+
     total = sum(p.stat().st_size for p in outdir.iterdir())
     print(f"\natlas: {len(manifest['combos'])} combos, {total / 1e6:.1f} MB in {outdir}")
     print(f"fingerprint: {manifest['data_fingerprint']}")
-    return 1 if (failures or missing) else 0
+    return 1 if (failures or missing or uncovered or prod_undeclared) else 0
+
+
+def verify_declared_coverage(sink: dict, walk: dict, manifest: dict) -> list:
+    """Every text a call site DECLARES must be present in the atlas just written.
+
+    The gate the other two structurally cannot be. `--verify` and `--pixel-verify`
+    both consume the sweep, so a text no state reaches is absent from the check for
+    the same reason it is absent from the bake — the tautology of
+    `critical_lessons.md § 9`. This asks a different question with an independent
+    oracle: `resolve()` says what the declaration stands for, and the written
+    manifest says what the artifact carries. Neither side is the sweep.
+
+    It also has to read the MANIFEST rather than `cook_from_data`'s own account of
+    what it emitted. Checking a generator against its own log is the same tautology
+    one level down; the packing and write path sit between the two and can drop an
+    entry.
+
+    Deliberately shape-agnostic — presence in any store counts, including the
+    per-character case where the combo carries a string's characters and not the
+    string. Re-deriving `emit`'s shape choice here would be a second implementation
+    of a production decision, which drifts silently.
+    """
+    by_ident = {(r["face"], r["size"], r["bold"], r["italic"]): r for r in manifest["combos"]}
+
+    misses = []
+    for ident in sorted(sink):
+        declared = sink[ident].get("draws") or []
+        if not declared:
+            continue
+        out = by_ident.get(ident)
+        if out is None:
+            misses.append((ident, "<combo missing from the manifest entirely>"))
+            continue
+
+        entries = set(out.get("entries") or {})
+        have = entries | set(out.get("sizes") or {})
+        have |= {k.split("|", 2)[2] for k in (out.get("entries_bg") or {})}
+        for k in out.get("parts") or {}:
+            have.add(k.split("|", 3)[3].split("|", 1)[1])
+
+        for src in declared:
+            for text in font_atlas.resolve(src, walk):
+                if not text or text in have:
+                    continue
+                if all(ch in entries for ch in text):
+                    continue  # stored per character, which is how it is drawn
+                misses.append((ident, text))
+    return misses
 
 
 def verify() -> int:
@@ -764,14 +843,130 @@ def pixel_verify() -> int:
     return 1
 
 
+_SHIPPED_DRIVER = r"""
+import sys, pathlib
+stage = pathlib.Path(sys.argv[1])
+routes = sys.argv[2:]
+
+# Redirect the project root BEFORE any display module imports, so their
+# `from app_paths import project_root` binds to the staged folder. This is what
+# makes the frame real rather than simulated-by-argument.
+import app_paths
+app_paths.project_root = lambda: stage
+
+import font_atlas
+font_atlas.project_root = lambda: stage
+
+import pygame
+pygame.init(); pygame.font.init(); pygame.display.set_mode((1, 1))
+
+print("  mode() ->", font_atlas.mode())
+if font_atlas.mode() != "atlas":
+    print("  FAIL: a folder with the baked faces removed must resolve ATLAS")
+    sys.exit(1)
+
+import preview_display
+from app import PASimulator
+from displays.train_models import TRAIN_MODELS
+
+bad = 0
+for route in routes:
+    for model in TRAIN_MODELS:
+        try:
+            sim = PASimulator(stage / "audio" / route, preview=True, model=model)
+            for stop in (0, len(sim.stops) // 2, len(sim.stops) - 1):
+                preview_display.apply_state(sim, stop=stop, pa=0, mode=0, lower_view="full")
+                preview_display.render_frame(sim, timestamp=0.0)
+            sim.cleanup(full_quit=False)
+            pygame.display.set_mode((1, 1))
+        except Exception as e:
+            bad += 1
+            print(f"  FAIL {route} [{model}]: {type(e).__name__}: {str(e)[:200]}")
+sys.exit(1 if bad else 0)
+"""
+
+
+def verify_shipped() -> int:
+    """Render from a folder shaped like the one /build stages.
+
+    The gate the other four structurally cannot be: every one of them runs in the
+    dev tree, where all three font families exist and the Python sources sit
+    beside the code. The shipped folder is a DIFFERENT frame — `fonts/` present
+    but the baked families deleted, `displays/` absent because PyInstaller bundles
+    it into the exe — and nothing rendered a single character there until this.
+
+    Two real bugs hid in exactly that gap: mode() answered LIVE off the folder
+    existing and sent every ShinGo load at a deleted file, and the code
+    fingerprint hashed an empty file list and refused the atlas as stale. Both
+    were invisible to 21,978 states of pixel-identical verification, because all
+    21,978 ran in the frame that has the fonts (`critical_lessons.md` §4, §6).
+
+    Builds the staged shape in a temp dir and drives the real app in a SUBPROCESS,
+    because the root has to be redirected before any display module imports.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+
+    root = ROOT
+    stage = Path(tempfile.mkdtemp(prefix="atlas_shipframe_"))
+    try:
+        # Mirror /build step 2d: stage fonts/, then drop the baked families.
+        shutil.copytree(root / "fonts", stage / "fonts")
+        dropped = sorted(p.name for fam in font_atlas.ATLAS_FACES for p in (stage / "fonts").glob(f"{fam}*.otf"))
+        for fam in font_atlas.ATLAS_FACES:
+            for p in (stage / "fonts").glob(f"{fam}*.otf"):
+                p.unlink()
+        if not (root / "font_atlas").is_dir():
+            print("no baked atlas to test — run the bake first")
+            return 1
+        shutil.copytree(root / "font_atlas", stage / "font_atlas")
+        shutil.copytree(root / "data", stage / "data")
+        # displays/ deliberately NOT copied — /build excludes it, and its absence
+        # is half of what this gate exists to exercise.
+        for rj in (root / "audio").rglob("route.json"):
+            rel = rj.relative_to(root)
+            (stage / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(rj, stage / rel)
+
+        print(f"shipped-frame check: fonts/ staged without {', '.join(dropped)}; displays/ absent")
+        routes = shipped_routes()
+        r = subprocess.run(
+            [sys.executable, "-c", _SHIPPED_DRIVER, str(stage), *routes],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        for line in (r.stdout or "").splitlines():
+            if "libpng" not in line and "Hello from" not in line and not line.startswith("pygame "):
+                print(line)
+        if r.returncode != 0:
+            print((r.stderr or "").strip()[:1200])
+            print("\n  A build staged from this tree would fail the same way for every user.")
+            return 1
+        print("SHIPPED-FRAME OK — the staged layout resolves ATLAS and renders every route")
+        return 0
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", default="font_atlas")
     ap.add_argument("--verify", action="store_true", help="re-drive the sweep in ATLAS mode; fails on any missing entry")
     ap.add_argument("--pixel-verify", action="store_true", help="render every state both ways and require identical frames")
+    ap.add_argument(
+        "--verify-shipped",
+        action="store_true",
+        help="render from a folder shaped like the one /build stages (baked faces removed, no displays/)",
+    )
     a = ap.parse_args()
     if a.pixel_verify:
         sys.exit(pixel_verify())
+    if a.verify_shipped:
+        sys.exit(verify_shipped())
     sys.exit(verify() if a.verify else bake(ROOT / a.out))
 
 

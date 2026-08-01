@@ -118,6 +118,45 @@ class LcdFont(pygame.font.Font):
 # ---------------------------------------------------------------------------
 
 
+def _code_files() -> list:
+    """Production sources that decide WHAT text is drawn, or HOW.
+
+    Derived from the tree, never hand-listed. The previous version named
+    `font_atlas.py`, `constants.py` and `route_loader.py` explicitly beside a
+    `displays/**` glob, which left the same open question every hand-written axis
+    list leaves — is `app.py` in or out? — and answered it by whoever last
+    thought about it. A module that starts composing drawn text is covered here
+    the day it is added, with nobody having to notice.
+
+    Coarse on purpose: any production edit invalidates the atlas. That costs
+    nothing, because dev renders LIVE and `/build` re-bakes every run, so this
+    only ever fires on a deliberately stale local atlas.
+    """
+    root = project_root()
+    files = sorted(root.glob("*.py")) + sorted(root.glob("displays/**/*.py"))
+    return [p for p in files if p.is_file() and not any(s.startswith("_") for s in p.relative_to(root).parts)]
+
+
+def _shipped_json_files() -> list:
+    """Every shipped JSON file, resolved once, as (path, rel) pairs.
+
+    `walk_shipped_json` reads these for the text domain; `data_fingerprint` hashes
+    them for staleness. The two must agree BY CONSTRUCTION — a file the domain
+    reads but the fingerprint ignores changes the drawn text without changing the
+    fingerprint, which is the silent case the fingerprint exists to prevent. Both
+    used to spell the globs and the `_`-skip out separately with a comment
+    asserting they matched; a comment is not enforcement, one list is.
+    """
+    root = project_root()
+    out = []
+    for p in sorted(root.glob("data/*.json")) + sorted(root.glob("audio/**/route.json")):
+        rel = p.relative_to(root).as_posix()
+        if any(seg.startswith("_") for seg in rel.split("/")):
+            continue  # staging, not shipped, so it cannot reach a shipped render
+        out.append((p, rel))
+    return out
+
+
 def code_fingerprint() -> str:
     """Hash of every source file that decides WHAT text is drawn, or HOW.
 
@@ -135,31 +174,43 @@ def code_fingerprint() -> str:
     """
     root = project_root()
     parts = []
-    files = sorted(root.glob("displays/**/*.py"))
-    files += [root / "font_atlas.py", root / "constants.py"]
-    for p in files:
-        if not p.is_file():
-            continue
+    for p in _code_files():
         rel = p.relative_to(root).as_posix()
         parts.append(f"{rel}:{hashlib.sha256(p.read_bytes()).hexdigest()}")
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
 
 
+def code_sources_present() -> bool:
+    """Is the Python source tree next to us at all?
+
+    It is in a dev checkout and it is NOT beside a frozen exe — PyInstaller bundles
+    the code INTO the binary, and `/build` excludes `displays/` from the staged
+    folder for exactly that reason. So `code_fingerprint()` there hashes an empty
+    file list, which cannot match what the bake stamped.
+
+    That matters because the comparison is only ever reached when mode() is ATLAS.
+    In dev the fonts are present, mode() is LIVE, and the atlas is never opened —
+    so the check's real audience is the verification arm (`force_mode(ATLAS)` with
+    the tree present), not the shipped app. Where the sources are absent the
+    question is not "has the code drifted" but "unanswerable", and a fingerprint
+    that cannot be computed must not be compared.
+
+    Freshness there is guaranteed differently: `/build` re-bakes from this same
+    tree in the same run, so the atlas beside the exe cannot predate the code
+    inside it. The DATA fingerprint still runs in the shipped build, because
+    `data/` and `audio/` do ship — data staleness stays caught where it can be.
+    """
+    return (project_root() / "displays").is_dir()
+
+
 def data_fingerprint() -> str:
     """Hash of every file whose contents can introduce new text to render.
 
-    The baker stamps this into the manifest; loading compares. Keep the file set
-    here in step with the baker's text domain — a source the domain reads but
-    this ignores would change the text without changing the fingerprint, which
-    is exactly the silent case this exists to prevent.
+    The baker stamps this into the manifest; loading compares. The file set comes
+    from `_shipped_json_files`, shared with the baker's text domain, so the domain
+    and the staleness check cannot disagree about what counts as a text source.
     """
-    root = project_root()
-    parts = []
-    for p in sorted(root.glob("data/*.json")) + sorted(root.glob("audio/**/route.json")):
-        rel = p.relative_to(root).as_posix()
-        if any(seg.startswith("_") for seg in rel.split("/")):
-            continue  # not shipped, so it cannot reach a shipped render
-        parts.append(f"{rel}:{hashlib.sha256(p.read_bytes()).hexdigest()}")
+    parts = [f"{rel}:{hashlib.sha256(p.read_bytes()).hexdigest()}" for p, rel in _shipped_json_files()]
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
 
 
@@ -298,9 +349,9 @@ def walk_shipped_json() -> dict:
 
     Returns `{string: {location, ...}}`, a location being
     `audio/*/route.json:pre_stops[].name` — list indices collapsed to `[]` so
-    every member of an array shares one location. Cached; the file set is the same
-    one `data_fingerprint` hashes, deliberately, so the domain and the staleness
-    check can never disagree about what counts as a text source.
+    every member of an array shares one location. Cached; the file set comes from
+    `_shipped_json_files`, shared with `data_fingerprint`, so the domain and the
+    staleness check cannot disagree about what counts as a text source.
     """
     global _walk
     if _walk is not None:
@@ -317,11 +368,7 @@ def walk_shipped_json() -> dict:
             for v in node:
                 rec(v, loc + "[]")
 
-    root = project_root()
-    for p in sorted(root.glob("data/*.json")) + sorted(root.glob("audio/**/route.json")):
-        rel = p.relative_to(root).as_posix()
-        if any(seg.startswith("_") for seg in rel.split("/")):
-            continue  # staging, not shipped
+    for p, rel in _shipped_json_files():
         rec(json.loads(p.read_text(encoding="utf-8")), _norm_file(rel) + ":")
     _walk = out
     return out
@@ -423,13 +470,30 @@ def force_mode(mode: Optional[str]) -> None:
     _cache.clear()
 
 
+def _baked_faces_available() -> bool:
+    """Can the atlas-backed families be loaded as real font FILES?
+
+    This is what decides LIVE, and it is deliberately not "does fonts/ exist".
+    The shipped folder KEEPS fonts/ — Helvetica, Frutiger and Noto are not baked,
+    so they must ship — and drops only the baked families. A folder test answers
+    "yes" there and sends every ShinGo load at a file /build deleted, so the atlas
+    is never consulted and the exe dies on the first station name. The two
+    questions were the same only while fonts/ was all-or-nothing; /build shipping
+    a PARTIAL fonts/ is what separated them.
+    """
+    d = project_root() / "fonts"
+    if not d.is_dir():
+        return False
+    return all(any(d.glob(f"{fam}*.otf")) for fam in ATLAS_FACES)
+
+
 def mode() -> str:
     global _mode
     if _mode is None:
         if _forced:
             _mode = _forced
         else:
-            have_fonts = (project_root() / "fonts").is_dir()
+            have_fonts = _baked_faces_available()
             have_atlas = (project_root() / ATLAS_DIRNAME / "manifest.json").is_file()
             if not have_fonts and not have_atlas:
                 raise RuntimeError(
@@ -448,15 +512,21 @@ class Atlas:
     def __init__(self, root):
         self.root = root
         self.manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-        for label, key, current, why in (
+        checks = [
             ("data", "data_fingerprint", data_fingerprint(), "Route or translation data changed, so the atlas may be missing text."),
-            (
-                "code",
-                "code_fingerprint",
-                code_fingerprint(),
-                "A renderer changed, so it may draw text or a point size that was never " "baked, or lay text out differently from what is stored.",
-            ),
-        ):
+        ]
+        # Only where the sources exist to hash — see code_sources_present().
+        if code_sources_present():
+            checks.append(
+                (
+                    "code",
+                    "code_fingerprint",
+                    code_fingerprint(),
+                    "A renderer changed, so it may draw text or a point size that was never "
+                    "baked, or lay text out differently from what is stored.",
+                )
+            )
+        for label, key, current, why in checks:
             stamped = self.manifest.get(key)
             if stamped != current:
                 raise RuntimeError(

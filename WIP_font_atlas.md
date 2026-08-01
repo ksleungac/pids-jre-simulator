@@ -5,9 +5,13 @@ the shipped build stops carrying font software) → [#115](https://github.com/ks
 ShinGo atlas, [#116](https://github.com/ksleungac/pids-jre-simulator/issues/116) Helvetica/Frutiger
 (`deferred`, so `fonts/` still ships).
 
-**Status:** built and passing its gates for E235-1000 / ShinGo. Author has visually checked the
-per-route sheets and accepted them (2026-07-30). Next work is the single-path rewrite in
-§ Next — one path, not two. Nothing is committed yet.
+**Status:** the shipped path for ShinGo, and verified as such. Committed 2026-07-30 (`6e5a04a`,
+coverage from `draws=` declarations rather than a state sweep). On 2026-08-01 a real PyInstaller
+build ran with no ShinGo font files staged and the author smoke-tested it — the first time the atlas
+had rendered a character outside the dev tree, and it did **not** work until two deployment-frame
+bugs were fixed that day (§ The frame nothing tested). Remaining scope is
+[#116](https://github.com/ksleungac/pids-jre-simulator/issues/116) — Helvetica and Frutiger are
+unbaked, so `fonts/` still ships and this doc stays alive until they follow.
 
 ---
 
@@ -125,17 +129,44 @@ names (Medium@78) as 366 laid-out texts totalling 1366 parts.
 
 ## The gates
 
-Three, all mechanical, all required. Goal 1 is binary so its test is binary.
+Five, all mechanical, all required, all wired into `/build` (which stops on any non-zero). Goal 1 is
+binary so its test is binary. Grouped by what they can and cannot see:
 
-1. **`--verify`** — re-drive all 10,476 states in ATLAS mode. Any missing entry is a failure, so an
-   incomplete recording stops the build rather than shipping a crash. *Currently: 0 raised.*
-2. **`--pixel-verify`** — render every state twice, LIVE then ATLAS, and compare frame digests.
-   Coverage says an entry existed; this says it was the right pixels. *Currently: 0 of 10,476
-   differ.*
-3. **Against pre-atlas code** — a detached `git worktree` at the pre-atlas commit renders the same
-   states with the original per-character blits; three-way diff pre-atlas / LIVE / ATLAS.
-   *Currently: 0 differing pixels over 36/36 states on both pairs.* This is the gate that catches a
-   refactor that changed rendering and then got faithfully stored.
+**Inside the bake** — these run before anything is written:
+
+1. **Source-literal audit** — a Japanese literal in display code that no swept state drew. It is a
+   gate rather than a cook input because the scan finds the string but cannot know which combo draws
+   it; baking it blind would put the 50-character route disclaimer at size 78.
+2. **Declared coverage** — every text a call site's `draws=` resolves to must be present in the
+   manifest just written. **The only gate whose oracle is not the sweep**: the domain comes from
+   `resolve()`, the witness from the written manifest. It reads the manifest rather than
+   `cook_from_data`'s own record on purpose — checking a generator against its own log is
+   `critical_lessons § 9` one level down, and the packing/write path sits between the two.
+3. **Undeclared-site ratchet** — an `lcd_font` call with no `draws=` fails the bake. The migration
+   reached zero; an undeclared site silently reverts that combo to coverage-by-reachability, which
+   is the dependency the declarations exist to remove. This is the gate a NEW TRAIN MODEL meets:
+   forking adds a dozen call sites at once and the copy-the-sibling convention carries the renderer,
+   not the judgement about where its text comes from.
+
+**Sweep-driven** — breadth, not coverage:
+
+4. **`--verify`** — re-drive every shipped state in ATLAS mode with the baked faces made unreadable
+   (`pygame.font.Font` patched to raise on an atlas face), so a path that *constructs* one is caught
+   even though the dev tree has every file. *0 raised across 21,978 frames.*
+5. **`--pixel-verify`** — render every state twice, LIVE then ATLAS, compare frame digests. Coverage
+   says an entry existed; this says it was the right pixels. *0 of 21,978 differ.*
+
+**Outside the dev frame** — see § The frame nothing tested:
+
+6. **`--verify-shipped`** — build the staged shape in a temp dir (`fonts/` with the baked families
+   deleted, no `displays/`) and drive the real app there in a subprocess, redirecting the project
+   root before any display module imports. Seconds, no PyInstaller run needed.
+
+**Retired: the pre-atlas worktree diff.** It caught the one thing the others could not — a refactor
+that changed rendering and then got faithfully stored (the 90-pixel flattening cost) — and it
+expires structurally, since a model authored after the atlas has no pre-atlas commit to diff
+against. It was never committed as a script and is not worth reconstructing now that `--pixel-verify`
+covers 21,978 states.
 
 **Both sweeps must pin every clock, including SDL's.** Freezing Python's `time` is not enough:
 the multi-PA hint blinks on `(pygame.time.get_ticks() // 500) % 2`
@@ -149,6 +180,44 @@ three trees succeeding let a failure in the third empty the first pair's sum, wh
 and read as a pass.
 
 ---
+
+## The frame nothing tested (2026-08-01)
+
+Five gates and 21,978 states of pixel-identical proof, and the atlas had **never rendered a character
+outside the dev tree**. It did not work there. Two bugs, stacked, both invisible to everything above:
+
+1. **`mode()` answered LIVE in the staged folder.** It asked "does `fonts/` exist" to decide "can I
+   load ShinGo". Those are the same question only while `fonts/` is all-or-nothing — and `/build`
+   staging a **partial** `fonts/` (Helvetica and Frutiger stay, the Morisawa faces go) is exactly
+   what separates them. So the atlas was never consulted and every ShinGo load went at a file the
+   build had just deleted: `FileNotFoundError` on the first station name, for every user.
+2. **Forcing ATLAS did not save it.** `code_fingerprint()` globs `displays/**/*.py`, which `/build`
+   excludes from the staged folder because PyInstaller bundles it into the exe. It therefore hashed
+   an *empty file list* — `e3b0c442…`, the hash of nothing — against a stamped dev-time value, and
+   the atlas refused to load as STALE.
+
+**The lesson is not either bug.** It is that adding a sixth gate in the same frame would have found
+neither. A suite that shares one environment verifies that environment, never deployment — the same
+shape as `critical_lessons § 9` (a check consuming the generator's own enumeration verifies
+fidelity, never coverage) one level up. → `critical_lessons.md § 10`.
+
+**Fixes, at the root rather than patched:**
+
+- `mode()` keys on `_baked_faces_available()` — are the atlas-backed families loadable as files.
+- `code_fingerprint()` derives its file set from the tree (root `*.py` + `displays/**`, `_`-excluded)
+  instead of naming files, and is **compared only where the sources exist** (`code_sources_present`).
+  The check is only ever reached when mode is ATLAS, which in dev never happens — so its real
+  audience is the verification arm, and in the shipped frame its inputs are absent by design.
+  Freshness there is guaranteed differently: `/build` re-bakes from the same tree in the same run.
+  The DATA fingerprint still runs in the shipped build, because `data/` and `audio/` do ship.
+- `--verify-shipped` exists so this class cannot return. Mutation-tested: restoring the folder test
+  makes it print `mode() -> live` and fail.
+
+Two smaller things fixed alongside, same family — a hand-maintained list standing in for what
+production reads: `data_fingerprint` and `walk_shipped_json` each re-spelled the shipped-JSON glob
+with a comment asserting they agreed (now one `_shipped_json_files`), and `code_fingerprint` omitted
+`route_loader.py`, which *transforms* drawn text (`_fill_dest_closure` decides each stop's rendered
+destination).
 
 ## Rejected
 
@@ -178,30 +247,23 @@ and read as a pass.
 
 ## State — pick up here
 
-**Nothing is committed.** On `master`, tree dirty:
+**The ShinGo half is done and shipped-verified.** `6e5a04a` (2026-07-30) put every LCD draw on the
+seam with coverage from `draws=` declarations; `a108e76`-era work on 2026-08-01 added the two bake
+gates, fixed the deployment-frame bugs below, and a real `/build` at `0.6.3` produced an exe with no
+ShinGo `.otf` staged that the author smoke-tested.
 
-| path | state |
-|---|---|
-| `font_atlas.py` | new — the seam |
-| `_dev_scripts/bake_font_atlas.py` | new — driver + all three gate entry points |
-| `font_atlas/` | baked output, 26 combos, 4.5 MB — now **gitignored**: a build artifact `/build` re-bakes, never a committed asset |
-| `displays/utils.py` | `compose_text_parts` extracted out of `draw_text_given_width` |
-| `preview_display.py` | `apply_state` / `render_frame` extracted out of `main()` |
-| `displays/train_models/e235_1000/{upper_lcd,lower_lcd,transfer_info}.py` | loads moved to `lcd_font`; `role=` and the `set_bold`/`set_italic` calls removed; `lower_lcd` + `transfer_info` carry `draws=` declarations |
-| `displays/train_models/e235_0/{upper_lcd,lower_lcd}.py` | 14 bare ShinGo loads (incl. `Light`) moved onto the seam — its `_font` helpers now delegate to `lcd_font` |
-| `.claude/skills/build/SKILL.md` | step 2a bakes + runs all three gates; explicit `font_atlas/` stage copy; the `'fonts'` exclusion documented as the final step |
-| `.gitignore` | `/font_atlas/` |
-| `CLAUDE.md`, `DISPLAY.md`, `DATA_FORMAT.md`, `.claude/rules/{principles,conventions}.md` | codifications |
+`font_atlas/` is a **gitignored build artifact** — `/build` re-bakes it every run, so it can never be
+stale. Consequence: a build requires the licensed fonts present on the machine. They are still
+tracked today, so any clone can build; once `fonts/` leaves the tree, only a machine holding them
+can.
 
-Session narrative + codification list for the first block are published on `origin/memory`
-(`memory/2026-07-27.md`, *"font atlas built"*). The 2026-07-30 work is not yet recapped.
-
-**Commands, and where they stood when last run** (both models, 21,978 states):
+**Commands, and where they stood on 2026-08-01** (both models, 14 routes, 21,978 states):
 
 ```
-uv run _dev_scripts/bake_font_atlas.py                  # cook   -> 26 combos, 4.5 MB
-uv run _dev_scripts/bake_font_atlas.py --verify         # cover  -> 0 raised
-uv run _dev_scripts/bake_font_atlas.py --pixel-verify   # ident  -> 0 frames differ
+uv run python -u _dev_scripts/bake_font_atlas.py                  # cook   -> 26 combos, 4.7 MB
+uv run python -u _dev_scripts/bake_font_atlas.py --verify         # cover  -> 0 raised
+uv run python -u _dev_scripts/bake_font_atlas.py --pixel-verify   # ident  -> 0 frames differ
+uv run python -u _dev_scripts/bake_font_atlas.py --verify-shipped # frame  -> resolves ATLAS, renders
 ```
 
 Both sweeps need `python -u` to see progress, and output goes through
@@ -463,12 +525,10 @@ deeply changes how our later LCD designs direction as well."* Correct — under 
 the sweep is the coverage mechanism, so it quietly constrains what a future LCD may render. Not
 decided; this is the agenda.
 
-**1. The sweep's axis list is hand-declared, which is the smell we just codified.**
-`MODES` / `VIEWS` / `PA_PHASES` are tuples typed into the baker, and `model` is hardcoded
-`"e235_1000"`. That is a declared table describing what production supports — the same shape as the
-combo table and the text domain that both failed. Adding a view, a mode or a model silently leaves
-the sweep behind. The axis list should come from production (the model's registered modes and
-slots), not from the baker.
+**1. ~~The sweep's axis list is hand-declared~~ — RESOLVED 2026-07-30.** Every axis now reads from
+production (`TRAIN_MODELS`, `_SLOT_BEATS`, `_frame_count`, `DisplayMode`), and more importantly the
+sweep stopped being the coverage mechanism at all, so an axis it misses can no longer cost coverage —
+only pixel-verification breadth. Codified as `critical_lessons.md § 9`.
 
 **2. What an enumerable state space costs the LCD design.** A stored-output atlas needs the set of
 `(text, colour, width, collapse, script)` tuples to be finite and reachable. Two future designs
@@ -483,10 +543,12 @@ is currently 0 misses; a long fuzz/soak recording is easier to grow but proves n
 whether the sweep stays a build-time cost that scales with models × routes × stops (today 10,476
 states for one model) or gets partitioned.
 
-**4. Miss behaviour in a shipped build.** Currently fatal, which is honest but is a crash for a
-user. The alternative is degrading to Noto (already shipped, OFL) with a loud log — graceful, but
-silently the wrong face. The single-path rewrite makes this the *only* remaining difference between
-dev and ship, so it wants a deliberate answer rather than the current default.
+**4. Miss behaviour in a shipped build.** Still fatal, and now a more defensible default than it was:
+coverage no longer depends on any state being reachable, and `--verify-shipped` renders the staged
+frame before it can reach a user, so a miss means the declarations are wrong rather than that some
+state went unvisited. The alternative — degrading to Noto (already shipped, OFL) with a loud log — is
+graceful but silently the wrong face on the most prominent element of the upper LCD. Left fatal
+deliberately; revisit only if a real miss ever escapes the gates.
 
 **5. Animation and the clock stay live** — they are the one part of the LCD that is not a pure
 function of persistent state, and they are also why any frame-comparison harness has to pin both
@@ -494,17 +556,16 @@ Python's clock and SDL's. Worth stating as a boundary the atlas never crosses.
 
 ## Also remaining
 
-**ShinGo leaves the shipped build (2026-07-30).** `/build` stages `fonts/` then deletes
-`ShinGoPr6N-*.otf` from it and throws if any survive. Everything that drew ShinGo now resolves from
-the atlas, and `i18n._LANG_CHROME_FONT["zh_HK"]` — the last reference outside the LCD, reachable only
-via `--classic` — moved to `NotoSansTC`, which also stops classic and TIMS disagreeing about zh_HK
-chrome (TIMS already used a Noto TC face there). `font_for_lang` synthesizes bold for a locale whose
-face ships in one weight, so bold labels do not silently become regular.
+**ShinGo leaves the shipped build (2026-07-30, verified 2026-08-01).** `/build` stages `fonts/` then
+deletes `ShinGoPr6N-*.otf` from it and throws if any survive. Everything that drew ShinGo now
+resolves from the atlas, and `i18n._LANG_CHROME_FONT["zh_HK"]` — the last reference outside the LCD,
+reachable only via `--classic` — moved to `NotoSansTC`, which also stops classic and TIMS disagreeing
+about zh_HK chrome (TIMS already used a Noto TC face there). `font_for_lang` synthesizes bold for a
+locale whose face ships in one weight, so bold labels do not silently become regular.
 
-Because `fonts/` still *exists* in the staged folder, `mode()` returns LIVE there, so a stray ShinGo
-load is a `FileNotFoundError` at construction rather than a silent fallback. That is the wanted
-failure, and it is what the `lint_primitives` ban and `--verify`'s unreadable-faces pass exist to
-prevent reaching a user.
+The staged folder resolves **ATLAS**, because `mode()` asks whether the *baked families* are loadable
+(`_baked_faces_available`), not whether `fonts/` exists. An earlier version tested the folder — see
+§ The frame nothing tested for why that was wrong and what it cost.
 
 Remaining, deliberately:
 

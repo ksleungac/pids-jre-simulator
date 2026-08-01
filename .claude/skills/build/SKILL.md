@@ -64,13 +64,28 @@ $env:PYTHONIOENCODING = "utf-8"
 uv run python -u _dev_scripts/bake_font_atlas.py
 uv run python -u _dev_scripts/bake_font_atlas.py --verify
 uv run python -u _dev_scripts/bake_font_atlas.py --pixel-verify
+uv run python -u _dev_scripts/bake_font_atlas.py --verify-shipped
 ```
 
 Several minutes each — they drive every shipped route × model × mode × slot × PA phase × frame. Stop
-on any non-zero: the bake fails on a Japanese source literal no state drew, `--verify` on a lookup the
-atlas cannot serve, `--pixel-verify` on any frame that differs between the live fonts and the atlas
-(goal 1 is a binary bar). `PYTHONIOENCODING` is required — Japanese in the report crashes a cp1252
-pipe.
+on any non-zero: the bake fails on a Japanese source literal no state drew **or on a text a call site
+declares that the bake did not store**, `--verify` on a lookup the atlas cannot serve, `--pixel-verify`
+on any frame that differs between the live fonts and the atlas (goal 1 is a binary bar).
+`PYTHONIOENCODING` is required — Japanese in the report crashes a cp1252 pipe.
+
+The declared-coverage check is the only one that does not consume the state sweep: it takes its
+domain from `resolve()` over the `draws=` declarations and its witness from the manifest just
+written. The two `--verify` passes re-drive the sweep, so a text no state reaches is missing from
+those checks for the same reason it is missing from the bake — see `critical_lessons.md § 9`.
+
+**`--verify-shipped` is the only one that leaves the dev frame**, and it is not optional. The other
+gates all run where every font exists and `displays/` sits beside the code; the staged folder has
+neither, and until 2026-08-01 nothing had ever rendered a character there. Two bugs lived in that
+gap — `mode()` answered LIVE off `fonts/` merely existing and sent every ShinGo load at a file this
+step deletes, and `code_fingerprint()` hashed an empty file list and refused the atlas as stale.
+Both were invisible to 21,978 states of pixel-identical proof, because all 21,978 ran in the frame
+that has the fonts (`critical_lessons.md` §4, §6). It builds the staged shape in a temp dir and
+drives the real app there, so it costs seconds and needs no PyInstaller run.
 
 **2b — Generate `version_info.txt`**
 
@@ -220,14 +235,15 @@ $shipped | ForEach-Object { Write-Host "  $_" }
 ```
 
 - **Two guards, hard then soft.** The tracked-only filter above is the *hard* guard (an untracked dir cannot ship, and any skipped one is printed under `SKIPPED (untracked …)`). The `$shipDirs` print-out is the *soft* guard on top — eyeball-confirm what's being staged. If a **tracked** dir appears that shouldn't ship, add it to `$shipExclude` (a deliberate, visible action) and re-run. If a dir you *expected* to ship shows up under SKIPPED, commit it first (`critical_lessons.md §2`).
-- **`fonts/` ships without ShinGo.** ShinGo is the only atlas-backed family
-  (`font_atlas.ATLAS_FACES`), so the staged `fonts/` keeps Helvetica, Frutiger and Noto and the
-  `Remove-Item` above drops the three Morisawa faces. Consequence worth understanding: `fonts/` still
-  *exists* in the staged folder, so `font_atlas.mode()` returns **LIVE** there — and a LIVE ShinGo
-  load would now be a `FileNotFoundError`, not a silent fallback. That is the desired failure (loud,
-  at construction), and it is why the ban in `lint_primitives.py` and the `draws=` coverage matter:
-  they are what guarantee no such load exists. When Helvetica and Frutiger are baked too, add
-  `'fonts'` to `$shipExclude` and the folder goes entirely.
+- **`fonts/` ships without ShinGo, and that PARTIAL folder is what decides the mode.** ShinGo is the
+  only atlas-backed family (`font_atlas.ATLAS_FACES`), so the staged `fonts/` keeps Helvetica,
+  Frutiger and Noto while the `Remove-Item` above drops the three Morisawa faces. `font_atlas.mode()`
+  therefore asks whether the **baked families** are present, not whether the folder is
+  (`_baked_faces_available`) — the staged folder resolves **ATLAS**. An earlier version tested the
+  folder, which is the same question only while `fonts/` is all-or-nothing; this step is exactly what
+  makes it partial, so it answered LIVE and sent every ShinGo load at a file it had just deleted.
+  Caught 2026-08-01 by `--verify-shipped` before any build ran. When Helvetica and Frutiger are baked
+  too, add `'fonts'` to `$shipExclude` and the folder goes entirely.
 - **Smoke-test this specifically.** Launching the staged exe is the only check that no code path
   reaches a removed face — the dev tree still has all of them, so this failure is invisible here
   (`critical_lessons.md` §4). Walk a route on both train models, and open the TIMS setup in zh_HK — the locale whose

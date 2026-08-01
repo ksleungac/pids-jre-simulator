@@ -1,6 +1,6 @@
 # Critical Lessons — DO NOT REPEAT
 
-Nine deployment-class incidents. Each locally defensible; each broke production or was caught only at the last gate before it. The shared root: **claude reasons about code as text rather than as a deployed artifact.**
+Ten deployment-class incidents. Each locally defensible; each broke production or was caught only at the last gate before it. The shared root: **claude reasons about code as text rather than as a deployed artifact.**
 
 ---
 
@@ -211,3 +211,39 @@ must not be a hand-typed description of what production supports.
 
 **Scope:** any bake / codegen / fixture-generation with a paired verifier; asset pipelines; snapshot
 tests whose snapshot set is produced by the code under test.
+
+---
+
+## 10. A suite that shares one environment verifies that environment, never deployment (2026-08-01)
+
+The font atlas had five mechanical gates and 21,978 states of pixel-identical proof, and had **never
+rendered a character outside the dev tree**. It did not work there. Two bugs, stacked:
+
+`mode()` asked *"does `fonts/` exist"* to decide *"can I load ShinGo"*. Those are the same question
+only while `fonts/` is all-or-nothing — and `/build` stages a **partial** `fonts/` (the unbaked
+families stay, the baked ones are deleted), which is precisely what separates them. So the staged
+folder resolved LIVE, the atlas was never consulted, and every ShinGo load went at a file the build
+had just deleted. Forcing ATLAS did not help: `code_fingerprint()` globs `displays/**/*.py`, which
+`/build` excludes because PyInstaller bundles it into the exe, so it hashed an *empty file list* and
+refused the atlas as stale. Caught before any build shipped, by a gate built to leave the frame.
+
+**Rule:** gates inherit the frame they run in. Adding another gate in the same environment cannot
+find what that environment hides, however exhaustive it is — depth in one frame is not coverage of
+another. §9 is this one level down (a check consuming the generator's own enumeration verifies
+fidelity, never coverage); §§3–8 are the same root in single instances. Exhaustiveness reads as
+rigour and is the thing that makes the blind spot invisible.
+
+**Pattern:**
+- For anything whose behavior differs between dev and deployed, build a gate that CONSTRUCTS the
+  deployed shape and runs the real code in it. `--verify-shipped` stages `fonts/`-minus-baked and
+  omits `displays/`, then drives the app in a subprocess so the root is redirected before imports —
+  seconds, no PyInstaller run. A simulation you can run every build beats a real build you run rarely.
+- When a predicate stands in for a question (`fonts/` exists ⇒ ShinGo loadable), name both and ask
+  what would separate them. A deliberate change that makes a resource PARTIAL is the classic
+  separator, and it usually lives in the build script rather than the code being reasoned about.
+- A check whose inputs are absent in the deployed frame must be SKIPPED there explicitly, not left to
+  compute a degenerate value and compare it. Ask where each check's inputs come from, per frame.
+- Count the frames a suite covers, not the cases. Five gates over one frame is one frame.
+
+**Scope:** any dev-vs-deployed divergence — frozen builds, partial asset staging, absent source
+trees, first-run state, capture quality, GPU topology.
