@@ -195,6 +195,262 @@ def check_app_translations(issues: list) -> None:
                 issues.append(("data/translations_app.json", f"'{key}': '{loc}' placeholders {sorted(loc_ph)} != en {sorted(en_ph)}"))
 
 
+# Kana -> romaji, enough to re-derive a station name's English from its reading.
+# Digraphs must be tried before single kana.
+_KANA_2 = {
+    "きゃ": "kya",
+    "きゅ": "kyu",
+    "きょ": "kyo",
+    "しゃ": "sha",
+    "しゅ": "shu",
+    "しょ": "sho",
+    "ちゃ": "cha",
+    "ちゅ": "chu",
+    "ちょ": "cho",
+    "にゃ": "nya",
+    "にゅ": "nyu",
+    "にょ": "nyo",
+    "ひゃ": "hya",
+    "ひゅ": "hyu",
+    "ひょ": "hyo",
+    "みゃ": "mya",
+    "みゅ": "myu",
+    "みょ": "myo",
+    "りゃ": "rya",
+    "りゅ": "ryu",
+    "りょ": "ryo",
+    "ぎゃ": "gya",
+    "ぎゅ": "gyu",
+    "ぎょ": "gyo",
+    "じゃ": "ja",
+    "じゅ": "ju",
+    "じょ": "jo",
+    "びゃ": "bya",
+    "びゅ": "byu",
+    "びょ": "byo",
+    "ぴゃ": "pya",
+    "ぴゅ": "pyu",
+    "ぴょ": "pyo",
+}
+_KANA_1 = {
+    "あ": "a",
+    "い": "i",
+    "う": "u",
+    "え": "e",
+    "お": "o",
+    "か": "ka",
+    "き": "ki",
+    "く": "ku",
+    "け": "ke",
+    "こ": "ko",
+    "が": "ga",
+    "ぎ": "gi",
+    "ぐ": "gu",
+    "げ": "ge",
+    "ご": "go",
+    "さ": "sa",
+    "し": "shi",
+    "す": "su",
+    "せ": "se",
+    "そ": "so",
+    "ざ": "za",
+    "じ": "ji",
+    "ず": "zu",
+    "ぜ": "ze",
+    "ぞ": "zo",
+    "た": "ta",
+    "ち": "chi",
+    "つ": "tsu",
+    "て": "te",
+    "と": "to",
+    "だ": "da",
+    "ぢ": "ji",
+    "づ": "zu",
+    "で": "de",
+    "ど": "do",
+    "な": "na",
+    "に": "ni",
+    "ぬ": "nu",
+    "ね": "ne",
+    "の": "no",
+    "は": "ha",
+    "ひ": "hi",
+    "ふ": "fu",
+    "へ": "he",
+    "ほ": "ho",
+    "ば": "ba",
+    "び": "bi",
+    "ぶ": "bu",
+    "べ": "be",
+    "ぼ": "bo",
+    "ぱ": "pa",
+    "ぴ": "pi",
+    "ぷ": "pu",
+    "ぺ": "pe",
+    "ぽ": "po",
+    "ま": "ma",
+    "み": "mi",
+    "む": "mu",
+    "め": "me",
+    "も": "mo",
+    "や": "ya",
+    "ゆ": "yu",
+    "よ": "yo",
+    "ら": "ra",
+    "り": "ri",
+    "る": "ru",
+    "れ": "re",
+    "ろ": "ro",
+    "わ": "wa",
+    "ゐ": "i",
+    "ゑ": "e",
+    "を": "o",
+    "ん": "n",
+}
+_MACRON = {"a": "ā", "i": "ī", "u": "ū", "e": "ē", "o": "ō"}
+_KANJI = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
+
+# Keys whose `english` is a deliberate TRANSLATION rather than a romanization, so
+# no reading can derive it. Kept as an explicit list because each one is an
+# editorial decision, not a spelling: 葛西臨海公園 was Kasairinkaikōen and JR East
+# now writes Park (author, 2026-08-01).
+_TRANSLATED_NAMES = {"葛西臨海公園", "成田空港", "空港第2ビル"}
+
+
+class _Unromanizable(Exception):
+    pass
+
+
+def _romanize_kana(kana: str) -> tuple[str, str | None]:
+    """Reading -> modified Hepburn with macrons, JR East signage form.
+
+    Returns ``(strict, loose)``. ``loose`` is non-None only when the reading
+    contains a doubled bare vowel, which kana cannot disambiguate: inside a
+    morpheme it is a long vowel (おおくぼ -> Ōkubo), across one it is two short
+    vowels (きた+あかばね -> Kita-Akabane). The caller accepts ``loose`` only when
+    the English marks that boundary with a hyphen or space.
+
+    Raises ``_Unromanizable`` on a kanji, which is how a half-converted IME entry
+    like よの本まち is caught -- the field is a reading and can hold no kanji.
+    """
+    # Katakana is legitimate inside a reading (くうこうだいにビル). Fold it onto
+    # hiragana so one table serves both; ー is handled below.
+    kana = "".join(chr(ord(c) - 0x60) if "ァ" <= c <= "ヶ" else c for c in kana)
+
+    out: list[str] = []
+    i = 0
+    sokuon = False
+    while i < len(kana):
+        two = kana[i : i + 2]
+        if two in _KANA_2:
+            syl, step = _KANA_2[two], 2
+        elif kana[i] == "っ":
+            sokuon = True
+            i += 1
+            continue
+        elif kana[i] == "ー":
+            if out and out[-1][-1] in _MACRON:
+                out[-1] = out[-1][:-1] + _MACRON[out[-1][-1]]
+            i += 1
+            continue
+        elif kana[i] in _KANA_1:
+            syl, step = _KANA_1[kana[i]], 1
+        else:
+            raise _Unromanizable(kana[i])
+        if sokuon:
+            syl = ("t" if syl.startswith("ch") else syl[0]) + syl
+            sokuon = False
+        out.append(syl)
+        i += step
+
+    merged: list[str] = []
+    ambiguous = False
+    for syl in out:
+        if merged and merged[-1][-1] in _MACRON:
+            prev, tail = merged[-1], merged[-1][-1]
+            if syl == "u" and tail in ("o", "u"):
+                merged[-1] = prev[:-1] + _MACRON[tail]
+                continue
+            if syl == tail and tail in ("a", "o", "e"):
+                merged[-1] = prev[:-1] + _MACRON[tail]
+                ambiguous = True
+                continue
+        merged.append(syl)
+
+    # ん assimilates to m before a labial. JR East signage does this everywhere --
+    # Shimbashi, Shimmachi, Shim-Misato, Yono-Hommachi, Jimbohara -- so it is a
+    # rule here rather than a list of exceptions.
+    strict = re.sub(r"n(?=[bmp])", "m", "".join(merged))
+    return strict, (re.sub(r"n(?=[bmp])", "m", "".join(out)) if ambiguous else None)
+
+
+def _romaji_skeleton(s: str) -> str:
+    """Strip editorial decoration so only the romanization itself is compared.
+
+    Hyphenation is deliberately NOT checked: whether a name takes a hyphen depends
+    on it being a prefix (Kita-Akabane) versus one place name (Sashiōgi), which no
+    reading encodes.
+    """
+    for ch in "-‐‑ '’.\n":
+        s = s.replace(ch, "")
+    return s.lower()
+
+
+def check_station_translations(translations: dict, issues: list) -> None:
+    """data/translations.json: `furigana` is a reading, and `english` derives from it.
+
+    Guards a class `check_route` cannot see, because both fields can be individually
+    well-formed and still wrong. Found 24 defects on its first run from a report of
+    one (2026-08-01): a furigana holding a kanji (`よの本まち`, an IME half-conversion
+    that renders kanji in the one mode that exists to remove it), 18 English names
+    missing a macron, 3 carrying one the reading does not support, and 2 wrong kana.
+
+    DATA_FORMAT.md § "Things the validator can't catch" listed Hepburn correctness
+    as by-eye; this is that gap closed.
+    """
+    rel = "data/translations.json"
+    for key, entry in translations.items():
+        if not isinstance(entry, dict):
+            continue
+        eng, fur = entry.get("english"), entry.get("furigana")
+        if fur is None:
+            continue
+        try:
+            strict, loose = _romanize_kana(fur)
+        except _Unromanizable as exc:
+            issues.append((rel, f"'{key}': furigana {fur!r} contains kanji {str(exc)!r} — must be a reading"))
+            continue
+        if not eng or key in _TRANSLATED_NAMES:
+            continue
+        accepted = {_romaji_skeleton(strict)}
+        if loose and any(sep in eng for sep in "- "):
+            accepted.add(_romaji_skeleton(loose))
+        if _romaji_skeleton(eng) not in accepted:
+            issues.append((rel, f"'{key}': english {eng!r} does not match furigana {fur!r} (expected {strict!r})"))
+
+
+def check_route_readings(route_path: Path, translations: dict, issues: list) -> None:
+    """Every station a shipped route draws needs a reading, not just an English name.
+
+    `route_loader._merge_station_translations` fills what it finds and silently
+    skips what it does not, so a station with `english` but no `furigana` renders
+    as kanji in furigana mode with no error anywhere. 11 Yokosuka-line stations in
+    sobu/1217F's pre_stops sat that way until 2026-08-01.
+    """
+    rel = route_path.parent.relative_to(AUDIO_ROOT).as_posix()
+    if is_fixture(rel):
+        return
+    data = load(route_path)
+    for arr in ("pre_stops", "stops"):
+        for stop in data.get(arr, []):
+            name = stop.get("name", "")
+            entry = translations.get(name)
+            if not name or entry is None or "furigana" in stop:
+                continue
+            if "furigana" not in entry:
+                issues.append((rel, f"{arr} '{name}': no furigana in translations.json — renders as kanji in furigana mode"))
+
+
 def check_route(route_path: Path, translations: dict, train_types: dict, issues: list) -> None:
     rel = route_path.parent.relative_to(AUDIO_ROOT).as_posix()
     try:
@@ -412,6 +668,7 @@ def main():
         check_stations_transfers(stations, lines, issues)
         check_transfers_by_view(stations, lines, issues)
         check_app_translations(issues)
+        check_station_translations(translations, issues)
         route_paths = sorted(AUDIO_ROOT.rglob("route.json"))
     else:
         route_paths = [route_arg]
@@ -426,6 +683,7 @@ def main():
         check_route(route_path, translations, train_types, issues)
         check_route_frames(route_path, issues)
         check_route_loads(route_path, translations, issues)
+        check_route_readings(route_path, translations, issues)
         check_route_transfer_view(route_path, stations, issues)
 
     if not issues:
