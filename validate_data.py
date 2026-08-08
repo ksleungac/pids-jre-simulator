@@ -679,26 +679,31 @@ def check_pool_sta_cut_sync(route_paths: list, issues: list) -> None:
     only enforcement was a stderr warning inside the by-ear GUI, which fires only while a
     human happens to be running it — never on the shipped-data gate.
 
-    Scope is per LINE, since a pool is per line: the same slug on two different lines is
-    two different files.
+    Scope is the resolved AUDIO ROOT, not the folder tree — ask resolve_audio_root rather
+    than restating the pooling assumption here. Two diagrams that each keep audio beside
+    their own route.json have separate sta/ dirs, so one slug is two different files and
+    grouping them by line name would invent a desync that does not exist.
     """
+    from route_loader import resolve_audio_root
+
     by_line: dict[str, dict[str, dict[float, list[str]]]] = {}
     for rp in route_paths:
         try:
             data = load(rp)
         except Exception:
             continue  # malformed route.json is already reported by check_route
-        line = rp.parent.parent.name
+        line = str(resolve_audio_root(rp.parent, data))
         for stop in data.get("stops") or []:
             cut = stop.get("sta_cut")
             for slug in stop.get("sta") or []:
                 where = f"{rp.parent.name}:{stop.get('name')}"
                 by_line.setdefault(line, {}).setdefault(slug, {}).setdefault(cut, []).append(where)
     for line, slugs in sorted(by_line.items()):
+        label = Path(line).name
         for slug, cuts in sorted(slugs.items()):
             if len(cuts) > 1:
                 detail = "; ".join(f"{c} at {', '.join(w)}" for c, w in sorted(cuts.items(), key=lambda kv: str(kv[0])))
-                issues.append((f"{line}", f"sta/{slug}.mp3 has {len(cuts)} different sta_cut values — one file, one cut: {detail}"))
+                issues.append((label, f"sta/{slug}.mp3 has {len(cuts)} different sta_cut values — one file, one cut: {detail}"))
 
 
 def main():
@@ -751,7 +756,10 @@ def main():
         check_route_readings(route_path, translations, issues)
         check_route_transfer_view(route_path, stations, issues)
 
-    check_pool_sta_cut_sync(route_paths if route_arg is None else [route_arg], issues)
+    # Same shipped-data scope as the loop above: `_*` routes are fixtures, not shipped, so
+    # they must not be able to fail the release gate.
+    scan = [route_arg] if route_arg else [p for p in route_paths if not is_fixture(p.parent.relative_to(AUDIO_ROOT).as_posix())]
+    check_pool_sta_cut_sync(scan, issues)
 
     if not issues:
         if not quiet and route_arg is None:

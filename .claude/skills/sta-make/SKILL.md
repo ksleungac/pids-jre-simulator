@@ -361,7 +361,10 @@ This is the forward-looking half of `critical_lessons.md § "The instrument is n
 ```bash
 mkdir -p audio_src/<line>
 cp -r audio/<line>/sta audio_src/<line>/sta.bak
-cp audio/<line>/*/route.json audio_src/<line>/          # every diagram on the line
+# Every diagram's route.json — they are all NAMED route.json, so the diagram has to go in
+# the destination FILENAME or the second copy silently overwrites the first. That matters
+# after pooling, not less: a cut written here lands in every diagram on the line.
+for f in audio/<line>/*/route.json; do cp "$f" "audio_src/<line>/$(basename "$(dirname "$f")").route.json.bak"; done
 ```
 
 Mention this safety net in your pre-flight summary so the user knows you have a rollback path. Delete `audio_src/<line>/sta.bak/` and the route.json copies only after the by-ear gate (Step 11) passes. The verifier takes its own per-file snapshot into `audio_src/<line>/sta_wave_backup/` before the first splice of each file, which is what `U` restores from.
@@ -830,7 +833,7 @@ Every STA file ships with **~0.2 s of silence at each end**:
 - **Unused-platform STA recordings** (other-platform takes for the train you're routing) belong in `audio/_archive/<line>/<diagram>/sta/`, NOT in operational `sta/`. Tag them `"archive"` in the splitter's SEGMENTS so the script routes them automatically — don't `mv` them after the fact.
 - **Passing-station mp3s on disk that aren't in the route** (the train doesn't stop there) → also belong in `_archive`. Surfaces as "unused on disk" in the sanity check.
 - **Trailing-announcement gap < ~5 s is suspicious** — the closing-door section between `cut` and `end` usually runs 5–20 s. If you see only 2–3 s, double-check `end` against the source.
-- **Splitter scripts stay with their source folder** (`audio_src/<line>/<diagram>/`), not in a shared workflow folder. The audit trail of "how this batch was split" stays with the data. Note: the entire `audio_src/` tree is gitignored — only the cut output under `audio/<line>/<diagram>/` ships.
+- **Splitter scripts stay with their source folder** (`audio_src/<line>/<diagram>/`), not in a shared workflow folder. The audit trail of "how this batch was split" stays with the data. Note: the entire `audio_src/` tree is gitignored — only the cut output under `audio/<line>/{pa,sta}/` ships, alongside each diagram's `route.json`.
 - **Formats vary between sources** — even within the same line/diagram, two STA recordings may use different timestamp conventions (3 timestamps vs 2). Don't try to unify; each source gets its own `split_sta_<describer>.py`.
 - **Trailing digits in station romanization** (e.g., `airport-terminal-2`) are part of the station name, not platform. Filename position-parsing has no parser, so this is human-readable ambiguity only — not a bug to fix.
 - **Don't create a metadata JSON sidecar.** The filename IS the metadata store. If `sta_meta.json` shows up, that's a previous experiment that should be removed.

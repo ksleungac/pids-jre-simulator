@@ -254,7 +254,10 @@ its `dest`, so they carry no audio). 192 files → **123** (78 PA + 45 STA).
   names the station `route.json` independently says is the previous stopping station.
 
 Finished 2026-08-08: the STA KAK was spliced by ear across 44 files (43.1 s removed, mean
-979 ms), cuts retuned in the same pass, 45/45 by ear, and the legacy folders are gone. 新子安
+979 ms), cuts retuned in the same pass, 45/45 by ear, and the legacy per-diagram folders were
+dropped — 192 superseded mp3s that had outlived the pool by two weeks, kept shipping in the
+zip, and (because `audio/keihin/1275A/sta` still existed) were the reason the verifiers'
+pooled-layout guard stayed silent on this one line. 新子安
 (JK14) now plays 鶴見 (JK15)'s melody at 鶴見's cut — its own take failed the gate and is kept
 at `audio/_archive/keihin/sta/JK14-south.mp3`.
 

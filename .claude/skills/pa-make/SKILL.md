@@ -232,7 +232,6 @@ PYTHONUTF8=1 python -c "
 import json
 from pathlib import Path
 ROOT = Path('D:/pids_jre_simulator')   # absolute path — cwd persists across Bash calls
-route = json.load(open(ROOT / 'audio/<line>/<diagram>/route.json', encoding='utf-8'))
 pa_dir = ROOT / 'audio/<line>/pa'
 on_disk = {p.stem for p in pa_dir.glob('*.mp3')} if pa_dir.exists() else set()
 # Union across every diagram on the line (the pool is shared) AND include pa_at_station,
