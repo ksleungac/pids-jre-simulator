@@ -14,6 +14,8 @@ This skill implements a Ralph loop pattern:
 2. **MAIN AGENT (you)**: Reads feedback and fixes issues yourself
 3. **Loop**: Continues until no issues found or max cycles reached
 
+**The fresh reviewer context IS the mechanism — do not optimize it away.** A separate agent holding no prior context and no momentum finds what the author cannot see, and no model generation substitutes for that. Guidance saying "don't use a subagent to verify your own work" is about SELF-verification (one context re-reading itself); this loop is the opposite, and the cycle count, the re-spawn, and the reviewer's independence are all load-bearing. See `principles.md § "Fresh context is the review instrument"`.
+
 ## Shell preference (IMPORTANT — Windows host)
 **Prefer PowerShell over bash for every shell command in every cycle.** The Git-for-Windows bash shell on this machine crashes with `fatal error - add_item ... errno 1`, which will abort a review cycle. Use the PowerShell tool for `git status`, `git diff`, file listing, and all other shell operations. The bash code blocks below are illustrative pseudocode for the loop structure — do NOT invoke the Bash tool to run them. Translate to PowerShell or drive the loop step-by-step through tool calls.
 

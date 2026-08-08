@@ -16,9 +16,9 @@ Modules:
   route_select.py route / start-station / run-pattern picker (C07AB/AC/AF)
 
 Production entry: ``run(screen) -> config | None`` (re-exported from ``home``) runs the home menu on an
-existing display and returns a launch-config dict shaped like ``setup.SetupScreen.run()`` (action /
+existing display and returns a launch-config dict shaped like the launch config ``_run_drive`` consumes (action /
 work_dir / route_data / model / start_idx) when the user commits a route and 起動s, else None. main.py
-calls it by default (``--classic`` opts back into the legacy setup). Preview the screens standalone via
+calls it — it is the only setup flow (the classic ``setup.py`` screen was retired 2026-07-30). Preview the screens standalone via
 ``_dev_scripts/preview_setup_tims.py``.
 """
 

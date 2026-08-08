@@ -72,6 +72,13 @@ _sta_verify_*.json
 /release_notes.md
 *.spec
 
+# Baked font atlas — pre-rendered output of the LCD faces, so a shipped build needs
+# no font software. A BUILD ARTIFACT, not an asset: /build re-bakes it every run
+# (an atlas keys on font SIZE, so a visual-tuning nudge invalidates an old one) and
+# copies it into the staged folder directly. Committing it would put ~4 MB of
+# regenerable binary in git and churn it on every size tweak. See WIP_font_atlas.md.
+/font_atlas/
+
 # User settings (language, future per-PC preferences). Lives next to the exe in
 # frozen builds / project root in dev. Local-only — separate per machine.
 /settings.json

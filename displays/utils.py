@@ -13,6 +13,7 @@ from typing import Dict, List, Tuple
 import pygame
 import pygame.gfxdraw
 
+import font_atlas
 from app_paths import project_root
 
 BADGE_TEXT = (15, 15, 15)  # dark — text sits on white interior
@@ -33,6 +34,11 @@ def _badge_font(size: float) -> pygame.font.Font:
         f = pygame.font.Font(str(project_root() / "fonts" / _BADGE_FONT_FILE), key)
         _badge_font_cache[key] = f
     return f
+
+
+# Font resolution for LCD renderers lives in font_atlas.lcd_font — one owner,
+# so a renderer cannot accidentally get a live font in a build that ships none.
+# Badges are the exception above: _badge_font hardcodes its face on purpose.
 
 
 # =============================================================================
@@ -634,31 +640,62 @@ def draw_text_given_width(
         script: 'latin' for proportional fonts (preserves kerning),
                 'japanese' for monospaced square characters
     """
+    for offset, img in font_atlas.text_parts(compose_text_parts, font, text, color, width, collapse, script):
+        screen.blit(img, (x + offset, y))
+
+
+def compose_text_parts(font, text, color, width, collapse=False, script="japanese"):
+    """Lay `text` out. THE layout implementation.
+
+    Returns `[(offset_from_x, surface), ...]` — the parts the caller blits, in
+    order. Deliberately NOT flattened into one surface: the compression branch
+    can place adjacent characters a pixel apart from their scaled widths, and
+    flattening an overlap onto transparency then blitting the result differs from
+    blitting each part onto the background in turn. Measured: 90 differing pixels
+    across 36 frames. Handing back the parts keeps the blit sequence identical to
+    what it has always been, so storing them in an atlas is exact by
+    construction instead of by measurement.
+
+    # CONTRACT: this is the only place LCD text layout exists, and the font
+    # atlas stores this function's OUTPUT. Nothing may re-derive the spacing, the
+    # compression ratio, or the collapse branch elsewhere — not a baker, not a
+    # test, not a proof script. A second implementation drifts silently, and the
+    # drift renders as correct-looking text at the wrong spacing.
+    # See WIP_font_atlas.md.
+
+    Offsets are integers in every branch, so pulling x out of the original
+    `int(x + sep * i)` and adding it back at blit time is exact, not approximate:
+    x is a non-negative int, and `int(x + f) == x + int(f)` for such x.
+    """
     t_w, t_h = font.size(text)
     t_w_s = t_w // len(text) if len(text) > 0 else 0
+
+    # Each branch produces (offset_from_x, surface) pairs; they are then packed
+    # into one surface below. Same arithmetic as when this blitted to the screen
+    # directly — only the destination changed.
+    parts = []
 
     if script == "latin":
         # Latin script: render full string centered, scale if needed
         if t_w > width:
             h_ratio = width / t_w
-            img = draw_text(text, font, color, x, y, h_ratio=h_ratio)
+            img = draw_text(text, font, color, 0, 0, h_ratio=h_ratio)
             scaled_w = int(t_w * h_ratio)
-            screen.blit(img, (x + (width - scaled_w) // 2, y))
+            parts.append(((width - scaled_w) // 2, img))
         else:
-            img = draw_text(text, font, color, x + (width - t_w) // 2, y)
-            screen.blit(img, (x + (width - t_w) // 2, y))
+            img = draw_text(text, font, color, 0, 0)
+            parts.append(((width - t_w) // 2, img))
     elif t_w > width:
         # Japanese text too wide - compress character by character
         sep = width / len(text)
         hr = width / (len(text) * t_w_s) if t_w_s > 0 else 1.0
         for i, char in enumerate(text):
-            x_coord = x + sep * i
-            img = draw_text(char, font, color, int(x_coord), y, h_ratio=hr)
-            screen.blit(img, (int(x_coord), y))
+            img = draw_text(char, font, color, 0, 0, h_ratio=hr)
+            parts.append((int(sep * i), img))
     elif collapse:
         # Collapse mode for Japanese: render full text centered
-        img = draw_text(text, font, color, x + (width - t_w) // 2, y)
-        screen.blit(img, (x + (width - t_w) // 2, y))
+        img = draw_text(text, font, color, 0, 0)
+        parts.append(((width - t_w) // 2, img))
     else:
         # Japanese text fits - add even spacing between characters.
         # Per-char measured widths (not uniform stride) — handles mixed-width
@@ -670,7 +707,7 @@ def draw_text_given_width(
         exp = 7 if len(text) == 2 else 0
         cumulative = 0
         for i, char in enumerate(text):
-            x_coord = x + sep * (i + 1) + cumulative + (exp if i > 0 else -exp)
-            img = draw_text(char, font, color, int(x_coord), y)
-            screen.blit(img, (int(x_coord), y))
+            parts.append((sep * (i + 1) + cumulative + (exp if i > 0 else -exp), draw_text(char, font, color, 0, 0)))
             cumulative += char_widths[i]
+
+    return [(off, img) for off, img in parts if img.get_width() and img.get_height()]

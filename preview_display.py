@@ -141,6 +141,56 @@ def parse_args():
     return parser.parse_args()
 
 
+def apply_state(sim, *, stop=0, pa=None, mode=None, lower_view="cycle"):
+    """Put `sim` into one previewable state.
+
+    Factored out of main() so anything that needs to visit many states — the
+    font-atlas bake sweeps every route x stop x mode x view — drives the app
+    through this one function instead of a copy of it. A copy is how a sweep ends
+    up exercising states the real preview never produces, or missing ones it does.
+    """
+    sim.jump_to_stop(stop)
+    if pa is not None:
+        forced = max(0, min(pa, 2))
+        if forced == 2:
+            sim.state.at_station = True
+            sim.state.cnt_pa = 0
+        else:
+            sim.state.at_station = False
+            sim.state.cnt_pa = forced
+    sim.upper.set_state(sim.state.curr_stop, sim.state.cnt_pa, at_station=sim.state.at_station)
+
+    # Force display mode if requested
+    if mode:
+        sim.upper.mode_cycler.current_mode = MODE_MAP[mode]
+        sim.upper.mode_cycler.enabled = False
+
+    # Force lower-LCD view by setting the slot directly + locking the cycler.
+    # Without locking, the cycler would still tick in interactive mode and
+    # rotate FULL → EIGHT → TRANSFER on its normal cadence; the forced slot
+    # would only persist for the boot frame.
+    if lower_view != "cycle":
+        slot_map = {
+            "full": sim.lower._SLOT_FULL,
+            "eight": sim.lower._SLOT_EIGHT,
+            "transfer": sim.lower._SLOT_TRANSFER,
+        }
+        sim.lower._current_slot = slot_map[lower_view]
+        # Lock: the scheduler owns every discrete change, so disabling it
+        # freezes the slot AND the language flip in one switch.
+        sim.scheduler.enabled = False
+
+
+def render_frame(sim, timestamp=None):
+    """Draw one complete frame — both LCDs — into sim.screen."""
+    timestamp = time.time() if timestamp is None else timestamp
+    sim.scheduler.tick(timestamp, sim.state)
+    sim.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
+    # current_time=0.0 freezes the lower-LCD countdown at full values for a
+    # readable static snapshot.
+    sim.lower.draw(0.0)
+
+
 def main():
     args = parse_args()
 
@@ -163,44 +213,10 @@ def main():
     # cnt_pa=0). --pa overrides that into a different prefix state for visual
     # iteration: 0=次は, 1=まもなく, 2=ただいま (STOPPING). Omitted leaves the
     # natural STOPPING landing.
-    sim.jump_to_stop(args.stop)
-    if args.pa is not None:
-        forced = max(0, min(args.pa, 2))
-        if forced == 2:
-            sim.state.at_station = True
-            sim.state.cnt_pa = 0
-        else:
-            sim.state.at_station = False
-            sim.state.cnt_pa = forced
-    sim.upper.set_state(sim.state.curr_stop, sim.state.cnt_pa, at_station=sim.state.at_station)
-
-    # Force display mode if requested
-    if args.mode:
-        sim.upper.mode_cycler.current_mode = MODE_MAP[args.mode]
-        sim.upper.mode_cycler.enabled = False
-
-    # Force lower-LCD view by setting the slot directly + locking the cycler.
-    # Without locking, the cycler would still tick in interactive mode and
-    # rotate FULL → EIGHT → TRANSFER on its normal cadence; the forced slot
-    # would only persist for the boot frame.
-    if args.lower_view != "cycle":
-        slot_map = {
-            "full": sim.lower._SLOT_FULL,
-            "eight": sim.lower._SLOT_EIGHT,
-            "transfer": sim.lower._SLOT_TRANSFER,
-        }
-        sim.lower._current_slot = slot_map[args.lower_view]
-        # Lock: the scheduler owns every discrete change, so disabling it
-        # freezes the slot AND the language flip in one switch.
-        sim.scheduler.enabled = False
+    apply_state(sim, stop=args.stop, pa=args.pa, mode=args.mode, lower_view=args.lower_view)
 
     if args.screenshot:
-        timestamp = time.time()
-        sim.scheduler.tick(timestamp, sim.state)
-        sim.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
-        # current_time=0.0 freezes the lower-LCD countdown at full values for
-        # a readable static snapshot.
-        sim.lower.draw(0.0)
+        render_frame(sim)
         pygame.display.flip()
         pygame.image.save(sim.screen, args.screenshot)
         print(f"Screenshot saved to {args.screenshot}")

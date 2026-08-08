@@ -3,8 +3,9 @@
 
 The transport (git plumbing) is thin and exercised by --dry-run; the
 regression-worthy logic is the mechanical merge: dedup, divergence union,
-edited-block refusal, idempotency. Expected values are pinned literally —
-never derived from the module under test.
+edited-block refusal, over-cap index refusal, idempotency. Expected values are
+pinned literally — never derived from the module under test, so the 150-char cap
+is typed here rather than imported and mutating the constant fails the test.
 """
 
 import sys
@@ -118,6 +119,22 @@ edited_idx = IDX_HEADER + "- [2026-07-22 old](2026-07-22.md) — REWORDED headli
 m, new, warns = merge_index(origin_idx, edited_idx)
 check("index edited: refused", m == origin_idx and new == [])
 check("index edited: warned", len(warns) == 1 and "2026-07-22 old" in warns[0])
+
+# Over-cap entry: refused with warning. The index is the pointer layer — a
+# recap-sized entry belongs in the daily log it links to. Cap pinned literally at 150.
+E_PREFIX = "- [2026-07-25 long](2026-07-25.md) — "
+E_AT_CAP = E_PREFIX + "x" * 113
+E_OVER_CAP = E_PREFIX + "x" * 114
+check("cap fixture: at-cap is exactly 150", len(E_AT_CAP) == 150, f"got {len(E_AT_CAP)}")
+check("cap fixture: over-cap is 151", len(E_OVER_CAP) == 151, f"got {len(E_OVER_CAP)}")
+
+m, new, warns = merge_index(origin_idx, IDX_HEADER + E_OVER_CAP + "\n" + E_OLD + "\n")
+check("index over-cap: refused", m == origin_idx and new == [])
+check("index over-cap: warned", len(warns) == 1 and "over-cap" in warns[0], f"got {warns!r}")
+
+# Boundary: exactly at the cap still publishes (the gate is >, not >=).
+m, new, warns = merge_index(origin_idx, IDX_HEADER + E_AT_CAP + "\n" + E_OLD + "\n")
+check("index at-cap: publishes", new == [E_AT_CAP] and warns == [], f"got {new!r} {warns!r}")
 
 
 # ---------------------------------------------------------------- merged_view

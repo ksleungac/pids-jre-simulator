@@ -10,6 +10,14 @@ import time
 from app_paths import load_json_relative, project_root
 from displays.base import DisplayMode, ModeCycler
 from displays.utils import clip, draw_text_given_width, draw_station_code_badge
+from font_atlas import (
+    DESTINATIONS,
+    STATION_NAMES,
+    STATION_READINGS,
+    TRAIN_TYPES,
+    lcd_font,
+    lit,
+)
 
 # =============================================================================
 # Region Map — E235-1000 upper LCD layout (descriptive)
@@ -144,14 +152,19 @@ class JapaneseDisplay:
         # locale Windows with `TypeError: expected str, bytes or os.PathLike object,
         # not int`. All fonts in this project ship in fonts/ and load via Font(path).
         # E235-1000 specific fonts (shared across methods) - load from fonts/ folder
-        self.font_type_bold = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Heavy.otf"), 26)
-        self.font_type_bold.set_bold(True)
-        self.font_type_bold.set_italic(True)
-        self.font_dest = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 35)
-        self.font_prefix = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 25)
-        self.font_station = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 78)
+        self.font_type_bold = lcd_font("ShinGoPr6N-Heavy.otf", 26, bold=True, italic=True, draws=TRAIN_TYPES)
+        self.font_dest = lcd_font("ShinGoPr6N-Medium.otf", 35, draws=DESTINATIONS)
+        self.font_prefix = lcd_font(
+            "ShinGoPr6N-Medium.otf",
+            25,
+            # Kanji set plus the one furigana variant that
+            # differs (`prefix_furigana` maps 次は -> つぎは;
+            # the other two are identical in both).
+            draws=lit("次は", "まもなく", "ただいま", "つぎは"),
+        )
+        self.font_station = lcd_font("ShinGoPr6N-Medium.otf", 78, draws=(STATION_NAMES, STATION_READINGS))
         self.font_clock = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Roman.otf"), 27)
-        self.font_suffix = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 18)
+        self.font_suffix = lcd_font("ShinGoPr6N-Medium.otf", 18, draws=lit("方面", "ゆき"))
 
     def draw_train_type(self, train_type: str, type_color: tuple) -> None:
         """Draw train type box."""
@@ -254,9 +267,7 @@ class EnglishDisplay:
         self.stops = stops
 
         # E235-1000 specific English fonts (shared across methods) - load from fonts/ folder
-        self.font_type_bold = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Heavy.otf"), 26)
-        self.font_type_bold.set_bold(True)
-        self.font_type_bold.set_italic(True)
+        self.font_type_bold = lcd_font("ShinGoPr6N-Heavy.otf", 26, bold=True, italic=True, draws=TRAIN_TYPES)
         self.font_dest = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Medium.otf"), 24)
         self.font_main_prefix = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Medium.otf"), 27)
         self.font_station = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), 75)

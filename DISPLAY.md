@@ -16,7 +16,7 @@ Train-family scope and in-spec/best-effort policy live in [CLAUDE.md](CLAUDE.md)
 > - Design-discussion rationale (multi-paragraph framings of *why* a model exists) — the rule lives here; the rationale lives in `memory/YYYY-MM-DD.md`
 > - Facts already in [CLAUDE.md](CLAUDE.md) mental model / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
 >
-> **Voice:** new reference-shaped entries (cross-model invariants, contracts, recipes, mode-system rules, state-machine spec, edge-case tables) — caveman-full voice (drop articles, fragments OK, `=` for definitional equivalence). Rationale-shaped passages (incident warnings, "Mental model:" framings, narrative examples) — stay normal voice. See [CLAUDE.md § Chat output style](CLAUDE.md).
+> **Voice:** new reference-shaped entries (cross-model invariants, contracts, recipes, mode-system rules, state-machine spec, edge-case tables) stay compressed — tables, `=` for definitional equivalence, no narrative padding. Rationale-shaped passages (incident warnings, "Mental model:" framings, narrative examples) run as ordinary prose. Both in complete sentences where they use prose at all, per [CLAUDE.md § Writing tone](CLAUDE.md).
 >
 > **Before adding:** name the section your edit merges into OR the content it replaces. If neither — you're appending, which is the failure mode this contract fights.
 >
@@ -261,6 +261,7 @@ Skip animation lives in `_advance_to_next_stop`. Entering STOPPING and cycling p
 
 - **Position constants inlined** as local variables in each draw method (e.g. `box_x, box_y = 15, 8`). Different train models may need different layouts; per-method positions make that explicit.
 - **Fonts shared** as class members defined in `__init__` (e.g. `self.font_type_bold`). Fonts consistent within a model.
+- **ShinGo fonts resolve through `font_atlas.lcd_font(face, size, bold=, italic=, draws=…)`** — never a bare `pygame.font.Font` for a baked face (banned by `lint_primitives.py`), and `set_bold()`/`set_italic()` on the result now **raise**: style is part of the atlas key, so pass the kwargs. `draws=` declares where the text comes from — `at("audio/*/route.json:stops[].name")`, `lit("次は")`, plus `replace=`/`split=`/`wrap=`/`suffix=` for text the renderer derives. **Adding drawn text is a two-part edit**, the string and its declaration; the atlas is cooked from declarations, so coverage never depends on a state being reachable, and `lcd_font` validates every dev draw against the declaration so an undeclared string fails on the first frame that draws it. Text layout has exactly one implementation, `utils.compose_text_parts`; the atlas stores its output. A font SIZE is part of the key, so `/build` re-bakes every run. Design + gates: [WIP_font_atlas.md](WIP_font_atlas.md).
 - See [conventions.md § "Tuneable-params block"](.claude/rules/conventions.md) for project-wide rule on labeled-local-variables at top of every draw method.
 
 ### Mode Renderer Design
@@ -397,7 +398,7 @@ upper = UpperDisplay(screen, route_data, stops)
 upper.set_state(curr_stop=0, cnt_pa=0, at_station=True)  # boots STOPPING at start platform
 upper.draw()   # language ticking belongs to ChangeScheduler, which PASimulator owns
 
-# Registry (multiple train models) — what app.py / setup.py use
+# Registry (multiple train models) — what app.py / tims.setup use
 from displays import get_train_model
 model = get_train_model("e235_1000")          # TrainModel record (default if unknown)
 upper = model.upper_cls(screen, route_data, stops)

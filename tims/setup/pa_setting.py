@@ -144,7 +144,7 @@ def _apply_selection(result):
 
 
 def _build_config(result, ocr=False):
-    """Bridge a committed route_select result → a launch config shaped like setup.SetupScreen.run()
+    """Bridge a committed route_select result → a launch config shaped like the dict ``main._run_drive`` consumes
     (action / work_dir / route_data / model). `start_idx` = the chosen start stop resolved by NAME
     against the committed variant's own stops (variant-agnostic — variants can carry different stop
     lists; this closes the deferred v0-index finding). main.py jumps the sim to start_idx before run().

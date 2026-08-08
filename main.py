@@ -12,62 +12,25 @@ os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 
 import i18n
 import update_check
-from setup import SetupScreen
 from app import PASimulator
 
-SETUP_SIZE = (730, 420)  # classic setup / OOBE tutorial window
-TIMS_SIZE = (730, 610)  # TIMS-console setup flow window (taller)
+TIMS_SIZE = (730, 610)  # TIMS-console setup flow window
 
 
-def _run_tutorial(screen_size: tuple[int, int]) -> bool:
-    """Resize the display to the tutorial's 1100×500 window, run it, then
-    restore the setup-sized display. Returns True if the tutorial actually
-    ran end-to-end (Done was pressed); False on Skip / window-close / asset
-    failure.
+def _run_setup():
+    """Show the TIMS setup flow and return a launch config, or None to exit.
 
-    Sized window is owned by the tutorial — we set_mode here, hand the
-    display surface off, and restore the original size on return. Mixer +
-    pygame stay alive across the transition; no full quit happens.
+    Owns its own display creation so it can be re-entered after a drive returns
+    Home (band Home button). The pre-TIMS classic `SetupScreen` and its forced
+    first-run fullscreen tutorial were retired 2026-07-30 — TIMS is the only flow,
+    and it does its own OOBE (the 教學 card flashes until visited,
+    `tims.setup.home._mark_oobe_done` persisting `oobe_completed`).
     """
-    from tutorial import Tutorial, WINDOW_H, WINDOW_W
+    from tims.setup import run as run_tims
 
-    pygame.display.set_mode((WINDOW_W, WINDOW_H))
-    try:
-        tut = Tutorial(pygame.display.get_surface())
-        completed = tut.run()
-    finally:
-        # Restore the setup screen's size so SetupScreen draws into the right surface.
-        pygame.display.set_mode(screen_size)
-    return completed
-
-
-def _run_setup(args, settings):
-    """Show the setup flow (TIMS or classic) and return a launch config, or None to exit. Owns its own
-    display creation so it can be re-entered after a drive returns Home (band Home button)."""
-    if not args.classic:
-        # TIMS-console setup flow (tims.setup), own-window 730×610 — now the DEFAULT flow.
-        from tims.setup import run as run_tims
-
-        pygame.display.set_mode(TIMS_SIZE)
-        pygame.display.set_caption("PA Simulator")
-        return run_tims(pygame.display.get_surface())
-    # Classic setup screen. The "? Tutorial" replay button shows only when oobe_completed=True (a re-run
-    # affordance, not a first-run gate). Loop in case the user clicks it: run tutorial, return to setup.
-    screen = pygame.display.set_mode(SETUP_SIZE)
+    pygame.display.set_mode(TIMS_SIZE)
     pygame.display.set_caption("PA Simulator")
-    setup = SetupScreen(screen, show_tutorial_button=settings.get("oobe_completed", False))
-    while True:
-        config = setup.run()
-        if config is None:
-            return None
-        action = config.get("action")
-        if action == "run_tutorial":
-            _run_tutorial(SETUP_SIZE)
-            continue
-        if action == "select":
-            return config
-        print(f"Unknown setup action: {action!r}. Exiting.")
-        return None
+    return run_tims(pygame.display.get_surface())
 
 
 def _run_drive(config):
@@ -79,12 +42,17 @@ def _run_drive(config):
     try:
         sim = PASimulator(config["work_dir"], config["route_data"], auto_input=auto_input, model=config.get("model"))
         start_idx = config.get("start_idx")
-        if start_idx is not None:  # tims setup start-station selection → land there (classic setup has no start_idx); idx 0 is a valid target
+        if start_idx is not None:  # tims setup start-station selection → land there; idx 0 is a valid target
             sim.jump_to_stop(start_idx)
         if auto_input:
             from auto_input import AutoDriver
 
-            driver = AutoDriver(sim, lead_m=config.get("lead_m", 900), interval_s=config.get("interval_s", 3))
+            driver = AutoDriver(
+                sim,
+                lead_m=config.get("lead_m", 900),
+                interval_s=config.get("interval_s", 3),
+                legacy_ocr=config.get("legacy_ocr", False),
+            )
             sim.auto_driver = driver  # exposes pause toggle to the band click handler
             driver.start()
         action = sim.run() or "quit"
@@ -105,9 +73,10 @@ def main():
 
     parser = argparse.ArgumentParser(description="Japanese Train PA Simulator")
     parser.add_argument(
-        "--classic",
+        "--legacy-ocr",
         action="store_true",
-        help="Launch the classic setup screen instead of the default TIMS-console setup flow (tims.setup)",
+        help="Debug: read the HUD at the capture's own resolution with its per-resolution templates, "
+        "instead of downscaling it into the 1080p model. No effect unless OCR Auto-PA is on.",
     )
     parser.add_argument(
         "--stream",
@@ -121,14 +90,20 @@ def main():
     )
     args = parser.parse_args()
 
+    # DPI awareness FIRST — before pygame creates any window, and before anything can import dxcam
+    # (which declares it as an import side effect, so the app used to be unaware for setup and aware
+    # for an OCR drive). Must precede pygame.init(); awareness is one-way and only takes effect for
+    # windows created after it. See window_utils.declare_dpi_awareness.
+    import window_utils
+
+    window_utils.declare_dpi_awareness()
+
     # Initialize pygame for the setup screen
     pygame.init()
     pygame.mixer.init()
 
     # Pin every window created from here on (setup flow, tutorials, sim) always-on-top — the app is a
     # companion overlay for the game. One seam wraps set_mode so no screen has to remember to re-pin.
-    import window_utils
-
     window_utils.install_topmost_hook()
 
     # Window mirroring (opt-in, off by default). Owned HERE rather than by PASimulator: the setup<->drive
@@ -153,9 +128,9 @@ def main():
     # overlaps the setup screens; the setup screen polls the result.
     update_check.check_async()
 
-    # No premature window here — the setup flow (_run_setup) and the classic OOBE tutorial each create
-    # their own correctly-sized window, so creating one now would only flash a blank frame before the
-    # handoff. (Used to exist for the removed first-run LanguagePicker — critical_lessons §6.)
+    # No premature window here — the setup flow (_run_setup) creates its own correctly-sized window, so
+    # creating one now would only flash a blank frame before the handoff. (Used to exist for the removed
+    # first-run LanguagePicker — critical_lessons §6.)
 
     # Language resolution — NO standalone first-run picker. Use the saved choice, else the OS-locale
     # default; the TIMS home's language knobs own runtime switching AND persist the choice. Persist the
@@ -168,25 +143,22 @@ def main():
         i18n.save_settings(settings)
     i18n.init(lang)
 
-    # First-run OOBE tutorial (CLASSIC setup only). Runs once after language resolution, before setup.
-    # Set ``oobe_completed=True`` regardless of how the tutorial finished (Done / Skip / asset-missing)
-    # so we don't re-prompt on next launch — a "replay" affordance lives on the setup screen.
-    # The TIMS flow (default) does its OWN OOBE: the 教學 card flashes until the first visit (home._mark_oobe_done
-    # persists the flag), so skip the forced fullscreen tutorial there — only the classic path runs it.
-    if args.classic and not settings.get("oobe_completed"):
-        _run_tutorial(SETUP_SIZE)
-        settings["oobe_completed"] = True
-        i18n.save_settings(settings)
+    # No forced first-run tutorial: TIMS owns OOBE itself — the 教學 card flashes until the first visit
+    # and `tims.setup.home._mark_oobe_done` persists `oobe_completed`. The classic path's fullscreen
+    # gate was retired with it (2026-07-30); the settings key stays, TIMS reads it.
 
     # Setup ↔ drive loop. A drive's band Home button returns here to re-pick a route (run() → "home");
     # window close / ESC ends the drive with "quit" and exits. OCR Auto-PA stays opt-in inside setup.
     while True:
-        config = _run_setup(args, settings)
+        config = _run_setup()
         if config is None:
             print("No route selected. Exiting.")
             frame_stream.stop()
             pygame.quit()
             return
+        # Debug lever, not a setting — the per-resolution path is what downscaling replaces,
+        # so it rides a CLI flag rather than settings.json / the OCR page.
+        config["legacy_ocr"] = args.legacy_ocr
         # Tear down the setup window before the drive builds its own (taller, panel-carved) window.
         pygame.display.quit()
         action = _run_drive(config)

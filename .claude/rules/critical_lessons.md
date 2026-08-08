@@ -1,6 +1,6 @@
 # Critical Lessons — DO NOT REPEAT
 
-Nine incidents. Each locally defensible; each broke something real. The shared root: **claude reasons from its own frame — code as text, the dev machine, its own measurement — rather than from the artifact as the user meets it.**
+Eleven incidents. Each locally defensible; each broke something real, or was caught only at the last gate before it. The shared root: **claude reasons from its own frame — code as text, the dev machine, its own measurement — rather than from the artifact as the user meets it.**
 
 ---
 
@@ -39,10 +39,22 @@ OCR templates in `game_references/` never committed. User deleted them as dev cr
 
 **Rule:** dep classification follows call-graph reachability, not file location or import timing. Production-reachable code path imports a library → that library is a runtime dep. "Lazy" = when it loads (perf); "optional" = whether it must exist (contract). Not interchangeable.
 
+**Corollary (2026-07-27) — a lazy import also defers the library's SIDE EFFECTS, so process-global
+state becomes feature-flag-dependent.** `dxcam` calls `SetProcessDpiAwareness(2)` at import time
+(`dxcam/__init__` builds a `DXFactory()` at module scope → `dxcam/core/output.py`), and
+`auto_input` is imported lazily — only with OCR enabled, or on the Report button. So the app ran
+DPI-unaware through setup and became aware on entering an OCR drive, and awareness is one-way, so
+it never reverted: same build, same machine, two different window scalings decided by which
+features the user turned on. Nothing errors; it just looks different. Fixed by declaring the state
+deliberately at entry (`window_utils.declare_dpi_awareness`) instead of inheriting it by accident.
+
 **Pattern:**
 - Trace call graph from the import site to entry points. Any production path reaches it → `dependencies`.
 - `try: import X except ImportError` is NEVER a substitute for correct classification.
 - File under `_*/` that production code imports → promote out of `_*/`.
+- A library that mutates PROCESS-global state at import (DPI awareness, locale, signal handlers,
+  COM apartment) must be imported at a deterministic point, or that state silently tracks whichever
+  optional feature pulled it in. Hook the setter and print the stack when you need to find one.
 
 **Scope:** all `pyproject.toml` deps, all `_*/` file placements, all defensive imports.
 
@@ -146,20 +158,101 @@ the guard only covered `create()` *returning* None, not *raising*.
 "one adapter", a single capture backend) is invisible on a dev box whose topology happens to make
 it hold. Enumerate the real hardware set and pick the combo that works; never trust index 0.
 
+**Corollary (2026-07-26) — check the restriction's SCOPE before assuming enumeration covers it.**
+Walking a per-call parameter cannot fix a constraint scoped to the PROCESS. DDA's hybrid rule is
+about which GPU the calling process runs on, so when Windows launches the app on the dGPU every
+combo the walk tries raises `UNSUPPORTED` and it exhausts. The reporter fixed it by setting the
+app's Windows GPU preference to power saving — no adapter, monitor or cable changed. The fix
+above is still correct; it just addresses the other half.
+
 **Pattern:**
 - Screen/GPU capture: enumerate adapters × outputs (`dxcam.output_info()`), try each until one
   succeeds — don't hardcode device 0. `auto_input/driver.py::_open_capture_camera`.
 - Wrap the init in try/except so a topology mismatch degrades gracefully — but **print the full
   original traceback**; muting it blinds the next report (user: *"if you mute the trace we cannot
   debug such problem next time"*).
-- Residual (no working combo — e.g. dGPU-owned display on a hybrid system): a different backend
-  (`winrt` / Windows.Graphics.Capture) is the only lever; note it, don't pretend enumeration covers it.
+- Residual (no working combo — the process is on the dGPU, or the display's only owner is): the
+  levers are the per-app GPU preference (`HKCU\Software\Microsoft\DirectX\UserGpuPreferences`) or a
+  different backend (`winrt` / Windows.Graphics.Capture); note it, don't pretend enumeration covers it.
+- A graceful-degradation path that re-prints the original traceback reads IDENTICALLY to the crash
+  it replaced, so "same error" in a user report distinguishes nothing. Keep the trace, and give the
+  degraded path a distinct leading line to ask the reporter to quote.
 
 **Scope:** dxcam / DXGI Desktop Duplication, any GPU-adapter or monitor-topology-dependent code.
 
 ---
 
-## 9. The instrument is not the artifact — the ear is (2026-07-26)
+## 9. A gate built from an enumeration cannot see a gap in that enumeration (2026-07-30)
+
+The font atlas derived its coverage by sweeping LCD state — routes × stops × modes × views × PA
+phases, from tuples typed into the baker. `sobu/1217F` is a through-service whose route bar windows
+per `frames`, and pinning the lower view disabled the scheduler, so `_active_frame_idx` never left 0.
+Result: **no raster at any size for the 7 stations interior to frame 1** — a `KeyError` the moment a
+real drive passed 千葉, on the one route that has frames.
+
+**All three verification gates passed on it.** `--verify` re-drove the *identical* sweep, so an
+unvisited state was symmetrically absent from both the bake and the check — it reported `0 raised`
+while the names were provably missing. `--pixel-verify` compared two renders of the same unvisited
+set. The third gate sampled 36 states. The bug was found by a fresh-context agent reading the
+manifest, not by any gate.
+
+**Rule:** a check that consumes the same enumeration the artifact was built from verifies *fidelity*,
+never *coverage*. If a generator and its verifier share the list of cases, neither can report a case
+missing from the list. The oracle must be independent of the generator — and the generator's inputs
+must not be a hand-typed description of what production supports.
+
+**Pattern:**
+- Derive every axis from production, never from a tuple in the tool: `TRAIN_MODELS`, `_SLOT_BEATS`,
+  `_frame_count`, `DisplayMode`. A hand-written axis list is `principles.md § "A second implementation
+  of a production decision drifts silently"` wearing a different hat, and it fails silently the same way.
+- Better: remove the enumeration from the correctness path. Coverage keyed on *declared data sources*
+  rather than reachable states cannot be short a case, because there is no case list to be short of.
+- Make the failure loud where it CAN be seen: the shipped build has no font files, so `--verify` now
+  runs with the baked faces unreadable. The dev tree has every face, so nothing else surfaces it.
+- Ask of any new gate: what class of defect is this structurally unable to detect? Write the answer down.
+
+**Scope:** any bake / codegen / fixture-generation with a paired verifier; asset pipelines; snapshot
+tests whose snapshot set is produced by the code under test.
+
+---
+
+## 10. A suite that shares one environment verifies that environment, never deployment (2026-08-01)
+
+The font atlas had five mechanical gates and 21,978 states of pixel-identical proof, and had **never
+rendered a character outside the dev tree**. It did not work there. Two bugs, stacked:
+
+`mode()` asked *"does `fonts/` exist"* to decide *"can I load ShinGo"*. Those are the same question
+only while `fonts/` is all-or-nothing — and `/build` stages a **partial** `fonts/` (the unbaked
+families stay, the baked ones are deleted), which is precisely what separates them. So the staged
+folder resolved LIVE, the atlas was never consulted, and every ShinGo load went at a file the build
+had just deleted. Forcing ATLAS did not help: `code_fingerprint()` globs `displays/**/*.py`, which
+`/build` excludes because PyInstaller bundles it into the exe, so it hashed an *empty file list* and
+refused the atlas as stale. Caught before any build shipped, by a gate built to leave the frame.
+
+**Rule:** gates inherit the frame they run in. Adding another gate in the same environment cannot
+find what that environment hides, however exhaustive it is — depth in one frame is not coverage of
+another. §9 is this one level down (a check consuming the generator's own enumeration verifies
+fidelity, never coverage); §§3–8 are the same root in single instances. Exhaustiveness reads as
+rigour and is the thing that makes the blind spot invisible.
+
+**Pattern:**
+- For anything whose behavior differs between dev and deployed, build a gate that CONSTRUCTS the
+  deployed shape and runs the real code in it. `--verify-shipped` stages `fonts/`-minus-baked and
+  omits `displays/`, then drives the app in a subprocess so the root is redirected before imports —
+  seconds, no PyInstaller run. A simulation you can run every build beats a real build you run rarely.
+- When a predicate stands in for a question (`fonts/` exists ⇒ ShinGo loadable), name both and ask
+  what would separate them. A deliberate change that makes a resource PARTIAL is the classic
+  separator, and it usually lives in the build script rather than the code being reasoned about.
+- A check whose inputs are absent in the deployed frame must be SKIPPED there explicitly, not left to
+  compute a degenerate value and compare it. Ask where each check's inputs come from, per frame.
+- Count the frames a suite covers, not the cases. Five gates over one frame is one frame.
+
+**Scope:** any dev-vs-deployed divergence — frozen builds, partial asset staging, absent source
+trees, first-run state, capture quality, GPU topology.
+
+---
+
+## 11. The instrument is not the artifact — the ear is (2026-07-26)
 
 Reported 0 KAK across a line the user could hear one in on the first file, then kept building
 detectors instead of taking the named file as truth. Four detectors later, the user's own hand

@@ -17,6 +17,7 @@ from displays.train_models import get_train_model
 from displays.utils import draw_text
 import i18n
 import tims.band as status_band
+import window_utils
 
 
 class AppState:
@@ -328,6 +329,12 @@ class PASimulator:
         window), do NOT pin a window position, and do NOT re-init the mixer
         (caller has already initialized it via main.py at startup).
         """
+        # Idempotent and one-way. main.py already declares it before the setup flow; repeating it
+        # here covers every entry point that builds a PASimulator directly (preview_display.py and
+        # the other harnesses), which would otherwise read pygame.display.Info() as the VIRTUALIZED
+        # desktop — 1536x864 on a 125% 1080p screen — and pick a zoom off the wrong numbers. It also
+        # keeps preview fidelity honest: calibration should be judged in the frame that ships.
+        window_utils.declare_dpi_awareness()
         pygame.init()
         if self.tutorial:
             # Caller owns the display + mixer; just bind our render target.
@@ -335,19 +342,36 @@ class PASimulator:
             self.window = pygame.display.get_surface()
             self.screen = self.target_surface
             self.debug_surface: Optional[pygame.Surface] = None
+            self.canvas = self.target_surface  # no zoom in the tutorial; caller sized the window
+            self.zoom = 1
             return
         if not self.preview:
             pygame.mixer.init()
         self.clock = pygame.time.Clock()
         s_width, s_height = self._train_model.s_width, self._train_model.s_height
         panel_h = DEBUG_PANEL_HEIGHT if self.auto_input else 0
-        self.window = pygame.display.set_mode((s_width, s_height + panel_h))
+
+        # Renderers draw into an OFFSCREEN canvas at native size and never learn about zoom; the
+        # window is a scaled presentation of it (_present). Keeping them separate is what lets the
+        # window resize without touching a single renderer or a single calibrated coordinate.
+        self.canvas = pygame.Surface((s_width, s_height + panel_h))
         if self.auto_input:
-            self.debug_surface = self.window.subsurface((0, 0, s_width, panel_h))
-            self.screen = self.window.subsurface((0, panel_h, s_width, s_height))
+            self.debug_surface = self.canvas.subsurface((0, 0, s_width, panel_h))
+            self.screen = self.canvas.subsurface((0, panel_h, s_width, s_height))
         else:
             self.debug_surface = None
-            self.screen = self.window
+            self.screen = self.canvas
+
+        info = pygame.display.Info()
+        cw, ch = self.canvas.get_size()
+        work_w, work_h = window_utils.work_area(info.current_w, info.current_h)
+        self._max_zoom = window_utils.max_zoom(cw, ch, work_w, work_h)
+        saved = i18n.load_settings().get("window_zoom")
+        if isinstance(saved, int) and 1 <= saved <= self._max_zoom:
+            self.zoom = saved  # a size the user chose deliberately outranks the default
+        else:
+            self.zoom = window_utils.pick_default_zoom(cw, ch, work_w, work_h)
+        self.window = pygame.display.set_mode((cw * self.zoom, ch * self.zoom), pygame.RESIZABLE)
         pygame.display.set_caption("PIDS Preview  —  PageDown=PA  PageUp=Mode  ←/→=Jump  ESC=Quit" if self.preview else "PA Simulator")
 
         if not self.preview:
@@ -377,7 +401,7 @@ class PASimulator:
         self.upper.draw()
         self.lower.draw(boot_t)
         self._render_panel()
-        pygame.display.flip()
+        self._present()
 
         while self.running:
             self.clock.tick(FRAME_RATE)
@@ -400,7 +424,7 @@ class PASimulator:
 
             self._render_panel()
 
-            pygame.display.flip()
+            self._present()
 
             # Handle input
             self._handle_input()
@@ -410,15 +434,20 @@ class PASimulator:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
+                elif event.type == pygame.VIDEORESIZE:
+                    # Snap the dragged size to a whole multiple so the blit stays nearest-neighbour.
+                    # The window visibly sticks at each multiple — that IS the affordance telling the
+                    # user which sizes are sharp, with no settings dialog to find.
+                    self._apply_zoom(window_utils.snap_zoom(self.canvas.get_height(), event.h, self._max_zoom))
                 elif (
                     event.type == pygame.MOUSEBUTTONDOWN
                     and event.button == 1
                     and self.auto_input
                     and self.debug_surface is not None
-                    and event.pos[1] < self.debug_surface.get_height()
+                    and self.window_to_canvas(event.pos)[1] < self.debug_surface.get_height()
                 ):
                     # Click inside the status band → its control cluster (pause / save / home).
-                    self._handle_band_click(event.pos)
+                    self._handle_band_click(self.window_to_canvas(event.pos))
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     # Click below the debug panel (or anywhere when no panel)
                     # — try click-to-jump on the lower LCD.
@@ -447,7 +476,10 @@ class PASimulator:
     def _handle_band_click(self, pos) -> None:
         """Dispatch a click inside the status band's control cluster (hit-rects from the last render):
         Pause toggles the auto-driver, Save generates the drive report, Home stops PA + returns to the
-        setup screen (run() exits "home" → main.py re-shows setup)."""
+        setup screen (run() exits "home" → main.py re-shows setup).
+
+        ``pos`` is in CANVAS coordinates — the caller applies ``window_to_canvas`` first, because the
+        band's hit-rects come from rendering into the canvas and know nothing about window zoom."""
         hits = self._band_hits
         home, pause, save = hits.get("home"), hits.get("pause"), hits.get("save")
         if home is not None and home.collidepoint(pos):
@@ -484,17 +516,77 @@ class PASimulator:
             return None
         return sim_idx
 
+    def window_to_canvas(self, pos) -> tuple[int, int]:
+        """Map WINDOW coordinates to CANVAS coordinates by undoing the zoom.
+
+        # CONTRACT: the single window->canvas transform. Every consumer of mouse position goes
+        # through this or through window_to_lcd, which is built on it — never re-derive inline.
+        # See issue #73: a wrong transform makes click-to-jump land on the WRONG station, and a
+        # wrong station is still a valid jump, so nothing anywhere raises an error.
+        """
+        return pos[0] // self.zoom, pos[1] // self.zoom
+
+    def window_to_lcd(self, pos) -> Optional[tuple[int, int]]:
+        """Map WINDOW coordinates to LCD-local coordinates, or None if the point is outside the LCD.
+
+        Two terms: undo the zoom, then subtract the status-band offset (present when auto_input is
+        on). Order matters — the band's height is a CANVAS measurement, so the zoom has to come off
+        first or the offset is applied in the wrong unit.
+        """
+        cx, cy = self.window_to_canvas(pos)
+        panel_h = self.debug_surface.get_height() if (self.auto_input and self.debug_surface is not None) else 0
+        lcd_y = cy - panel_h
+        if lcd_y < 0:
+            return None
+        return cx, lcd_y
+
+    def _present(self) -> None:
+        """Blit the offscreen canvas to the window and flip.
+
+        Nearest-neighbour by construction: the window is only ever an exact whole multiple of the
+        canvas (window_utils.snap_zoom), so ``scale`` maps each source pixel to a clean k*k block
+        with no interpolation. ``scale`` writing straight into the window surface avoids a second
+        temporary each frame.
+        """
+        if self.zoom == 1:
+            self.window.blit(self.canvas, (0, 0))
+        else:
+            pygame.transform.scale(self.canvas, self.window.get_size(), self.window)
+        pygame.display.flip()
+
+    def _apply_zoom(self, k: int) -> None:
+        """Adopt whole-multiple ``k``: force the window to exactly k*canvas and remember the choice.
+
+        The guard is the WINDOW SIZE, not k. A drag that snaps back to the same multiple still
+        leaves the OS window at whatever odd size the user released at, and returning early there
+        would leave every later frame nearest-scaling the canvas into a non-multiple — permanently
+        uneven pixels, which is the exact thing whole-multiple snapping exists to prevent.
+
+        It is also the loop terminator: ``set_mode`` emits another resize event, that event snaps to
+        the same k, and this time the size already matches so it returns.
+        """
+        k = max(1, min(self._max_zoom, k))
+        cw, ch = self.canvas.get_size()
+        target = (cw * k, ch * k)
+        if k == self.zoom and self.window.get_size() == target:
+            return
+        changed = k != self.zoom
+        self.zoom = k
+        self.window = pygame.display.set_mode(target, pygame.RESIZABLE)
+        if changed:  # only a deliberate zoom change is worth a settings write
+            settings = i18n.load_settings()
+            settings["window_zoom"] = k
+            i18n.save_settings(settings)
+
     def _handle_lcd_click(self, pos) -> None:
         """Translate a window-coords click into a click-to-jump action.
 
-        Subtracts the debug-panel offset (when auto_input is on) before
-        querying hit_test. Silent no-op on non-clickable cells.
+        Silent no-op outside the LCD region or on non-clickable cells.
         """
-        mx, my = pos
-        panel_h = self.debug_surface.get_height() if (self.auto_input and self.debug_surface is not None) else 0
-        lcd_y = my - panel_h
-        if lcd_y < 0:
+        lcd = self.window_to_lcd(pos)
+        if lcd is None:
             return
+        mx, lcd_y = lcd
         sim_idx = self._click_target(mx, lcd_y)
         if sim_idx is None:
             return
@@ -505,10 +597,8 @@ class PASimulator:
 
     def _update_hover_cursor(self) -> None:
         """Set pointer-hand cursor over clickable cells, default elsewhere."""
-        mx, my = pygame.mouse.get_pos()
-        panel_h = self.debug_surface.get_height() if (self.auto_input and self.debug_surface is not None) else 0
-        lcd_y = my - panel_h
-        clickable = lcd_y >= 0 and self._click_target(mx, lcd_y) is not None
+        lcd = self.window_to_lcd(pygame.mouse.get_pos())
+        clickable = lcd is not None and self._click_target(*lcd) is not None
         pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND if clickable else pygame.SYSTEM_CURSOR_ARROW)
 
     def _handle_input(self) -> None:

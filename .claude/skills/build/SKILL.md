@@ -52,6 +52,41 @@ uv run validate_data.py
 
 If non-zero, stop and surface the violations. See `conventions.md § Tooling` ("Data-field additions").
 
+Then bake the font atlas and run its gates. **Always re-bake — never reuse an existing
+`font_atlas/`.** The atlas keys on `(face, size, bold, italic)`, so a font-size nudge during visual
+tuning creates a combo that does not exist in a previously baked atlas. In dev that is invisible
+(`fonts/` is present, so `font_atlas.mode()` returns LIVE and any size renders), and in a build that
+ships no font files it is a `KeyError` at renderer construction on every route. Re-baking every build
+is what makes a size, position or text edit impossible to ship stale — see `WIP_font_atlas.md`.
+
+```powershell
+$env:PYTHONIOENCODING = "utf-8"
+uv run python -u _dev_scripts/bake_font_atlas.py
+uv run python -u _dev_scripts/bake_font_atlas.py --verify
+uv run python -u _dev_scripts/bake_font_atlas.py --pixel-verify
+uv run python -u _dev_scripts/bake_font_atlas.py --verify-shipped
+```
+
+Several minutes each — they drive every shipped route × model × mode × slot × PA phase × frame. Stop
+on any non-zero: the bake fails on a Japanese source literal no state drew **or on a text a call site
+declares that the bake did not store**, `--verify` on a lookup the atlas cannot serve, `--pixel-verify`
+on any frame that differs between the live fonts and the atlas (goal 1 is a binary bar).
+`PYTHONIOENCODING` is required — Japanese in the report crashes a cp1252 pipe.
+
+The declared-coverage check is the only one that does not consume the state sweep: it takes its
+domain from `resolve()` over the `draws=` declarations and its witness from the manifest just
+written. The two `--verify` passes re-drive the sweep, so a text no state reaches is missing from
+those checks for the same reason it is missing from the bake — see `critical_lessons.md § 9`.
+
+**`--verify-shipped` is the only one that leaves the dev frame**, and it is not optional. The other
+gates all run where every font exists and `displays/` sits beside the code; the staged folder has
+neither, and until 2026-08-01 nothing had ever rendered a character there. Two bugs lived in that
+gap — `mode()` answered LIVE off `fonts/` merely existing and sent every ShinGo load at a file this
+step deletes, and `code_fingerprint()` hashed an empty file list and refused the atlas as stale.
+Both were invisible to 21,978 states of pixel-identical proof, because all 21,978 ran in the frame
+that has the fonts (`critical_lessons.md` §4, §6). It builds the staged shape in a temp dir and
+drives the real app there, so it costs seconds and needs no PyInstaller run.
+
 **2b — Generate `version_info.txt`**
 
 Write a PyInstaller Windows version resource to the project root. Overwrite any existing file. Template:
@@ -172,9 +207,47 @@ foreach ($dir in $shipDirs) {
         }
     }
 }
+
+# font_atlas/ — a DELIBERATE exception to the tracked-only guard above, stated here
+# rather than by widening the guard. It is a build ARTIFACT, not a committed asset:
+# step 2a regenerated it from `fonts/` + `data/` in this same run, so it cannot be
+# stale — which is the failure `critical_lessons.md §2` guards against. Committing it
+# instead would put ~4 MB of regenerable binary in git and churn it on every visual
+# tune. Consequence: a build requires the licensed fonts present. They are still
+# tracked today, so any clone can build; once `fonts/` leaves the tree, only a
+# machine holding them can.
+Copy-Item -Path "font_atlas" -Destination "dist-release\JRE-PA-Simulator\font_atlas" -Recurse -Force
+
+# ShinGo leaves the ship. It is the family the atlas was built for (licensed, no
+# redistribution right), every LCD draw of it now resolves from font_atlas/, and
+# i18n's zh_HK chrome moved to Noto TC — so nothing in the staged build reads
+# these files. Helvetica / Frutiger / Noto stay: they are not baked yet, so the
+# folder still ships, just without the Morisawa faces.
+#
+# Deleting after the copy rather than filtering during it, because the BAKE needs
+# them present in the project's own fonts/ — they are a build-time input, not a
+# shipped asset.
+Remove-Item "dist-release\JRE-PA-Simulator\fonts\ShinGoPr6N-*.otf" -Force
+$shipped = Get-ChildItem "dist-release\JRE-PA-Simulator\fonts" -Filter *.otf | ForEach-Object { $_.Name }
+if ($shipped -match 'ShinGo') { throw "ShinGoPr6N still staged in fonts/ — the atlas has not replaced it" }
+Write-Host "fonts/ staged without ShinGo:" -ForegroundColor Cyan
+$shipped | ForEach-Object { Write-Host "  $_" }
 ```
 
 - **Two guards, hard then soft.** The tracked-only filter above is the *hard* guard (an untracked dir cannot ship, and any skipped one is printed under `SKIPPED (untracked …)`). The `$shipDirs` print-out is the *soft* guard on top — eyeball-confirm what's being staged. If a **tracked** dir appears that shouldn't ship, add it to `$shipExclude` (a deliberate, visible action) and re-run. If a dir you *expected* to ship shows up under SKIPPED, commit it first (`critical_lessons.md §2`).
+- **`fonts/` ships without ShinGo, and that PARTIAL folder is what decides the mode.** ShinGo is the
+  only atlas-backed family (`font_atlas.ATLAS_FACES`), so the staged `fonts/` keeps Helvetica,
+  Frutiger and Noto while the `Remove-Item` above drops the three Morisawa faces. `font_atlas.mode()`
+  therefore asks whether the **baked families** are present, not whether the folder is
+  (`_baked_faces_available`) — the staged folder resolves **ATLAS**. An earlier version tested the
+  folder, which is the same question only while `fonts/` is all-or-nothing; this step is exactly what
+  makes it partial, so it answered LIVE and sent every ShinGo load at a file it had just deleted.
+  Caught 2026-08-01 by `--verify-shipped` before any build ran. When Helvetica and Frutiger are baked
+  too, add `'fonts'` to `$shipExclude` and the folder goes entirely.
+- **Smoke-test this specifically.** Launching the staged exe is the only check that no code path
+  reaches a removed face — the dev tree still has all of them, so this failure is invisible here
+  (`critical_lessons.md` §4). Walk a route on both train models, and open the TIMS setup in zh_HK — the locale whose
+  chrome used to read ShinGo.
 - **Adding a new top-level dev-only folder** (e.g. `_visual_iter/`, `_recordings/`, `audio_src/`) — convention is `_*` prefix or `.*` prefix; otherwise add to `$shipExclude`. New shipped folders need no skill edit at all.
 - **The `_*` filter applies recursively** — `data/_*`, `fonts/_*`, `ocr_templates/_*` would all be excluded if added in future, matching the `audio/_*/` Step 3 pattern.
 - Junction caveats:

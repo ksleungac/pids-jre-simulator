@@ -15,7 +15,7 @@ This document defines the JSON data formats used by the PA Simulator for route c
 > - Design-discussion rationale (multi-paragraph framings of *why* a model exists) — the rule lives here; the rationale lives in `memory/YYYY-MM-DD.md`
 > - Facts already in [CLAUDE.md](CLAUDE.md) mental model / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
 >
-> **Voice:** new reference-shaped entries (schemas, field semantics, render contracts) — caveman-full voice (drop articles, fragments OK, `=` for definitional equivalence). Rationale-shaped passages (incident traces, design rationale, "why this matters" framings, anything labeled "Convention rationale" or similar) — stay normal voice. See [CLAUDE.md § Chat output style](CLAUDE.md).
+> **Voice:** new reference-shaped entries (schemas, field semantics, render contracts) stay compressed — tables, `=` for definitional equivalence, no narrative padding. Rationale-shaped passages (incident traces, design rationale, "why this matters" framings, anything labeled "Convention rationale" or similar) run as ordinary prose. Both in complete sentences where they use prose at all, per [CLAUDE.md § Writing tone](CLAUDE.md).
 >
 > **Before adding:** name the section your edit merges into OR the content it replaces. If neither — you're appending, which is the failure mode this contract fights.
 >
@@ -85,8 +85,8 @@ Centralized translation lookup for **any Japanese text** used in simulator:
 
 | Field | Description |
 |-------|-------------|
-| `furigana` | Hiragana reading for the text |
-| `english` | English translation/romanization |
+| `furigana` | Kana reading. Katakana is allowed where the name carries it (`くうこうだいにビル`); a **kanji is never valid** — this is the field furigana mode exists to render instead of kanji. A half-converted IME entry (`よの本まち`) is well-formed JSON and silently wrong, so `validate_data.py` rejects it. |
+| `english` | English translation/romanization. Must derive from `furigana` — see § English Translation Convention. |
 
 ### Compound Destinations (e.g., Yamanote Line)
 
@@ -114,19 +114,27 @@ English translations use **modified Hepburn romanization with macrons** to indic
 | Long Vowel | Source | Example |
 |------------|--------|---------|
 | **ō** | おう, おお | 東京 → T**ō**ky**ō**, 大宮 → **Ō**miya |
-| **ū** | う, うう, うう | 越中島 → Etch**ū**jima |
+| **ū** | ゆう, うう | 越中島 → Etch**ū**jima, 有楽町 → Y**ū**rakuchō |
 
 **Examples:**
 ```json
 {
     "東京": { "english": "Tōkyō" },
     "大宮": { "english": "Ōmiya" },
-    "大久保": { "english": "Ōkubō" },
+    "大久保": { "english": "Ōkubo" },
     "十条": { "english": "Jūjō" },
     "越中島": { "english": "Etchūjima" },
     "港南台": { "english": "Kōnandai" }
 }
 ```
+
+**JR East signage form, not textbook Hepburn.** `ん` assimilates to `m` before `b` / `m` / `p`: 新橋 → Shi**m**bashi, 新町 → Shi**mm**achi, 与野本町 → Yono-Ho**mm**achi, 海浜幕張 → Kaihi**mm**akuhari, 神保原 → Ji**m**bohara.
+
+**A hyphen marks a prefix, not a word break.** A directional / qualifier prefix takes one (Kita-Akabane, Shin-Ōkubo, Nishi-Ōi, Shim-Misato); a single place name does not (Sashiōgi, Fuchūhommachi, Hongōdai, Kemigawahama). No reading encodes this, so it is the one facet left to the eye.
+
+**A few `english` values are translations rather than romanizations** — 葛西臨海公園 = `Kasai-Rinkai Park` (JR East's current form; it was Kasairinkaikōen), 成田空港 = `Narita Airport\nTerminal 1`. Each is an editorial decision, so they are listed explicitly in `validate_data.py::_TRANSLATED_NAMES` rather than pattern-matched.
+
+**Authoring order of authority:** JR East's own English pages (`timetables.jreast.co.jp/en/…`) → ja.wikipedia's infobox ローマ字 → derivation from the reading. JR East's timetable channel strips macrons (it writes `Yurakucho`, `Osaki`), so it settles spelling and hyphenation but never macrons.
 
 ### Stop-Level Destination Override
 
@@ -435,6 +443,13 @@ Each stop in `stops` array:
 }
 ```
 
+**`name` — a space means "break here".** A space inside a station name is a layout instruction, not
+part of the name: the route-bar label renders the space-separated parts on two vertical lines
+(`"さいたま 新都心"` → `さいたま` over `新都心`). Same class of in-band layout convention as `&` /
+`\n` in a compound `dest` above. Consequence worth knowing: the drawn strings are the PARTS, which
+exist nowhere in the JSON — so anything enumerating renderable text from the data has to apply the
+same split (`font_atlas.STATION_NAMES` declares `split=True` for exactly this).
+
 **Note:** `time` field = scheduled **incoming** travel time — minutes from previous PA station's departure to this stop's arrival. Display semantics (countdown formula, floor division, forced "1" on last PA, STOPPING blanking, `TIME_SCALE` constant) live at inline `# CONTRACT:` on `displays/train_models/e235_1000/lower_lcd.py` `draw_times` per [CLAUDE.md](CLAUDE.md). State-machine interaction → [DISPLAY.md § Unified State Machine](DISPLAY.md).
 
 **Convention rationale:** the field is anchored on the destination station, not the source — `stops[N].time` answers "how long does it take to reach N?" (= travel from N−1 → N), not "how long until I leave N?". Verified via Tokaido 1865E: 新橋.time=2 matches IRL 東京→新橋 (~2 min), 品川.time=5 matches 新橋→品川 (~5 min). 東京.time=0 because there's no previous station.
@@ -630,7 +645,7 @@ Issues grouped by location (route or top-level data file). **Add new checks by e
 
 ### Things the validator can't catch (verify by eye)
 
-- Hepburn correctness in new translations (macrons on long vowels, spelling).
+- **Hyphenation** of a station's English name — a prefix takes one, a single place name does not, and no reading encodes which it is. (Macrons and spelling *are* checked now: `check_station_translations` re-derives `english` from `furigana`.)
 - PA track mapping — that `tokyo-dep.mp3` is actually the announcement recorded *after* Tokyo and references the correct next stop. Validator only checks the file exists.
 - Slug song-id correctness for `sta` files — slug = metadata store; validator can't tell `kinshicho_4_gota-del-vient` from `kinshicho_4_horidei`.
 

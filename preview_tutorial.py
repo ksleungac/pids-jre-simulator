@@ -1,4 +1,4 @@
-"""Screenshot tool for the OOBE tutorial — mirrors preview_chrome.py.
+"""Screenshot tool for the OOBE tutorial — mirrors preview_display.py.
 
 Renders one frame of the tutorial at a chosen step and saves to PNG. Catches
 layout regressions without requiring a full interactive run.

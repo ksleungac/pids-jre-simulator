@@ -53,6 +53,7 @@ from displays.utils import (
     draw_jr_logo,
     EN_ROUTE_DISCLAIMER,
 )
+from font_atlas import STATION_NAMES, lcd_font, lit
 
 # =============================================================================
 # Through-service frame windowing
@@ -176,10 +177,12 @@ class JapaneseDisplay(_FrameWindowMixin):
         # `continuity[2]` via _get_stops_list_disp's side effect.
         self._last_window: Optional[List[Tuple[int, Dict]]] = None
 
-        self.font_stops = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), FONT_STOPS_SIZE)
+        self.font_stops = lcd_font("ShinGoPr6N-Medium.otf", FONT_STOPS_SIZE, draws=STATION_NAMES)
         self.font_time = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), FONT_TIME_SIZE)
-        self.font_minute = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), FONT_STOPS_MINUTE_SIZE)
-        self.font_disclaimer = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 10)
+        self.font_minute = lcd_font("ShinGoPr6N-Medium.otf", FONT_STOPS_MINUTE_SIZE, draws=lit("分"))
+        # The declaration reads the very property that supplies the text, so the
+        # two cannot disagree.
+        self.font_disclaimer = lcd_font("ShinGoPr6N-Medium.otf", 10, draws=lit(self.disclaimer_text))
         # Hardcoded bar-extension width computed from the canonical ShinGo font.
         # EnglishDisplay overrides font_minute (Helvetica) but NOT this — the
         # route-map bar extension must stay the same pixel width IRL.
@@ -950,12 +953,12 @@ class JapaneseEightStationDisplay(_FrameWindowMixin):
         # ------------------------------------
         # fmt: on
 
-        self.font_stops = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), self.label_font_size)
+        self.font_stops = lcd_font("ShinGoPr6N-Medium.otf", self.label_font_size, draws=STATION_NAMES)
         self.font_time = pygame.font.Font(str(project_root() / "fonts" / "HelveticaNeue-Bold.otf"), FONT_TIME_SIZE + 7)
-        self.font_minute = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), FONT_STOPS_MINUTE_SIZE + 3)
+        self.font_minute = lcd_font("ShinGoPr6N-Medium.otf", FONT_STOPS_MINUTE_SIZE + 3, draws=lit("分"))
         # Badge typeface is fixed inside draw_station_code_badge (Frutiger);
         # point sizes (prefix_size/num_size) live in the badge params block.
-        self.font_disclaimer = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 10)
+        self.font_disclaimer = lcd_font("ShinGoPr6N-Medium.otf", 10, draws=lit(self.disclaimer_text))
         # Hardcoded bar-extension width from the canonical ShinGo "分" glyph.
         # Subclasses override font_minute but NOT this — bar width stays fixed.
         self._minute_w, _ = self.font_minute.size("分")

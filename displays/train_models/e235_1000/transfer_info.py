@@ -21,6 +21,17 @@ from displays.transfer_info import (
     resolve_entry,
 )
 from app_paths import project_root
+from font_atlas import at, lcd_font, lit
+
+# What the transfer-panel faces draw. Line names are DERIVED twice before they
+# reach a font: `compact_dots` swaps the JSON's `・` for the narrower `·`, then
+# `render_with_dot_pad` splits on `·` and renders each part plus the `·` alone.
+# So none of the drawn strings equals the `name_ja` in the data, and declaring
+# the derivation is what puts them in the bake without depending on which
+# stations happen to be reachable.
+_DOT = ("・", "·")
+_LINE_NAME_JA = (at("data/lines.json:*.name_ja", replace=_DOT, split="·"), lit("·"))
+_LINE_NAME_EN = (at("data/lines.json:*.name_en", replace=_DOT, split="·"), lit("·"))
 
 # Canvas width for the transfer-info body (lower-LCD region). Height is read
 # per-render from the actual subsurface (render_transfer uses surf.get_height())
@@ -195,10 +206,16 @@ def render_transfer(
     # ----------------------------------------
     # fmt: on
 
-    font_ja = _font("ShinGoPr6N-Medium.otf", name_size_ja)
+    # ShinGo goes through the atlas seam (font_atlas.lcd_font) so a build that
+    # ships no font files still renders. The local _font cache below stays for
+    # the Latin faces, which are not in the atlas scope yet.
+    font_ja = lcd_font("ShinGoPr6N-Medium.otf", name_size_ja, draws=_LINE_NAME_JA)
     font_en = _font("NeueFrutigerWorld-Bold.otf", name_size_en)
-    font_en_cjk = _font("ShinGoPr6N-Medium.otf", name_size_en)
-    font_banner_ja = _font("ShinGoPr6N-Medium.otf", banner_size_ja)
+    # Fires only where the Latin face lacks a glyph for a `name_en`, which no
+    # current data reaches — declared regardless, so the day one does it is
+    # already baked rather than a KeyError in a fontless build.
+    font_en_cjk = lcd_font("ShinGoPr6N-Medium.otf", name_size_en, draws=_LINE_NAME_EN)
+    font_banner_ja = lcd_font("ShinGoPr6N-Medium.otf", banner_size_ja, draws=lit("のりかえ案内", "国"))
     font_banner_en = _font("HelveticaNeue-Medium.otf", banner_size_en)
     banner_text_gap = int(round(font_banner_ja.size("国")[0] * banner_text_gap_factor))
 
@@ -220,7 +237,7 @@ def render_transfer(
         # than ShinGo/Helvetica's default U+30FB. Substitute U+00B7 (Middle Dot,
         # Latin block) at render time — narrower glyph, same visual semantic,
         # both fonts carry it. Keep U+30FB in JSON for data correctness.
-        return text.replace("・", "·")
+        return text.replace("・", "·")  # not-drawn: substituted away before render
 
     def render_with_dot_pad(text: str, render_fn):
         """Render text, adding `dot_side_pad` px on each side of every `·`."""

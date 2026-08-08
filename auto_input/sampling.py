@@ -10,6 +10,9 @@ suspect exactly where it matters most: diagnosing a production misread. Any futu
 diagnostic MUST call this function rather than re-derive it.
 
 # CONTRACT: reader order and guard order are load-bearing, not stylistic.
+#   0. if the frame is downscaled (downscale_hud), that happens BEFORE read_hud and the
+#      caller passes DOWNSCALE_PROFILE — every cell must be cropped from the SAME frame,
+#      never a mix of native and downscaled geometry
 #   1. all four cells cropped from ONE frame (same instant — cross-attribute guards
 #      compare speed against distance against badge, so a re-grab between cells breaks them)
 #   2. badge classified FIRST — it gates the offset read and the score gate
@@ -28,6 +31,7 @@ from typing import Optional
 
 import numpy as np
 
+from .hud_layout import DOWNSCALE_PROFILE
 from .ocr import (
     classify_badge_state,
     read_distance,
@@ -36,6 +40,83 @@ from .ocr import (
     read_speed_tenths,
     read_stopping_offset,
 )
+
+
+def _box_axis(a: np.ndarray, n_out: int) -> np.ndarray:
+    """Exact area-average along axis 0, from `a.shape[0]` samples down to `n_out`.
+
+    Each output sample is the mean of the input span it covers, fractional edges weighted by
+    how much of the edge pixel falls inside. Computed from a cumulative sum, so the cost is
+    one pass over the data regardless of the downscale factor — the naive form (a dense
+    n_in x n_out weight matrix per axis) is the same arithmetic and ran ~100x slower.
+    """
+    n_in = a.shape[0]
+    if n_in == n_out:
+        return a
+    f = a.astype(np.float32)
+    # csum[i] = total of rows 0..i-1, so an integral to any integer boundary is one lookup.
+    csum = np.concatenate([np.zeros((1, *f.shape[1:]), np.float32), np.cumsum(f, axis=0)], axis=0)
+    step = n_in / n_out
+    edges = np.arange(n_out + 1, dtype=np.float64) * step
+
+    def integral(p: np.ndarray) -> np.ndarray:
+        # Clipped so p == n_in resolves as csum[n_in-1] + 1.0 * row[n_in-1] == csum[n_in].
+        i = np.clip(np.floor(p).astype(np.int64), 0, n_in - 1)
+        frac = (p - i).astype(np.float32).reshape(-1, *([1] * (f.ndim - 1)))
+        return csum[i] + frac * f[i]
+
+    return (integral(edges[1:]) - integral(edges[:-1])) / np.float32(step)
+
+
+def _resize_area(arr: np.ndarray, th: int, tw: int) -> np.ndarray:
+    """Area-average (box) resample of an (H, W, C) image to (th, tw, C).
+
+    The correct downsampler at ANY ratio: an output pixel is the mean of exactly the input
+    pixels it covers, so nothing aliases however far the image shrinks. Bilinear — the
+    previous implementation — always samples a fixed 2x2 neighbourhood no matter the scale
+    factor, which is adequate around 0.75 (1440p) but progressively ignores more of the input
+    as the ratio drops: at 4K's 0.5 an output pixel covers 4 inputs, at 5K's 0.36 nearly 8.
+    Area removes the ratio from the question entirely.
+
+    Distinct from `ocr._resize_nn`, which snaps a TEMPLATE onto a glyph's exact box and must
+    NOT average — it compares binary masks and any interpolation there would invent grey.
+
+    `rint` before the cast, never a bare `astype`: uint8 conversion TRUNCATES, which biases
+    every pixel down by up to 1 LSB. A uniform field of 137 came back as 136. One level of
+    systematic darkening is precisely the margin the binarization threshold works in
+    (`critical_lessons.md §7`).
+    """
+    out = np.swapaxes(_box_axis(np.swapaxes(_box_axis(arr, th), 0, 1), tw), 0, 1)
+    return np.rint(np.clip(out, 0, 255)).astype(arr.dtype)
+
+
+def downscale_hud(frame_bgra: np.ndarray, src_profile) -> np.ndarray:
+    """Cut the HUD out of a capture-region frame and downscale it to the 1080p model.
+
+    This is the whole of multi-resolution support: shrink the INPUT into one model rather
+    than calibrating a model per resolution. The caller then reads with `DOWNSCALE_PROFILE`
+    — the returned frame IS the HUD, so its origin is (0, 0). A 1080p capture is already
+    the right size and comes back as a plain copy.
+
+    Resizes the HUD RECT, not the whole capture region: the region is ~14x the pixels for
+    the same result, and the HUD is the only part any reader looks at.
+    """
+    hx, hy, hw, hh = src_profile.hud_bbox_in_capture
+    hud = frame_bgra[hy : hy + hh, hx : hx + hw]
+    # Fail loud on a short grab. numpy slices past the end SILENTLY, and downscaling a
+    # partial HUD is worse than not downscaling at all: the resize restores it to the model's
+    # dimensions, so every downstream shape check passes and the readers return confident
+    # garbage. The capture loop catches this, logs it, and skips the cycle.
+    if hud.shape[0] != hh or hud.shape[1] != hw:
+        raise ValueError(
+            f"HUD crop is {hud.shape[1]}x{hud.shape[0]}, expected {hw}x{hh} — the captured frame "
+            f"({frame_bgra.shape[1]}x{frame_bgra.shape[0]}) is smaller than the "
+            f"{src_profile.desktop_w}x{src_profile.desktop_h} capture region implies."
+        )
+    tw, th = DOWNSCALE_PROFILE.hud_bbox_in_capture[2], DOWNSCALE_PROFILE.hud_bbox_in_capture[3]
+    if hud.shape[0] == th and hud.shape[1] == tw:
+        return hud.copy()  # cost, not fidelity: area at 1:1 is already the identity
+    return _resize_area(hud, th, tw)
 
 
 @dataclass

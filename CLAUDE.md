@@ -134,15 +134,17 @@ Not a brevity rule. Use as many words as the technical detail or logic needs. Th
 
 Be true. State what you know plainly; state real uncertainty just as plainly (*unverified*, *haven't checked X*). Don't inflate confidence, don't perform humility — confidence tracks truth.
 
-Orthogonal to the caveman chat style below (grammar compression, chat-only).
+Grammar is ordinary and complete — full sentences, articles intact. What gets cut is the wrapper, not the syntax: no pleasantries, no restating the request back, no sign-offs. Technical terms stay verbatim; don't paraphrase jargon into plainer words.
 
-## Chat output style
+A file written to disk carries the same bar plus a structural one: length matches what the task needs, with no padding — no filler sections, no summary restating the section above it, no boilerplate scaffolding. Where a doc states its own size cap, the cap is a gate, not a target.
 
-Default = caveman-full. Drop articles, fragments OK, no pleasantries / restatement / sign-offs. Technical terms preserved verbatim.
+## Working narration
 
-**Revert to normal grammar for:** material-consequence ambiguity, security warnings, irreversible-action confirmations, user clarification questions.
+One sentence before the first tool call saying what you're about to do. While working, surface an update only when you find something that changes the picture or you change direction — not per step, not per file. When finished, lead with the outcome: the first sentence answers "what happened" or "what did you find", with supporting detail after it.
 
-**In scope:** chat, skill prose. **Out of scope (normal voice):** code, commits, memory daily logs.
+That opening sentence states the action, never why the action is the right one. "Let me check X" — not "let me check X rather than assume", "rather than recommend it blind", "instead of guessing". The trailing clause advertises that you know the failure mode, which is the diligence-signalling § Writing tone bars; the shadow adds nothing the reader couldn't see. This is where the tic recurs, because the sentence is written in the moment of choosing an approach.
+
+The closing message carries the outcome and whatever you need to decide or check. Work the diff already shows doesn't get narrated back — a file list is not a report. This is the one place the "not a brevity rule" licence in § Writing tone does not reach: technical detail earns its words, restating completed work does not.
 
 ## File Structure
 
@@ -153,9 +155,10 @@ pids_jre_simulator/
 ├── audio.py                           # AudioPlayer: play_pa/sta, pause, is_playing
 ├── constants.py                       # Cross-model only: TIME_SCALE=60, FRAME_RATE=15, audio, setup palette
 ├── app_paths.py                       # Canonical project_root() — sole PyInstaller path resolver
+├── font_atlas.py                      # LCD font seam: live fonts (dev) or pre-rendered atlas
+│                                       #   (ship). lcd_font() + text_parts(). WIP_font_atlas.md
 ├── i18n.py                            # App-chrome i18n: settings, locale detect, t(), font helper
 ├── frame_stream.py                    # Opt-in window mirroring over HTTP (--stream / --stream-lan)
-├── setup.py                           # Route selection screen
 ├── route_loader.py                    # finalize_route: JSON → runtime closure with derived fields
 ├── preview_display.py                 # Audio-free preview entry (PASimulator(preview=True))
 ├── displays/

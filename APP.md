@@ -14,7 +14,7 @@ App-level runtime + the setup / chrome flow. Canonical home for app-level specs 
 > - Speculative future designs ("when X is implemented …") — GitHub Issues is the home
 > - Facts already in [CLAUDE.md](CLAUDE.md) mental model — cross-reference, don't restate
 >
-> **Voice:** reference-shaped entries (runtime map, screen table, flow contracts) — caveman-full voice (drop articles, fragments OK, `=` for definitional equivalence). Rationale-shaped passages (incident traces, "why" framings) — stay normal voice. See [CLAUDE.md § Chat output style](CLAUDE.md).
+> **Voice:** reference-shaped entries (runtime map, screen table, flow contracts) stay compressed — tables, `=` for definitional equivalence, no narrative padding. Rationale-shaped passages (incident traces, "why" framings) run as ordinary prose. Both in complete sentences where they use prose at all, per [CLAUDE.md § Writing tone](CLAUDE.md).
 >
 > **Before adding:** name the section your edit merges into OR the content it replaces. If neither — you're appending, which is the failure mode this contract fights.
 >
@@ -28,22 +28,21 @@ App-level runtime + the setup / chrome flow. Canonical home for app-level specs 
 `main()`:
 1. `pygame.init()` + `mixer.init()`; `update_check.check_async()` fires early (3 s network window overlaps setup).
 2. **Language resolution** — NO standalone picker. Saved `settings["language"]`, else `detect_default_lang()` (OS locale → `zh_CN` for Simplified locales, **`zh_HK` for everything else** — the HK-primary clean-install default, NOT English; `DEFAULT_LANG="en"` stays the separate translation fallback), persisted on genuine first-run; then `i18n.init(lang)`. Runtime switching + persistence is owned by the TIMS home's language knobs (`tims/setup/home.py`). (The pre-TIMS grey `LanguagePicker` was removed — stale + redundant beside the knobs; critical_lessons §6.)
-3. **OOBE tutorial** — CLASSIC flow only (`--classic` + not `oobe_completed`). The default TIMS flow does its own OOBE (§ Tutorial).
-4. **Setup ↔ drive loop:**
+3. **Setup ↔ drive loop:**
    - `_run_setup()` → launch config, or `None` → exit.
    - `pygame.display.quit()` (tear down setup window — the drive builds its own taller, panel-carved one).
    - `_run_drive(config)` → `"home"` (band Home → re-enter setup; pygame/mixer stay alive) or `"quit"` (window close / ESC → full exit).
 
-**`_run_setup(args, …)`** — default: `tims.setup.run(surface)` in a 730×610 window. `--classic`: `SetupScreen` in 730×420 with an inner replay-tutorial loop. Returns the launch config or `None`.
+**`_run_setup()`** — `tims.setup.run(surface)` in a 730×610 window. Returns the launch config or `None`. No forced first-run tutorial: TIMS owns OOBE itself (the 教學 card flashes until visited, `home._mark_oobe_done` persisting `oobe_completed`).
 
 **`_run_drive(config)`** — builds `PASimulator(work_dir, route_data, auto_input=, model=)`; `jump_to_stop(start_idx)` if a start station was picked; if `auto_input`, spins `AutoDriver(lead_m, interval_s)` + `sim.auto_driver = driver` (exposes pause to the band). `sim.run()` returns the exit action; driver stopped in `finally`.
 
-Window sizes: `SETUP_SIZE=(730,420)` (classic setup / OOBE tutorial), `TIMS_SIZE=(730,610)` (TIMS flow). No premature window is created before the flow — each path (`_run_setup` / `_run_tutorial`) creates its own first window, so first-run goes straight to the correctly-sized screen (no blank pre-flash).
+Window size: `TIMS_SIZE=(730,610)`. No premature window is created before the flow — `_run_setup` creates its own first window, so first-run goes straight to the correctly-sized screen (no blank pre-flash).
 
 **Always-on-top:** the app is a companion overlay for the game, so the window stays `HWND_TOPMOST`. `main()` calls `window_utils.install_topmost_hook()` once (after `pygame.init()`), wrapping `pygame.display.set_mode` so EVERY window it creates re-pins topmost — one seam, regression-proof as screens are added. Needed because every `set_mode` drops the topmost style and the TIMS flow re-`set_mode`s per screen transition; the old monolith re-pinned inline after each call, the modular rewrite kept the pin only in the sim → the setup flow lost it. Previews / dev scripts don't call the hook (stay unpinned). No-op off-Windows / if pywin32 absent.
 
 ## Launch config (setup → `main._run_drive`)
-The dict every setup flow returns, shaped like `setup.SetupScreen.run()`:
+The dict `tims.setup.run()` returns:
 
 | Key | Meaning |
 |---|---|
@@ -58,7 +57,7 @@ The dict every setup flow returns, shaped like `setup.SetupScreen.run()`:
 Main loop drives events → PA/STA/pause + the render path; `_handle_band_click` dispatches the status-band cluster (pause / save-record / home). `exit_action` defaults `"quit"`, set `"home"` by band Home. On exit: `cleanup(full_quit = exit_action != "home")`, returns `exit_action` to `_run_drive`. State-machine spec: `DISPLAY.md § Unified State Machine`.
 
 ## Setup flow (TIMS — default; `tims/setup/`)
-Console re-skin of the setup flow to the JR East TIMS cab look. Runs side-by-side with classic `setup.py` (`--classic`). Primitives in `tims/widgets.py`; shared vocabulary in `tims/chrome.py`. Chrome/font/interaction RULES → `conventions.md`.
+Console re-skin of the setup flow to the JR East TIMS cab look, and since 2026-07-30 the ONLY setup flow. Primitives in `tims/widgets.py`; shared vocabulary in `tims/chrome.py`. Chrome/font/interaction RULES → `conventions.md`.
 
 ### Package map
 - `home.py` — page-1 menu + the setup entry (`run()` re-exported as `tims.setup.run`).
@@ -117,8 +116,8 @@ Full-width near-black status strip across every setup screen AND the live in-dri
 ### Band Home
 Every setup screen's band Home returns to the HOME MENU (not one level up) with a press + loading beat. Deep pages return the sentinel `"home"`, bubbled up through parents (`route_select`/`model_select` → `pa_setting` → home; `tutorial_basic` → `tutorial_select` → home).
 
-## Classic flow (`--classic`)
-Legacy `setup.py` `SetupScreen` — keyboard-navigable route picker + the OOBE fullscreen-tutorial gate. Retained (not deleted); intentionally lacks `start_idx`. The TIMS flow reached feature parity 2026-07-11; only classic-only keyboard nav is intentionally dropped for the console style.
+## Retired: the classic flow
+`setup.py` (`SetupScreen`), its `--classic` flag, `preview_chrome.py`, and `i18n`'s per-language OTF chrome table (`_LANG_CHROME_FONT` / `font()` / `font_for_lang()`) were **deleted 2026-07-30** — TIMS reached feature parity 2026-07-11 and the classic path had no remaining user. Its keyboard-navigable route picker went with it, dropped deliberately for the console style. `tutorial.py` SURVIVES: `tims/setup/tutorial_basic.py` imports `Tutorial` / `STEPS` / `PHASE_KEYS` / the mixed-text helpers from it, so it is shared, not legacy.
 
 ## Cross-references
 - Chrome / font / interaction RULES → `conventions.md § UI code style`, `§ "TIMS chrome text"`.

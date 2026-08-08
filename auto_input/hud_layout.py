@@ -15,11 +15,15 @@ full-frame resolution probe. The existing flat module-level constants (``HUD_BBO
 ``BADGE_BBOX``, etc.) remain unchanged for backward compatibility with the
 ``*_from_surface`` helpers in ``ocr.py`` (1b dev-tool path) and the calibration
 extractor in ``_dev_scripts/extract_ocr_assets.py`` — both are 1440p-only tools.
+
+``DOWNSCALE_PROFILE`` is the alternative to all of that (PoC, ``main.py --downscale-ocr``):
+one 1080p model that every larger capture is downscaled into, so a new resolution needs no
+profile and no templates. See ``sampling.downscale_hud``.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 @dataclass(frozen=True)
@@ -56,12 +60,19 @@ class ResolutionProfile:
     # Scale relative to 1440p. Used by seg_for_scale() in ocr.py to derive
     # per-resolution segmentation thresholds.
     scale: float
+    # True = this geometry has been confirmed on a live drive at least once.
+    # False = interpolated from the 16:9 fractions by profile_for(). Interpolated
+    # geometry is expected to be right (the HUD scales without reflow) but nobody
+    # has watched it read, so it is announced at startup and bars --legacy-ocr,
+    # which would need a native template set that only a tested resolution has.
+    verified: bool = True
 
 
 # ─── 2560×1440 profile (production baseline) ──────────────────────────────────
 
 # fmt: off
 _HUD_BBOX_2560_1440         = (2200,  20, 350, 480)
+_HUD_BBOX_2560_1440_REF_H   = 1440   # the height every interpolated profile scales FROM
 _CAPTURE_REGION_2560_1440   = (1280,   0, 2560, 720)
 _HUD_IN_CAPTURE_2560_1440   = (
     _HUD_BBOX_2560_1440[0] - _CAPTURE_REGION_2560_1440[0],
@@ -122,12 +133,87 @@ PROFILE_1920_1080 = ResolutionProfile(
 )
 # fmt: on
 
-# All supported resolutions. AutoDriver probes desktop size at startup and
-# looks up here; FATAL if not found.
+# ─── Interpolating a profile for any 16:9 resolution ──────────────────────────
+# The two measured profiles agree to the digit on where the HUD sits as a FRACTION of the
+# screen — x/W = 0.859375, y/H = 0.013889, h/H = 1/3 — and both capture regions are exactly
+# (W/2, 0, W, H/2). The game scales the HUD without reflow, so any other 16:9 size lands on
+# the same fractions and its geometry can be derived rather than measured.
+#
+# Scope, deliberately narrow: 16:9 only, 1080p or larger. A different aspect ratio may well
+# move the HUD and nobody has checked, so guessing there would be inventing a fact. Below
+# 1080p is out of scope while every real target is >= 1080p.
+_MIN_INTERPOLATED_H = 1080
+
+
+def _interpolate_profile(desktop_w: int, desktop_h: int) -> ResolutionProfile:
+    """Derive a profile from the 16:9 fractions. Caller checks scope first."""
+    s = desktop_h / _HUD_BBOX_2560_1440_REF_H
+    hud = _scale_bbox(_HUD_BBOX_2560_1440, s)
+    capture = (desktop_w // 2, 0, desktop_w, desktop_h // 2)
+    return ResolutionProfile(
+        desktop_w=desktop_w,
+        desktop_h=desktop_h,
+        capture_region=capture,
+        hud_bbox=hud,
+        hud_bbox_in_capture=(hud[0] - capture[0], hud[1] - capture[1], hud[2], hud[3]),
+        badge_bbox=_scale_bbox((29, 122, 111, 40), s),
+        distance_value_bbox=_scale_bbox((120, 314, 230, 55), s),
+        speed_value_bbox=_scale_bbox((120, 165, 230, 55), s),
+        speed_limit_value_bbox=_scale_bbox((120, 215, 230, 55), s),
+        # Unused on the downscale path (the 1080p model owns the cell bboxes and templates).
+        # A resolution with no native template set also has --legacy-ocr barred, via verified.
+        templates_subdir="",
+        badges_subdir="badges",
+        scale=s,
+        verified=False,
+    )
+
+
+# Geometries CONFIRMED ON A LIVE DRIVE. Absence is not a capability limit — any other 16:9
+# desktop >= 1080p is interpolated. Add an entry once a resolution has actually been driven,
+# so the dict stays a record of what was tested rather than what is possible.
+#
+# 4K is the interpolated geometry marked as tested — it derives to capture (1920,0,3840,1080)
+# and HUD (3300,30,525,720), so this entry adds no new numbers, only the claim that someone
+# watched it read. `replace` rather than a hand-authored literal so the arithmetic has exactly
+# one home and a promoted profile can never drift from what interpolation would have produced.
 PROFILES: dict[tuple[int, int], ResolutionProfile] = {
+    (3840, 2160): replace(_interpolate_profile(3840, 2160), verified=True),
     (2560, 1440): PROFILE_2560_1440,
     (1920, 1080): PROFILE_1920_1080,
 }
+
+
+def profile_for(desktop_w: int, desktop_h: int) -> ResolutionProfile | None:
+    """The profile for a desktop size: the tested one if it exists, else interpolated.
+
+    Returns None when the size is outside the interpolation scope — the caller should treat
+    that as fatal rather than reading with wrong geometry. See auto_input/README.md
+    § "What a profile means, and what gets interpolated".
+    """
+    tested = PROFILES.get((desktop_w, desktop_h))
+    if tested is not None:
+        return tested
+    if desktop_w * 9 != desktop_h * 16 or desktop_h < _MIN_INTERPOLATED_H:
+        return None
+    return _interpolate_profile(desktop_w, desktop_h)
+
+
+# ─── The one 1080p model every resolution downscales into ─────────────────────
+# Per-resolution profiles cost a calibration round each: capture screenshots, hand-author
+# a ResolutionProfile, re-extract templates. Instead build ONE model at 1080p and downscale
+# every larger capture into it — one template set, one SegConfig, any desktop resolution.
+#
+# 1080p because every real target is >= 1080p, so the resize is always a DOWNSCALE.
+# Upscaling would invent detail; rescaling a TEMPLATE was the earlier wrong direction.
+#
+# hud_bbox_in_capture is (0, 0, w, h) because a downscaled frame IS the HUD — there is no
+# surrounding capture region left to offset from. Cell bboxes are HUD-relative already, so
+# they carry over from the 1080p profile untouched.
+DOWNSCALE_PROFILE = replace(
+    PROFILE_1920_1080,
+    hud_bbox_in_capture=(0, 0, PROFILE_1920_1080.hud_bbox_in_capture[2], PROFILE_1920_1080.hud_bbox_in_capture[3]),
+)
 
 
 # ─── Flat constants (1440p) — backward compat ─────────────────────────────────

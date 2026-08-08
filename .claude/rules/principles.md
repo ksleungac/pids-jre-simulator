@@ -48,6 +48,7 @@ Present findings/learnings before making documentation updates or non-trivial ch
 - **Co-designing a state machine / rule set: walk it one rule at a time.** Lay the shared vocabulary out first, then build a rule per turn and let the user confirm before the next — don't open with a full multi-axis case matrix + forks + questions. (2026-05-31) Front-loaded a triggers×states table for auto-driver re-entry; user: *"Kind of too complicated, overwhelmed my. Let's discuss rule by rule like yesterday."*
 - **Data work specifically** — present the parse + flag uncertainties before generating splitter scripts or touching `route.json`.
 - **Don't mix discussion and implementation questions.** Keep "was that the intent?" separate from "OK to apply?" — a bundled question makes Yes ambiguous. Ask discussion first; implementation as a separate explicit question.
+- **A clarifying question about a proposal is not approval of it.** When the user engages with a proposal's details — scope, mechanism, edge cases — that is them understanding it, not authorizing it. Engagement reads like buy-in and isn't. Wait for the answer to the apply question you actually asked. (2026-07-25) Offered a publish-time memory gate and asked yes/no; user replied *"i believe the gate is only about the memory index? not actual date files"*; I built it. User: *"i didn't tell you to do it, i am just wondering if opus blown past it all the time?"* — the real question went unanswered while the work landed.
 
 ### Skip-confirmation when explicitly signaled
 When the user says "push directly" / "skip my confirmation", bypass per-file gates. Still split commits logically — just don't pause between them.
@@ -89,9 +90,11 @@ Before claiming "X is a bug" or "X works like Y", read the call sites and trace 
 - (2026-05-08 PM) Defended green ring on Yamanote time circle across multiple pushbacks; user: *"there is NO green ring."* Code and doc were stale relative to user's IRL mental model.
 - (2026-07-22) Took an OCR frame's "true" value from the NEIGHBOURING frame's filename instead of rendering its glyphs; invented a non-existent digit-confusion bug, filed it as an issue, and wrote it into the README and a test docstring. Rendering the pixels took one command and showed the read was already correct. A neighbouring sample is not the sample.
 - (2026-05-29) Concluded a feature "already shipped at v0.5.3a" from `git log -S` string-match + tag ancestry; correct method = read commit messages `v<prev>..HEAD` + code at the tag. User lost confidence in release-note drafting.
-- (2026-06-12) Theorized SVG-deployment risk across ~2 rounds; the user had already shipped that exact pattern (`data/line_icons/` SVG-sourced PNGs). Resolved only after reading `setup.py`. Don't raise a hypothetical risk the repo may have already solved.
+- (2026-07-25) Attributed this project's MEMORY.md bloat and long final responses to the Opus 5 upgrade, twice, without checking dates. Measuring all 143 index entries showed the cap had been blown 97–100% of the time since May, under every prior model. A behavior noticed right after a change is not caused by it until the dates say so.
+- (2026-07-27) Proposed stripping the ID3 tags from 78 shipped mp3s to remove a provenance hint — a destructive batch edit whose entire justification was legal, argued without checking the legal rule. Removing rights-holder identifying metadata is itself addressed by copyright-management-information provisions (US 17 U.S.C. §1202(b)), so the proposal inverted its own goal: it would have converted a passive position into a deliberate concealment act, for no real reduction in discoverability (audio is matched by fingerprint, not metadata). The user asking *"is it safe?"* surfaced it; my own analysis had not. **A mitigation whose whole rationale lives in some domain must be checked against that domain's rules before proposing it** — reasoning from the technical frame (metadata hygiene) while the governing frame was legal is what made a reversal look like a cleanup.
 - (2026-07-16) Reasoned about the auto-driver layer model from a stale preloaded `conventions.md` binding that mislabelled badge reads as "Layer 2"; the canonical `auto_input/README.md` has them as Layer 3 inputs. Trusted the preloaded summary over the doc for several rounds. A preloaded rules-file summary of a domain model may have drifted — read the canonical doc before reasoning about the model, not after being told.
 - (2026-07-25) Discarded a correct measurement of Chūō's STA because `sta-make` says closing announcements run 5–20 s and the probe reported 1–2 s voice blocks. The announcements really are short chunks; the doc describes the common case, not an invariant. User: *"voice-len being short is possible."* A doc's descriptive generalization never outranks a measurement of the file in front of you — when they disagree, re-check the instrument, then believe the data.
+- (2026-07-27) Cited `critical_lessons §9` twice as an existing rule. The file has §1–§8; §9 appeared only in a memory entry's "Codifications this session" list, and that work was uncommitted on the other machine. A codification list records what the writer INTENDED at write time — memory is append-only and outlives the commit that never landed, so it is never evidence the file contains the rule.
 
 **How to apply:**
 - When the user references their own existing setup ("if you read my X you'll know") — read it BEFORE theorizing, especially before raising a risk/blocker. The answer is often already in-repo.
@@ -159,6 +162,7 @@ When the user asks for a design decision that's claude's to drive, recommend ONE
 - Answer reachable from loaded context → commit. Recommendation + one-line reason.
 - Two genuinely equivalent options → pick one, name the tradeoff, let user override.
 - **Implementation / engineering-practice questions the user can't usefully arbitrate → decide, don't ask.** Bring the user ONLY real-world / mental-model / user-facing questions ("what's different on your end", in-game behavior); make the practice call yourself and show the result for a yes/no. A "idk, your call" reply is the signal you should have decided it. (2026-07-19; also brainstorming-skill override #1.)
+- **Reporting a finding: lead with what it MEANS, then the mechanism.** The user needs the consequence and the decision it forces; the trace is supporting material, not the answer. Burying the implication under a correct technical account reads as not having one. (2026-08-01) Reported two deployment-frame bugs mechanism-first across several turns; user: *"idk, i don't care actual thing, what's the implication here?"*, and earlier *"what do you mean?"* on a paragraph about an adjacent artifact. The one-line version — *"`/build` today ships an exe that crashes for every user on the first station name"* — was available from the start.
 - **A finding your own analysis already resolves is not a question — resolve it and report.** Escalating it reads as a real open risk and spends the user's attention re-deriving what you had. (2026-07-21) Flagged the departure level test's deceleration path for the user to rule on, having *already written* "double-fire protection = the `departure_observed` flag" two paragraphs earlier in the same doc; user: *"how do you think, it is gated behind our departure fired?"*
 
 ### Don't gate cheap verification behind a question
@@ -178,6 +182,7 @@ When working through user-stated logic, reason strictly in the vocabulary and fr
 **Why:** Imported context shifts the frame off the user's logic. Examples:
 - (2026-05-02) Reached conclusion via "opaque badge paints over text"; user never mentioned opacity. User: *"just dead logic to follow."*
 - (2026-06-12) "the dot is obstructing" → resolved "dot" to the rendered marker dot (I'd just merged the m0/d0 dots, so that frame was top-of-mind) and built a hide-toggle; user meant the editor drag handle. Built + reverted the wrong fix.
+- (2026-07-30) User named the frame — *"at the end it's a collaboration of both sides"* — and I re-presented it a turn later as my own finding ("neither alone is complete; together they are"). User: *"you see, that i mentioned it a two side efforts."* Re-deriving a frame the user already stated reads as not having heard it, and it costs them a turn to re-assert. When a design frame lands, name it back in their words and build on it, rather than arriving at it again independently.
 
 **How to apply:**
 - If a justification uses vocabulary the user didn't introduce, stop and ask.
@@ -298,10 +303,35 @@ Before writing a function that "feels generic," grep the codebase for an existin
 - Trigger: function < 20 lines, stdlib-only body, name like `load_*` / `resolve_*` / `_*_root`.
 - `grep -rn "<name-stem>" --include="*.py" .` excluding `.venv/`. If found, extend rather than fork.
 
-### Dispatch independent work to parallel subagents
-When subtasks have no data dependency (separate searches, reads, verifications, asset hunts), fan them out to parallel subagents in ONE message — don't run them sequentially in the main thread. Still verify each subagent's output before acting (cf. § "Verify before claiming"). 2026-06-27: user — *"you need to actively dispatch subagents to do tasks in parallel."*
+### Delegate only genuinely independent, sizeable work
+Fan out to subagents for large parallel tracks with no data dependency — a wide multi-file investigation, several unrelated searches. Don't delegate what you'd finish in a handful of tool calls, don't use a subagent to verify your own work, and when one agent suffices don't spawn several. A subagent's output is still yours to verify before acting (cf. § "Verify before claiming").
 
-**Scope: read-only fan-out + self-contained research/doc — NOT cross-file code surgery.** A subagent is safe where its output is reviewable in one read (searches, codebase mapping, a contained doc edit). The main thread drives anything that rewires code across call sites / multiple files: a subagent's "looks done" self-check (grep says zero refs, imports OK) gives false confidence on mechanical edits. 2026-06-28: an i18n subagent deleted per-module label dicts but left ~26 dangling refs across 5 modules + broke button calls, then reported "imports + render OK" (imports pass because Python doesn't run function bodies at import) — reverted, redone inline. User: *"subagents doesn't seem to be good idea, breaking things."*
+**Why:** the delegation reflex over-fires, and the model the original steer was written against under-fired. Examples:
+- (2026-06-27) User: *"you need to actively dispatch subagents to do tasks in parallel"* — the original steer, against a too-sequential default.
+- (2026-06-28) An i18n subagent deleted per-module label dicts, left ~26 dangling refs across 5 modules, then reported "imports + render OK" (imports pass because Python doesn't run function bodies at import). Reverted, redone inline. User: *"subagents doesn't seem to be good idea, breaking things."*
+- (2026-07-25) Opus 5 delegates more readily than the model the 06-27 steer targeted; the standing harness default is now don't-delegate-unless-asked.
+
+**How to apply:**
+- Read-only fan-out and self-contained research/doc only — searches, codebase mapping, a contained doc edit, where the output is reviewable in one read.
+- NOT cross-file code surgery. The main thread drives anything rewiring call sites across files; a subagent's "looks done" self-check gives false confidence on mechanical edits.
+
+### Fresh context is the review instrument — no model generation beats it
+A reviewer holding no prior context and no momentum sees blindspots the author structurally cannot, however strong the author's model is. Delegation caps and "don't use a subagent to check your own work" guidance target SELF-verification — re-reading your own work inside your own context. They do not reach `/review-plus-fix-relentlessly`'s Ralph loop or `/third-man`, whose whole value is the absent context.
+
+**Why:** the two are indistinguishable from outside — both spawn an agent to look at work just finished — so a cap written for one gets applied to the other. Examples:
+- (2026-07-25) User: *"the value in review+fix is the ralph, fresh context … no opus 5,6,7 can win fresh context. imagine a human world. you ask your colleagues who has no prior context and momentum to review your work, you find blindspots."*
+- (2026-07-25) Reviewing the corpus against Anthropic's Opus 5 prompting guidance, I read its subagent cap as reaching the review loop and proposed cutting its cycle count.
+
+**How to apply:**
+- Distinguish by what the second agent LACKS. Same context re-reading itself → self-verification, cut it. Fresh context → an instrument, keep it.
+- A model upgrade never retires it. A stronger author has stronger blindspots, not fewer.
+- **It also measures ERGONOMICS, not just correctness.** Hand a blind agent an ordinary task on the
+  thing just built and watch what it reaches for — that answers "is this seam discoverable?", which the
+  author cannot self-assess at all. (2026-07-30) Two agents given routine LCD edits, told nothing about
+  the font atlas: one adopted the new seam correctly and then said *"nothing in CLAUDE.md says a bare
+  `pygame.font.Font` is now wrong"* — `conventions.md` was in fact still instructing the OLD pattern.
+  The other found that a font size is part of the atlas key and proved the failure rather than
+  inferring it. Neither finding was visible from inside the author's context.
 
 ### Natural adoption gates tool value — push through the harness, don't add a pull-MCP
 A tool's worth is capped by whether it gets used *naturally*, and naturalness = **who owns the context-injection step**. A **pull** tool (an MCP the model must choose to call) loses to the reflex and sits unused — Serena is installed, `conventions.md` says "use it going forward," and grep still wins. To get used, the output must be **pushed**: a **skill step** (orchestrated work — the skill invokes it, so it can't be forgotten) or a **harness hook** (free-form work — injected at the decision). Judge a candidate by delivery shape FIRST, capability second.
@@ -322,6 +352,28 @@ Write the minimum code that solves the problem. No speculative additions.
 **How to apply:**
 - No features beyond what was asked. No abstractions for single-use code. No error handling for impossible scenarios.
 - The test: would a senior engineer call it overcomplicated?
+
+### A rule is not a licence to expand scope
+Citing a principle to justify work the user did not ask for inverts what the corpus is for. Every rule here exists to make the REQUESTED deliverable trustworthy; none of them authorises a new artifact. When a rule seems to demand more scope ("verify before claiming", "test the change", "calibrate the instrument"), it is asking for confidence in what was asked, not for a tool, a harness, or a benchmark that was not.
+
+**Why:** each increment is individually defensible, so nothing feels wrong until the pile is visible — and the justification comes from the user's own corpus, which makes it feel sanctioned. Examples:
+- (2026-07-26) Asked to adapt the 1440p OCR pipeline to downscaling as a PoC. Built it, then added a two-pipeline comparison script, then a validation harness, then metadata plumbing to support them — each step citing a real rule. The WIP doc's stated goal was to REDUCE per-resolution measurement burden; I manufactured new measurement burden, which pointed directly away from the purpose. User: *"review and fucking clean up the garbage that you've made."* Everything but the pipeline was deleted.
+
+**How to apply:**
+- The deliverable is what was asked for. Verification serves it and ships inside it — a new script, harness or fixture is its own deliverable and needs its own ask.
+- Scratch work that answers a question is scratch: run it, report the number, don't graduate it to `_dev_scripts/` unless asked.
+- **Repeated pushback on SCOPE is the same stop signal as pushback on a value** (cf. § "Converge on the model, not the next correction"). "Don't I already have that?", "what is this thing you're building?" — that is a second opinion arriving twice. Stop and cut, don't explain and continue.
+
+### Match the user's vocabulary for their own domain
+Use the words the user uses for concepts they own. Introducing a new term for their concept forces them to learn your name for their own thing, and the name then propagates into code, flags and docs where it is expensive to unpick.
+
+**Why:** Examples:
+- (2026-07-26) Named the OCR downscale approach "canonical" — from a WIP doc I had written, never from the user. It reached `CANONICAL_PROFILE`, `to_canonical_hud`, `--canonical-ocr` and three doc sections before they said: *"opus 5 had get ahead of me in a sense that it created a lot of names not in my brain before, like i never mentioned the canonical ocr name for ocr."* Their words throughout were "downscale", "old path / new path", "the 1080p model". Renamed to match.
+
+**How to apply:**
+- Take identifiers from how the user described the thing, not from how a doc or the literature describes it.
+- A term you introduced and they never echoed back is a rename waiting to happen — check before it reaches an identifier or a CLI flag.
+- Also holds for structure: match an existing convention rather than inventing a parallel one (`live_captures/1440p/`, matching `_tests/fixtures/ocr/1440p/`, not a new `2560x1440/` scheme).
 
 ### Reusable code = flexible primitive
 When factoring shared code (helper / utility / chrome layer), design a portable, options-customized interface — keyword options for variants, parameters over hardcoded constants — so it's callable from many sites with different inputs. NOT license for speculative generality (cf. Simplicity First — no abstraction for single-use, no option without a second caller); the flexibility serves reuse you can point to.
@@ -347,10 +399,38 @@ A tool's output is not the fact it was meant to establish. Before a comparison /
 **Why:** every method has a failure mode that looks like a confident answer. Examples:
 - (2026-07-22) "Are these two mp3s the same recording" answered three times by three instruments, each wrong the same way: byte hash (ID3 tags + encoder padding → 9/13 pairs called "different"), strided cross-correlation (5 ms lag grid at 48 kHz → sample-identical audio scored 0.03, and a false "PA is 0% shareable across all 32×25 pairs"), whole-file chroma (conflated the melody with the station-specific announcement after it). Every report was faithful to its tool; no tool could answer the question. Resolved by threshold-free methods — silence-trimmed PCM hash, plus FFT correlation which evaluates every lag.
 
+- (2026-07-27) An exhaustive LIVE-vs-ATLAS frame comparison reported ~1150 of 10476 frames
+  mismatched, and a DIFFERENT ~1150 on each run. Freezing Python's `time` was not enough: the
+  multi-PA hint blinks on `pygame.time.get_ticks()`, SDL's own counter, which patching the `time`
+  module cannot reach — so the two passes caught the blink in opposite phases depending on how long
+  the first pass took. **Freeze every clock the platform exposes, not just the language's.** A
+  set of failures that changes between runs is the instrument, not the subject; localising one and
+  finding zero difference in isolation confirms it in one command.
+- (2026-07-27) The same harness compared three trees pairwise and gated BOTH pairs on all three
+  rendering successfully. Every state failed in the third tree, which silently emptied the first
+  pair's sum — it printed `0 differing pixels` and read as a pass. **Score each pair on its own
+  availability, and print the denominator**, so an empty sum cannot impersonate a clean one.
+
+- (2026-07-30) Four more in one session, same shape every time — the subject was correct and the
+  measurement was wrong. A lint ban written `pygame\.font\.Font\([^)]*ShinGoPr6N` fired on **nothing**:
+  every real call site has `project_root()` inside the parens, so the paren-excluding class stopped
+  before the face name. A "how many call sites are still undeclared" count read 26 because the
+  measuring step *itself* created 26 undeclared entries in the thing it was counting. Both looked like
+  clean results. → **A check that has never been observed to fail has not been shown to work**, and a
+  measurement taken AFTER a step that also writes the measured state is counting the instrument.
+
 **How to apply:**
 - Feed it a known-same and a known-different case first. A method that can't return "same" on a known-same is measuring something else.
+- **Mutation-prove a new gate at birth** — not only regression fixtures (§ "Test real logic"), but every
+  linter rule, assertion, coverage count and staleness guard. Break the thing it guards, confirm it
+  fires, restore. A gate that reports clean on its first run has told you nothing until it has also
+  reported dirty on demand.
+- **Snapshot a metric BEFORE anything that writes what it measures.** If the measuring pass shares
+  state with the measured system, order decides the answer.
+- Print N alongside every aggregate. A total with no count attached cannot be distinguished from a total over nothing.
 - Similarity / threshold methods fail toward "different": a negative is weak evidence, a positive is strong. Prefer an exact, thresholdless method where one exists.
 - The user asserting a contrary fact about their own domain outranks the instrument — re-check the instrument, not the assertion.
+- **A comparison rendered for the USER to judge is an instrument too.** Before presenting arms side by side, confirm they actually differ — print the sizes, the parameters, the diff count. (2026-07-27) A four-row scaling comparison had rows 1 and 2 produced by the identical `transform.scale` call; the user picked a filter from two copies of one image, and only caught it by noticing they looked the same.
 
 ### Test the change, not just the bug
 Exercise the change's full blast radius before saying done. Smoke test on the bug-fix target is necessary but not sufficient.
@@ -381,6 +461,32 @@ Companion bound on the above: the "ships with a test" bar is for the **silent-fa
 - A regression fixture must DISCRIMINATE — fail when the fix is reverted; verify it does. A downstream backstop can mask a naive one (2026-07-21: a `19.1→19` speed-cell passed with AND without the decimal fix because `_rectify_speed(191)=19`; swapped for a rectify-proof `5.3→5`).
 - **Discrimination decays — re-run the mutation after ANY later change to the guarded code, its constants, or the fixture.** Verified-once is not verified. (2026-07-21) A logo-suppression assertion was mutation-proven, then a floor retune (2s→4s) plus a `reveal_slot` semantic change silently made it inert; the review caught it, and the first repair was ALSO inert (it sampled the guard state *after* the stepped frame, so it already held the mutated value).
 - Never read the constant under test into the test — pin the expected value literally. A fixture that imports `FLOOR` scales its own expectations with any mutation of `FLOOR` and stops discriminating.
+
+### A second implementation of a production decision drifts silently
+When a tool, test, harness, baker or proof needs to know what production does, it must CALL
+production, not restate it. A restatement is correct the day it is written and diverges thereafter,
+and its output looks plausible the whole time — the copy is exercised, so nothing errors.
+
+**Why:** the copy is usually the cheap way to get moving, and the drift surfaces as content that is
+subtly wrong rather than as a failure. Examples:
+- (2026-07-27) Font atlas. Three separate copies of a production decision, each caught only by
+  accident: a proof script re-derived `draw_train_type`'s box geometry and branch condition, so
+  two-character train types rendered without their `exp=7` spread while the script reported zero
+  pixel difference (the user spotted the spacing by eye); a baker declared a combo table, which
+  missed all nine transfer-panel sizes; a baker derived its text domain from `route.json`, which
+  missed the 18 stations in `sobu/1217F`'s `pre_stops`. Fixed structurally — one layout function
+  with a `# CONTRACT:` block, the baker drives the real app and stores what it returns, and nothing
+  outside production reasons about layout at all. User: *"if you did this then theres multiple code
+  paths that leaked failures like this"*, *"architectural mishaps"*.
+
+**How to apply:**
+- Needing a production value in a tool → import and call the production function. If it is not
+  callable (blits straight to a surface, buried in a loop), extract a seam so it is; that extraction
+  is the fix, not a workaround.
+- A tool that "knows" which cases exist — a declared table, an enumerated domain, a branch condition
+  restated — is the smell. Drive the real thing and record what it asked for.
+- Enumeration by SAMPLING is the other half: if coverage comes from driving, the drive must be
+  exhaustive over the state space, and a mechanical gate must fail on a gap rather than trusting it.
 
 ### A simplification must carry its constraints forward
 When a design collapses to something simpler, re-derive which parts of the original were load-bearing. A constraint that was correct in the complex design is still correct in the simple one — dropping it alongside the scaffolding it lived in is silent, and only surfaces as a user-visible defect.
@@ -420,11 +526,13 @@ Pick the metric that IS the thing you care about. A proxy that correlates in the
 
 **Why:** the proxy is usually easier to compute, which is why it gets chosen — and why it goes unquestioned. Examples:
 - (2026-07-22) Judged an OCR matching change by the top-2 template MARGIN: it collapsed (glyphs under 0.10 margin went 51 → 381) and I called the change net-negative and nearly reverted it. Measuring the real metric — read accuracy under degradation — showed 92.8% → 100%. Tolerance lifts the runner-up along with the winner, so margin compresses while the ORDERING, which is what determines the read, improves.
+- (2026-07-26) Picked a resampler on SYNTHETIC gaussian blur. An area+unsharp variant won across a broad parameter plateau (193 vs 178) — no knife-edge, so the method looked robust — then destroyed the decimal digit on 145 of 792 REAL driven frames. Uniform low-pass is something re-sharpening recovers from; real capture degradation is not. A degradation MODEL is a proxy for degradation, and a plateau proves only that the tuning is stable, never that the model is right.
 
 **How to apply:**
 - Name the outcome first ("does it read the right digit"), then ask whether the metric you are about to compute can move opposite to it. If it can, it is a proxy — go get the outcome.
 - A proxy that is a *component* of the outcome (a score, a margin, a distance) is the most dangerous kind: it looks causal.
 - When a measurement contradicts a change you reasoned carefully about, suspect the measurement once before suspecting the reasoning — then test both.
+- **Synthesized inputs are a proxy for real ones.** Gate anything tuned on them against real captured samples before it ships; hold the real set back as the arbiter rather than folding it into the tuning.
 
 ### Construction-proof model beats the next repro theory
 When static analysis keeps contradicting a reproducible observation across 2+ rounds — your trace says the bug can't happen, the user keeps seeing it — stop generating repro theories. Either instrument for ground truth, or redesign the invariant so the whole bug CLASS is impossible by construction. The Nth theory has diminishing value once analysis and observation disagree.
@@ -457,7 +565,8 @@ Each rule has exactly one home. Don't create aggregator files.
 ### Preloaded mental model vs progressive implementation detail
 Mental model (what it models, scope, IRL framing) → pre-loaded files. Implementation details (draw-method gotchas, JSON-field minutiae) → domain docs, read on demand.
 
-- **Token-cost asymmetry.** Preloaded rules (`.claude/rules/*`) burn tokens every turn — compress aggressively, strip rationale to one-liners. On-demand skills load only when invoked — can afford fuller rationale. Mechanical classification work (commit file sorting) can offload to PostToolUse hooks entirely.
+- **Compression buys ATTENTION, not tokens.** Preloaded rules (`.claude/rules/*`) load every turn — compress aggressively, strip rationale to one-liners; on-demand skills can afford fuller rationale, and mechanical classification (commit file sorting) offloads to hooks entirely. But the reason is that any one rule competes with ~33k tokens of sibling rules for attention, NOT that tokens are scarce. So a rule earns removal only by being WRONG or by actively causing bad behaviour (2026-07-26: rules cited as licence to widen scope); redundancy alone never does. (2026-07-27) User: *"i don't care about cost, don't save cost for me, i only care that you 99.9999999% of the time do the right thing."*
+- **Rules do not reach that bar; gates do.** Advisory text competing for attention fails at some rate — the MEMORY.md cap sat stated and unread for three months at 97–100% violation. Where a rule must always hold, move it to a mechanical gate (pre-commit, publish-boundary refusal, a test) and let the prose describe rather than enforce.
 - **Corpus out-competes a lone rule.** A preloaded rule that keeps getting violated is out-voted by the always-loaded docs modeling the counter-behavior — remove the counter-examples, don't restate the rule harder. (2026-07-24: the editorial-tone preference stuck only after de-polluting every rules/doc file, not after a stronger rule.)
 
 ### Single source of truth

@@ -55,3 +55,11 @@ The upper LCD cycles between Japanese, Furigana, and English. Major JR East inte
 - More route diagrams
 - Additional LCD styles (E233-0, E231, …)
 - Enhanced Lower LCD
+
+---
+
+## Credits
+
+Line symbols and operator logos come from [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:Rapid_transit_icons_of_Japan) — thanks to the contributors who drew and maintain them, and in particular to Carnby, Perhelion, KANAO22 and 東京都交通局 for the shinkansen and Tokyo Sakura Tram marks.
+
+Full credits and asset details: [THIRD-PARTY.md](THIRD-PARTY.md).

@@ -37,7 +37,7 @@ Build the production surface. Use the project's own boundaries:
 
 | Always in scope | Always out of scope |
 |---|---|
-| `app.py`, `main.py`, `audio.py`, `constants.py`, `setup.py` | `preview_display.py` (testing harness — not shipped, exclude from production reviews) |
+| `app.py`, `main.py`, `audio.py`, `constants.py`, `i18n.py`, `font_atlas.py` | `preview_display.py` (testing harness — not shipped, exclude from production reviews) |
 | `displays/**/*.py` (all LCD/model code) | `old_version.py` (intentionally preserved pre-refactor monolith — keep, do not propose deleting) |
 | `data_loader.py` or any other top-level production module | `compare_*.py`, `validate_*.py` (dev/CI tools) |
 | | `_*` folders / files (preserved-but-not-shipped, e.g. `_archive/`, `_mock/`) |

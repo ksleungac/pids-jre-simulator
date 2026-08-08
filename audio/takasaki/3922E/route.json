@@ -212,10 +212,10 @@
             "name": "神保原",
             "pa": [
                 "honjo-dep-down",
-                "kanhobara-arr-down"
+                "jimbohara-arr-down"
             ],
             "sta": [
-                "kanhobara"
+                "jimbohara"
             ],
             "sta_cut": 8.7,
             "time": 4,
@@ -224,7 +224,7 @@
         {
             "name": "新町",
             "pa": [
-                "kanhobara-dep-down",
+                "jimbohara-dep-down",
                 "shinmachi-arr-down"
             ],
             "sta": [

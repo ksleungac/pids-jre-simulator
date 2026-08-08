@@ -30,6 +30,19 @@ BANS: list[tuple[re.Pattern[str], list[str], str]] = [
         "pygame.font.SysFont is banned in production (crashes on Chinese-locale Windows) — load via pygame.font.Font(str(project_root() / 'fonts' / fname), ...). See conventions.md § Tooling.",
     ),
     (
+        # A baked face named INSIDE a pygame.font.Font(...) call. Only ShinGo is in
+        # font_atlas.ATLAS_FACES today; Helvetica and Frutiger still ship, so they
+        # legitimately load directly. Extend this alternation when a family joins
+        # ATLAS_FACES — the two must not drift.
+        # `.*` not `[^)]*`: every real call site has `project_root()` inside the
+        # parens, so a paren-excluding class stops before the face name and the ban
+        # is inert — it fired on nothing until a mutation probe exposed it. `.` does
+        # not cross newlines, so this covers single-line calls, which all of them are.
+        re.compile(r"pygame\.font\.Font\(.*ShinGoPr6N"),
+        ["_dev_scripts/"],
+        'A baked font face must resolve through font_atlas.lcd_font(face, size, draws=...), never a bare pygame.font.Font(). A bare construct works in dev (fonts/ is present) and raises in a build that ships no font software — invisible-in-dev, critical_lessons.md §4. See conventions.md § Tooling ("LCD fonts resolve through font_atlas.lcd_font").',
+    ),
+    (
         re.compile(r"sys\._MEIPASS\b"),
         ["app_paths.py"],
         "sys._MEIPASS only allowed in app_paths.py (this project ships assets alongside-exe via build copy, not --add-data). See conventions.md § Tooling.",

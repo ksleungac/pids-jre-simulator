@@ -44,8 +44,8 @@
         "english": "Yono"
     },
     "与野本町": {
-        "furigana": "よの本まち",
-        "english": "Yono-Honcho"
+        "furigana": "よのほんまち",
+        "english": "Yono-Hommachi"
     },
     "中浦和": {
         "furigana": "なかうらわ",
@@ -57,7 +57,7 @@
     },
     "二俣新町": {
         "furigana": "ふたまたしんまち",
-        "english": "Futamata-Shinmachi"
+        "english": "Futamatashimmachi"
     },
     "二宮": {
         "furigana": "にのみや",
@@ -65,11 +65,11 @@
     },
     "八丁堀": {
         "furigana": "はっちょうぼり",
-        "english": "Hatchobori"
+        "english": "Hatchōbori"
     },
     "八王子": {
         "furigana": "はちおうじ",
-        "english": "Hachioji"
+        "english": "Hachiōji"
     },
     "北与野": {
         "furigana": "きたよの",
@@ -113,7 +113,7 @@
     },
     "吉祥寺": {
         "furigana": "きちじょうじ",
-        "english": "Kichijoji"
+        "english": "Kichijōji"
     },
     "品川": {
         "furigana": "しながわ",
@@ -137,7 +137,7 @@
     },
     "大井町": {
         "furigana": "おおいまち",
-        "english": "Oimachi"
+        "english": "Ōimachi"
     },
     "大宮": {
         "furigana": "おおみや",
@@ -189,7 +189,7 @@
     },
     "御徒町": {
         "furigana": "おかちまち",
-        "english": "Ōkachimachi"
+        "english": "Okachimachi"
     },
     "御茶ノ水": {
         "furigana": "おちゃのみず",
@@ -209,11 +209,11 @@
     },
     "戸田公園": {
         "furigana": "とだこうえん",
-        "english": "Toda-Koen"
+        "english": "Toda-Kōen"
     },
     "指扇": {
         "furigana": "さしおうぎ",
-        "english": "Sashi-Ogi"
+        "english": "Sashiōgi"
     },
     "新子安": {
         "furigana": "しんこやす",
@@ -261,11 +261,11 @@
     },
     "有楽町": {
         "furigana": "ゆうらくちょう",
-        "english": "Yurakucho"
+        "english": "Yūrakuchō"
     },
     "本郷台": {
         "furigana": "ほんごうだい",
-        "english": "Hongo-dai"
+        "english": "Hongōdai"
     },
     "東京": {
         "furigana": "とうきょう",
@@ -297,11 +297,11 @@
     },
     "桜木町": {
         "furigana": "さくらぎちょう",
-        "english": "Sakuragicho"
+        "english": "Sakuragichō"
     },
     "検見川浜": {
         "furigana": "けみがわはま",
-        "english": "Kemigawa-Hama"
+        "english": "Kemigawahama"
     },
     "横浜": {
         "furigana": "よこはま",
@@ -329,11 +329,11 @@
     },
     "洋光台": {
         "furigana": "ようこうだい",
-        "english": "Yokodai"
+        "english": "Yōkōdai"
     },
     "浜松町": {
         "furigana": "はままつちょう",
-        "english": "Hamamatsucho"
+        "english": "Hamamatsuchō"
     },
     "浦和": {
         "furigana": "うらわ",
@@ -345,7 +345,7 @@
     },
     "海浜幕張": {
         "furigana": "かいひんまくはり",
-        "english": "Kaihin-Makuhari"
+        "english": "Kaihimmakuhari"
     },
     "渋谷": {
         "furigana": "しぶや",
@@ -385,7 +385,7 @@
     },
     "石川町": {
         "furigana": "いしかわちょう",
-        "english": "Ishikawacho"
+        "english": "Ishikawachō"
     },
     "磯子": {
         "furigana": "いそご",
@@ -477,7 +477,7 @@
     },
     "府中本町": {
         "furigana": "ふちゅうほんまち",
-        "english": "Fuchū-Honmachi"
+        "english": "Fuchūhommachi"
     },
     "分倍河原": {
         "furigana": "ぶばいがわら",
@@ -513,7 +513,7 @@
     },
     "葛西臨海公園": {
         "furigana": "かさいりんかいこうえん",
-        "english": "Kasai-Rinkai-Koen"
+        "english": "Kasai-Rinkai Park"
     },
     "蒲田": {
         "furigana": "かまた",
@@ -533,7 +533,7 @@
     },
     "西八王子": {
         "furigana": "にしはちおうじ",
-        "english": "Nishi-Hachioji"
+        "english": "Nishi-Hachiōji"
     },
     "西国分寺": {
         "furigana": "にしこくぶんじ",
@@ -541,7 +541,7 @@
     },
     "西大宮": {
         "furigana": "にしおおみや",
-        "english": "Nishi-Omiya"
+        "english": "Nishi-Ōmiya"
     },
     "西川口": {
         "furigana": "にしかわぐち",
@@ -569,7 +569,7 @@
     },
     "辻堂": {
         "furigana": "つじどう",
-        "english": "Tsujido"
+        "english": "Tsujidō"
     },
     "関内": {
         "furigana": "かんない",
@@ -581,7 +581,7 @@
     },
     "高円寺": {
         "furigana": "こうえんじ",
-        "english": "Koenji"
+        "english": "Kōenji"
     },
     "高尾": {
         "furigana": "たかお",
@@ -605,7 +605,7 @@
     },
     "水道橋": {
         "furigana": "すいどうばし",
-        "english": "Suidobashi"
+        "english": "Suidōbashi"
     },
     "飯田橋": {
         "furigana": "いいだばし",
@@ -629,10 +629,10 @@
     },
     "大久保": {
         "furigana": "おおくぼ",
-        "english": "Ōkubō"
+        "english": "Ōkubo"
     },
     "五反田": {
-        "furigana": "ごたんた",
+        "furigana": "ごたんだ",
         "english": "Gotanda"
     },
     "目黒": {
@@ -679,7 +679,7 @@
     },
     "新大久保": {
         "furigana": "しんおおくぼ",
-        "english": "Shin-Ōkubō"
+        "english": "Shin-Ōkubo"
     },
     "高田馬場": {
         "furigana": "たかだのばば",
@@ -706,8 +706,8 @@
         "english": "Kita-Kōnosu"
     },
     "神保原": {
-        "furigana": "かんぼはら",
-        "english": "Kanhobara"
+        "furigana": "じんぼはら",
+        "english": "Jimbohara"
     },
     "行田": {
         "furigana": "ぎょうだ",
@@ -739,7 +739,7 @@
     },
     "新町": {
         "furigana": "しんまち",
-        "english": "Shinmachi"
+        "english": "Shimmachi"
     },
     "高崎": {
         "furigana": "たかさき",
@@ -818,36 +818,47 @@
         "english": "Narita Airport\nTerminal 1"
     },
     "衣笠": {
+        "furigana": "きぬがさ",
         "english": "Kinugasa"
     },
     "横須賀": {
+        "furigana": "よこすか",
         "english": "Yokosuka"
     },
     "田浦": {
+        "furigana": "たうら",
         "english": "Taura"
     },
     "東逗子": {
+        "furigana": "ひがしずし",
         "english": "Higashi-Zushi"
     },
     "逗子": {
+        "furigana": "ずし",
         "english": "Zushi"
     },
     "鎌倉": {
+        "furigana": "かまくら",
         "english": "Kamakura"
     },
     "北鎌倉": {
+        "furigana": "きたかまくら",
         "english": "Kita-Kamakura"
     },
     "東戸塚": {
+        "furigana": "ひがしとつか",
         "english": "Higashi-Totsuka"
     },
     "保土ヶ谷": {
+        "furigana": "ほどがや",
         "english": "Hodogaya"
     },
     "新川崎": {
+        "furigana": "しんかわさき",
         "english": "Shin-Kawasaki"
     },
     "西大井": {
+        "furigana": "にしおおい",
         "english": "Nishi-Ōi"
     }
 }

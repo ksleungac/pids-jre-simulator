@@ -8,7 +8,7 @@ display classes, window dimensions, and human-readable label.
   The model is an explicit constructor arg sourced from the setup-screen
   picker (which is seeded from the route's default). ``None`` / unknown →
   the default model.
-- ``setup.py`` reads ``model_choices()`` for the per-route model dropdown.
+- ``tims/setup/model_select.py`` reads ``model_choices()`` for the per-route model picker.
 
 Imports are STATIC (not ``importlib``): the ``app.py -> here -> leaf
 package`` chain is visible to PyInstaller's static analyzer, so every model
