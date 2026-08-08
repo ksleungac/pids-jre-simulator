@@ -15,9 +15,9 @@ pool slugs that already exist.
 > [DATA_FORMAT.md](DATA_FORMAT.md)), per-line IRL notes (→ [audio/README.md](audio/README.md)).
 >
 > **Graduates when** every shipped line is migrated — single-diagram included, since pooling
-> is now the only schema (yamanote excepted, and the table says why): fold the `audio_root` +
+> is now the only schema, no exceptions: fold the `audio_root` +
 > naming rules into `DATA_FORMAT.md`, the per-line status into `audio/README.md`,
-> then delete this file. Remaining: keiyo, tokaido, nambu.
+> then delete this file. **All nine shipped lines are migrated as of 2026-08-08 — the trigger is met.**
 
 ---
 
@@ -26,14 +26,14 @@ pool slugs that already exist.
 | line | diagrams | STA pooled | PA pooled | notes |
 |---|---|---|---|---|
 | chuo | 1654T, 916H | ☑ | ☑ | **Done + committed.** 23 STA + 55 PA (53 referenced); both trimmed, by-ear 23/23 + 53/53. Every pair is a genuine separate take — re-verified 2026-07-26 |
-| keihin | 1275A, 727B | ☑ | ☑ | **Pooled 2026-07-26**, 192 → 123 files. 45 STA (35 identical pairs collapsed) + 78 PA (30 pairs are ONE recording, 4 more collapsed by ear). PA trim still to do; legacy folders still on disk |
-| tokaido | 1865E, 3535E | ☐ | ☐ | 11.9 MB; PA already descriptive in 3535E (underscore separator) |
-| nambu | 4027F, 603F | ☐ | ☐ | 7.6 MB |
+| keihin | 1275A, 727B | ☑ | ☑ | **Pooled 2026-07-26**, 192 → 123 files. 45 STA (35 identical pairs collapsed) + 78 PA (30 pairs are ONE recording, 4 more collapsed by ear). PA trimmed 2026-07-27; STA KAK spliced by ear 2026-08-08 (44 files, 43.1 s) |
+| tokaido | 1865E, 3535E | ☑ | ☑ | **Done 2026-08-08.** 116 → 94 files. STA 21/21 identical; PA 0/31 shared, so every file carries a type token (`-futsu` / `-acty`) |
+| nambu | 4027F, 603F | ☑ | ☑ | **Done 2026-08-08.** 110 → 86 files. STA 23/23 identical (+`Nishifucho`=`Nishifu`, one recording under two names); PA 0/19 shared at near-zero correlation, so uniform `-kaisoku` / `-kakueki` |
 | saikyo | 1349F, 759K | ☑ | ☑ | **Done 2026-08-08**, 92 → 66 files, 28 → 22 MB. Legacy folders dropped. STA by-ear 25/25, PA all pass |
 | sobu | 1217F | ☑ | ☑ | **Done 2026-08-08.** Single diagram, so a pure move: 28 PA gain `-down`, 16 STA verbatim (platform-bearing slugs) |
 | takasaki | 3922E | ☑ | ☑ | **Done 2026-08-08.** Same shape — 30 PA gain `-down`, 16 STA verbatim |
 | keiyo | 780Y_1510Y | ☑ | ☑ | **Done 2026-08-08.** 30 PA numeric → descriptive + `-up`, 17 STA verbatim. Roles confirmed from transcripts, not assumed — see below |
-| yamanote | *(flat)* | n/a | n/a | **Stays flat, deliberately.** `audio/yamanote/{pa,sta,route.json}` already resolves through the same one-root mechanism (`resolve_audio_root` returns the work dir, which holds `pa/` and `sta/`) — the degenerate case of this schema, not a second one. It cannot take a direction token either: one route.json serves both 内回り and 外回り |
+| yamanote | 1208G | ☑ | ☑ | **Done 2026-08-08**, the last flat line. Its audio was already in pool position, so only `route.json` moved into `1208G/`. 29 PA numeric → descriptive + `-inner`; 29 STA verbatim |
 
 **Every shipped line is migrated, single-diagram included — pooling is the one schema going
 forward** (author, 2026-08-08). A single-diagram line has nothing to dedup, so its migration
@@ -283,6 +283,33 @@ Both diagrams 下り on one 24-stop spine: 1349F 快速 → 川越 (through 川�
   now `sta: ["kawagoe-down"]`, `sta_cut: 3.8` on `stops[23]`. An arrival terminus carrying
   `sta` departs from `DATA_FORMAT.md`'s rule; the validator and `_next_sta` both accept it.
 - `759K/pa/13.mp3` was unreferenced and matched no neighbour → `audio/_archive/saikyo/`.
+
+## Tokaido — pooled 2026-08-08
+
+1865E 普通 stops everywhere; 3535E 快速アクティー skips 辻堂, 大磯, 二宮, 鴨宮. Both 下り to 熱海.
+116 → 94 files, and the two lines of this line land on opposite answers:
+
+- **STA — all 21 same-named pairs are sample-identical**, so it was a pure move, names verbatim.
+  3535E's four unreferenced melodies (the stations it skips) are byte-identical to 1865E's and
+  simply vanish into the pool rather than needing an archive.
+- **PA — 0 of 31 shared events is one recording.** Not a threshold call: the range runs 0.08–0.79
+  with nothing near 1.0, the Chūō signature of two independent source recordings. Since no file is
+  shared, every one needs a discriminator, so the whole PA set takes a **uniform type token**
+  (`-futsu` / `-acty`) rather than the doc's mixed `-{type}` / `-{diagram}` split. Author decision:
+  a uniform rule reads at a glance, and the doc's "earn the tier by a measured difference" caution
+  is satisfied — the difference is measured, on every pair.
+
+**`{prev}` on a `-dep` slug is the previous STOPPING station, and a skipping diagram makes that
+bite.** Deriving it from the previous array element produced `tsujido-dep` / `ninomiya-dep` /
+`kamonomiya-dep` on 3535E, for announcements that actually say 茅ヶ崎 / 国府津 / 小田原. Caught
+because 3535E already carries hand-authored descriptive names, which makes it a free oracle:
+assert the derivation reproduces all 31, and a wrong `{prev}` fails loudly. Use that check on any
+line where one diagram is already descriptive.
+
+**`pa_at_station` slug = `{station}-stopping-{dir}`** (keihin precedent), indexed `-1` / `-2` when
+a stop has more than one — 国府津 carries a dwell notice (発車まで4分ほど) then a departure-imminent
+one, and the array order is the play order. No new role word: `-departing` would read too close
+to `-dep`. 3535E's unreferenced `opening.mp3` went to `audio/_archive/tokaido/3535E/pa/`.
 
 ## Keiyo — pooled 2026-08-08
 

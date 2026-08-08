@@ -17,6 +17,12 @@ placement, C writes it to route.json. No audio is modified — this only moves
 where the simulator jumps to. Contrast with the trim controls below, which
 splice the mp3 itself.
 
+While a cut nudge is pending, replay starts at [sta_cut - TAIL_LEAD] and skips
+the head segment — you just moved the cut, so the head is not what you are
+listening for, and replaying it costs HEAD_DURATION + the inter-gap on every
+nudge. Releasing a marker drag does the same. Once the cut is committed with C
+or dropped with Z, R goes back to the full head+tail pass.
+
 Interactive trim: when an audio file has a stutter / extra content at the start
 or end that the propose+splice pipeline can't fix algorithmically, use the
 trim controls to nudge a red overlay marker on the seek bar. T commits the
@@ -44,7 +50,33 @@ import pygame
 
 from audio_layout import discover_route_sources, order_by_reference_count
 
-WINDOW_W, WINDOW_H = 1040, 540
+WINDOW_W, WINDOW_H = 1180, 680
+
+# fmt: off
+# Detail-pane vertical layout. Every row DERIVES from the one above it, so growing the
+# waveform can never silently land on top of something again — which is exactly what
+# happened when it went 44px -> 230px and the status lines stayed at a fixed y.
+PAD_X        = 20   # panel inner margin
+ROW_PROGRESS = 36   # "n / m"
+ROW_TITLE    = 64   # station name
+ROW_SUB      = 104  # <sta>.mp3  sta_cut = ...
+ROW_NOTE     = 132  # note row (click to edit)
+NOTE_H       = 26
+ROW_PHASE    = ROW_NOTE + NOTE_H + 10          # playback phase
+PHASE_H      = 24
+ROW_WAVE     = ROW_PHASE + PHASE_H + 8         # waveform top
+WAVE_H       = 260                             # the point of the window; artifacts are 40-500 ms
+ROW_SEEK     = ROW_WAVE + WAVE_H + 14
+SEEK_H       = 18
+ROW_STATUS   = ROW_SEEK + SEEK_H + 12          # pending trim / pending cut
+STATUS_LINE  = 20
+ROW_HINTS    = ROW_STATUS + STATUS_LINE * 2 + 10
+HINT_LINE    = 22
+BTN_H        = 56
+ROW_BUTTONS  = ROW_HINTS + HINT_LINE * 2 + 14
+# fmt: on
+
+WAVE_GAMMA = 0.5  # amplitude curve; a KAK quieter than the melody is invisible at linear scale
 LIST_W = 280  # left-column station list width
 LIST_TOP = 60
 ROW_H = 26
@@ -142,9 +174,19 @@ def draw_wave(
     peaks = wave_peaks(path, rect.w)
     mid = rect.y + rect.h // 2
     half = rect.h // 2 - 1
+    # Amplitude guides at the raw levels the curve maps to — so "how loud is that blip"
+    # stays answerable by eye rather than by running a probe.
+    guides = ((1.0, "0"), (0.316, "-10"), (0.1, "-20"), (0.0316, "-30"))
+    for frac, _ in guides:
+        dy = int((frac**WAVE_GAMMA) * half)
+        for yy in (mid - dy, mid + dy):
+            pygame.draw.line(screen, (44, 52, 62), (rect.x + 1, yy), (rect.right - 1, yy))
+    pygame.draw.line(screen, (58, 68, 80), (rect.x + 1, mid), (rect.right - 1, mid))
     for i in range(rect.w):
         lo, hi = float(peaks[0, i]), float(peaks[1, i])
-        pygame.draw.line(screen, (86, 150, 200), (rect.x + i, mid - int(hi * half)), (rect.x + i, mid - int(lo * half)))
+        hs = (abs(hi) ** WAVE_GAMMA) * (1 if hi >= 0 else -1)
+        ls = (abs(lo) ** WAVE_GAMMA) * (1 if lo >= 0 else -1)
+        pygame.draw.line(screen, (86, 150, 200), (rect.x + i, mid - int(hs * half)), (rect.x + i, mid - int(ls * half)))
     if sel:
         a, b = sorted(sel)
         xa = rect.x + int(rect.w * max(0.0, min(1.0, a / duration)))
@@ -154,10 +196,25 @@ def draw_wave(
         screen.blit(ov, (xa, rect.y))
         for xx in (xa, xb):
             pygame.draw.line(screen, (255, 90, 90), (xx, rect.y), (xx, rect.y + rect.h), 1)
-        label = font.render(f"{(b - a) * 1000:.0f} ms", True, (255, 140, 140))
-        screen.blit(label, (min(xa, rect.right - label.get_width() - 2), rect.y - 15))
+        label = font.render(f"{(b - a) * 1000:.0f} ms", True, (255, 190, 190))
+        lx = min(max(xa + 4, rect.x + 4), rect.right - label.get_width() - 6)
+        pad = label.get_rect(topleft=(lx, rect.y + 5)).inflate(8, 4)
+        chip = pygame.Surface(pad.size, pygame.SRCALPHA)
+        chip.fill((120, 30, 30, 210))
+        screen.blit(chip, pad.topleft)
+        screen.blit(label, (lx, rect.y + 5))
+    for frac, lbl in guides:
+        dy = int((frac**WAVE_GAMMA) * half)
+        tag = font.render(lbl, True, (128, 140, 154))
+        for yy in (mid - dy, mid + dy):
+            tr = tag.get_rect(midright=(rect.right - 5, yy))
+            back = pygame.Surface(tr.inflate(6, 2).size, pygame.SRCALPHA)
+            back.fill((22, 26, 32, 190))
+            screen.blit(back, tr.inflate(6, 2).topleft)
+            screen.blit(tag, tr.topleft)
     cx = rect.x + int(rect.w * max(0.0, min(1.0, cut / duration)))
-    pygame.draw.line(screen, CUT_MARKER, (cx, rect.y), (cx, rect.y + rect.h), 1)
+    pygame.draw.line(screen, CUT_MARKER, (cx, rect.y), (cx, rect.y + rect.h), 2)
+    pygame.draw.polygon(screen, CUT_MARKER, [(cx - 5, rect.y), (cx + 5, rect.y), (cx, rect.y + 7)])
 
 
 def draw_seek_bar(
@@ -297,21 +354,60 @@ class Player:
         self.cut_time: float = 0.0  # absolute file-time position where sta_cut sits
         self.beep_played: bool = False
         self.beep = _make_beep()
+        self.melody_until: float | None = None
+        self.skip: tuple[float, float] | None = None
+        self.skipped: bool = False
 
-    def begin(self, path: Path, sta_cut: float, head_start: float = 0.0, tail_end: float | None = None) -> None:
+    def begin(
+        self,
+        path: Path,
+        sta_cut: float,
+        head_start: float = 0.0,
+        tail_end: float | None = None,
+        tail_only: bool = False,
+        melody_until: float | None = None,
+        from_time: float | None = None,
+        skip: tuple[float, float] | None = None,
+    ) -> None:
         """Start playback. head_start/tail_end let the caller preview pending trim
         without touching the file: head plays from `head_start` (skipping the
         soon-to-be-trimmed prefix), tail stops at `tail_end` (skipping the
-        soon-to-be-trimmed suffix)."""
+        soon-to-be-trimmed suffix).
+
+        `tail_only` skips the head segment and the inter-gap, starting straight at
+        [sta_cut - TAIL_LEAD]. That is the cut-tuning loop: when you have just MOVED
+        the cut, the head tells you nothing you did not already hear, and replaying
+        it costs HEAD_DURATION + INTER_GAP_MS on every nudge."""
         self.tail_path = path
-        self.tail_start = max(head_start, sta_cut - TAIL_LEAD)
+        self.tail_start = from_time if from_time is not None else max(head_start, sta_cut - TAIL_LEAD)
         self.cut_time = sta_cut
         self.head_start_offset = head_start
         self.tail_end = tail_end
         self.beep_played = False
+        self.skip = skip
+        self.skipped = False
         pygame.mixer.music.stop()
         pygame.mixer.music.unload()
         pygame.mixer.music.load(str(path))
+        if melody_until is not None:
+            # Whole melody, head_start -> sta_cut. The only way to judge whether the
+            # recording holds COMPLETE loops, which the 3 s head cannot show.
+            try:
+                pygame.mixer.music.play(start=head_start)
+            except pygame.error:
+                pygame.mixer.music.play()
+            self.melody_until = melody_until
+            self.segment_started_ms = pygame.time.get_ticks()
+            self.state = "MELODY"
+            return
+        if tail_only:
+            try:
+                pygame.mixer.music.play(start=self.tail_start)
+            except pygame.error:
+                pygame.mixer.music.play()
+            self.segment_started_ms = pygame.time.get_ticks()
+            self.state = "TAIL"
+            return
         try:
             pygame.mixer.music.play(start=head_start)
         except pygame.error:
@@ -323,6 +419,12 @@ class Player:
 
     def tick(self) -> None:
         now = pygame.time.get_ticks()
+        if self.state == "MELODY":
+            pos = self.head_start_offset + (now - self.segment_started_ms) / 1000.0
+            if (self.melody_until is not None and pos >= self.melody_until) or not pygame.mixer.music.get_busy():
+                pygame.mixer.music.fadeout(FADE_MS)
+                self.state = "DONE"
+            return
         if self.state == "HEAD" and now >= self.head_stop_at:
             pygame.mixer.music.fadeout(FADE_MS)
             self.gap_until = now + INTER_GAP_MS + FADE_MS
@@ -341,6 +443,16 @@ class Player:
             self.state = "TAIL"
         elif self.state == "TAIL":
             pos = self.tail_start + (now - self.segment_started_ms) / 1000.0
+            # Pending splice: jump the gap so you hear the RESULT before committing it.
+            if self.skip and not self.skipped and pos >= self.skip[0]:
+                self.skipped = True
+                self.tail_start = self.skip[1]
+                try:
+                    pygame.mixer.music.play(start=self.skip[1])
+                except pygame.error:
+                    pass
+                self.segment_started_ms = pygame.time.get_ticks()
+                return
             # Marker beep at sta_cut moment (only once per playback)
             if not self.beep_played and pos >= self.cut_time:
                 self.beep.play()
@@ -500,30 +612,34 @@ def main() -> int:
     verdicts: dict[str, str] = {}  # sta -> "PASS"/"FAIL" — this session's verdicts
     player.begin(items[idx]["path"], items[idx]["sta_cut"])
 
-    def begin_with_trim() -> None:
-        """Start playback for current item, previewing any pending trim + cut nudge."""
+    def begin_with_trim(tail_only: bool = False) -> None:
+        """Start playback for current item, previewing any pending trim + cut nudge.
+
+        `tail_only` is set by the cut-tuning path — see Player.begin. R also uses it
+        whenever a cut nudge is pending, so the whole nudge→listen loop stays short;
+        once the cut is committed or discarded, R goes back to the full head+tail check."""
         item = items[idx]
         head_s = trim_start
         tail_e = item.get("duration", 0.0) - trim_end_offset if trim_end_offset > 0 else None
-        player.begin(item["path"], eff_cut(), head_start=head_s, tail_end=tail_e)
+        player.begin(item["path"], eff_cut(), head_start=head_s, tail_end=tail_e, tail_only=tail_only)
 
     btn_w, btn_h = 150, 56
     detail_x = LIST_W + 40
-    pass_rect = pygame.Rect(detail_x, WINDOW_H - 90, btn_w, btn_h)
-    fail_rect = pygame.Rect(detail_x + btn_w + 20, WINDOW_H - 90, btn_w, btn_h)
-    replay_rect = pygame.Rect(detail_x + 2 * (btn_w + 20), WINDOW_H - 90, btn_w, btn_h)
+    pass_rect = pygame.Rect(detail_x, ROW_BUTTONS, btn_w, btn_h)
+    fail_rect = pygame.Rect(detail_x + btn_w + 20, ROW_BUTTONS, btn_w, btn_h)
+    replay_rect = pygame.Rect(detail_x + 2 * (btn_w + 20), ROW_BUTTONS, btn_w, btn_h)
     # Note row sits above the seek bar; click anywhere in this rect to edit.
-    note_rect = pygame.Rect(detail_x, 134, WINDOW_W - detail_x - 20, 26)
+    note_rect = pygame.Rect(detail_x, ROW_NOTE, WINDOW_W - detail_x - PAD_X, NOTE_H)
     # Seek bar geometry is fixed — hoisted out of the draw block so mouse handling
     # (which runs earlier in the frame) can hit-test against it.
-    seek_rect = pygame.Rect(detail_x, 230, WINDOW_W - detail_x - 20, 18)
+    seek_rect = pygame.Rect(detail_x, ROW_SEEK, WINDOW_W - detail_x - PAD_X, SEEK_H)
     # Vertical grab band: the sta_cut marker is drawn taller than the bar itself.
     seek_grab_rect = seek_rect.inflate(0, 24)
     CUT_GRAB_PX = 14  # horizontal slop for grabbing the marker
     # Waveform strip, same [0, duration] span as the seek bar. Drag on it to select a
     # region, X/DEL to splice that region out — the manual path for artifacts (KAK) that
     # no automatic detector separates reliably on a hot source.
-    wave_rect = pygame.Rect(detail_x, 178, WINDOW_W - detail_x - 20, 44)
+    wave_rect = pygame.Rect(detail_x, ROW_WAVE, WINDOW_W - detail_x - PAD_X, WAVE_H)
     wave_sel: list[float] | None = None
     dragging_sel = False
 
@@ -538,6 +654,7 @@ def main() -> int:
     cut_pending: float | None = None
 
     dragging_cut = False  # True while the sta_cut marker is held with the mouse
+    cut_before_splice: dict[str, float] = {}  # sta -> sta_cut as it was before this session spliced it
 
     def eff_cut() -> float:
         """sta_cut in effect right now — the pending nudge if one is staged."""
@@ -702,6 +819,39 @@ def main() -> int:
         player.begin(src, new_cut)
         return True
 
+    def restore_original() -> bool:
+        """U — undo every splice made to this file, from the snapshot taken before the first one.
+
+        Restores the audio AND the sta_cut it had at that moment, so a file cannot be left with a
+        cut that refers to samples no longer in it. The snapshot lives in
+        audio_src/<line>/sta_wave_backup/ and predates this session's first splice of the file.
+        """
+        nonlocal wave_sel
+        item = items[idx]
+        src = Path(item["path"])
+        bak = Path("audio_src") / src.parent.parent.name / "sta_wave_backup" / src.name
+        if not bak.exists():
+            print(f"no snapshot for {src.name} — nothing spliced this session", file=sys.stderr)
+            return False
+        player.stop()
+        pygame.mixer.music.unload()
+        try:
+            shutil.copy2(bak, src)
+        except OSError as e:
+            print(f"restore failed for {src.name}: {e}", file=sys.stderr)
+            return False
+        try:
+            item["duration"] = pygame.mixer.Sound(str(src)).get_length()
+        except pygame.error:
+            pass
+        old_cut = cut_before_splice.pop(item["sta"], item["sta_cut"])
+        item["sta_cut"] = old_cut
+        written = persist_cut(item["sta"], old_cut)
+        wave_sel = None
+        print(f"restored {item['sta']} from snapshot  sta_cut -> {old_cut}  ({', '.join(written)})")
+        player.begin(src, old_cut, tail_only=True)
+        return True
+
     def splice_selection() -> bool:
         """Delete the highlighted region from the mp3 and shift sta_cut per sta-make Step 7.5.
 
@@ -724,6 +874,7 @@ def main() -> int:
         bak_dir.mkdir(parents=True, exist_ok=True)
         if not (bak_dir / src.name).exists():
             shutil.copy2(src, bak_dir / src.name)
+        cut_before_splice.setdefault(item["sta"], item["sta_cut"])
         player.stop()
         pygame.mixer.music.unload()
         tmp = src.with_suffix(".tmp.mp3")
@@ -754,7 +905,10 @@ def main() -> int:
         written = persist_cut(item["sta"], new_cut)
         print(f"spliced {item['sta']}: removed [{a:.3f},{b:.3f}] ({width*1000:.0f}ms)  " f"sta_cut {cut} → {new_cut}  ({', '.join(written)})")
         wave_sel = None
-        player.begin(src, new_cut)
+        # Tail only: the splice you just made is at the cut, so that is what you need
+        # to hear. Replaying the head costs HEAD_DURATION + the inter-gap on every pass,
+        # and an artifact routinely takes two or three passes to bracket cleanly.
+        player.begin(src, new_cut, tail_only=True)
         return True
 
     def list_row_at(pos: tuple[int, int]) -> int | None:
@@ -793,7 +947,8 @@ def main() -> int:
                         if idx + 1 < len(items):
                             jump_to(idx + 1)
                     elif ev.key == pygame.K_r:
-                        begin_with_trim()
+                        # Mid-nudge, R is part of the cut-tuning loop → tail only.
+                        begin_with_trim(tail_only=cut_pending is not None)
                     elif ev.key == pygame.K_UP:
                         jump_to(idx - 1)
                     elif ev.key == pygame.K_DOWN:
@@ -816,10 +971,15 @@ def main() -> int:
                         cut_pending = max(trim_start + 0.05, eff_cut() - step)
                     elif ev.key == pygame.K_RIGHT:
                         cut_pending = min(cur_dur - 0.05, eff_cut() + step)
+                    elif ev.key == pygame.K_m:
+                        # Whole melody [0 -> sta_cut]: is it a COMPLETE loop, or cut short?
+                        player.begin(items[idx]["path"], eff_cut(), head_start=trim_start, melody_until=eff_cut())
                     elif ev.key == pygame.K_c:
                         commit_cut()
                     elif ev.key in (pygame.K_x, pygame.K_DELETE):
                         splice_selection()
+                    elif ev.key == pygame.K_u:
+                        restore_original()
                     elif ev.key == pygame.K_z:
                         trim_start = 0.0
                         trim_end_offset = 0.0
@@ -846,6 +1006,9 @@ def main() -> int:
                         # Grabbed the sta_cut marker — drag to reposition.
                         dragging_cut = True
                         cut_pending = round(time_at_x(ev.pos[0]), 2)
+                    elif seek_rect.collidepoint(ev.pos):
+                        # Anywhere else on the timeline: play from there.
+                        player.begin(items[idx]["path"], eff_cut(), from_time=max(0.0, time_at_x(ev.pos[0])), tail_only=True)
                     else:
                         row = list_row_at(ev.pos)
                         if row is not None:
@@ -855,20 +1018,25 @@ def main() -> int:
                         elif fail_rect.collidepoint(ev.pos):
                             record("FAIL")
                         elif replay_rect.collidepoint(ev.pos):
-                            begin_with_trim()
+                            begin_with_trim(tail_only=cut_pending is not None)
             elif ev.type == pygame.MOUSEMOTION and dragging_cut:
                 cut_pending = round(time_at_x(ev.pos[0]), 2)
             elif ev.type == pygame.MOUSEMOTION and dragging_sel and wave_sel:
                 wave_sel[1] = wave_time_at_x(ev.pos[0])
             elif ev.type == pygame.MOUSEBUTTONUP and ev.button == 1 and dragging_cut:
                 dragging_cut = False
-                # Play the new placement straight away so the drag is self-verifying.
-                begin_with_trim()
+                # Play the new placement straight away so the drag is self-verifying —
+                # from sta_cut - TAIL_LEAD, not from the top: you just moved the cut,
+                # so the head is not what you are listening for.
+                begin_with_trim(tail_only=True)
             elif ev.type == pygame.MOUSEBUTTONUP and ev.button == 1 and dragging_sel:
                 dragging_sel = False
-                # a click (not a drag) clears the selection rather than leaving a zero-width one
+                # A click (not a drag) on the waveform is a SEEK: play from there. Dropping a
+                # zero-width selection was the old behaviour and threw the click away.
                 if wave_sel and abs(wave_sel[1] - wave_sel[0]) < 0.004:
+                    at = wave_sel[0]
                     wave_sel = None
+                    player.begin(items[idx]["path"], eff_cut(), from_time=max(0.0, at), tail_only=True)
 
         player.tick()
         item = items[idx]
@@ -904,21 +1072,21 @@ def main() -> int:
             screen.blit(font_small.render("▼", True, DIM), (LIST_W - 16, WINDOW_H - 16))
 
         # right: detail panel
-        panel_rect = pygame.Rect(LIST_W + 20, 20, WINDOW_W - LIST_W - 40, WINDOW_H - 130)
+        panel_rect = pygame.Rect(LIST_W + PAD_X, 20, WINDOW_W - LIST_W - 2 * PAD_X, ROW_BUTTONS - 34)
         pygame.draw.rect(screen, PANEL, panel_rect, border_radius=10)
 
         progress = font_h2.render(f"{idx + 1} / {len(items)}", True, DIM)
-        screen.blit(progress, (detail_x, 36))
+        screen.blit(progress, (detail_x, ROW_PROGRESS))
 
         head = font_h1.render(f"{item['stop']}", True, FG)
-        screen.blit(head, (detail_x, 72))
+        screen.blit(head, (detail_x, ROW_TITLE))
 
         if cut_pending is None:
             sub_txt, sub_col = f"{item['sta']}.mp3   sta_cut = {item['sta_cut']:.1f}s", DIM
         else:
             sub_txt = f"{item['sta']}.mp3   sta_cut = {item['sta_cut']:.1f}s → {cut_pending:.2f}s"
             sub_col = ACCENT
-        screen.blit(font_body.render(sub_txt, True, sub_col), (detail_x, 110))
+        screen.blit(font_body.render(sub_txt, True, sub_col), (detail_x, ROW_SUB))
 
         # Note row: ✎ icon + text. Click anywhere in the rect to edit.
         # States: editing (live buffer + cursor), resolved (dim + strike-through),
@@ -951,12 +1119,13 @@ def main() -> int:
             "HEAD": f"head  [0 → {HEAD_DURATION:.0f}s]",
             "GAP": "(silence)",
             "TAIL": f"tail  [sta_cut − {TAIL_LEAD:.0f}s → end]",
+            "MELODY": "melody  [0 → sta_cut]   full loops?",
             "DONE": "playback done — verdict?",
             "IDLE": "",
         }[player.state]
         phase_color = ACCENT if player.state in ("HEAD", "TAIL") else DIM
         phase = font_h2.render(phase_label, True, phase_color)
-        screen.blit(phase, (detail_x, 160))
+        screen.blit(phase, (detail_x, ROW_PHASE))
 
         # seek bar: full file timeline with head/cut-lead/voice tints, sta_cut marker, live cursor
         # Trim overlays (trim_start, trim_end_offset) show pending cuts; sta_cut display
@@ -972,13 +1141,13 @@ def main() -> int:
         )
 
         # Status line: pending trim and/or pending sta_cut nudge
-        status_y = 268
+        status_y = ROW_STATUS
         if trim_start > 0 or trim_end_offset > 0:
             preview_cut = round(eff_cut() - trim_start, 2)
             preview_dur = trim_end_pos - trim_start
             trim_msg = f"pending trim: -{trim_start:.2f}s start, -{trim_end_offset:.2f}s end → new dur {preview_dur:.2f}s, sta_cut {preview_cut:.2f}s"
             screen.blit(font_small.render(trim_msg, True, (250, 130, 130)), (detail_x, status_y))
-            status_y += 20
+            status_y += STATUS_LINE
         if cut_pending is not None:
             delta = cut_pending - item["sta_cut"]
             verb = "dragging" if dragging_cut else "pending"
@@ -990,13 +1159,14 @@ def main() -> int:
         else:
             hint_lines = [
                 "P pass   F fail   R replay   E edit note   ↑↓ navigate   Q quit",
-                "sta_cut: drag the marker or ←/→,  C commit    Trim [/] ,/.  T apply    Z reset",
+                "sta_cut: drag or ←/→, C commit   M whole melody   click timeline to play from there",
+                "waveform: drag + X splices it out,  U undo the file to its original    Trim [/] ,/.  T apply",
             ]
             for i, line in enumerate(hint_lines):
-                screen.blit(font_body.render(line, True, DIM), (detail_x, WINDOW_H - 148 + i * 24))
+                screen.blit(font_body.render(line, True, DIM), (detail_x, ROW_HINTS + i * HINT_LINE))
             hint = None
         if hint is not None:
-            screen.blit(hint, (detail_x, WINDOW_H - 130))
+            screen.blit(hint, (detail_x, ROW_HINTS))
 
         draw_button(screen, pass_rect, "PASS  (P)", PASS_COLOR, font_btn, pass_rect.collidepoint(mouse))
         draw_button(screen, fail_rect, "FAIL  (F)", FAIL_COLOR, font_btn, fail_rect.collidepoint(mouse))

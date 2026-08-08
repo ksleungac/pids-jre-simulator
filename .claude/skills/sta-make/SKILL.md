@@ -32,7 +32,7 @@ Take STA recordings (raw or already split) and produce simulator-ready per-segme
 
 **Calibrate before trusting it:** `uv run _dev_scripts/audio_id.py --selftest`. A check that has never been observed to fail has not been shown to work.
 
-**Before auditing an existing route, look for a prior by-ear verdict** in `audio_src/<line>/*_verify_results.json`. A set that already passed the ear is DONE, and re-auditing it with derived thresholds produces a list of defects that are not defects. That file is gitignored, so its absence proves nothing — ask rather than assume the set is unverified. (2026-08-08: audited an already-verified Saikyo, reported several "problems", then the ear returned 25/25 PASS with every inherited cut unchanged.)
+**Before auditing an existing route, read `audio/README.md`'s `Audio state` field for that line.** It is the committed record of what has been done and when. A set that already passed the ear is DONE; re-auditing it with derived thresholds produces a list of defects that are not defects. (2026-08-08: audited an already-verified Saikyo, reported several "problems", then the ear returned 25/25 PASS with every inherited cut unchanged.) `audio_src/<line>/*_verify_results.json` is the working file for a session in progress and is gitignored, so its absence proves nothing — the README is the record that travels.
 
 ## STA anatomy — what a raw recording actually contains
 
@@ -58,6 +58,32 @@ Which parts are optional:
 | KAK | yes | absent on clean sources; present across a whole line when the capture rig picked up the switch |
 | silence after KAK | **no** | if the burst runs straight into speech it is the voice's own onset, not a KAK |
 | voice | yes | some stations have no closing announcement at all (Chūō 立川: three loops then silence) |
+
+### Keep WHOLE loops — trim a trailing partial, at the data's best availability
+
+The melody plays on a loop and the attendant stops it wherever they stop it, so a recording holds
+whatever fraction it holds. The finished article keeps a **whole number of loops** and trims the
+leftover partial:
+
+| the recording has | ship |
+|---|---|
+| 1.5 loops | 1 loop — splice the trailing half away |
+| 2 loops | 2 loops — both are real content, keep them |
+| 1 loop | 1 loop |
+
+**Best availability, not a quality bar.** You never add music that is not in the recording, and a
+file is not *failed* for what its source lacks. This is a trim decision, not a recut trigger.
+
+**The ear decides where the boundary is.** Fractions guide, they do not rule: Saikyo's `JA24` came
+in at 77 % of its base loop and the author kept it. See § Pattern B for the splice mechanics and
+`audio_id.loop_repeat` for measuring a candidate repeat.
+
+**Recent spec, applied leniently to lines that predate it** (author, 2026-08-08). Older lines were
+never checked against it; record the state and move on rather than opening a pass. Apply it to new
+splits and to any line being re-cut anyway.
+
+Press **M** in `verify_sta_listen.py` to hear the whole melody `[0 → sta_cut]` — the 3 s head
+playback cannot show loop structure, which is why that key exists.
 
 **`sta_cut` belongs in the silence between KAK and voice** — after every artifact, before the first syllable. This is why **artifacts are spliced BEFORE `sta_cut` is validated** (Step 7.5 → 8 → 9): an unspliced KAK makes `detect_sta_cut.py` report `music_end == voice_start` (it flips at the click) and every LATE/EARLY verdict downstream is measured against the wrong landmark. A whole line reporting zero-gap is a **KAK diagnosis**, not a broken detector.
 
@@ -296,7 +322,29 @@ Continue to **Phase B**.
 
 ## Phase B — Validation + refinement
 
-This phase is **always run** — for new splits and for revisits to existing routes. The validator is a **gate**: no STA folder ships with out-of-gap `sta_cut` values, and no route ships without a by-ear pass.
+This phase is **always run** — for new splits and for revisits to existing routes. No route ships without a by-ear pass.
+
+### The order: open the verifier FIRST, and do the work in it
+
+**`verify_sta_listen.py` is the primary tool of this phase, not its final gate.** It shows the waveform, takes a drag-selection, splices it with `X`, retunes `sta_cut` on the same screen, and writes to every `route.json` referencing the file. Artifact removal and cut placement are one pass over one file, not three steps over a corpus.
+
+The detector-first order this skill used to prescribe — detect, propose a table, apply in bulk, then listen — is demoted to background (Steps 7.5, 9, 10). It has failed on every line that has actually been examined:
+
+| line | detector said | truth |
+|---|---|---|
+| keihin | no KAK (couldn't fire — source limited flat) | KAK throughout; a bulk auto-splice then came out under-tight on 40 of 45 files and was reverted |
+| saikyo | 0 of 24 files carry speech | 3 do — the hf/lf band came from another capture chain |
+| tokaido | 0 KAK across the line | **21 of 21** had one, quieter than the melody. Removed by eye in one sitting: 13.9 s, mean 662 ms/file |
+
+So: back up (Step 7) → open the verifier → per file, look at the waveform, splice what you see, tune the cut, PASS → record the result (Step 13). Reach for a detector only to triage a corpus too large to eyeball, and treat whatever it says as a candidate list.
+
+### Work the author did by hand is DONE
+
+A file the author spliced or whose cut the author placed by ear is finished. Do not re-measure it, do not propose a correction against it, and do not report a derived threshold disagreeing with it as a finding — the ear is the gate this whole phase exists to satisfy, and it has already run.
+
+This is the forward-looking half of `critical_lessons.md § "The instrument is not the artifact"`: that rule says the ear outranks the instrument when they conflict; this one says a finished hand edit is not a thing to re-open at all. (2026-08-08, author: *"i have confidence on things that are edited by me, so the standard workflows can change a bit."* The same day, an audit of an already-passed Saikyo produced a list of defects that were not defects.)
+
+**Before auditing anything, read `audio/README.md`'s `Audio state` field for the line** — it is the committed record of what has been done and when. A line marked verified is not re-audited; a line marked **unverified** is where the work is.
 
 ### Step 7 — Backup before destructive ops
 
@@ -310,7 +358,12 @@ cp audio/<line>/<diagram>/route.json audio_src/<line>/<diagram>/route.json.bak
 
 Mention this safety net in your pre-flight summary so the user knows you have a rollback path. Delete `audio_src/<line>/<diagram>/sta.bak/` and `route.json.bak` only after the by-ear gate (Step 11) passes.
 
-### Step 7.5 — Splice source-recording artifacts (optional, only if pattern is present)
+### Step 7.5 — Source-recording artifacts: WHAT they are (splice them in the verifier)
+
+> **The detection machinery below is background, not the procedure.** Read the anatomy and the two
+> patterns — they are what make the waveform readable — then remove the artifact by eye with the
+> verifier's drag-select + `X`. Every detector in this section has now reported clean on a line
+> that was full of them. Build no more of them.
 
 Some source recordings include capture artifacts that the standard trim/validate pipeline can't clean up. Two patterns surfaced so far (across multiple lines — patterns are recording-source-driven, not line-specific):
 
@@ -511,9 +564,11 @@ p.write_text(json.dumps(route, ensure_ascii=False, indent=4) + "\n", encoding="u
 
 Re-run Step 9 to confirm `in gap: N/N`.
 
-### Step 11 — By-ear verification gate
+### Step 11 — By-ear verification gate (and where the actual work happens)
 
-The detector is a feature-based heuristic; the by-ear gate is the ground truth. Run the GUI verifier:
+The detector is a feature-based heuristic; the by-ear gate is the ground truth — and per § "The
+order" above, this is also where artifacts get spliced and cuts get placed, not merely where
+finished work is checked. Run the GUI verifier:
 
 ```bash
 PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/<line>/<diagram>
@@ -659,7 +714,17 @@ anullsrc=channel_layout=stereo:sample_rate=22050,atrim=duration=<silence_dur>[si
 
 Run the audit script after each fix batch. The skill is "done" when 0 stops fall outside 250–400 ms.
 
-### Step 13 — Cleanup
+### Step 13 — Record the state, then clean up
+
+**Write what was done into `audio/README.md`'s `Audio state` field for the line** — the facets that
+matter are `sta_cut` checked by ear, KAK spliced (how many files, how much removed), silences
+trimmed, PA checked by ear, each with the date. Say **unverified** for anything not done; an absent
+verdict is not a pass.
+
+This is the only durable record. `audio_src/<line>/sta_verify_results.json` is the working file for
+a session in progress and is gitignored, so it never reaches a fresh clone or a second machine — a
+later session cannot otherwise tell "verified months ago" from "never touched", and will re-audit a
+finished corpus and report defects that are not defects. Update it in the same commit as the work.
 
 After by-ear gate passes (`PASS` for all stations or user explicitly accepts FAILs):
 
