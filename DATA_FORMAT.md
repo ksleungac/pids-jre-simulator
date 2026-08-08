@@ -547,8 +547,8 @@ Semantic split:
 ```json
 {
     "name": "国府津",
-    "pa": ["25", "26"],
-    "pa_at_station": ["27", "28"],
+    "pa": ["ninomiya-dep-down-futsu", "kozu-arr-down-futsu"],
+    "pa_at_station": ["kozu-stopping-1-down-futsu", "kozu-stopping-2-down-futsu"],
     "sta": ["JT14"],
     "sta_cut": 18,
     "time": 6,

@@ -90,13 +90,19 @@ different axes and which one a line uses is a property of that line:
 
 | `remarks.direction` | token | lines |
 |---|---|---|
-| 上り | `up` | chuo, keiyo |
+| 上り | `up` | chuo *(see below)*, keiyo |
 | 下り | `down` | sobu, nambu, saikyo, tokaido, takasaki |
 | 南行 / 北行 | `south` / `north` | keihin |
 | 内回り / 外回り | `inner` / `outer` | yamanote |
 
 `south`/`north` also match the `transfer_view` vocabulary already in `data/stations.json`
 (`JK_south`, `JA_north`, `JO_north`), so this is existing spelling, not a new one.
+
+**Chūō is the one line that does not carry the token** — 0 of its 53 PA slugs, against 100 %
+on the other eight. It was pooled 2026-07-26, before this rule was written, and retrofitting
+costs a rewrite of every file and both `pa` arrays for a collision that is not live (no 下り
+Chūō diagram exists). Recorded rather than silently tolerated, the same way keihin's and
+saikyo's STA tokens are: stamp `-up` when a reverse diagram actually lands.
 
 ### STA — direction only when nothing else discriminates the platform
 
@@ -247,14 +253,10 @@ its `dest`, so they carry no audio). 192 files → **123** (78 PA + 45 STA).
   coverage, collisions, type crossover, 次は/まもなく agreement, and that each `-dep` slug
   names the station `route.json` independently says is the previous stopping station.
 
-Still to do: STA KAK splice + `sta_cut` re-validation (see below), then drop the legacy
-folders:
-
-```
-rm -rf audio/keihin/1275A/pa audio/keihin/1275A/sta audio/keihin/727B/pa audio/keihin/727B/sta
-```
-
-Snapshot at `_audio_backup/keihin_pre_pool/` (112 MB, 192 files) until that lands.
+Finished 2026-08-08: the STA KAK was spliced by ear across 44 files (43.1 s removed, mean
+979 ms), cuts retuned in the same pass, 45/45 by ear, and the legacy folders are gone. 新子安
+(JK14) now plays 鶴見 (JK15)'s melody at 鶴見's cut — its own take failed the gate and is kept
+at `audio/_archive/keihin/sta/JK14-south.mp3`.
 
 Two PA files peak above 0 dBFS (`1275A/48` +2.7, `727B/39` +2.5 pre-pool) — pre-existing
 clipping, noted for the trim pass. Whisper garbled four files (`727B/39`, `50`, `53`,

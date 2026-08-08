@@ -235,7 +235,12 @@ ROOT = Path('D:/pids_jre_simulator')   # absolute path — cwd persists across B
 route = json.load(open(ROOT / 'audio/<line>/<diagram>/route.json', encoding='utf-8'))
 pa_dir = ROOT / 'audio/<line>/pa'
 on_disk = {p.stem for p in pa_dir.glob('*.mp3')} if pa_dir.exists() else set()
-refs = {x for stop in route['stops'] for x in stop.get('pa', [])}
+# Union across every diagram on the line (the pool is shared) AND include pa_at_station,
+# or every other diagram's audio plus this line's at-station tracks report as 'unused'.
+refs = set()
+for rj in sorted((ROOT / 'audio/<line>').glob('*/route.json')):
+    route = json.load(open(rj, encoding='utf-8'))
+    refs |= {x for stop in route['stops'] for k in ('pa', 'pa_at_station') for x in stop.get(k, [])}
 print(f'pa: refs={len(refs)} disk={len(on_disk)} missing={sorted(refs-on_disk)} unused={sorted(on_disk-refs)}')
 "
 ```
@@ -304,8 +309,8 @@ Fast -40 dB gate after trimming. Expect 0 flags on low-noise files; a few flags 
 #### Step 7.6 — By-ear verification
 
 ```bash
-uv run python _dev_scripts/verify_pa_listen.py audio/<line>/<diagram>
-uv run python _dev_scripts/verify_pa_listen.py audio/<line>          # pooled line
+uv run python _dev_scripts/verify_pa_listen.py audio/<line>              # every shipped line
+uv run python _dev_scripts/verify_pa_listen.py audio/_joban/tsuchiura    # per-diagram layout only
 ```
 
 Plays first 3s of each PA segment (head), then last 3s before EOF (tail) — sequential auto-playback so you hear both ends. Seeks via `pygame.mixer.music.play(start=offset)` (same mechanism as STA verifier). PASS/FAIL per file, notes editable. Verdicts persist to `audio_src/<line>/pa_verify_results.json`. Includes both `pa` and `pa_at_station` entries.

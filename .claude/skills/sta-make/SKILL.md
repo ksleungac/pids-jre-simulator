@@ -299,17 +299,25 @@ PYTHONUTF8=1 python -c "
 import json
 from pathlib import Path
 ROOT = Path('D:/pids_jre_simulator')   # absolute path — cwd persists across Bash calls
-route = json.load(open(ROOT / 'audio/<line>/<diagram>/route.json', encoding='utf-8'))
 sta_dir = ROOT / 'audio/<line>/sta'
 on_disk = {p.stem for p in sta_dir.glob('*.mp3')} if sta_dir.exists() else set()
-refs = {x for stop in route['stops'] for x in stop.get('sta', [])}
+# Union across EVERY diagram on the line — the pool is shared, so one diagram's refs are
+# not the whole picture. Diffing a single diagram reports every OTHER diagram's audio as
+# 'unused' (measured: 21 files for chuo/1654T, 42 for tokaido/3535E), and the relocate
+# recipe below would then move shipped audio into _archive.
+refs = set()
+for rj in sorted((ROOT / 'audio/<line>').glob('*/route.json')):
+    route = json.load(open(rj, encoding='utf-8'))
+    refs |= {x for stop in route['stops'] for x in stop.get('sta', [])}
 print(f'sta refs={len(refs)}  on_disk={len(on_disk)}')
 print(f'missing: {sorted(refs - on_disk)}')
 print(f'unused on disk: {sorted(on_disk - refs)}')
 "
 ```
 
-**Expected unused on disk: none** — unused recordings (passing-station mp3s, other-platform takes) should already be in `audio/_archive/`. If a file appears in "unused" here, it's a leftover that needs to be relocated:
+`validate_data.py` already does this correctly through `resolve_audio_root` — this check is the quick local form, not a second gate.
+
+**Expected unused on disk: none** — unused recordings (passing-station mp3s, other-platform takes) should already be in `audio/_archive/`. If a file appears in "unused" *after* the union above, it's a genuine leftover:
 
 ```bash
 mkdir -p audio/_archive/<line>/<diagram>/sta
@@ -351,12 +359,12 @@ This is the forward-looking half of `critical_lessons.md § "The instrument is n
 `trim_sta_silence.py` (next step) modifies mp3s in place (lossless lead/trail copy + lossy mid-gap re-encode) and patches route.json. **Snapshot first, into `audio_src/` so the backups stay gitignored**:
 
 ```bash
-mkdir -p audio_src/<line>/<diagram>
-cp -r audio/<line>/sta audio_src/<line>/<diagram>/sta.bak
-cp audio/<line>/<diagram>/route.json audio_src/<line>/<diagram>/route.json.bak
+mkdir -p audio_src/<line>
+cp -r audio/<line>/sta audio_src/<line>/sta.bak
+cp audio/<line>/*/route.json audio_src/<line>/          # every diagram on the line
 ```
 
-Mention this safety net in your pre-flight summary so the user knows you have a rollback path. Delete `audio_src/<line>/<diagram>/sta.bak/` and `route.json.bak` only after the by-ear gate (Step 11) passes.
+Mention this safety net in your pre-flight summary so the user knows you have a rollback path. Delete `audio_src/<line>/sta.bak/` and the route.json copies only after the by-ear gate (Step 11) passes. The verifier takes its own per-file snapshot into `audio_src/<line>/sta_wave_backup/` before the first splice of each file, which is what `U` restores from.
 
 ### Step 7.5 — Source-recording artifacts: WHAT they are (splice them in the verifier)
 
@@ -571,8 +579,8 @@ order" above, this is also where artifacts get spliced and cuts get placed, not 
 finished work is checked. Run the GUI verifier:
 
 ```bash
-PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/<line>/<diagram>
-PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/<line>          # pooled line
+PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/<line>              # every shipped line
+PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/_joban/tsuchiura    # per-diagram layout only
 ```
 
 **Pooled lines**: pass the LINE folder. The verifier finds `<line>/*/route.json`, merges the STA union across diagrams (ordered by the diagram referencing the most), and warns if two diagrams disagree on a shared file's `sta_cut`. Every write — interactive trim or cut nudge — lands in **all** route.json files referencing that mp3; patching one desyncs the pool. See `WIP_audio_pooling.md § Tooling must be pool-aware`.
@@ -593,8 +601,11 @@ The window has a clickable sidebar listing all STAs with their current verdict (
 | Key | Action |
 |---|---|
 | drag marker / `←` `→` | move `sta_cut` |
-| `C` | commit `sta_cut` to every route.json referencing the file |
+| `C` | commit `sta_cut` to every route.json referencing the file — and to every STOP within one, since a slug can be referenced twice (yamanote's loop, keihin's 新子安→鶴見, nambu's 矢川/西国立) |
 | `Z` | discard pending cut + trim |
+| drag on the **waveform**, then `X` / `Del` | **splice the selected region out of the mp3** and shift `sta_cut` accordingly. This is the primary artifact tool — § "The order" |
+| `U` | **undo** — restore the file AND its pre-splice `sta_cut` from the snapshot in `audio_src/<line>/sta_wave_backup/`, taken before this session's first splice of that file |
+| `M` | play the whole melody `[0 → sta_cut]` — the only way to judge whether it holds complete loops (§ "Keep WHOLE loops"); the 3 s head cannot show it |
 
 **Interactive trim** (for files where the propose+splice pipeline can't cleanly fix the issue — e.g., per-file stutters, duplicate intros, idiosyncratic snippets):
 
@@ -611,7 +622,7 @@ The trim regions show as red overlays on the seek bar. Status line below the bar
 **Single-station retest** when iterating on a fix:
 
 ```bash
-PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/<line>/<diagram> --only kumagaya
+PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/<line> --only kumagaya
 ```
 
 Results merge into `audio_src/<line>/sta_verify_results.json` (auto-creating the dir under the gitignored `audio_src/` tree) — verdicts for stations not tested this run are preserved from the prior JSON. Read this file to pick up FAILs:

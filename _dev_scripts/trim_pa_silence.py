@@ -117,7 +117,7 @@ def trim_file(path: Path, onset: float, end: float, dur: float) -> tuple[bool, b
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("pa_dir", type=Path, help="audio/<line>/<diagram>/pa")
+    ap.add_argument("pa_dir", type=Path, help="audio/<line>/pa")
     args = ap.parse_args()
 
     if not args.pa_dir.exists():

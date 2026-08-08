@@ -8,8 +8,12 @@ Click/key in PASS or FAIL per station; final report to stdout.
     uv run python _dev_scripts/verify_sta_listen.py audio/takasaki
 
 Keys: P=Pass  F=Fail  R=Replay  E=Edit note  N=Next without verdict  Q/Esc=Quit
-      ←/→ move sta_cut  C commit sta_cut
+      ←/→ or drag the marker = move sta_cut    C = commit it
+      drag on the WAVEFORM then X/Del = splice that region out of the mp3
+      U = undo — restore the file and its pre-splice sta_cut from the snapshot
+      M = play the whole melody [0 → sta_cut], to judge complete loops
       [/] adjust start-trim  ,/. adjust end-trim  T apply trim  Z reset pending
+      click either timeline to play from that point
       (hold Shift while adjusting for fine 0.01s steps)
 
 Adjusting sta_cut: ←/→ nudge the cut marker, R replays so you hear the new

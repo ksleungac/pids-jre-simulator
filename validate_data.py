@@ -29,6 +29,17 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 SUFFIX_RE = re.compile(r"_[A-Z]{2,}$")
 AUDIO_ROOT = Path("audio")
+
+
+def _is_within(child: Path, parent: Path) -> bool:
+    """True if `child` is `parent` or lies under it. Path relation, not string prefix."""
+    try:
+        child.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
 DATA_ROOT = Path("data")
 LINE_ICONS_DIR = DATA_ROOT / "line_icons"
 
@@ -554,7 +565,10 @@ def check_route(route_path: Path, translations: dict, train_types: dict, issues:
             issues.append((rel, f"audio_root must be a string, got {type(raw_root).__name__}"))
         else:
             resolved = (route_path.parent / raw_root).resolve()
-            if not str(resolved).startswith(str(AUDIO_ROOT.resolve())):
+            # Path containment, NOT a string prefix: "../../../audio_src/<line>" startswith
+            # ".../audio" and would have passed, resolving into this workflow's own gitignored
+            # working tree — clean on the authoring machine, no audio in the shipped zip.
+            if not _is_within(resolved, AUDIO_ROOT.resolve()):
                 issues.append((rel, f"audio_root {raw_root!r} escapes audio/ (resolves to {resolved})"))
             elif not resolved.is_dir():
                 issues.append((rel, f"audio_root {raw_root!r} is not a directory ({resolved})"))
@@ -656,6 +670,37 @@ def check_route_loads(route_path: Path, station_db: dict, issues: list) -> None:
         issues.append((rel, f"route_loader.finalize_route raised {type(e).__name__}: {e}"))
 
 
+def check_pool_sta_cut_sync(route_paths: list, issues: list) -> None:
+    """One mp3 carries ONE sta_cut, wherever it is referenced.
+
+    That is the shared pool's defining invariant, and it has already failed twice: a
+    `break` in verify_sta_listen's writer half-patched a slug referenced at two stops in
+    one route.json, leaving nambu's 矢川/西国立 melody at two different cuts. Until now the
+    only enforcement was a stderr warning inside the by-ear GUI, which fires only while a
+    human happens to be running it — never on the shipped-data gate.
+
+    Scope is per LINE, since a pool is per line: the same slug on two different lines is
+    two different files.
+    """
+    by_line: dict[str, dict[str, dict[float, list[str]]]] = {}
+    for rp in route_paths:
+        try:
+            data = load(rp)
+        except Exception:
+            continue  # malformed route.json is already reported by check_route
+        line = rp.parent.parent.name
+        for stop in data.get("stops") or []:
+            cut = stop.get("sta_cut")
+            for slug in stop.get("sta") or []:
+                where = f"{rp.parent.name}:{stop.get('name')}"
+                by_line.setdefault(line, {}).setdefault(slug, {}).setdefault(cut, []).append(where)
+    for line, slugs in sorted(by_line.items()):
+        for slug, cuts in sorted(slugs.items()):
+            if len(cuts) > 1:
+                detail = "; ".join(f"{c} at {', '.join(w)}" for c, w in sorted(cuts.items(), key=lambda kv: str(kv[0])))
+                issues.append((f"{line}", f"sta/{slug}.mp3 has {len(cuts)} different sta_cut values — one file, one cut: {detail}"))
+
+
 def main():
     quiet = "--quiet" in sys.argv
     route_arg = None
@@ -705,6 +750,8 @@ def main():
         check_route_loads(route_path, translations, issues)
         check_route_readings(route_path, translations, issues)
         check_route_transfer_view(route_path, stations, issues)
+
+    check_pool_sta_cut_sync(route_paths if route_arg is None else [route_arg], issues)
 
     if not issues:
         if not quiet and route_arg is None:

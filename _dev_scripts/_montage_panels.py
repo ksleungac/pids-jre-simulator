@@ -31,7 +31,7 @@ app.S_HEIGHT = pkg.S_HEIGHT
 UPPER_HEIGHT = pkg.UPPER_HEIGHT
 S_HEIGHT = pkg.S_HEIGHT
 
-sim = PASimulator("audio/yamanote", preview=True)
+sim = PASimulator("audio/yamanote/1208G", preview=True)
 
 # Pin lower LCD to the 5-station (EIGHT) slot; lock the cycler.
 sim.lower._current_slot = sim.lower._SLOT_EIGHT

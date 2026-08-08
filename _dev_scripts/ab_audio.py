@@ -8,7 +8,7 @@ least once. So: play them, decide, move on.
 
 Usage
     uv run _dev_scripts/ab_audio.py --manifest _audio_backup/chuo_pa_ab.json
-    uv run _dev_scripts/ab_audio.py audio/chuo/pa/33.mp3 audio/chuo/pa/24.mp3
+    uv run _dev_scripts/ab_audio.py audio/chuo/pa/kanda-arr-1654T.mp3 audio/chuo/pa/kanda-arr-916H.mp3
 
 Manifest format — a list of pairs, optional label:
     [{"label": "神田 arr", "a": "audio/.../33.mp3", "b": "audio/.../24.mp3"}, ...]

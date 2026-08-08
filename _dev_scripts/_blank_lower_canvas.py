@@ -31,7 +31,7 @@ app.S_HEIGHT = e235_0.S_HEIGHT
 out = sys.argv[1] if len(sys.argv) > 1 else "_blank_lower_e235_0.png"
 stop = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 
-sim = PASimulator("audio/yamanote", preview=True)
+sim = PASimulator("audio/yamanote/1208G", preview=True)
 sim.jump_to_stop(stop)
 sim.upper.set_state(sim.state.curr_stop, sim.state.cnt_pa, at_station=sim.state.at_station)
 sim.upper.mode_cycler.current_mode = DisplayMode.KANJI

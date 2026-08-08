@@ -293,7 +293,7 @@ After split + route.json update lands: if this work surfaced anything line-speci
 
 - **Variant / arrangement modeling** — current scheme captures song identity, not recording identity. If/when fidelity matters, extend the convention or add a sidecar then. Don't pre-build for it.
 - **Cross-route audio sharing** (e.g., 東京 STA used on Sobu AND Tokaido) — for now, duplicate the file. If it becomes painful, factor out an `audio/_shared/` later.
-- **Renaming legacy numbered routes** (`audio/keiyo/`, `audio/chuo/` use `1.mp3`, `2.mp3`, etc.) — the renderer treats both conventions identically. Don't migrate.
+- **Nothing** — numeric slugs were retired on every shipped line by the 2026-08-08 pooling. They survive only under `audio/_joban/` and `audio/_mock/`.
 - **Audio normalization / loudness leveling** — out of this skill. The simulator does -15 LUFS at runtime.
 
 ## Related

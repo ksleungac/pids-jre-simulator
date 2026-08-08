@@ -48,11 +48,25 @@ def main() -> int:
     got = resolve_audio_root(str(wd), {"audio_root": ".."})
     check(got.name == "tokaido", f"str work_dir must behave like Path, got {got}")
 
-    # THE contract: exactly one root, no search order. A route declaring the pool must NOT
-    # also see the diagram folder — a fallback would let a missing file resolve to a
+    # THE contract: exactly one root, NO search order. The property that distinguishes it
+    # from a fallback design is that the answer depends only on the declared value — never
+    # on what happens to be on disk. A fallback would let a missing file resolve to a
     # different root and play the WRONG announcement (critical_lessons.md §2).
-    pooled = resolve_audio_root(wd, {"audio_root": ".."})
-    check(pooled != wd.resolve(), "pooled root must not equal the diagram folder — that would be a search order")
+    #
+    # An earlier version of this test asserted `pooled != wd.resolve()`, which is true by
+    # construction for any implementation — a claim about pathlib, not about this function.
+    # A resolver implementing exactly the forbidden fallback passed it.
+    empty = Path("audio/_nonexistent_line/_nonexistent_diagram")
+    declared = resolve_audio_root(empty, {"audio_root": ".."})
+    check(
+        declared == (empty / "..").resolve(),
+        f"root must follow the DECLARED value even when that folder holds no pa/ or sta/ "
+        f"(a fallback would divert to the work_dir here), got {declared}",
+    )
+    check(
+        Path(declared) != empty.resolve(),
+        "root must not fall back to the work_dir when the declared pool is empty — that is a search order",
+    )
 
     for msg in FAILURES:
         print(f"  FAIL: {msg}")

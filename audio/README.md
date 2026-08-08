@@ -47,7 +47,8 @@ The whole-loop rule (keep a whole number of melody loops, trim a trailing partia
 ### JC — Chuo (中央線)
 
 - **Name:** 中央線 / Chūō Line
-- **Diagrams:** `1654T`, `916H`
+- **Diagrams:** `1654T` (快速), `916H` (中央特快)
+- **Audio layout:** pooled — `audio/chuo/{pa,sta}/` with `"audio_root": ".."`. **This is the one line whose PA carries no direction token** (0 of 53 files, against 100 % on every other line): it was pooled 2026-07-26, before that rule existed, and retrofitting means touching every file and both `pa` arrays again. It is 上り, so a reverse (下り) Chūō diagram would collide — stamp `-up` across the 53 slugs at that point, not before. Two takes of the same announcement are kept apart by a `-{diagram}` tier (`kanda-arr-1654T` / `kanda-arr-916H`), the only line using that form; every other line's split pairs differ by train type instead.
 - **Audio state:** STA — trimmed through `sta-make` Phase B and verified by ear 23/23 on 2026-07-25; 国立's incomplete 2nd loop spliced; no KAK on this source. PA — lead-trimmed and verified by ear 53/53 on 2026-07-25.
 
 ### JE — Keiyo (京葉線)
