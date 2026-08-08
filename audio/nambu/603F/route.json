@@ -1,219 +1,344 @@
 {
     "route": "南武線",
+    "audio_root": "..",
     "line_code": "JN",
-    "color": [255, 212, 0],
+    "color": [
+        255,
+        212,
+        0
+    ],
     "type": "各駅停車",
     "remarks": {
         "direction": "下り",
         "through": "",
         "note": ""
     },
-    "type_color": [0, 0, 0],
+    "type_color": [
+        0,
+        0,
+        0
+    ],
     "dest": "立川",
     "stops": [
         {
             "name": "川崎",
             "pa": [],
-            "sta": ["Kawasaki"],
-            "sta_cut": 16,
+            "sta": [
+                "Kawasaki"
+            ],
+            "sta_cut": 13.23,
             "time": 0,
             "sta_code": "JN01"
         },
         {
             "name": "尻手",
-            "pa": ["1"],
-            "sta": ["Shitte"],
-            "sta_cut": 8,
+            "pa": [
+                "kawasaki-dep-down-kakueki"
+            ],
+            "sta": [
+                "Shitte"
+            ],
+            "sta_cut": 7.68,
             "time": 2,
             "sta_code": "JN02"
         },
         {
             "name": "矢向",
-            "pa": ["2"],
-            "sta": ["Yako"],
-            "sta_cut": 10,
+            "pa": [
+                "shitte-dep-down-kakueki"
+            ],
+            "sta": [
+                "Yako"
+            ],
+            "sta_cut": 7.52,
             "time": 2,
             "sta_code": "JN03"
         },
         {
             "name": "鹿島田",
-            "pa": ["3","4"],
-            "sta": ["Kashimada"],
-            "sta_cut": 10,
+            "pa": [
+                "yako-dep-down-kakueki",
+                "kashimada-arr-down-kakueki"
+            ],
+            "sta": [
+                "Kashimada"
+            ],
+            "sta_cut": 9.51,
             "time": 2,
             "sta_code": "JN04"
         },
         {
             "name": "平間",
-            "pa": ["5"],
-            "sta": ["Hirama"],
-            "sta_cut": 9,
+            "pa": [
+                "kashimada-dep-down-kakueki"
+            ],
+            "sta": [
+                "Hirama"
+            ],
+            "sta_cut": 7.46,
             "time": 2,
             "sta_code": "JN05"
         },
         {
             "name": "向河原",
-            "pa": ["6","7"],
-            "sta": ["Mukaigawara"],
-            "sta_cut": 10,
+            "pa": [
+                "hirama-dep-down-kakueki",
+                "mukaigawara-arr-down-kakueki"
+            ],
+            "sta": [
+                "Mukaigawara"
+            ],
+            "sta_cut": 7.3,
             "time": 2,
             "sta_code": "JN06"
         },
         {
             "name": "武蔵小杉",
-            "pa": ["8"],
-            "sta": ["Musashi-Kosugi"],
-            "sta_cut": 15,
+            "pa": [
+                "mukaigawara-dep-down-kakueki"
+            ],
+            "sta": [
+                "Musashi-Kosugi"
+            ],
+            "sta_cut": 13.0,
             "time": 2,
             "sta_code": "JN07"
         },
         {
             "name": "武蔵中原",
-            "pa": ["9","10"],
-            "sta": ["Musashi-Nakahara"],
-            "sta_cut": 15,
+            "pa": [
+                "musashi-kosugi-dep-down-kakueki",
+                "musashi-nakahara-arr-down-kakueki"
+            ],
+            "sta": [
+                "Musashi-Nakahara"
+            ],
+            "sta_cut": 13.04,
             "time": 3,
             "sta_code": "JN08"
         },
         {
             "name": "武蔵新城",
-            "pa": ["11", "12"],
-            "sta": ["Musashi-Shinjo"],
-            "sta_cut": 9,
+            "pa": [
+                "musashi-nakahara-dep-down-kakueki",
+                "musashi-shinjo-arr-down-kakueki"
+            ],
+            "sta": [
+                "Musashi-Shinjo"
+            ],
+            "sta_cut": 7.31,
             "time": 2,
             "sta_code": "JN09"
         },
         {
             "name": "武蔵溝ノ口",
-            "pa": ["13", "14"],
-            "sta": ["Musashi-Mizonokuchi"],
-            "sta_cut": 8,
+            "pa": [
+                "musashi-shinjo-dep-down-kakueki",
+                "musashi-mizonokuchi-arr-down-kakueki"
+            ],
+            "sta": [
+                "Musashi-Mizonokuchi"
+            ],
+            "sta_cut": 5.52,
             "time": 3,
             "sta_code": "JN10"
         },
         {
             "name": "津田山",
-            "pa": ["15"],
-            "sta": ["Tsudayama"],
-            "sta_cut": 11,
+            "pa": [
+                "musashi-mizonokuchi-dep-down-kakueki"
+            ],
+            "sta": [
+                "Tsudayama"
+            ],
+            "sta_cut": 8.23,
             "time": 2,
             "sta_code": "JN11"
         },
         {
             "name": "久地",
-            "pa": ["16"],
-            "sta": ["Kuji"],
-            "sta_cut": 10,
+            "pa": [
+                "tsudayama-dep-down-kakueki"
+            ],
+            "sta": [
+                "Kuji"
+            ],
+            "sta_cut": 8.22,
             "time": 2,
             "sta_code": "JN12"
         },
         {
             "name": "宿河原",
-            "pa": ["17"],
-            "sta": ["Shukugawara"],
-            "sta_cut": 15,
+            "pa": [
+                "kuji-dep-down-kakueki"
+            ],
+            "sta": [
+                "Shukugawara"
+            ],
+            "sta_cut": 12.31,
             "time": 2,
             "sta_code": "JN13"
         },
         {
             "name": "登戸",
-            "pa": ["18"],
-            "sta": ["Noborito"],
-            "sta_cut": 15,
+            "pa": [
+                "shukugawara-dep-down-kakueki"
+            ],
+            "sta": [
+                "Noborito"
+            ],
+            "sta_cut": 11.77,
             "time": 2,
             "sta_code": "JN14"
         },
         {
             "name": "中野島",
-            "pa": ["19","20"],
-            "sta": ["Nakanoshima"],
-            "sta_cut": 10,
+            "pa": [
+                "noborito-dep-down-kakueki",
+                "nakanoshima-arr-down-kakueki"
+            ],
+            "sta": [
+                "Nakanoshima"
+            ],
+            "sta_cut": 8.31,
             "time": 3,
             "sta_code": "JN15"
         },
         {
             "name": "稲田堤",
-            "pa": ["21","22"],
-            "sta": ["Inadazutsumi"],
-            "sta_cut": 11,
+            "pa": [
+                "nakanoshima-dep-down-kakueki",
+                "inadazutsumi-arr-down-kakueki"
+            ],
+            "sta": [
+                "Inadazutsumi"
+            ],
+            "sta_cut": 8.24,
             "time": 2,
             "sta_code": "JN16"
         },
         {
             "name": "矢野口",
-            "pa": ["23","24"],
-            "sta": ["Yanokuchi"],
-            "sta_cut": 15,
+            "pa": [
+                "inadazutsumi-dep-down-kakueki",
+                "yanokuchi-arr-down-kakueki"
+            ],
+            "sta": [
+                "Yanokuchi"
+            ],
+            "sta_cut": 12.18,
             "time": 2,
             "sta_code": "JN17"
         },
         {
             "name": "稲城長沼",
-            "pa": ["25","26"],
-            "sta": ["Inaginaganuma"],
-            "sta_cut": 12,
+            "pa": [
+                "yanokuchi-dep-down-kakueki",
+                "inaginaganuma-arr-down-kakueki"
+            ],
+            "sta": [
+                "Inaginaganuma"
+            ],
+            "sta_cut": 10.0,
             "time": 3,
             "sta_code": "JN18"
         },
         {
             "name": "南多摩",
-            "pa": ["27","28"],
-            "sta": ["Minamitama"],
-            "sta_cut": 12,
+            "pa": [
+                "inaginaganuma-dep-down-kakueki",
+                "minamitama-arr-down-kakueki"
+            ],
+            "sta": [
+                "Minamitama"
+            ],
+            "sta_cut": 9.35,
             "time": 2,
             "sta_code": "JN19"
         },
         {
             "name": "府中本町",
-            "pa": ["29","30"],
-            "sta": ["Fuchu-Honmachi"],
-            "sta_cut": 11,
+            "pa": [
+                "minamitama-dep-down-kakueki",
+                "fuchu-honmachi-arr-down-kakueki"
+            ],
+            "sta": [
+                "Fuchu-Honmachi"
+            ],
+            "sta_cut": 8.53,
             "time": 3,
             "sta_code": "JN20"
         },
         {
             "name": "分倍河原",
-            "pa": ["31"],
-            "sta": ["Bubaigawara"],
-            "sta_cut": 12,
+            "pa": [
+                "fuchu-honmachi-dep-down-kakueki"
+            ],
+            "sta": [
+                "Bubaigawara"
+            ],
+            "sta_cut": 9.39,
             "time": 2,
             "sta_code": "JN21"
         },
         {
             "name": "西府",
-            "pa": ["32","33"],
-            "sta": ["Nishifu"],
-            "sta_cut": 12,
+            "pa": [
+                "bubaigawara-dep-down-kakueki",
+                "nishifu-arr-down-kakueki"
+            ],
+            "sta": [
+                "Nishifu"
+            ],
+            "sta_cut": 9.06,
             "time": 2,
             "sta_code": "JN22"
         },
         {
             "name": "谷保",
-            "pa": ["34","35"],
-            "sta": ["Yaho"],
-            "sta_cut": 12,
+            "pa": [
+                "nishifu-dep-down-kakueki",
+                "yaho-arr-down-kakueki"
+            ],
+            "sta": [
+                "Yaho"
+            ],
+            "sta_cut": 9.44,
             "time": 3,
             "sta_code": "JN23"
         },
         {
             "name": "矢川",
-            "pa": ["36","37"],
-            "sta": ["Yagawa_Nishi-Kunitachi"],
-            "sta_cut": 12,
+            "pa": [
+                "yaho-dep-down-kakueki",
+                "yagawa-arr-down-kakueki"
+            ],
+            "sta": [
+                "Yagawa_Nishi-Kunitachi"
+            ],
+            "sta_cut": 9.42,
             "time": 2,
             "sta_code": "JN24"
         },
         {
             "name": "西国立",
-            "pa": ["38","39"],
-            "sta": ["Yagawa_Nishi-Kunitachi"],
+            "pa": [
+                "yagawa-dep-down-kakueki",
+                "nishi-kunitachi-arr-down-kakueki"
+            ],
+            "sta": [
+                "Yagawa_Nishi-Kunitachi"
+            ],
             "sta_cut": 12,
             "time": 2,
             "sta_code": "JN25"
         },
         {
             "name": "立川",
-            "pa": ["40","41"],
+            "pa": [
+                "nishi-kunitachi-dep-down-kakueki",
+                "tachikawa-arr-down-kakueki"
+            ],
             "time": 2,
             "sta_code": "JN26"
         }

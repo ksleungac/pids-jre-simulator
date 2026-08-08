@@ -1,21 +1,32 @@
 {
     "route": "南武線",
+    "audio_root": "..",
     "line_code": "JN",
-    "color": [255, 212, 0],
+    "color": [
+        255,
+        212,
+        0
+    ],
     "type": "快速",
     "remarks": {
         "direction": "下り",
         "through": "",
         "note": ""
     },
-    "type_color": [206, 0, 0],
+    "type_color": [
+        206,
+        0,
+        0
+    ],
     "dest": "立川",
     "stops": [
         {
             "name": "川崎",
             "pa": [],
-            "sta": ["Kawasaki"],
-            "sta_cut": 16,
+            "sta": [
+                "Kawasaki"
+            ],
+            "sta_cut": 13.23,
             "time": 0,
             "sta_code": "JN01"
         },
@@ -31,9 +42,14 @@
         },
         {
             "name": "鹿島田",
-            "pa": ["1","2"],
-            "sta": ["Kashimada"],
-            "sta_cut": 10,
+            "pa": [
+                "kawasaki-dep-down-kaisoku",
+                "kashimada-arr-down-kaisoku"
+            ],
+            "sta": [
+                "Kashimada"
+            ],
+            "sta_cut": 9.51,
             "time": 5,
             "sta_code": "JN04"
         },
@@ -49,33 +65,53 @@
         },
         {
             "name": "武蔵小杉",
-            "pa": ["3","4"],
-            "sta": ["Musashi-Kosugi"],
-            "sta_cut": 15,
+            "pa": [
+                "kashimada-dep-down-kaisoku",
+                "musashi-kosugi-arr-down-kaisoku"
+            ],
+            "sta": [
+                "Musashi-Kosugi"
+            ],
+            "sta_cut": 13.0,
             "time": 4,
             "sta_code": "JN07"
         },
         {
             "name": "武蔵中原",
-            "pa": ["5","6"],
-            "sta": ["Musashi-Nakahara"],
-            "sta_cut": 15,
+            "pa": [
+                "musashi-kosugi-dep-down-kaisoku",
+                "musashi-nakahara-arr-down-kaisoku"
+            ],
+            "sta": [
+                "Musashi-Nakahara"
+            ],
+            "sta_cut": 13.04,
             "time": 3,
             "sta_code": "JN08"
         },
         {
             "name": "武蔵新城",
-            "pa": ["7", "8"],
-            "sta": ["Musashi-Shinjo"],
-            "sta_cut": 9,
+            "pa": [
+                "musashi-nakahara-dep-down-kaisoku",
+                "musashi-shinjo-arr-down-kaisoku"
+            ],
+            "sta": [
+                "Musashi-Shinjo"
+            ],
+            "sta_cut": 7.31,
             "time": 2,
             "sta_code": "JN09"
         },
         {
             "name": "武蔵溝ノ口",
-            "pa": ["9", "10"],
-            "sta": ["Musashi-Mizonokuchi"],
-            "sta_cut": 8,
+            "pa": [
+                "musashi-shinjo-dep-down-kaisoku",
+                "musashi-mizonokuchi-arr-down-kaisoku"
+            ],
+            "sta": [
+                "Musashi-Mizonokuchi"
+            ],
+            "sta_cut": 5.52,
             "time": 3,
             "sta_code": "JN10"
         },
@@ -96,9 +132,14 @@
         },
         {
             "name": "登戸",
-            "pa": ["11","12"],
-            "sta": ["Noborito"],
-            "sta_cut": 15,
+            "pa": [
+                "musashi-mizonokuchi-dep-down-kaisoku",
+                "noborito-arr-down-kaisoku"
+            ],
+            "sta": [
+                "Noborito"
+            ],
+            "sta_cut": 11.77,
             "time": 5,
             "sta_code": "JN14"
         },
@@ -109,9 +150,14 @@
         },
         {
             "name": "稲田堤",
-            "pa": ["13","14"],
-            "sta": ["Inadazutsumi"],
-            "sta_cut": 11,
+            "pa": [
+                "noborito-dep-down-kaisoku",
+                "inadazutsumi-arr-down-kaisoku"
+            ],
+            "sta": [
+                "Inadazutsumi"
+            ],
+            "sta_cut": 8.24,
             "time": 4,
             "sta_code": "JN16"
         },
@@ -122,9 +168,14 @@
         },
         {
             "name": "稲城長沼",
-            "pa": ["15","16"],
-            "sta": ["Inaginaganuma"],
-            "sta_cut": 12,
+            "pa": [
+                "inadazutsumi-dep-down-kaisoku",
+                "inaginaganuma-arr-down-kaisoku"
+            ],
+            "sta": [
+                "Inaginaganuma"
+            ],
+            "sta_cut": 10.0,
             "time": 4,
             "sta_code": "JN18"
         },
@@ -135,17 +186,26 @@
         },
         {
             "name": "府中本町",
-            "pa": ["17","18"],
-            "sta": ["Fuchu-Honmachi"],
-            "sta_cut": 11,
+            "pa": [
+                "inaginaganuma-dep-down-kaisoku",
+                "fuchu-honmachi-arr-down-kaisoku"
+            ],
+            "sta": [
+                "Fuchu-Honmachi"
+            ],
+            "sta_cut": 8.53,
             "time": 4,
             "sta_code": "JN20"
         },
         {
             "name": "分倍河原",
-            "pa": ["19"],
-            "sta": ["Bubaigawara"],
-            "sta_cut": 12,
+            "pa": [
+                "fuchu-honmachi-dep-down-kaisoku"
+            ],
+            "sta": [
+                "Bubaigawara"
+            ],
+            "sta_cut": 9.39,
             "time": 2,
             "sta_code": "JN21"
         },
@@ -171,7 +231,10 @@
         },
         {
             "name": "立川",
-            "pa": ["20","21"],
+            "pa": [
+                "bubaigawara-dep-down-kaisoku",
+                "tachikawa-arr-down-kaisoku"
+            ],
             "time": 7,
             "sta_code": "JN26"
         }
