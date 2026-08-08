@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """PostToolUse(Edit) hook — validate route.json immediately on edit.
 
 Fires when the edited file is */route.json. Runs validate_data.py scoped to

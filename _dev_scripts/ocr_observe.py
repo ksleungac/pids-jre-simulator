@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """OCR corpus collector — runs the PRODUCTION read path and records what it saw.
 
 Replaces capture_game.py for OCR diagnosis. The entire point is that this script

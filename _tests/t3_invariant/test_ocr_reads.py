@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T3 — OCR pipeline reads correct real-world values from committed HUD fixtures
 """Assert the production OCR pipeline reads the right value from real game HUD pixels.
 

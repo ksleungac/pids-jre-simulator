@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Replay a screen-recording through the PRODUCTION OCR read path.
 
 The point is degraded input. Every local corpus is captured from a live framebuffer and

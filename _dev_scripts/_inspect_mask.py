@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Throwaway: inspect a mask PNG's alpha + RGB so we can judge the bake.
 
   uv run _dev_scripts/_inspect_mask.py <mask.png>

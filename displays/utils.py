@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Shared rendering utilities for display system.
 
 Contains both generic pygame primitives (text, polygons, chevron-arrow

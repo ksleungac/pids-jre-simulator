@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Background check for a newer GitHub release — fail-silent update hint.
 
 On launch, ``main.py`` kicks off ``check_async()`` in a daemon thread. It queries

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — re-entry resolver (_resolve_reentry_target)
 """Locks `AutoDriver._resolve_reentry_target()` — THE 2026-07-16 bug site.
 

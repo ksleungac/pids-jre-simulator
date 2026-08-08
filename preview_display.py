@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Entry point for the audio-free PIDS preview.
 
 Thin wrapper around `PASimulator(preview=True)`. Everything that isn't CLI

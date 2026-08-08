@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """PostToolUse(Edit) hook — surface stale refs when an identifier is renamed.
 
 Fires when old_string → new_string removes 1–3 Python identifiers (rename signal).

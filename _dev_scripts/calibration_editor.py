@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Calibration editor v1 — direct-manipulation pixel tuning for pygame LCDs.
 
 WIP, see WIP_calibration_editor.md at repo root. Wired up by preview_display.py

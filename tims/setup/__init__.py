@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """tims.setup — the TIMS-console setup flow.
 
 Home menu (報站設定 / 教學 / 設定 / 行車記錄) → 案内設定 (C07AA) PA-setting page →

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Basic-usage tutorial — VERTICAL-FIT, framed inside the TIMS page. INTERACTIVE.
 
 The legacy `tutorial.py` walkthrough is a WIDE window (LCD 730 left + 300px step panel right +

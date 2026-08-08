@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """PA-setting screen (案内設定 / TIMS C07AA), reached from the home menu's 報站設定 (PA Setup)
 card. Models the real TIMS 案内設定 register: a settings-summary table (route / train-type /
 origin-terminal / …) plus a route-picker entry button and launch buttons. Renders the persistent

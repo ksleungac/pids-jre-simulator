@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Headless stress test for the TIMS button + low-res text primitives (widgets.py).
 No display needed — renders onto offscreen Surfaces and asserts: no crashes across edge cases,
 sizing functions return sane positive values, responsive sizing holds (2 lines -> taller box).

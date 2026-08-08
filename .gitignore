@@ -79,6 +79,17 @@ _sta_verify_*.json
 # regenerable binary in git and churn it on every size tweak. See WIP_font_atlas.md.
 /font_atlas/
 
+# ShinGoPr6N (Morisawa) — untracked 2026-08-08. The licence bought for these faces
+# does not extend to redistribution, and a tracked file on a public repo is at least
+# as exposed as the release zip: clonable, indexable, permanent. Everything that drew
+# ShinGo now resolves from the baked atlas (font_atlas.ATLAS_FACES), so the SHIPPED
+# build needs no ShinGo file at all. The files stay on the author's machines because
+# BAKING still needs the real outlines — a clone without them renders LCD text only
+# from a pre-baked atlas, and font_atlas/ is itself ignored above. History keeps the
+# blobs by the no-rewrite decision (2026-07-27). HelveticaNeue / NeueFrutigerWorld
+# remain tracked until #116 bakes them. See WIP_font_atlas.md.
+/fonts/ShinGoPr6N-*.otf
+
 # User settings (language, future per-PC preferences). Lives next to the exe in
 # frozen builds / project root in dev. Local-only — separate per machine.
 /settings.json

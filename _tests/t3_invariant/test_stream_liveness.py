@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T3 — the streamed frames must keep up with the display.
 
 The realistic silent failure is not "the page 404s" (loud, obvious). It is the

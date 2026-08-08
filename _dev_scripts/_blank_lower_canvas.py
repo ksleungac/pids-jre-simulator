@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Throwaway: render E235-0 frame with upper LCD normal + lower LCD blank white.
 
 Backdrop for tracing the Tier-2 mask PNG (Yamanote 5-station band) in

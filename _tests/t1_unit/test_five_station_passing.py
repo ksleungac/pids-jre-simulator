@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — e235_0 5-station view: passing-station handling (out-of-spec skip route)
 """Locks e235_0's `JapaneseFiveStationDisplay` best-effort treatment of a
 PASSING station (empty ``pa``) when an out-of-spec skip route is fed into the

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Throwaway: classify mask pixels into transparent / band-white / grey-opaque /
 edge, and map them, to see if grey is a distinct element or just band edge.
 

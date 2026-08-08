@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — window zoom: default pick, ceiling, and drag snapping
 """Pins `window_utils.max_zoom` / `pick_default_zoom` / `snap_zoom`.
 

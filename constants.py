@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Constants for PA Simulator - timing, audio, lower-LCD route-map sizes.
 
 Only values that are TRULY cross-model (shared by all train series) live

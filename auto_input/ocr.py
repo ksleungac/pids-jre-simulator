@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """HUD OCR + badge classifier for JR EAST Train Sim.
 
 Three readers:

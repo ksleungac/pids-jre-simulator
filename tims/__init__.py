@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """TIMS console package — the JR East cab-look UI.
 
 Groups the shared TIMS primitives and both TIMS surfaces:

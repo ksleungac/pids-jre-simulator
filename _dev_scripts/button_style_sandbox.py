@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """TIMS button-style sandbox — preview harness for the glossy raised bevel + low-res pixel text.
 The primitives themselves GRADUATED to the production chrome module `widgets.py` (2026-06-24); this
 file is now a thin montage that imports them and renders the button states / responsive sizing /

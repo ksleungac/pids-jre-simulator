@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """DEV preview — the persistent TIMS top band driven by the OCR debug-panel mock scenarios.
 
 Wires `tims.band.render` (status-driven) to a set of mock `status` dicts covering the

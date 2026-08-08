@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — detector direct read (_Detector.update sample sequences)
 """Locks `_Detector.update()` — the DIRECT-READ path: raw (distance, speed, badge)
 samples in → PA-fire event names + observed-flags out.

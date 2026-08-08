@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Window-lifecycle concerns: always-on-top pinning, and DPI awareness.
 
 This app is a companion OVERLAY for JRE Train Sim — it must float above the game window. Every

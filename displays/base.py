@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Base classes and utilities for train display system.
 
 The view schedule is authored in BEATS, never in seconds. One beat is

@@ -428,6 +428,7 @@ A tool's output is not the fact it was meant to establish. Before a comparison /
 - **Snapshot a metric BEFORE anything that writes what it measures.** If the measuring pass shares
   state with the measured system, order decides the answer.
 - Print N alongside every aggregate. A total with no count attached cannot be distinguished from a total over nothing.
+- **A query tool's default page size is part of the instrument.** `gh issue list` returns 30 unless `--limit` says otherwise, so `--json number --jq length` reports 30 for a 68-issue backlog — a number, not an error. I quoted it as the total twice, and the same truncation hid 13 issues from a classification sweep built on it. A count that lands on a round default (30, 50, 100) is a tell; pass the limit explicitly before believing any aggregate a list command hands back. (2026-08-08)
 - Similarity / threshold methods fail toward "different": a negative is weak evidence, a positive is strong. Prefer an exact, thresholdless method where one exists.
 - The user asserting a contrary fact about their own domain outranks the instrument — re-check the instrument, not the assertion.
 - **A comparison rendered for the USER to judge is an instrument too.** Before presenting arms side by side, confirm they actually differ — print the sizes, the parameters, the diff count. (2026-07-27) A four-row scaling comparison had rows 1 and 2 produced by the identical `transform.scale` call; the user picked a filter from two copies of one image, and only caught it by noticing they looked the same.

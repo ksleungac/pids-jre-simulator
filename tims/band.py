@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Persistent TIMS status band — the near-black top strip.
 
 Two callers, one module (lives in the ``tims`` package):

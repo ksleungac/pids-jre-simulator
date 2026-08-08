@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """tims setup window dimensions + background — the setup flow's own-window size.
 
 Split out of the status band (``tims/band.py`` takes its width from the caller's

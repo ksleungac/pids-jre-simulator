@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T4 — clean-frame startup (state-absent FIXTURE of the integration tier)
 """First-run / clean-install startup, exercised over the settings.json fixture no dev
 machine ever has: ABSENT. This is the frame that shipped the stale language picker in

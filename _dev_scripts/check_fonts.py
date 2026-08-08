@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Ban .ttf fonts in fonts/ — .otf only. See conventions.md § Tooling."""
 
 import sys

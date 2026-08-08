@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """E235-0 series display implementations.
 
 Provides UpperDisplay + LowerDisplay for the E235-0 train model (Yamanote

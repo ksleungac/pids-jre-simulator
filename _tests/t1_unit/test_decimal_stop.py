@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — decimal-stop discrimination (segment_chars stop_at_decimal)
 """Locks the decimal-point scan against DIGIT-FRAGMENT false positives.
 

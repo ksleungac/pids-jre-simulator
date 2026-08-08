@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """TIMS selection-grid screens (route + start-station), variants of the general
 始発駅選択 (C07AC) template (tims-route-selection-general style.png). Reached from the 案内設定
 page's 選擇路綫 button:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """E235-1000 series display implementations.
 
 Provides UpperDisplay and LowerDisplay for the E235-1000 train model,

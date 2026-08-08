@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """App-chrome widgets — the JR East TIMS cab-console look (glossy raised-bevel pixel buttons +
 low-res pixel text). CHROME ONLY: setup screen, OCR debug panel, future OOBE.
 The train LCD displays are NOT chrome — they own their own faces and primitives under `displays/`

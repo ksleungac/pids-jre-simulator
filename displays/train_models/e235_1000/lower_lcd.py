@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """E235-1000 series Lower LCD display implementation.
 
 Contains all display modes (Japanese, English) for the E235-1000 series

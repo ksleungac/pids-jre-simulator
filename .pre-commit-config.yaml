@@ -10,6 +10,8 @@
 #                                 canonical source (version → display_version(), bundled-
 #                                 asset paths → project_root()). conventions.md § Tooling.
 #   - no-ttf-fonts       — ban .ttf files in fonts/ (conventions.md § Tooling)
+#   - spdx-header        — every .py carries `# SPDX-License-Identifier: MIT`
+#                          (WIP_licensing.md; LICENSE grants only authored code/docs)
 
 repos:
   - repo: https://github.com/psf/black-pre-commit-mirror
@@ -55,3 +57,14 @@ repos:
         entry: python _dev_scripts/check_fonts.py
         language: python
         files: ^fonts/.*\.ttf$
+
+      - id: spdx-header
+        name: Require SPDX-License-Identifier header (WIP_licensing.md)
+        entry: python _dev_scripts/check_spdx.py
+        language: python
+        types: [python]
+        # NO exclude. The identifier is about authorship of the file, not about
+        # whether it ships — `_dev_scripts/`, `_harness/` and `_tests/` are as
+        # much authored code as the app, and old_version.py is retained authored
+        # history. The other local hooks exclude `_` because they police
+        # PRODUCTION primitives; this one has no production scope to narrow to.

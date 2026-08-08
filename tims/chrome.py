@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Shared TIMS chrome — the design tokens + bits every TIMS surface draws identically.
 
 Lives in the ``tims`` package (peer of ``tims/widgets.py``) because it's shared by

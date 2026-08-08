@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Side-by-side comparison of LCD reference photos vs. preview screenshots.
 
 Usage:

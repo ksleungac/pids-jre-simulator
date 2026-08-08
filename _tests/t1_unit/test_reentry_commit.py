@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — re-entry commit shape (AutoDriver._maybe_reentry)
 """Locks the COMMIT side of re-entry — what a consensus-confirmed target actually
 does to the sim. The resolver's spec grid lives in test_reentry_target.py; this

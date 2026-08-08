@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Resolve the audio folder layout for the by-ear verifiers.
 
 Two layouts exist since per-line audio pooling (see DATA_FORMAT.md § audio_root Field):

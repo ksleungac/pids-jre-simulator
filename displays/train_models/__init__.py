@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Train model display registry.
 
 Maps a model key (matching both the optional route.json ``model`` field and

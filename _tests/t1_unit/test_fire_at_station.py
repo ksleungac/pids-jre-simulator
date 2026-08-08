@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — at-station fire (AutoDriver._fire_at_station)
 """Locks `_fire_at_station`'s reachability contract: a STOPPED badge while the app
 is in transit (1A/1B) must ALWAYS land the STOPPING transition.

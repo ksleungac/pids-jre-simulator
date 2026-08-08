@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Cross-model Lower LCD manager — slot cycling, transfer force-switch, and
 the through-service frame swap.
 

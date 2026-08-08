@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Browser A/B chooser for candidate-duplicate audio pairs.
 
 Why a browser and not the terminal: choosing between two takes needs replay,

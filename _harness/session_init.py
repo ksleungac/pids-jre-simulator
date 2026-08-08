@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Session initialization — dump memory context + GitHub-Issues backlog in one shot.
 
 Replaces 3-4 separate Read calls at session start.

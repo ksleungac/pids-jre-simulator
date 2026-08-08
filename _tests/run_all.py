@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# SPDX-License-Identifier: MIT
 """Test-suite runner + live coverage map. `_tests/README.md` defines the hierarchy.
 
 Runs every test in the physical tiers (t1_unit / t3_invariant / t4_clean_frame) and

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T3 — ChangeScheduler invariants (lower-LCD flash fix, #78).
 
 Drives the REAL scheduler against a REAL PASimulator (headless, silent audio)

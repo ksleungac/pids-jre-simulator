@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Transfer-info display base class (model-agnostic).
 
 Resolves the per-stop transfer list each frame: looks up the current

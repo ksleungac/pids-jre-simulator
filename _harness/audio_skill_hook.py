@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """PreToolUse hook — surface sta-make / pa-make when work touches the audio corpus.
 
 WHY. The skills' frontmatter `triggers` only fire on their own vocabulary

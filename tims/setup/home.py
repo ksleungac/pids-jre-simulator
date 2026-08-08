@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Home menu — page 1 of the tims setup flow. The first screen: a persistent OCR status
 band across the top, four big action cards (報站設定 / 教學 / 設定 / 行車記錄), a bottom-right
 language-knob row, and a bottom-left version tag (flashes a SAME-STYLE update hint when a

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Main application class for PA Simulator."""
 
 import copy

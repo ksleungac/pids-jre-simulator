@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Measure HUD bounding box in native 1080p screenshots and test badge extraction.
 
 Scans the right edge of native 1080p refs for the HUD's white/light background,

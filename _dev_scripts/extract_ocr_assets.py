@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Extract OCR runtime assets from local-only source screenshots.
 
 Five-pass extraction:

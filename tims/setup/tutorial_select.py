@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tutorial-selection page (教學選擇), reached from the home menu's 教學 action card. A simple
 menu screen: a centered column of TIMS bevel buttons, one per feature tutorial. Clicking a button
 enters that tutorial DIRECTLY — there is no 設定 confirm (unlike the route/station selection grids);

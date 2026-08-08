@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T1 — frame_stream.resolve_bind_host: launch flags -> bind address.
 
 Oracle is independent of the implementation: the exposure contract. LAN

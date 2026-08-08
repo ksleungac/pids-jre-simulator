@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 import os
 from os import environ
 from draw_util import *

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Dep scanner — verify all production imports are in pyproject.toml [project.dependencies].
 
 Catches critical_lessons.md §3: lazy import ≠ optional dep. Any third-party package

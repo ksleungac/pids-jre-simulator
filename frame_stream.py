@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Mirror the app's window to a browser over HTTP (stage 1: display-only).
 
 Serves whatever is currently on the PC screen — setup flow, tutorial, drive —

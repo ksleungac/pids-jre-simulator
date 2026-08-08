@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T3 — e235_0 band-fill centerline is derived from the mask geometry
 """Locks the mask-derived fill-sweep centerline (#51).
 

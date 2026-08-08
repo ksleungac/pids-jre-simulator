@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """PreToolUse(Edit) hook — inject context reminders for high-risk file edits.
 
 Non-blocking. Fires only for file patterns where missing context has caused

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Trim PA lead silence to ~80ms before voice onset.
 
 Voice onset detected by RMS amplitude with adaptive threshold + sustained-voice gate.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Font access for the LCD renderers — one seam, two modes, identical call site.
 
 A renderer always writes the same line:

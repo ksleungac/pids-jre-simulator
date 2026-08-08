@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — stopping-offset badge gate (_accept_stopping_offset)
 """Locks `_accept_stopping_offset(offset_cm, badge)` — the badge==STOPPED gate on the
 green ±cm stopping-offset read.

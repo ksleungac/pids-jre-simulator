@@ -66,6 +66,10 @@ simulator and are not licensed for redistribution by this project.
 - **All other faces** are commercial font software owned by their respective foundries.
   They are not covered by the MIT license and are not licensed for redistribution by
   this project.
+- **ShinGoPr6N** (Morisawa) is **not** in this repository and is not distributed with
+  the release. The LCD renders it from a pre-rendered raster atlas, so neither the
+  shipped build nor a clone contains the font software. Regenerating that atlas from
+  source requires a licensed copy of the faces, which you must obtain yourself.
 
 ## Assets derived from third-party software
 
@@ -74,6 +78,9 @@ simulator and are not licensed for redistribution by this project.
 Glyph templates and reference frames extracted from a third-party train simulator's
 on-screen display, used to locate and read its HUD. Rights in the depicted software
 and its interface belong to its publisher and to East Japan Railway Company.
+
+The release also contains `font_atlas/`, pre-rendered raster output of the LCD
+typefaces. It is generated at build time and is not in this repository. See § Fonts.
 
 ## Reference material
 

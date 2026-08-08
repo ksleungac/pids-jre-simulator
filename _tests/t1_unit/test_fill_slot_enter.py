@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — e235_0 5-station band fill fires only on a genuine slot-enter
 """Locks the fix for the 5-station green-band false-refill (the `_INACTIVE_GAP`
 second-clock bug).

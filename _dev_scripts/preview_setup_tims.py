@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Dev preview launcher for the tims.setup package (home menu + sub-screens).
 
 The screens live in the production package `tims/setup/`; this launcher is the dev-only

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — badge-reject score gate (_apply_badge_reject_gate)
 """Locks `_apply_badge_reject_gate` — the cross-attribute hardening that drops
 low-confidence digit reads on a badge-reject frame.

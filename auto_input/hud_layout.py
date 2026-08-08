@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """HUD region constants for JR EAST Train Simulator.
 
 Single source of truth for cell positions. Cell coordinates are HUD-relative

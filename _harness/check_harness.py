@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Harness integrity — verify all script references in settings.json and SKILL.md files exist on disk.
 
 Catches: a hook or skill pointing to a renamed or deleted script.

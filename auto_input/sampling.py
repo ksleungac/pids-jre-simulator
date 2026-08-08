@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """One HUD sample: grab-frame in, fully-read-and-guarded values out.
 
 THE single per-cycle read path. `AutoDriver._run` (production) and

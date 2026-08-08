@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — publish_memory merge logic (daily-log block merge + MEMORY.md entry merge)
 """Pure-function tests for _harness/publish_memory.py merge logic.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — the consent-body wrap cache never changes the answer
 """Guards the #60 memoization of `ocr_setting._wrap`.
 

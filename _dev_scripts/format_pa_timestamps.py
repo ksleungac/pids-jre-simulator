@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Format proposed PA timestamps with a safety margin.
 
 Input via JSON (file or stdin):

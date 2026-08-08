@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Trim leading + trailing + mid-file silence on STA mp3s.
 
 - Leading and trailing silence trimmed to ~0.2 s pads (lossless stream-copy).

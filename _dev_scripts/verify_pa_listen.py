@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Quick by-ear PA verifier with manual start-trim controls.
 
 For each PA in a route, plays the first PREVIEW_DURATION seconds (head→tail cycle).

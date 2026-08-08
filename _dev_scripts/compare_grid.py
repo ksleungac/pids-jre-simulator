@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Stack reference + multiple candidate renders for one station into a tall grid.
 
 Useful for A/B/C comparing several font/size variants at once. List each

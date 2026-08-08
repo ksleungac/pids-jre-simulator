@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Route-data loader."""
 
 # CONTRACT: route.json is input grammar, not runtime shape.

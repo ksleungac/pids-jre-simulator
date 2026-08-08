@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — distance plausibility guard (guard_distance)
 """Locks `guard_distance` — the physical-motion gate + hold-last-good on the remaining-distance read.
 

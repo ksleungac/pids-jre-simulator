@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Headless simulation of the inline transfer-panel layout algorithm.
 
 NOT shipped (``_`` prefix). Validates the column-anchor + curved-right-edge

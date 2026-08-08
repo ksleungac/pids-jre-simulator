@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """auto_input — OCR-driven PA firing from JR EAST Train Sim HUD.
 
 Public-facing surface. Re-exports the two symbols consumed by production

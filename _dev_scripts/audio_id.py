@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Named instruments for the audio workflows — identity, structure, speech presence.
 
 WHY THIS EXISTS. These questions come up on every `sta-make` / `pa-make` /

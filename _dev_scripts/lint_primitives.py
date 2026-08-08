@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Lint forbidden production primitives — `conventions.md § Tooling`.
 
 Run via the `ban-production-primitives` pre-commit hook. Files come from

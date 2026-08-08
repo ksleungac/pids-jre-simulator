@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """E235-0 series Lower LCD display implementation.
 
 Provides a circular full-route renderer (Yamanote racetrack layout) and a

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Ad-hoc: tile the E235-0 5-station inline transfer panel for every Yamanote
 stop into one montage PNG. Headless (SDL dummy), single sim, loops all stops.
 

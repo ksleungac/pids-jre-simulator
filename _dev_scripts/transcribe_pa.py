@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """PoC: transcribe a PA source mp3 with Whisper to recover timestamped segments.
 
 Idea: instead of the user manually scrubbing through src.mp3 to write

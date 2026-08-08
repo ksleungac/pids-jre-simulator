@@ -231,7 +231,10 @@ destination).
   them the proprietary faces, on a public repo. That is at least as exposed as a zip and arguably
   more — clonable, indexable, and permanent in history by the no-rewrite decision (2026-07-27).
   So goal 3 takes three things, not one: the atlas (ShinGo done), `'fonts'` added to `/build`'s
-  `$shipExclude`, and `git rm -r --cached fonts/` on master. History keeps them by choice.
+  `$shipExclude`, and `git rm --cached` on master. History keeps them by choice. **ShinGo has all
+  three bar the `$shipExclude` line, which waits on #116** — the staged `fonts/` still carries
+  Helvetica and Frutiger, so the folder cannot go wholesale and `/build` deletes the ShinGo files
+  from staging instead.
 - **Tell users to obtain the fonts themselves.** Not a path a hobbyist can walk, and every load site
   is unguarded — absence is a crash, not degradation.
 - **A glyph atlas — per-character bitmaps recomposed at runtime.** Recomposing from individual glyph
@@ -253,9 +256,10 @@ gates, fixed the deployment-frame bugs below, and a real `/build` at `0.6.3` pro
 ShinGo `.otf` staged that the author smoke-tested.
 
 `font_atlas/` is a **gitignored build artifact** — `/build` re-bakes it every run, so it can never be
-stale. Consequence: a build requires the licensed fonts present on the machine. They are still
-tracked today, so any clone can build; once `fonts/` leaves the tree, only a machine holding them
-can.
+stale. Consequence: a build requires the licensed fonts present on the machine. **Since 2026-08-08
+ShinGo is untracked**, so that is now real rather than prospective — a fresh clone has neither the
+faces nor an atlas and cannot render LCD text until one or the other is supplied by hand. Helvetica
+and Frutiger are still tracked, so only the ShinGo half of the constraint bites today.
 
 **Commands, and where they stood on 2026-08-01** (both models, 14 routes, 21,978 states):
 
@@ -574,8 +578,16 @@ Remaining, deliberately:
   family to `font_atlas.ATLAS_FACES`, extend the `lint_primitives` alternation, declare the sites);
   no swap to an open face is needed or wanted, so the earlier Nimbus Sans / BIZ UDGothic track is
   retired. Until then `fonts/` ships and the folder cannot be dropped wholesale.
-- **`fonts/` stays tracked, by decision, not by omission.** Author 2026-07-30: *"they can still exist
-  there until the time we fill comfortable."* So the proprietary faces remain in the public repo and in
-  history (§ Rejected records why that is the larger exposure). Not a pending task — do not re-propose
-  `git rm -r --cached fonts/` as cleanup; it happens when the author says so.
+- **ShinGo is out of the tracked tree (2026-08-08).** `git rm --cached fonts/ShinGoPr6N-*.otf` on
+  the author's instruction, with `/fonts/ShinGoPr6N-*.otf` added to `.gitignore` so it cannot return
+  by accident. The files stay on the author's machines; only tracking changed. History keeps the
+  blobs by the no-rewrite decision (2026-07-27), so this closes the *forward* exposure — a clone of
+  HEAD no longer carries Morisawa font software — not the historical one.
+  **Consequence, stated because nothing enforces it:** `font_atlas/` is a gitignored build artifact,
+  so a machine with neither the ShinGo files nor a baked atlas cannot render LCD text or run the
+  bake. Every machine that builds must hold a licensed copy locally. `THIRD-PARTY.md § Fonts` says
+  so for anyone forking.
+- **`HelveticaNeue` / `NeueFrutigerWorld-Bold` stay tracked** until #116 bakes them — untracking a
+  face the atlas cannot serve would leave no source for it at all. That is what keeps this doc alive:
+  the graduation trigger reads *the proprietary faces* (plural), and two of three remain.
 - **Recap + commit.** Nothing from 2026-07-30 is committed or recapped.

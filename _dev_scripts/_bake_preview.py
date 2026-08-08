@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Throwaway: bake a white-on-transparent mask with route color (alpha-stencil)
 and composite over the blank E235-0 canvas, to confirm edges resolve clean.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Detect the music→voice transition (sta_cut) in an STA mp3.
 
 Approach: each file trains its own classifier. The first ~3 s after the leading

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Render an interactive HTML drive report (走行記録) from a blackbox JSONL.
 
 Reads the three record types written by `auto_input.AutoDriver`:

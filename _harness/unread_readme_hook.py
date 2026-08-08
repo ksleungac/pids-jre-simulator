@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """PreToolUse(Glob) hook — flag when accessing a module dir without having read its README.
 
 Fires before Glob executes under a directory that has a README.md, if that README

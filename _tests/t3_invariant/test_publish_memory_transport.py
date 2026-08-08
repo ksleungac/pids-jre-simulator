@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T3 — publish_memory transport: bootstrap + journal-ref push + race union, sandboxed
 """End-to-end publish against a throwaway bare repo (never the real origin).
 

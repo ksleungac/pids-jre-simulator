@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Validate PA mp3 files: each should have brief silence at start and end.
 
 Each PA segment is one announcement bracketed by silence (the voice doesn't run

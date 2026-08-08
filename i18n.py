@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """App-chrome internationalisation.
 
 Surfaces: the TIMS setup flow (incl. the home language knobs) +

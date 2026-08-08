@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Bake the font atlas that `font_atlas.py` reads in ATLAS mode.
 
 The atlas holds what the PRODUCTION code produced. This script does not lay text

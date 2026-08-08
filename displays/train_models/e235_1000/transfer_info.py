@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """E235-1000 transfer-info display (concrete).
 
 Renders the resolved transfer list onto the lower LCD area

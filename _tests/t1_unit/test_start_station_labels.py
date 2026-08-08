@@ -1,4 +1,5 @@
-﻿# TIER: T1 — the TIMS start-station grid never offers the terminus (loop duplicate)
+# SPDX-License-Identifier: MIT
+# TIER: T1 — the TIMS start-station grid never offers the terminus (loop duplicate)
 """Locks the #59 fix: a loop route offered its terminus station twice in the
 start-station picker, and the launch bridge resolved the pick by NAME.
 

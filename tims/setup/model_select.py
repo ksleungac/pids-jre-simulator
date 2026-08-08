@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Train-model picker (番台選択-style), reached from the C07AA PA-setting page's 列車型號 button (the IRL
 番線 slot, repurposed). Mirrors the real TIMS 番台選択 screen (tims_bandai_choice.png): a 2-column grid of
 glossy bevel buttons, the active model LIT (white) like the IRL selected 番台, the rest normal, and the

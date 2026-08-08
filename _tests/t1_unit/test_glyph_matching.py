@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — glyph matching robustness (compare_tolerant / Templates.match)
 """Locks matching against the two capture degradations measured live at 1080p.
 

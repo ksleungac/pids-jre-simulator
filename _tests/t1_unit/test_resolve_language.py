@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — resolve_language() saved-or-detect logic
 """Locks first-run language resolution (`i18n.resolve_language`) as a PURE,
 screen-free function — the unit-level regression guard for the 2026-07-16

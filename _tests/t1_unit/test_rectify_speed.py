@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — speed domain clamp + decimal-slip rectify (_rectify_speed)
 """Locks `_rectify_speed(value)` — the speed value-domain hardening.
 

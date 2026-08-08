@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Project-root path resolution — single source of truth.
 
 Every module that loads bundled assets (``data/*.json``, ``fonts/*``,

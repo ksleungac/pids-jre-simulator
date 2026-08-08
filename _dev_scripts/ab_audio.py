@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """A/B two audio files side by side and record a by-ear verdict.
 
 Built because measuring "are these the same recording" kept giving answers that

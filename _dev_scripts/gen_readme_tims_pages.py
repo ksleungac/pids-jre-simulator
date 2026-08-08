@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Regenerate the two TIMS README screenshots that the standard preview harness
 can't reach in a single CLI call:
   - assets/08-tims-pa-setting.png   — PA-setting page in the READY state (a route

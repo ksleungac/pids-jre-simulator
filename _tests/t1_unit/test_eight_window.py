@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — 8-station window + FULL-slot lock (cursor_pos keying)
 """Locks the pointer-visibility invariant for the E235-1000 lower LCD — THE 2026-07-17
 bug site.

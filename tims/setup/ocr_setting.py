@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """OCR auto-PA consent + settings screen (自動放送設定), TIMS-styled. Ported from setup.py's
 `_draw_ocr_disclaimer_panel` + the lead/interval steppers, reskinned to TIMS chrome (band on top,
 near-black panel, Noto AA-off text, bevel buttons).

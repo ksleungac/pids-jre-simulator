@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Publish narrative memory to the dedicated `memory` ref — mechanical suffix-sync.
 
 memory/*.md are append-only narrative (daily logs + MEMORY.md index). The canonical

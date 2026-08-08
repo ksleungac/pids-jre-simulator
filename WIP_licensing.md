@@ -32,6 +32,27 @@ all-rights-reserved) and that `fonts/` redistributes commercial font software.
   the required CC BY-SA attribution, pointing at `THIRD-PARTY.md`.
 - **`conventions.md § Tooling`** — new asset class must update `THIRD-PARTY.md` in the same
   change; classify per file class, not per folder.
+- **SPDX headers** (2026-08-08) — `# SPDX-License-Identifier: MIT` on all 124 tracked `.py`
+  files, which is what makes the split per-file and machine-readable instead of asking a reader
+  to apply the scope note by judgment. Inserted byte-level so each file kept its own line
+  terminator, after any shebang or PEP 263 coding declaration. Full REUSE compliance stays
+  rejected as disproportionate — the identifier without the `SPDX-FileCopyrightText` line.
+  Coverage is held by a `spdx-header` pre-commit hook (`_dev_scripts/check_spdx.py`), which
+  reads only the first 3 lines so a module that merely *mentions* SPDX cannot pass; mutation-
+  tested at birth against a missing header and against a tag sitting below the header.
+  **It found a latent defect on contact:** `_tests/t1_unit/test_start_station_labels.py` carried
+  a UTF-8 BOM (the § Tooling PowerShell round-trip trap). Python accepts a BOM at byte 0, so the
+  test had always passed; pushed to line 2 by the header it became a `SyntaxError`. BOM removed.
+  A sweep of every tracked file found one other, `assets/README.md`, harmless in Markdown and
+  left alone.
+- **8 of 9 releases deleted, tags included** (2026-08-08) — v0.6.0, v0.5.4, v0.5.3a, v0.5.3,
+  v0.5.2, v0.5.1, v0.5.0b, v0.5.0. `fonts/ShinGoPr6N-Medium.otf` entered in the initial commit,
+  so every tag carried it; there was no old-versus-new split to draw. Each tag's SHA was recorded
+  before deletion, since every one is still reachable from `master`. Verified after: `v0.5.4`'s
+  source archive returns 404, `v0.6.2`'s still 200.
+- **`font_atlas/` in `THIRD-PARTY.md`** (2026-08-08) — the release carries pre-rendered raster
+  output of the LCD typefaces, a shipped class that appeared in no inventory path. Cross-
+  referenced from § Assets derived from third-party software to § Fonts rather than restated.
 
 ## Why MIT and not Apache-2.0
 
@@ -63,25 +84,23 @@ GPL over a tree holding non-free assets is a known mess.
 
 ## Pending
 
-- **SPDX headers** — `# SPDX-License-Identifier: MIT` on 114 tracked `.py` files (currently
-  zero). This is the layer that makes the split per-file and machine-readable rather than
-  requiring a reader to apply the scope note by judgment. **Blocked** behind the five
-  uncommitted working files, deliberately — it touches every Python file and would tangle with
-  them. Add a pre-commit check in the same pass so coverage cannot rot; full REUSE compliance
-  considered and rejected as disproportionate.
-- **Old release source archives.** GitHub auto-attaches a generated "Source code (zip)" to every
-  release, built from its tag. Those keep serving whatever the tag contained, indefinitely, no
-  matter what HEAD does. Deleting the affected releases is the only way to stop it — author's
-  decision, not a mechanical fix.
-- **In-app non-affiliation statement.** Currently only in `THIRD-PARTY.md`. The app has its own
-  disclaimer surface, which is where it would actually be seen.
-- **zh-HK punctuation.** `conventions`-adjacent: the `/readme` skill records zh-HK as full-width
-  punctuation, but the older zh-HK README paragraphs use half-width `,` and `(`. New text follows
-  the rule; the older lines are an unswept inconsistency.
+- **v0.6.2 is the last release still serving font software.** Its zip, its exe and its source
+  archive all carry `fonts/ShinGoPr6N-*.otf`; it was kept deliberately (2026-08-08) because it is
+  the live download — 154 zip + 57 exe pulls, and where the YouTube traffic lands. Deleting it
+  before a replacement exists would 404 every download pointer. Closed by shipping a fonts-clean
+  release from current `master` and then deleting it, in that order.
 (Audio is not pending — see below.)
 
 ## Decided, do not re-litigate
 
+- **No in-app non-affiliation statement** (2026-08-08). Author declined; `THIRD-PARTY.md` carries
+  it and that is the endpoint. Don't re-propose a disclaimer surface in the app.
+- **A release's source archive is served from its TAG, not from the Release object** (verified
+  2026-08-08, not assumed: `/archive/refs/heads/master.zip` returns 200 and no Release exists for
+  a branch). So `gh release delete` alone leaves the tree one click away — deleting the tag is
+  what stops it, and `--cleanup-tag` does both. Recoverable in one direction only: a tag pointing
+  at a commit still reachable from `master` can be recreated from its SHA, but uploaded assets
+  are gone for good.
 - **No history rewrite** (2026-07-27). Past commits keep what they had; the posture is
   forward-clean, aimed at future exposure rather than retroactive cleanliness. Every measure here
   should be judged against that goal, not against making the history clean.

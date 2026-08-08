@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Validate the project's authored data against the DATA_FORMAT.md spec.
 
 Covers route.json files (per audio/<line>/<diagram>/) and the top-level

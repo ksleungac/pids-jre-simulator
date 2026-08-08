@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """OOBE Tutorial — first-run hands-on walkthrough.
 
 Runs after language resolution, before the setup screen on first launch

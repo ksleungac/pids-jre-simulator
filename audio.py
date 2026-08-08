@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Audio handling with loudness normalization for PA Simulator."""
 
 import os

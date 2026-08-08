@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Standalone preview CLI for the transfer-info display element.
 
 Renders the transfer block for a given station onto a lower-LCD-sized

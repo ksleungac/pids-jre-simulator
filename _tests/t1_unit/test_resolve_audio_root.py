@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T1 — route_loader.resolve_audio_root: the single audio-path resolver.
 
 Every shipped line's audio lives in a per-line pool (`audio/<line>/{pa,sta}/`) while its

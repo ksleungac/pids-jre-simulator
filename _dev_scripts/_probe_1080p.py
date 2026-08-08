@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """1080p OCR feasibility probe — true 1080p pipeline.
 
 Game renders HUD at 100% at 1080p; 1440p is proportional upscale. Downscale

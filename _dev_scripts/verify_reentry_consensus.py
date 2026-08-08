@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Offline verification of the re-entry consensus latch — no game, no OCR.
 
 `AutoDriver._maybe_reentry` commits a silent-advance only after TWO consecutive

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Train display system.
 
 Provides display rendering for different train models with support for

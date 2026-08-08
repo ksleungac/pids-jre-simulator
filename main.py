@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """PA Simulator - Entry Point
 
 A Japanese Train PA (Public Address) Simulator with pygame-based

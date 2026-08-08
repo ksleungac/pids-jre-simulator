@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — the single window->LCD coordinate transform
 """Pins `PASimulator.window_to_lcd`, the one place window coords become LCD coords.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """E235-0 series Upper LCD display implementation.
 
 Contains all display modes (Japanese, Furigana, English) for the

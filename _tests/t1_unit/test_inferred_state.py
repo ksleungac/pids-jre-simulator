@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # TIER: T1 — inferred_state() truth table
 """Locks the canonical Layer-3 inference (`_Detector.inferred_state`) against drift.
 
