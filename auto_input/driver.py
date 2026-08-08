@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Auto-input driver — same-process integration.
 
 Reads the JR EAST Train Sim HUD via dxcam in a background thread, runs OCR + a
@@ -23,6 +24,7 @@ Usage (from `main.py`):
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 import time
@@ -124,7 +126,17 @@ RECORDINGS_DIR = project_root() / "_recordings"
 
 # Speed-limit OCR misread debug dump. When a grammar-valid speed_limit read scores
 # below this threshold, the source cell is saved as a PNG under the dump dir for
-# offline calibration. Local-only (parent _ocr_calibration/ is gitignored).
+# offline calibration.
+#
+# CONTRACT: OFF unless PIDS_OCR_MISREAD_DUMPS=1. This is a calibration instrument,
+# not a production behavior. "_ocr_calibration/ is gitignored" (the original
+# rationale) is a fact about the REPO and says nothing about the deployed frame:
+# project_root() resolves to the folder holding the exe, so leaving this on wrote
+# PNGs next to a user's exe — at up to the sample rate, unbounded across a drive,
+# for exactly the marginal captures that trip the score gate. On a read-only
+# install dir it instead printed a failure line every sample. Enable it when
+# gathering calibration input for the OCR work (#91-#95); never by default.
+DUMP_MISREAD_CELLS = os.environ.get("PIDS_OCR_MISREAD_DUMPS") == "1"
 SUSPICIOUS_SPEED_LIMIT_SCORE = 0.75
 MISREAD_DUMP_DIR = project_root() / "_ocr_calibration" / "_misread_dumps"
 
@@ -978,7 +990,7 @@ class AutoDriver:
                     sl_val, sl_score = r.speed_limit, r.speed_limit_score
                     gated_fields, dist_rejected = r.gated_fields, r.distance_rejected
                     sl_cell = r.cells["speed_limit"]
-                    if sl_val is not None and sl_score < SUSPICIOUS_SPEED_LIMIT_SCORE:
+                    if DUMP_MISREAD_CELLS and sl_val is not None and sl_score < SUSPICIOUS_SPEED_LIMIT_SCORE:
                         _dump_misread_speed_limit_cell(sl_cell, sl_val, sl_score, sample_ts)
                     # Speed-limit change-cue: stamp on a value→different-value change (drives the band's
                     # cyan flash). Ignore None (OCR dropout / no-limit segment) so flicker doesn't flash.

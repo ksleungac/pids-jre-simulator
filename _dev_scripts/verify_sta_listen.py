@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Quick by-ear STA cut verifier.
 
 For each STA in a route, plays the first HEAD_DURATION seconds, brief pause,
@@ -1215,6 +1216,16 @@ def main() -> int:
         except (json.JSONDecodeError, KeyError):
             pass
 
+    # `stops` is the startup snapshot, so its sta_cut is PRE-session. C (commit a
+    # nudge) and T (interactive trim) both write route.json via persist_cut and
+    # update items[idx], but items entries are fresh dicts built at line ~548 —
+    # nothing propagates back into `stops`. Recording it unmodified would file a
+    # verdict against a cut the run itself replaced, and this JSON is the committed
+    # record of what the ear approved (#118). Overlay by slug: only an item that was
+    # playable this run can have been edited, and persist_cut writes per-slug across
+    # every referencing stop, so keying on sta matches what landed on disk.
+    session_cuts = {it["sta"]: float(it["sta_cut"]) for it in items}
+
     # build the full route's items list (unfiltered) so the JSON always reflects route order
     full_items = []
     for stop in stops:
@@ -1222,7 +1233,7 @@ def main() -> int:
         for sta in stop.get("sta", []):
             if sta_cut_v is None:
                 continue
-            full_items.append({"stop": stop["name"], "sta": sta, "sta_cut": float(sta_cut_v)})
+            full_items.append({"stop": stop["name"], "sta": sta, "sta_cut": session_cuts.get(sta, float(sta_cut_v))})
 
     merged_items = []
     for fi in full_items:

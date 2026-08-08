@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Classify git-status files into commit buckets.
 
 Runs as a PostToolUse hook after `git status` — injects a structured
@@ -86,7 +87,13 @@ def main():
     if result.returncode != 0:
         return
 
-    lines = [l for l in result.stdout.strip().splitlines() if l.strip()]
+    # No outer strip(): `git status --short` encodes the staged/worktree state in
+    # the first TWO columns, so an unstaged change begins with a literal space
+    # (" M path"). Stripping the whole blob eats that space on the FIRST line
+    # only, shifting line[3:] by one and printing the path a character short
+    # (`_harness/...` -> `harness/...`). splitlines() already drops the trailing
+    # newline; the per-line filter drops blanks.
+    lines = [l for l in result.stdout.splitlines() if l.strip()]
     if not lines:
         return
 
