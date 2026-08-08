@@ -1,5 +1,6 @@
 {
     "route": "京葉線",
+    "audio_root": "..",
     "line_code": "JE",
     "color": [
         201,
@@ -37,8 +38,8 @@
         {
             "name": "千葉みなと",
             "pa": [
-                "1",
-                "2"
+                "soga-dep-up",
+                "chiba-minato-arr-up"
             ],
             "sta": [
                 "chiba-minato"
@@ -50,8 +51,8 @@
         {
             "name": "稲毛海岸",
             "pa": [
-                "3",
-                "4"
+                "chiba-minato-dep-up",
+                "inage-kaigan-arr-up"
             ],
             "sta": [
                 "inage-kaigan"
@@ -63,8 +64,8 @@
         {
             "name": "検見川浜",
             "pa": [
-                "5",
-                "6"
+                "inage-kaigan-dep-up",
+                "kemigawahama-arr-up"
             ],
             "sta": [
                 "kemigawahama"
@@ -76,8 +77,8 @@
         {
             "name": "海浜幕張",
             "pa": [
-                "7",
-                "8"
+                "kemigawahama-dep-up",
+                "kaihin-makuhari-arr-up"
             ],
             "sta": [
                 "kaihin-makuhari"
@@ -89,8 +90,8 @@
         {
             "name": "新習志野",
             "pa": [
-                "9",
-                "10"
+                "kaihin-makuhari-dep-up",
+                "shin-narashino-arr-up"
             ],
             "sta": [
                 "shin-narashino"
@@ -102,8 +103,8 @@
         {
             "name": "南船橋",
             "pa": [
-                "11",
-                "12"
+                "shin-narashino-dep-up",
+                "minami-funabashi-arr-up"
             ],
             "sta": [
                 "minami-funabashi"
@@ -115,8 +116,8 @@
         {
             "name": "二俣新町",
             "pa": [
-                "13",
-                "14"
+                "minami-funabashi-dep-up",
+                "futamata-shimmachi-arr-up"
             ],
             "sta": [
                 "futamata-shimmachi"
@@ -128,8 +129,8 @@
         {
             "name": "市川塩浜",
             "pa": [
-                "15",
-                "16"
+                "futamata-shimmachi-dep-up",
+                "ichikawa-shiohama-arr-up"
             ],
             "sta": [
                 "ichikawa-shiohama"
@@ -141,8 +142,8 @@
         {
             "name": "新浦安",
             "pa": [
-                "17",
-                "18"
+                "ichikawa-shiohama-dep-up",
+                "shin-urayasu-arr-up"
             ],
             "sta": [
                 "shin-urayasu"
@@ -154,8 +155,8 @@
         {
             "name": "舞浜",
             "pa": [
-                "19",
-                "20"
+                "shin-urayasu-dep-up",
+                "maihama-arr-up"
             ],
             "sta": [
                 "maihama_2_let-it-go"
@@ -167,8 +168,8 @@
         {
             "name": "葛西臨海公園",
             "pa": [
-                "21",
-                "22"
+                "maihama-dep-up",
+                "kasai-rinkai-koen-arr-up"
             ],
             "sta": [
                 "kasai-rinkai-koen"
@@ -180,8 +181,8 @@
         {
             "name": "新木場",
             "pa": [
-                "23",
-                "24"
+                "kasai-rinkai-koen-dep-up",
+                "shin-kiba-arr-up"
             ],
             "sta": [
                 "shin-kiba"
@@ -193,8 +194,8 @@
         {
             "name": "潮見",
             "pa": [
-                "25",
-                "26"
+                "shin-kiba-dep-up",
+                "shiomi-arr-up"
             ],
             "sta": [
                 "shiomi"
@@ -206,8 +207,8 @@
         {
             "name": "越中島",
             "pa": [
-                "27",
-                "28"
+                "shiomi-dep-up",
+                "etchujima-arr-up"
             ],
             "sta": [
                 "etchujima"
@@ -219,7 +220,7 @@
         {
             "name": "八丁堀",
             "pa": [
-                "29"
+                "etchujima-dep-up"
             ],
             "sta": [
                 "hatchobori"
@@ -231,7 +232,7 @@
         {
             "name": "東京",
             "pa": [
-                "30"
+                "hatchobori-dep-up"
             ],
             "sta": [
                 "tokyo"

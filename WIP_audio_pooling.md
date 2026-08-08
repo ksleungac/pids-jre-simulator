@@ -32,7 +32,7 @@ pool slugs that already exist.
 | saikyo | 1349F, 759K | ☑ | ☑ | **Done 2026-08-08**, 92 → 66 files, 28 → 22 MB. Legacy folders dropped. STA by-ear 25/25, PA all pass |
 | sobu | 1217F | ☑ | ☑ | **Done 2026-08-08.** Single diagram, so a pure move: 28 PA gain `-down`, 16 STA verbatim (platform-bearing slugs) |
 | takasaki | 3922E | ☑ | ☑ | **Done 2026-08-08.** Same shape — 30 PA gain `-down`, 16 STA verbatim |
-| keiyo | 780Y_1510Y | ☐ | ☐ | Single diagram, but PA is numeric → needs the descriptive mapping. 上り → `-up` |
+| keiyo | 780Y_1510Y | ☑ | ☑ | **Done 2026-08-08.** 30 PA numeric → descriptive + `-up`, 17 STA verbatim. Roles confirmed from transcripts, not assumed — see below |
 | yamanote | *(flat)* | n/a | n/a | **Stays flat, deliberately.** `audio/yamanote/{pa,sta,route.json}` already resolves through the same one-root mechanism (`resolve_audio_root` returns the work dir, which holds `pa/` and `sta/`) — the degenerate case of this schema, not a second one. It cannot take a direction token either: one route.json serves both 内回り and 外回り |
 
 **Every shipped line is migrated, single-diagram included — pooling is the one schema going
@@ -100,25 +100,23 @@ different axes and which one a line uses is a property of that line:
 
 ### STA — direction only when nothing else discriminates the platform
 
-**A melody belongs to a PLATFORM, so the platform is what the name must pin down.**
-Direction is a proxy for it — the opposite direction uses the other platform — and a proxy
-is only needed when the real thing is absent:
+**STA takes no direction token. A melody belongs to a PLATFORM, and the platform is what the
+name must pin down** — direction is only ever a proxy for it, since the opposite direction uses
+the other platform. Author, 2026-08-08: *"sta no need up or down, only pa needs it, sta in sobu
+and takasaki is by platform."* So pooling STA is a pure move, name unchanged.
 
-| slug already carries | example | pooled name |
-|---|---|---|
-| a platform field | `bakurocho_2_hassha-beru` (sobu) | **verbatim** — platform is the discriminator |
-| station identity only | `JK12_YHM` (keihin), `JA13` (saikyo) | `JK12_YHM-south` — append the direction |
+Where a slug records the platform (`bakurocho_2_hassha-beru`, sobu) it already discriminates.
+Where it doesn't (`ageo`, takasaki; `soga`, keiyo) the fix if a reverse diagram ever collides is
+to add the **platform** field the slug convention already defines — not to bolt on a direction.
 
-Appending the token to a platform-bearing slug is not merely redundant, it costs something:
-the trailing song-id field is globbable (`ls *_gota-del-vient.mp3` shows every station playing
-that song — `sta-make § STA filename convention`), and a token appended after it lands *inside*
-that field and breaks the glob. On sobu that glob spans 4 stations for one song, 3 for another.
-(2026-08-08, author: *"sta no need up or down, only pa needs it, sta in sobu and takasaki is by
-platform."*)
+Appending a token also costs something concrete on the rich slugs: the trailing song-id field is
+globbable (`ls *_gota-del-vient.mp3` shows every station playing that song — `sta-make § STA
+filename convention`), and a token appended after it lands *inside* that field and breaks the
+glob. On sobu that glob spans 4 stations for one song and 3 for another.
 
-Takasaki is the in-between case — bare `ageo`, no platform recorded — and stays verbatim too,
-because the fix if a 上り diagram ever lands is to add the **platform** field the convention
-already defines, not to bolt on a direction.
+**Keihin (`-south`) and saikyo (`-down`) carry tokens on STA and keep them.** They were pooled
+before this rule and renaming shipped data for tidiness is not worth the churn — but don't read
+them as the pattern to copy.
 
 Otherwise pooling STA is a pure move. Hyphen when the token IS appended, so `_` keeps meaning
 "station code" and everything before the `-` stays the legacy name verbatim. STA takes no
@@ -285,6 +283,20 @@ Both diagrams 下り on one 24-stop spine: 1349F 快速 → 川越 (through 川�
   now `sta: ["kawagoe-down"]`, `sta_cut: 3.8` on `stops[23]`. An arrival terminus carrying
   `sta` departs from `DATA_FORMAT.md`'s rule; the validator and `_next_sta` both accept it.
 - `759K/pa/13.mp3` was unreferenced and matched no neighbour → `audio/_archive/saikyo/`.
+
+## Keiyo — pooled 2026-08-08
+
+Single diagram, so no dedup — the work was purely the numeric → descriptive PA mapping.
+47 files move; 30 PA gain `-up`, 17 STA stay verbatim. Station slugs were taken from the
+existing STA names, which are already descriptive, so nothing had to be romanised by hand.
+
+**The `-dep` / `-arr` roles were read off transcripts, not assumed from the convention, and
+one of them contradicts it.** `pa-make § PA filename convention` says a terminus's single PA is
+`{this}-arr`; keiyo's file 30 at 東京 says 次は終点、東京 — a departure announcement made
+leaving 八丁堀, so it is `hatchobori-dep-up`. Mid-route single PA (file 29 at 八丁堀) is
+`etchujima-dep-up`, which does match. Spot-checked the pairing on both ends: first-of-pair is
+次は (dep), second is まもなく (arr). The convention is a default; the audio decides, and a
+mis-set role is permanent once the file is renamed.
 
 ## Chūō STA — trimmed + verified (2026-07-25)
 

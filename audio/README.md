@@ -47,6 +47,8 @@ Ordered by JR EAST line code. Standard fields omitted (= follows convention). En
 - **Diagrams:** `780Y_1510Y` (two consecutive service IDs concatenated into one diagram folder; physical line stays Keiyo, not actual through-running)
 - **Sim quirks:** long PASSING leg 千葉みなと → 稲毛海岸 (~80s) — train crosses 千葉貨物 freight terminal. Relevant for OCR autodriver state-machine (badge stays PASSING across the freight gap).
 - **Audio quirks:** Tokyo-end stations have elaborate (>20s) STA melodies IRL — music duration outliers in splitter parse are real, not segment-merge artifacts.
+- **Terminus PA is a `-dep`, not an `-arr`.** 東京's single PA says 次は終点、東京 — the announcement made leaving 八丁堀 — so it is `hatchobori-dep-up`. Contradicts `pa-make`'s "terminus single PA = `{this}-arr`" default; read the content before assigning a role.
+- **Audio layout:** pooled — `audio/keiyo/{pa,sta}/` with `"audio_root": ".."`. PA carries `-up`; STA is verbatim (no direction token). See [WIP_audio_pooling.md](../WIP_audio_pooling.md).
 
 ### JJ — Joban (常磐線)
 
