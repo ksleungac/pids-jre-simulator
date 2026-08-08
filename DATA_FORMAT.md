@@ -527,6 +527,8 @@ State machine consumes both lists, surfaces separate "STOPPING at station" displ
 | Value | Meaning |
 |-------|---------|
 | *(field omitted)* | No STA melody — passing stations and arrival termini (last stop, where train doesn't depart again). An *origin* terminus DOES get `sta`, since train departs from there. |
+
+**Exception — an arrival terminus MAY carry `sta` when the recording is an arrival announcement.** The slot holds platform audio, not strictly departure melodies: some stations have several STA entries, one of which plays after the train stops with the doors open. Saikyo 1349F's 川越 carries the end-of-journey announcement this way (`kawagoe-down`, `sta_cut` at the chime→voice boundary). `validate_data.py` forbids `sta` only on passing stops and `pre_stops`, and `_next_sta` has no terminus branch, so this needs no code change. Whether the user plays it is their choice. (2026-08-08, author decision.)
 | `["JC01"]` | Single STA audio file |
 | `["JC01", "JC01_1"]` | Multiple STA audio files (variants) |
 

@@ -22,6 +22,16 @@ The pipeline has three logical phases:
 
 For STA (departure melody + closing-door announcement) work, see the **sta-make** skill (separate; STA has its own conventions and tools — `sta_cut` placement, by-ear verification, etc.).
 
+## Instruments — use these, do not rebuild them
+
+`_dev_scripts/audio_id.py`, shared with sta-make (full table in that skill). For PA the ones that matter:
+
+- `same_recording(a, b)` — "are these two diagrams' announcements one recording, or two takes of the same words?" This is the question pooling turns on. `r ~1.0` = one recording; a clean corpus separates hard (Saikyo scored 11 pairs ≥0.9966 and 8 at ≤0.35, nothing between).
+- `contains(a, b)` — which cut survives when collapsing a duplicate pair.
+- `has_speech(path)` — Whisper with the hallucination filter applied (below).
+
+**Waveform correlation cannot tell you whether two takes say the same WORDS** — speech takes never correlate acoustically. Only the transcript answers that, which is why the PA question needs Step 0's Whisper pass even when identity has already been measured.
+
 ## When to run
 
 The user points at a working folder like `audio_src/<line>/<diagram>/` containing the source PA mp3 and either a `timestamps.txt` (skip Step 0) or a request to derive one (run Step 0).
@@ -88,6 +98,11 @@ uv run _dev_scripts/transcribe_pa.py audio_src/<line>/<diagram>/src_from<MIN>.mp
   4. **Japanese** `間もなく、X、X` (X repeated) — kicks off the separate {this}-arr cluster.
 - Two-PA stations (most): {prev}-dep cluster + {this}-arr cluster.
 - One-PA stations: termini, IRL no-arrival-PA stations, or tight {prev}-dep that runs straight into the stop. Use 1 timestamp.
+
+**0.3.0 — Two Whisper outputs that are NOT content.** Both read as plausible transcription and both have been mistaken for real announcements. Filter them before drawing any conclusion (`audio_id.has_speech` already does):
+
+- **Stock hallucinations on non-speech audio** — ご視聴ありがとうございました / "Thank you for watching." / ご覧いただきありがとうございました. A melody-only file returns these, so a sweep counting non-empty transcripts reports announcements that do not exist.
+- **Prompt echo** — this script primes the model with *「これはJR東日本の電車内アナウンスです。次の駅、お乗り換え、お降り、各駅停車などの案内が含まれます。」*, and a file with no speech gets it echoed back verbatim. Harder to spot than the stock hallucinations because it reads as exactly the right vocabulary. Any transcript containing 〜などの案内が含まれます is the prime, not the file. (2026-08-08: read as a real-but-garbled announcement on a Saikyo file.)
 
 **0.3.a — Homophone watch-list (build per-route as new ones surface)**
 
@@ -342,6 +357,7 @@ Hepburn romanization, macrons stripped, lowercase, hyphens for word boundaries �
 
 ## Tools
 
+- `_dev_scripts/audio_id.py` — named instruments (identity, containment, structure, speech presence); `--selftest` calibrates them.
 - `_dev_scripts/transcribe_pa.py` — Whisper wrapper. CUDA-enabled, downloads model on first run, outputs JSON with segment-level timestamps + text. Defaults to `large-v3` on `cuda`. JSON output lands next to the source mp3 by default.
 - `_dev_scripts/format_pa_timestamps.py` — formatter that converts a `{station: voice_onsets}` mapping into `timestamps.txt` with safety-margin (`floor()`) applied.
 - `_dev_scripts/trim_pa_silence.py` — voice-onset detection + stream-copy trimming. Finds actual voice start (noise_floor + 12 dB attack), trims to ~80ms pad before onset. Idempotent. Replaces the old simple -40 dB gate.

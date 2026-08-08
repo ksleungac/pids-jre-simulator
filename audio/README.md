@@ -30,7 +30,11 @@ Ordered by JR EAST line code. Standard fields omitted (= follows convention). En
 ### JA — Saikyo (埼京線)
 
 - **Name:** 埼京線 / Saikyō Line
-- **Diagrams:** `1349F`, `759K`
+- **Diagrams:** `1349F` (快速 → 川越, through 川越線), `759K` (各駅停車 → 大宮)
+- **Sim quirks:** `759K` extends `stops[19..23]` past route-level `dest` (大宮, idx 18) to 川越 — operational reference, no audio. Same shape as JK `727B`. `1349F` skips 北赤羽, 浮間舟渡, 戸田, 北戸田.
+- **Audio quirks — this line's STA is mostly melody with NO closing-door announcement.** 18 of 24 files are melody only; `JA25` (北与野) has a full one (2番線、ドアが閉まります), `JA14`/`JA24` fragments. So `detect_sta_cut.py` reporting `music_end == voice_start` across this line is diagnosing the absent voice, not a misplaced cut — it derives `voice_start` from a level change and finds the next melody block. Cuts land in an inter-loop silence and are correct there; the whole set passed by ear 25/25 on 2026-08-08. Verify speech with `audio_id.has_speech()`, never a spectral band — a known announcement here reads hf/lf 0.002, i.e. identical to melody.
+- **大宮 and 川越 carry arrival-type STA.** The `sta` slot on this line is not only departure melodies: 大宮 holds two entries, one of which plays at arrival with the doors open, and 川越 (an arrival terminus) carries the end-of-journey announcement. That makes 川越 an exception to `DATA_FORMAT.md`'s "arrival termini omit `sta`" — deliberate, author decision 2026-08-08.
+- **Audio layout:** pooled — `audio/saikyo/{pa,sta}/` with `"audio_root": ".."` in both diagrams. PA slugs carry `-down` plus a `-kaisoku` / `-kakueki` tier where the two diagrams' announcements differ. The four Kawagoe-line STA files were renamed station-derived (`nisshin-down`, …) because their originals were bare numerics with no station identity — those stations have `sta_code: null`. See [WIP_audio_pooling.md](../WIP_audio_pooling.md).
 
 ### JC — Chuo (中央線)
 

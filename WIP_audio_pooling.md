@@ -28,7 +28,7 @@ pool slugs that already exist.
 | keihin | 1275A, 727B | ☑ | ☑ | **Pooled 2026-07-26**, 192 → 123 files. 45 STA (35 identical pairs collapsed) + 78 PA (30 pairs are ONE recording, 4 more collapsed by ear). PA trim still to do; legacy folders still on disk |
 | tokaido | 1865E, 3535E | ☐ | ☐ | 11.9 MB; PA already descriptive in 3535E (underscore separator) |
 | nambu | 4027F, 603F | ☐ | ☐ | 7.6 MB |
-| saikyo | 1349F, 759K | ☐ | ☐ | 2.0 MB |
+| saikyo | 1349F, 759K | ☑ | ☑ | **Done 2026-08-08**, 92 → 66 files, 28 → 22 MB. Legacy folders dropped. STA by-ear 25/25, PA all pass |
 | yamanote | *(flat)* | n/a | n/a | already one audio folder — the pool shape, pre-existing |
 | sobu, takasaki, keiyo | single | n/a | n/a | nothing to share until a 2nd diagram lands |
 
@@ -232,6 +232,29 @@ clipping, noted for the trim pass. Whisper garbled four files (`727B/39`, `50`, 
 `1275A/45`); all four measure as normal-level full-length audio, so it is a transcription
 artefact, not damaged content.
 
+## Saikyo — pooled 2026-08-08
+
+Both diagrams 下り on one 24-stop spine: 1349F 快速 → 川越 (through 川越線, skips 北赤羽,
+浮間舟渡, 戸田, 北戸田), 759K 各駅停車 → 大宮 (stops 19–23 are past its `dest`, no audio).
+92 files → **66** (41 PA + 25 STA).
+
+- **STA — all 14 same-named pairs are sample-identical** and `sta_cut` already agreed on
+  every one, so it was a pure move plus `-down`. The 4 Kawagoe-line files had bare numeric
+  names (`20`–`23`, stations whose `sta_code` is null) carrying no station identity, which
+  is the property the pooled-STA rule depends on — renamed station-derived by author
+  decision. This is the one case where pooling is NOT a pure move.
+- **PA — 11 of 19 shared events are ONE recording** (10 byte-identical, `ebisu-arr` two cuts
+  of one take, kept 759K's superset). The 8 that split are all explained by content — type +
+  destination, the 快速 skip notice, a different next station, 終点 wording — so none needed
+  the ear and all took the `-kaisoku` / `-kakueki` type tier, matching keihin.
+- **This line's STA carry almost no closing announcement** (see `audio/README.md § JA`), so
+  `detect_sta_cut.py`'s flags here are not cut errors. Cut values were inherited unchanged
+  and passed 25/25 by ear.
+- 川越's terminus arrival announcement was sitting unreferenced in `1349F/sta/24.mp3` —
+  now `sta: ["kawagoe-down"]`, `sta_cut: 3.8` on `stops[23]`. An arrival terminus carrying
+  `sta` departs from `DATA_FORMAT.md`'s rule; the validator and `_next_sta` both accept it.
+- `759K/pa/13.mp3` was unreferenced and matched no neighbour → `audio/_archive/saikyo/`.
+
 ## Chūō STA — trimmed + verified (2026-07-25)
 
 Pooling was a pure move, so the STA arrived carrying whatever the original cuts had:
@@ -370,8 +393,14 @@ lose time. Three methods failed here before one worked:
   faster-whisper large-v3). Speech takes never correlate acoustically; only the text
   matches. This is the only method that answers the PA question.
 
-Scratch scripts for all of these were written ad-hoc per
-`principles.md § "Per-source ad-hoc scripts"` — regenerate rather than maintain them.
+**These live in `_dev_scripts/audio_id.py` — call them, do not rewrite them.** This
+section used to end "regenerate rather than maintain them", citing
+`principles.md § "Per-source ad-hoc scripts"`. That was a misapplication: the
+per-source rule is about SPLITTERS, whose format genuinely varies per recording.
+These instruments are source-invariant, and regenerating them is what made each
+job hit-or-miss — 2026-08-08 rebuilt four from scratch and got the speech
+question wrong on a corpus that had already passed the ear. Named instruments +
+`--selftest` replaced that.
 
 ---
 

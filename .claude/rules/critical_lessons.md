@@ -176,12 +176,30 @@ instrument is wrong until proven otherwise — re-check the instrument, never th
 Same frame error as §7 and §8: reasoning from claude's own environment rather than the user's.
 Here the environment is the measurement itself.
 
+**Recurred 2026-08-08 on an ALREADY-ACCEPTED corpus, which is the worse form.** Saikyo's STA had
+passed the ear under a previous session months earlier. Knowing none of that, I audited it with
+derived thresholds and reported a list of defects — dead air, an incomplete loop, a mis-shared
+cut — then a spectral band borrowed from keihin declared "0 of 24 files carry speech" when the
+answer was 3. The ear then returned **25/25 PASS with every inherited cut unchanged**. Nothing was
+ever wrong. The user: *"you, using your own scope, tell me something is broken."*
+
+**Rule (second half):** a gate that already accepted authored content IS the standard for it.
+Derived measurement can raise a question for the ear; it cannot return a verdict that the content
+is wrong. And before auditing anything that already shipped, look for the prior verdict —
+`audio_src/<line>/*_verify_results.json`. That tree is gitignored, so its absence proves nothing
+and does not travel between machines; ask rather than assume a set is unverified.
+
 **Pattern:**
 - A user-named file is ground truth. The detector's job becomes reproducing it; one that reports
   clean on that file is disqualified, not "mostly right."
 - Treat a detected window as the INNER bound — human cuts land where the artifact stops being
   audible, which is further out than any threshold.
 - Before applying a documented numeric convention across a corpus, check the corpus satisfies its
-  premise (here: that the file has a near-silent floor to insert into).
+  premise (here: that the file has a near-silent floor to insert into). A band's known-positive
+  must come from the corpus you are about to judge, never the one it was measured on.
+- Don't rebuild the instruments. They are named in `_dev_scripts/audio_id.py` with a `--selftest`;
+  re-deriving them per session is what makes these jobs hit-or-miss, and it is how the 0-of-24
+  answer got produced. Four detectors in 2026-07-26, four more in 2026-08-08, same root.
 
-**Scope:** all `sta-make` / `pa-make` detectors; anything gated by a by-ear pass.
+**Scope:** all `sta-make` / `pa-make` detectors; anything gated by a by-ear pass; any re-audit of
+content a human gate already passed.

@@ -17,6 +17,23 @@ triggers:
 
 Take STA recordings (raw or already split) and produce simulator-ready per-segment mp3s with `sta_cut` values that land cleanly in the music→voice silence gap. Each STA is one departure: melody (varies by station/platform) → silence pad → closing-door announcement (staff voice).
 
+## Instruments — use these, do not rebuild them
+
+`_dev_scripts/audio_id.py`. Every question below has ONE method that works and several that return confident nonsense; re-deriving them per session is how a job goes hit-or-miss.
+
+| question | call | notes |
+|---|---|---|
+| are these one recording? | `same_recording(a, b)` | FFT correlation over every lag, re-scored on the real overlap. `r ~1.0` = one recording |
+| confirm an exact duplicate | `exact_identity(a, b)` | decoded-PCM hash. Confirms a positive; **never** establishes a negative |
+| which cut do I keep? | `contains(a, b)` | keep the cut that contains the other — trimming is reversible, truncation is not |
+| where are music / silence / the cut? | `structure(path, sta_cut)` | anchors on the silence run holding `sta_cut`. Do NOT anchor on "the first music block" — an internal melody break longer than 0.3 s makes that report a gap mid-melody |
+| is there a closing announcement? | `has_speech(path)` | Whisper. The ONLY instrument that answers this |
+| is that a repeated loop? | `loop_repeat(path, base, later)` | Pattern B, below |
+
+**Calibrate before trusting it:** `uv run _dev_scripts/audio_id.py --selftest`. A check that has never been observed to fail has not been shown to work.
+
+**Before auditing an existing route, look for a prior by-ear verdict** in `audio_src/<line>/*_verify_results.json`. A set that already passed the ear is DONE, and re-auditing it with derived thresholds produces a list of defects that are not defects. That file is gitignored, so its absence proves nothing — ask rather than assume the set is unverified. (2026-08-08: audited an already-verified Saikyo, reported several "problems", then the ear returned 25/25 PASS with every inherited cut unchanged.)
+
 ## STA anatomy — what a raw recording actually contains
 
 Read this before touching any detector. The shape above is the **finished** article; a raw capture has more in it, and every artifact pattern below is a piece of this one sequence:
@@ -332,6 +349,8 @@ What survives limiting is the **spectral shape**, because a KAK is a broadband c
 | closing announcement | 0.2–0.5 |
 | **KAK** | **1.0–1.3** |
 
+**These numbers are CAPTURE-CHAIN specific — they are keihin's, not the format's.** On Saikyo's platform recordings a clearly intelligible closing announcement reads **0.002**, indistinguishable from melody, so a speech-vs-melody sweep built on this band reported "0 of 24 files carry speech" when the answer was 3. Use the band only after reproducing it on a known-positive **from the same line**; for the speech question use `audio_id.has_speech()` instead, which does not depend on a band at all. (2026-08-08.)
+
 On keihin's 大宮 melody the transition reads unambiguously — music stops dead (`lf` 146 → 37 in two frames), then `hf` jumps 13× the music median with `hf/lf` 1.31. A 20×+ separation from the melody, immune to the limiting.
 
 **The trap: `hf/lf` explodes in quiet passages** — the denominator collapses, so silence between melody and voice reads 13–18, *higher than a real KAK*, with no click present. A detector ranking on the ratio alone picks the gap every time. Gate on absolute broadband energy as well (`hf > ~3 × hf_median_of_music_region`) so only frames carrying real HF content qualify.
@@ -406,7 +425,11 @@ Detection — **amplitude alone cannot do this** (a mid-loop pulse looks like a 
 3. Block 1 is the base loop. Correlate each later music block against the base loop's head of equal length using `scipy.signal.correlate(..., mode="full", method="fft")` — every lag, no threshold grid (per `principles.md § "A measurement is a claim until the instrument is calibrated"`; a strided lag scan scores identical audio near zero).
 4. `r ≥ 0.80` ⇒ a loop repeat. **Complete** if its duration ≥ 85 % of the base loop, else **incomplete**.
 
+Use `audio_id.loop_repeat(path, base, later)` — steps 3–4 are what it implements.
+
 Measured separation on Chūō: keeps landed at 100–102 % (r = 0.93–0.99), the one removal at 12 % (r = 0.98). Nothing sat near the boundary. Chroma-CQT agreed independently (0.958 vs a 0.490 voice control) — a useful second read when a waveform correlation is borderline.
+
+**The 85 % line does not adjudicate the middle.** Saikyo's `JA24` came in at 77 % (r = 0.936) — a substantial partial loop, not a stub and not complete. Chūō's clean 12-vs-100 split is what makes the threshold look decisive; it is not. Anything between roughly 60 % and 85 % goes to the ear, not to the rule. (The user kept `JA24`.)
 
 Surface the classified list before splicing anything (`critical_lessons.md § 1` — print the resolved target list, never drive a destructive loop off an unverified filter).
 
@@ -737,6 +760,7 @@ Every STA file ships with **~0.2 s of silence at each end**:
 - **Don't create a metadata JSON sidecar.** The filename IS the metadata store. If `sta_meta.json` shows up, that's a previous experiment that should be removed.
 - **Front-half placeholders are fine.** When STA source covers only part of a route (e.g., from-某-station-onward), the unsplit stops keep their placeholder `sta` refs until the rest arrives. They'll fail `validate_data.py`'s file-existence check until then — that's expected.
 - **Detector zero-gap pattern → real gap is outside the search window.** When the detector returns `music_end == voice_start` with high confidence, that's NOT a genuinely tight transition — it's a false positive. Probe the waveform manually (Step 12) and run the manual mid-trim recipe.
+- **A whole line reporting zero-gap can mean the recordings have no closing announcement at all.** `detect_sta_cut.py` derives `voice_start` from a level change, so on a melody-only recording it reports the next melody block — and has no way to express "there is no voice here". Saikyo is such a line: 18 of 24 files are melody only, `JA25` has a full announcement, `JA14`/`JA24` fragments. Check with `audio_id.has_speech()` before treating the flags as cut-placement errors. `sta_cut` still has a job on these files (it is where PageUp jumps to), so the values stay — they just land in an inter-loop silence rather than before a voice.
 - **Source-recording transients (KAK).** Some source recordings have a loud physical-cut transient captured at the staff-machine cut moment (seen on Keiyo + Yamanote so far; recording-source-driven, not line-specific). If you spot a -4 to -7 dB peak near `sta_cut`, run Step 7.5 to splice it out before normal trim. Without splicing, the transient gets played at full volume during cut transitions — jarring UX. The detector also misclassifies the KAK's silence boundary as music_end, producing zero-gap false positives.
 - **Most stations flag EARLY immediately after `trim_sta_silence.py`** — expected, propose-then-apply fixes them. Don't try to "fix" the trim script's `total_shift` math; the propose-then-apply round trip is the design.
 
@@ -756,6 +780,7 @@ After Phase A split / Phase B verification lands: if this work surfaced anything
 - **pa-make** skill — PA workflow (separate; PA has different conventions, no `sta_cut`)
 - `audio/README.md` — per-line IRL + sim quirks catalog (write-gate target above)
 - `DATA_FORMAT.md` — route.json schema reference (field meanings, validation rules)
+- `_dev_scripts/audio_id.py` — the named instruments (identity, structure, speech presence); `--selftest` calibrates them
 - `_dev_scripts/trim_sta_silence.py` — trim leading/trailing/mid-gap silence
 - `_dev_scripts/detect_sta_cut.py` — validate `sta_cut` placement
 - `_dev_scripts/verify_sta_listen.py` — by-ear verification GUI

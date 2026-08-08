@@ -1,5 +1,6 @@
 {
     "route": "埼京線",
+    "audio_root": "..",
     "line_code": "JA",
     "transfer_view": "JA_north",
     "color": [
@@ -19,7 +20,7 @@
             "name": "大崎",
             "pa": [],
             "sta": [
-                "JA08_OSK"
+                "JA08_OSK-down"
             ],
             "sta_cut": 9.0,
             "time": 0,
@@ -28,11 +29,11 @@
         {
             "name": "恵比寿",
             "pa": [
-                "0",
-                "1"
+                "osaki-dep-down-kakueki",
+                "ebisu-arr-down"
             ],
             "sta": [
-                "JA09_EBS"
+                "JA09_EBS-down"
             ],
             "sta_cut": 16.0,
             "time": 3,
@@ -41,11 +42,11 @@
         {
             "name": "渋谷",
             "pa": [
-                "2",
-                "3"
+                "ebisu-dep-down",
+                "shibuya-arr-down"
             ],
             "sta": [
-                "JA10_SBY"
+                "JA10_SBY-down"
             ],
             "sta_cut": 7.3,
             "time": 2,
@@ -54,11 +55,11 @@
         {
             "name": "新宿",
             "pa": [
-                "4",
-                "5"
+                "shibuya-dep-down",
+                "shinjuku-arr-down"
             ],
             "sta": [
-                "JA11_SJK"
+                "JA11_SJK-down"
             ],
             "sta_cut": 8.7,
             "time": 5,
@@ -67,11 +68,11 @@
         {
             "name": "池袋",
             "pa": [
-                "6",
-                "7"
+                "shinjuku-dep-down-kakueki",
+                "ikebukuro-arr-down"
             ],
             "sta": [
-                "JA12_IKB"
+                "JA12_IKB-down"
             ],
             "sta_cut": 19.5,
             "time": 2,
@@ -80,10 +81,10 @@
         {
             "name": "板橋",
             "pa": [
-                "8"
+                "ikebukuro-dep-down"
             ],
             "sta": [
-                "JA13"
+                "JA13-down"
             ],
             "sta_cut": 11.1,
             "time": 3,
@@ -92,10 +93,10 @@
         {
             "name": "十条",
             "pa": [
-                "9"
+                "itabashi-dep-down"
             ],
             "sta": [
-                "JA14"
+                "JA14-down"
             ],
             "sta_cut": 11.1,
             "time": 2,
@@ -104,10 +105,10 @@
         {
             "name": "赤羽",
             "pa": [
-                "10"
+                "jujo-dep-down-kakueki"
             ],
             "sta": [
-                "JA15_ABN"
+                "JA15_ABN-down"
             ],
             "sta_cut": 11.1,
             "time": 3,
@@ -116,10 +117,10 @@
         {
             "name": "北赤羽",
             "pa": [
-                "11"
+                "akabane-dep-down-kakueki"
             ],
             "sta": [
-                "JA16"
+                "JA16-down"
             ],
             "sta_cut": 6.8,
             "time": 2,
@@ -128,10 +129,10 @@
         {
             "name": "浮間舟渡",
             "pa": [
-                "12"
+                "kita-akabane-dep-down"
             ],
             "sta": [
-                "JA17"
+                "JA17-down"
             ],
             "sta_cut": 10.6,
             "time": 2,
@@ -140,10 +141,10 @@
         {
             "name": "戸田公園",
             "pa": [
-                "14"
+                "ukima-funado-dep-down"
             ],
             "sta": [
-                "JA18"
+                "JA18-down"
             ],
             "sta_cut": 7.9,
             "time": 2,
@@ -152,10 +153,10 @@
         {
             "name": "戸田",
             "pa": [
-                "16"
+                "toda-koen-dep-down-kakueki"
             ],
             "sta": [
-                "JA19"
+                "JA19-down"
             ],
             "sta_cut": 7.9,
             "time": 2,
@@ -164,10 +165,10 @@
         {
             "name": "北戸田",
             "pa": [
-                "17"
+                "toda-dep-down"
             ],
             "sta": [
-                "JA20"
+                "JA20-down"
             ],
             "sta_cut": 8.0,
             "time": 2,
@@ -176,11 +177,11 @@
         {
             "name": "武蔵浦和",
             "pa": [
-                "18",
-                "19"
+                "kita-toda-dep-down",
+                "musashi-urawa-arr-down-kakueki"
             ],
             "sta": [
-                "JA21"
+                "JA21-down"
             ],
             "sta_cut": 8.0,
             "time": 2,
@@ -189,10 +190,10 @@
         {
             "name": "中浦和",
             "pa": [
-                "20"
+                "musashi-urawa-dep-down-kakueki"
             ],
             "sta": [
-                "JA22"
+                "JA22-down"
             ],
             "sta_cut": 7.8,
             "time": 2,
@@ -201,10 +202,10 @@
         {
             "name": "南与野",
             "pa": [
-                "21"
+                "naka-urawa-dep-down"
             ],
             "sta": [
-                "JA23"
+                "JA23-down"
             ],
             "sta_cut": 7.9,
             "time": 2,
@@ -213,10 +214,10 @@
         {
             "name": "与野本町",
             "pa": [
-                "22"
+                "minami-yono-dep-down"
             ],
             "sta": [
-                "JA24"
+                "JA24-down"
             ],
             "sta_cut": 14.0,
             "time": 2,
@@ -225,10 +226,10 @@
         {
             "name": "北与野",
             "pa": [
-                "24"
+                "yono-honmachi-dep-down"
             ],
             "sta": [
-                "JA25"
+                "JA25-down"
             ],
             "sta_cut": 8.2,
             "time": 2,
@@ -237,7 +238,7 @@
         {
             "name": "大宮",
             "pa": [
-                "25"
+                "kita-yono-dep-down-kakueki"
             ],
             "time": 3,
             "sta_code": "JA26"
