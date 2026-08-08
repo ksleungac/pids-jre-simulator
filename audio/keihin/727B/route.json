@@ -22,7 +22,7 @@
             "sta": [
                 "JK47_OMY-south"
             ],
-            "sta_cut": 12,
+            "sta_cut": 11.44,
             "time": 0,
             "sta_code": "JK47"
         },
@@ -34,7 +34,7 @@
             "sta": [
                 "JK46-south"
             ],
-            "sta_cut": 9,
+            "sta_cut": 7.94,
             "time": 3,
             "sta_code": "JK46"
         },
@@ -46,7 +46,7 @@
             "sta": [
                 "JK45-south"
             ],
-            "sta_cut": 8,
+            "sta_cut": 8.0,
             "time": 2,
             "sta_code": "JK45"
         },
@@ -58,7 +58,7 @@
             "sta": [
                 "JK44-south"
             ],
-            "sta_cut": 9,
+            "sta_cut": 7.96,
             "time": 2,
             "sta_code": "JK44"
         },
@@ -70,7 +70,7 @@
             "sta": [
                 "JK43_URW-south"
             ],
-            "sta_cut": 17,
+            "sta_cut": 16.72,
             "time": 2,
             "sta_code": "JK43"
         },
@@ -82,7 +82,7 @@
             "sta": [
                 "JK42-south"
             ],
-            "sta_cut": 11,
+            "sta_cut": 9.41,
             "time": 3,
             "sta_code": "JK42"
         },
@@ -95,7 +95,7 @@
             "sta": [
                 "JK41-south"
             ],
-            "sta_cut": 11,
+            "sta_cut": 10.69,
             "time": 4,
             "sta_code": "JK41"
         },
@@ -108,7 +108,7 @@
             "sta": [
                 "JK40-south"
             ],
-            "sta_cut": 10,
+            "sta_cut": 9.67,
             "time": 2,
             "sta_code": "JK40"
         },
@@ -121,7 +121,7 @@
             "sta": [
                 "JK39-south"
             ],
-            "sta_cut": 11,
+            "sta_cut": 10.54,
             "time": 3,
             "sta_code": "JK39"
         },
@@ -134,7 +134,7 @@
             "sta": [
                 "JK38_ABN-south"
             ],
-            "sta_cut": 10,
+            "sta_cut": 10.0,
             "time": 3,
             "sta_code": "JK38"
         },
@@ -146,7 +146,7 @@
             "sta": [
                 "JK37-south"
             ],
-            "sta_cut": 10,
+            "sta_cut": 9.65,
             "time": 3,
             "sta_code": "JK37"
         },
@@ -158,7 +158,7 @@
             "sta": [
                 "JK36-south"
             ],
-            "sta_cut": 10,
+            "sta_cut": 9.7,
             "time": 2,
             "sta_code": "JK36"
         },
@@ -170,7 +170,7 @@
             "sta": [
                 "JK35-south"
             ],
-            "sta_cut": 10,
+            "sta_cut": 10.0,
             "time": 2,
             "sta_code": "JK35"
         },
@@ -182,7 +182,7 @@
             "sta": [
                 "JK34-south"
             ],
-            "sta_cut": 6,
+            "sta_cut": 6.03,
             "time": 3,
             "sta_code": "JK34"
         },
@@ -194,7 +194,7 @@
             "sta": [
                 "JK33-south"
             ],
-            "sta_cut": 9,
+            "sta_cut": 8.51,
             "time": 2,
             "sta_code": "JK33"
         },
@@ -206,7 +206,7 @@
             "sta": [
                 "JK32_NPR-south"
             ],
-            "sta_cut": 11,
+            "sta_cut": 8.47,
             "time": 2,
             "sta_code": "JK32"
         },
@@ -218,7 +218,7 @@
             "sta": [
                 "JK31-south"
             ],
-            "sta_cut": 9,
+            "sta_cut": 8.51,
             "time": 2,
             "sta_code": "JK31"
         },
@@ -230,7 +230,7 @@
             "sta": [
                 "JK30_UEN-south"
             ],
-            "sta_cut": 5,
+            "sta_cut": 4.55,
             "time": 2,
             "sta_code": "JK30"
         },
@@ -242,7 +242,7 @@
             "sta": [
                 "JK29-south"
             ],
-            "sta_cut": 9,
+            "sta_cut": 8.26,
             "time": 2,
             "sta_code": "JK29"
         },
@@ -254,7 +254,7 @@
             "sta": [
                 "JK28_AKB-south"
             ],
-            "sta_cut": 8,
+            "sta_cut": 8.25,
             "time": 3,
             "sta_code": "JK28"
         },
@@ -266,7 +266,7 @@
             "sta": [
                 "JK27_KND-south"
             ],
-            "sta_cut": 9,
+            "sta_cut": 8.43,
             "time": 2,
             "sta_code": "JK27"
         },
@@ -278,7 +278,7 @@
             "sta": [
                 "JK26_TYO-south"
             ],
-            "sta_cut": 9,
+            "sta_cut": 7.0,
             "time": 2,
             "sta_code": "JK26"
         },
@@ -290,7 +290,7 @@
             "sta": [
                 "JK25-south"
             ],
-            "sta_cut": 8,
+            "sta_cut": 6.99,
             "time": 2,
             "sta_code": "JK25"
         },
@@ -302,7 +302,7 @@
             "sta": [
                 "JK24_SMB-south"
             ],
-            "sta_cut": 9,
+            "sta_cut": 8.55,
             "time": 2,
             "sta_code": "JK24"
         },
@@ -314,7 +314,7 @@
             "sta": [
                 "JK23_HMC-south"
             ],
-            "sta_cut": 9,
+            "sta_cut": 9.0,
             "time": 4,
             "sta_code": "JK23"
         },
@@ -326,7 +326,7 @@
             "sta": [
                 "JK22-south"
             ],
-            "sta_cut": 9,
+            "sta_cut": 9.12,
             "time": 2,
             "sta_code": "JK22"
         },
@@ -338,7 +338,7 @@
             "sta": [
                 "JK20_SGW-south"
             ],
-            "sta_cut": 6,
+            "sta_cut": 5.98,
             "time": 3,
             "sta_code": "JK20"
         },
@@ -351,7 +351,7 @@
             "sta": [
                 "JK19-south"
             ],
-            "sta_cut": 11,
+            "sta_cut": 10.08,
             "time": 4,
             "sta_code": "JK19"
         },
@@ -364,7 +364,7 @@
             "sta": [
                 "JK18-south"
             ],
-            "sta_cut": 9,
+            "sta_cut": 9.28,
             "time": 2,
             "sta_code": "JK18"
         },
@@ -377,7 +377,7 @@
             "sta": [
                 "JK17-south"
             ],
-            "sta_cut": 11,
+            "sta_cut": 9.91,
             "time": 4,
             "sta_code": "JK17"
         },
@@ -390,7 +390,7 @@
             "sta": [
                 "JK16_KWS-south"
             ],
-            "sta_cut": 10,
+            "sta_cut": 9.17,
             "time": 5,
             "sta_code": "JK16"
         },
@@ -403,7 +403,7 @@
             "sta": [
                 "JK15-south"
             ],
-            "sta_cut": 19,
+            "sta_cut": 18.71,
             "time": 4,
             "sta_code": "JK15"
         },
@@ -414,9 +414,9 @@
                 "shin-koyasu-arr-south"
             ],
             "sta": [
-                "JK14-south"
+                "JK15-south"
             ],
-            "sta_cut": 13,
+            "sta_cut": 18.71,
             "time": 3,
             "sta_code": "JK14"
         },
@@ -429,7 +429,7 @@
             "sta": [
                 "JK13-south"
             ],
-            "sta_cut": 14,
+            "sta_cut": 10.34,
             "time": 3,
             "sta_code": "JK13"
         },
@@ -441,7 +441,7 @@
             "sta": [
                 "JK12_YHM-south"
             ],
-            "sta_cut": 19,
+            "sta_cut": 18.97,
             "time": 4,
             "sta_code": "JK12"
         },
@@ -453,7 +453,7 @@
             "sta": [
                 "JK11-south"
             ],
-            "sta_cut": 10,
+            "sta_cut": 10.22,
             "time": 3,
             "sta_code": "JK11"
         },
@@ -465,7 +465,7 @@
             "sta": [
                 "JK10-south"
             ],
-            "sta_cut": 14,
+            "sta_cut": 14.0,
             "time": 3,
             "sta_code": "JK10"
         },
@@ -477,7 +477,7 @@
             "sta": [
                 "JK09-south"
             ],
-            "sta_cut": 20,
+            "sta_cut": 19.32,
             "time": 2,
             "sta_code": "JK09"
         },
@@ -489,7 +489,7 @@
             "sta": [
                 "JK08-south"
             ],
-            "sta_cut": 20,
+            "sta_cut": 19.4,
             "time": 2,
             "sta_code": "JK08"
         },
@@ -502,7 +502,7 @@
             "sta": [
                 "JK07-south"
             ],
-            "sta_cut": 7,
+            "sta_cut": 6.84,
             "time": 3,
             "sta_code": "JK07"
         },
@@ -515,7 +515,7 @@
             "sta": [
                 "JK06-south"
             ],
-            "sta_cut": 10,
+            "sta_cut": 9.69,
             "time": 3,
             "sta_code": "JK06"
         },
