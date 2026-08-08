@@ -35,7 +35,6 @@
       "Bash(ssh *)",
       "Bash(scp *)",
       "Bash(nc *)",
-      "Bash(rm -rf *)",
       "Bash(sudo *)",
       "Bash(chmod 777 *)",
       "Bash(* > /dev/*)"
