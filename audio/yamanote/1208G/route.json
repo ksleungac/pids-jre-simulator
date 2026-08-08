@@ -1,5 +1,6 @@
 {
     "route": "山手線",
+    "audio_root": "..",
     "model": "e235_0",
     "line_code": "JY",
     "transfer_view": "JY_inner",
@@ -34,7 +35,7 @@
         {
             "name": "品川",
             "pa": [
-                "1"
+                "osaki-dep-inner"
             ],
             "sta": [
                 "JY25_SGW"
@@ -46,7 +47,7 @@
         {
             "name": "田町",
             "pa": [
-                "3"
+                "shinagawa-dep-inner"
             ],
             "sta": [
                 "JY27"
@@ -59,7 +60,7 @@
         {
             "name": "浜松町",
             "pa": [
-                "4"
+                "tamachi-dep-inner"
             ],
             "sta": [
                 "JY28_HMC"
@@ -71,7 +72,7 @@
         {
             "name": "新橋",
             "pa": [
-                "5"
+                "hamamatsucho-dep-inner"
             ],
             "sta": [
                 "JY29_SMB"
@@ -83,7 +84,7 @@
         {
             "name": "有楽町",
             "pa": [
-                "6"
+                "shimbashi-dep-inner"
             ],
             "sta": [
                 "JY30"
@@ -95,7 +96,7 @@
         {
             "name": "東京",
             "pa": [
-                "7"
+                "yurakucho-dep-inner"
             ],
             "sta": [
                 "JY01_TYO"
@@ -107,7 +108,7 @@
         {
             "name": "神田",
             "pa": [
-                "8"
+                "tokyo-dep-inner"
             ],
             "sta": [
                 "JY02_KND"
@@ -120,7 +121,7 @@
         {
             "name": "秋葉原",
             "pa": [
-                "9"
+                "kanda-dep-inner"
             ],
             "sta": [
                 "JY03_AKB"
@@ -132,7 +133,7 @@
         {
             "name": "御徒町",
             "pa": [
-                "10"
+                "akihabara-dep-inner"
             ],
             "sta": [
                 "JY04"
@@ -144,7 +145,7 @@
         {
             "name": "上野",
             "pa": [
-                "11"
+                "okachimachi-dep-inner"
             ],
             "sta": [
                 "JY05_UEN"
@@ -156,7 +157,7 @@
         {
             "name": "鶯谷",
             "pa": [
-                "12"
+                "ueno-dep-inner"
             ],
             "sta": [
                 "JY06"
@@ -169,7 +170,7 @@
         {
             "name": "日暮里",
             "pa": [
-                "13"
+                "uguisudani-dep-inner"
             ],
             "sta": [
                 "JY07_NPR"
@@ -181,7 +182,7 @@
         {
             "name": "西日暮里",
             "pa": [
-                "14"
+                "nippori-dep-inner"
             ],
             "sta": [
                 "JY08"
@@ -193,7 +194,7 @@
         {
             "name": "田端",
             "pa": [
-                "15"
+                "nishi-nippori-dep-inner"
             ],
             "sta": [
                 "JY09"
@@ -205,7 +206,7 @@
         {
             "name": "駒込",
             "pa": [
-                "16"
+                "tabata-dep-inner"
             ],
             "sta": [
                 "JY10"
@@ -217,7 +218,7 @@
         {
             "name": "巣鴨",
             "pa": [
-                "17"
+                "komagome-dep-inner"
             ],
             "sta": [
                 "JY11"
@@ -229,7 +230,7 @@
         {
             "name": "大塚",
             "pa": [
-                "18"
+                "sugamo-dep-inner"
             ],
             "sta": [
                 "JY12"
@@ -241,7 +242,7 @@
         {
             "name": "池袋",
             "pa": [
-                "19"
+                "otsuka-dep-inner"
             ],
             "sta": [
                 "JY13_IKB"
@@ -253,7 +254,7 @@
         {
             "name": "目白",
             "pa": [
-                "20"
+                "ikebukuro-dep-inner"
             ],
             "sta": [
                 "JY14"
@@ -266,7 +267,7 @@
         {
             "name": "高田馬場",
             "pa": [
-                "21"
+                "mejiro-dep-inner"
             ],
             "sta": [
                 "JY15"
@@ -278,7 +279,7 @@
         {
             "name": "新大久保",
             "pa": [
-                "22"
+                "takadanobaba-dep-inner"
             ],
             "sta": [
                 "JY16"
@@ -290,7 +291,7 @@
         {
             "name": "新宿",
             "pa": [
-                "23"
+                "shin-okubo-dep-inner"
             ],
             "sta": [
                 "JY17_SJK"
@@ -302,7 +303,7 @@
         {
             "name": "代々木",
             "pa": [
-                "24"
+                "shinjuku-dep-inner"
             ],
             "sta": [
                 "JY18"
@@ -315,7 +316,7 @@
         {
             "name": "原宿",
             "pa": [
-                "25"
+                "yoyogi-dep-inner"
             ],
             "sta": [
                 "JY19"
@@ -327,7 +328,7 @@
         {
             "name": "渋谷",
             "pa": [
-                "26"
+                "harajuku-dep-inner"
             ],
             "sta": [
                 "JY20_SBY"
@@ -339,7 +340,7 @@
         {
             "name": "恵比寿",
             "pa": [
-                "27"
+                "shibuya-dep-inner"
             ],
             "sta": [
                 "JY21_EBS"
@@ -352,7 +353,7 @@
         {
             "name": "目黒",
             "pa": [
-                "28"
+                "ebisu-dep-inner"
             ],
             "sta": [
                 "JY22"
@@ -364,7 +365,7 @@
         {
             "name": "五反田",
             "pa": [
-                "29"
+                "meguro-dep-inner"
             ],
             "sta": [
                 "JY23"
@@ -376,7 +377,7 @@
         {
             "name": "大崎",
             "pa": [
-                "30"
+                "gotanda-dep-inner"
             ],
             "sta": [
                 "JY24_OSK"

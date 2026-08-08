@@ -8,7 +8,7 @@ documented at `PASimulator.__init__`'s ``preview`` parameter.
 
 Usage:
   uv run preview_display.py                                     # MOCK route (audio/_mock/main)
-  uv run preview_display.py --route yamanote                    # real route by shorthand
+  uv run preview_display.py --route yamanote/1208G              # real route by shorthand
   uv run preview_display.py --route chuo/916H --stop 6          # real route at a specific stop
   uv run preview_display.py --screenshot out.png --mode english --stop 2 --pa 1
 
@@ -30,7 +30,7 @@ Interactive controls (forwarded to PASimulator._handle_input_preview):
   ESC       quit
 
 --route accepts: a path to route.json, a directory containing one, or a
-shorthand like 'yamanote' / 'chuo/916H' (resolved under audio/).
+shorthand like 'yamanote/1208G' / 'chuo/916H' (resolved under audio/).
 
 --lower-view {full,eight,cycle} forces the lower LCD into a fixed view.
 Default 'cycle' alternates full ↔ 8-station every 12s. 'eight' or 'full'
@@ -65,7 +65,7 @@ def _resolve_work_dir(spec: str) -> str:
     """Resolve a --route arg into a work_dir (directory containing route.json).
 
     Accepts a path to route.json, a directory, or a shorthand like
-    'yamanote' / 'chuo/916H' / '_mock/main' (probed under audio/).
+    'yamanote/1208G' / 'chuo/916H' / '_mock/main' (probed under audio/).
     """
     candidates = [
         Path(spec),
