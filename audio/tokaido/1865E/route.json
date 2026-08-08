@@ -1,7 +1,12 @@
 {
     "route": "東海道線",
+    "audio_root": "..",
     "line_code": "JT",
-    "color": [244, 132, 44],
+    "color": [
+        244,
+        132,
+        44
+    ],
     "type": "普通",
     "remarks": {
         "direction": "下り",
@@ -13,170 +18,276 @@
         {
             "name": "東京",
             "pa": [],
-            "pa_at_station": ["1"],
-            "sta": ["JT01_TYO"],
-            "sta_cut": 6,
+            "pa_at_station": [
+                "tokyo-stopping-down-futsu"
+            ],
+            "sta": [
+                "JT01_TYO"
+            ],
+            "sta_cut": 5.74,
             "time": 0,
             "sta_code": "JT01"
         },
-	    {
+        {
             "name": "新橋",
-            "pa": ["2"],
-            "sta": ["JT02_SMB"],
-            "sta_cut": 11,
+            "pa": [
+                "tokyo-dep-down-futsu"
+            ],
+            "sta": [
+                "JT02_SMB"
+            ],
+            "sta_cut": 11.34,
             "time": 2,
             "sta_code": "JT02"
         },
         {
             "name": "品川",
-            "pa": ["3", "4"],
-            "sta": ["JT03_SGW"],
-            "sta_cut": 17,
+            "pa": [
+                "shimbashi-dep-down-futsu",
+                "shinagawa-arr-down-futsu"
+            ],
+            "sta": [
+                "JT03_SGW"
+            ],
+            "sta_cut": 17.47,
             "time": 5,
             "sta_code": "JT03"
         },
         {
             "name": "川崎",
-            "pa": ["5", "6"],
-            "sta": ["JT04_KWS"],
-            "sta_cut": 12,
+            "pa": [
+                "shinagawa-dep-down-futsu",
+                "kawasaki-arr-down-futsu"
+            ],
+            "sta": [
+                "JT04_KWS"
+            ],
+            "sta_cut": 12.21,
             "time": 9,
             "sta_code": "JT04"
         },
         {
             "name": "横浜",
-            "pa": ["7", "8"],
-            "sta": ["JT05_YHM"],
-            "sta_cut": 8,
+            "pa": [
+                "kawasaki-dep-down-futsu",
+                "yokohama-arr-down-futsu"
+            ],
+            "sta": [
+                "JT05_YHM"
+            ],
+            "sta_cut": 8.37,
             "time": 8,
             "sta_code": "JT05"
         },
         {
             "name": "戸塚",
-            "pa": ["9", "10"],
-            "sta": ["JT06_TTK"],
-            "sta_cut": 11,
+            "pa": [
+                "yokohama-dep-down-futsu",
+                "totsuka-arr-down-futsu"
+            ],
+            "sta": [
+                "JT06_TTK"
+            ],
+            "sta_cut": 11.23,
             "time": 10,
             "sta_code": "JT06"
         },
         {
             "name": "大船",
-            "pa": ["11","12"],
-            "sta": ["JT07_OFN"],
-            "sta_cut": 11,
+            "pa": [
+                "totsuka-dep-down-futsu",
+                "ofuna-arr-down-futsu"
+            ],
+            "sta": [
+                "JT07_OFN"
+            ],
+            "sta_cut": 11.2,
             "time": 6,
             "sta_code": "JT07"
         },
         {
             "name": "藤沢",
-            "pa": ["13","14"],
-            "sta": ["JT08"],
-            "sta_cut": 7,
+            "pa": [
+                "ofuna-dep-down-futsu",
+                "fujisawa-arr-down-futsu"
+            ],
+            "sta": [
+                "JT08"
+            ],
+            "sta_cut": 6.89,
             "time": 4,
             "sta_code": "JT08"
         },
         {
             "name": "辻堂",
-            "pa": ["15","16"],
-            "sta": ["JT09"],
-            "sta_cut": 14,
+            "pa": [
+                "fujisawa-dep-down-futsu",
+                "tsujido-arr-down-futsu"
+            ],
+            "sta": [
+                "JT09"
+            ],
+            "sta_cut": 14.28,
             "time": 3,
             "sta_code": "JT09"
         },
         {
             "name": "茅ヶ崎",
-            "pa": ["17","18"],
-            "sta": ["JT10"],
-            "sta_cut": 15,
+            "pa": [
+                "tsujido-dep-down-futsu",
+                "chigasaki-arr-down-futsu"
+            ],
+            "sta": [
+                "JT10"
+            ],
+            "sta_cut": 15.5,
             "time": 3,
             "sta_code": "JT10"
         },
         {
             "name": "平塚",
-            "pa": ["19","20"],
-            "sta": ["JT11"],
-            "sta_cut": 17,
+            "pa": [
+                "chigasaki-dep-down-futsu",
+                "hiratsuka-arr-down-futsu"
+            ],
+            "sta": [
+                "JT11"
+            ],
+            "sta_cut": 17.87,
             "time": 5,
             "sta_code": "JT11"
         },
         {
             "name": "大磯",
-            "pa": ["21","22"],
-            "sta": ["JT12"],
-            "sta_cut": 11,
+            "pa": [
+                "hiratsuka-dep-down-futsu",
+                "oiso-arr-down-futsu"
+            ],
+            "sta": [
+                "JT12"
+            ],
+            "sta_cut": 11.3,
             "time": 4,
             "sta_code": "JT12"
         },
         {
             "name": "二宮",
-            "pa": ["23","24"],
-            "sta": ["JT13"],
-            "sta_cut": 15,
+            "pa": [
+                "oiso-dep-down-futsu",
+                "ninomiya-arr-down-futsu"
+            ],
+            "sta": [
+                "JT13"
+            ],
+            "sta_cut": 14.59,
             "time": 5,
             "sta_code": "JT13"
         },
         {
             "name": "国府津",
-            "pa": ["25","26"],
-            "pa_at_station": ["27","28"],
-            "sta": ["JT14"],
-            "sta_cut": 18,
+            "pa": [
+                "ninomiya-dep-down-futsu",
+                "kozu-arr-down-futsu"
+            ],
+            "pa_at_station": [
+                "kozu-stopping-1-down-futsu",
+                "kozu-stopping-2-down-futsu"
+            ],
+            "sta": [
+                "JT14"
+            ],
+            "sta_cut": 17.78,
             "time": 6,
             "sta_code": "JT14"
         },
         {
             "name": "鴨宮",
-            "pa": ["29", "30"],
-            "sta": ["JT15"],
-            "sta_cut": 11,
+            "pa": [
+                "kozu-dep-down-futsu",
+                "kamonomiya-arr-down-futsu"
+            ],
+            "sta": [
+                "JT15"
+            ],
+            "sta_cut": 11.28,
             "time": 5,
             "sta_code": "JT15"
         },
         {
             "name": "小田原",
-            "pa": ["31", "32"],
-            "sta": ["JT16"],
-            "sta_cut": 15,
+            "pa": [
+                "kamonomiya-dep-down-futsu",
+                "odawara-arr-down-futsu"
+            ],
+            "sta": [
+                "JT16"
+            ],
+            "sta_cut": 14.88,
             "time": 3,
             "sta_code": "JT16"
         },
         {
             "name": "早川",
-            "pa": ["33", "34"],
-            "sta": ["JT17"],
-            "sta_cut": 16,
+            "pa": [
+                "odawara-dep-down-futsu",
+                "hayakawa-arr-down-futsu"
+            ],
+            "sta": [
+                "JT17"
+            ],
+            "sta_cut": 16.41,
             "time": 3,
             "sta_code": "JT17"
         },
         {
             "name": "根府川",
-            "pa": ["35", "36"],
-            "sta": ["JT18"],
-            "sta_cut": 10,
+            "pa": [
+                "hayakawa-dep-down-futsu",
+                "nebukawa-arr-down-futsu"
+            ],
+            "sta": [
+                "JT18"
+            ],
+            "sta_cut": 9.98,
             "time": 5,
             "sta_code": "JT18"
         },
         {
             "name": "真鶴",
-            "pa": ["37", "38"],
-            "sta": ["JT19"],
-            "sta_cut": 10,
+            "pa": [
+                "nebukawa-dep-down-futsu",
+                "manazuru-arr-down-futsu"
+            ],
+            "sta": [
+                "JT19"
+            ],
+            "sta_cut": 9.94,
             "time": 5,
             "sta_code": "JT19"
         },
         {
             "name": "湯河原",
-            "pa": ["39", "40"],
-            "sta": ["JT20"],
-            "sta_cut":10,
+            "pa": [
+                "manazuru-dep-down-futsu",
+                "yugawara-arr-down-futsu"
+            ],
+            "sta": [
+                "JT20"
+            ],
+            "sta_cut": 9.99,
             "time": 4,
             "sta_code": "JT20"
         },
-		{
+        {
             "name": "熱海",
-            "pa": ["41", "42"],
-            "sta": ["JT21"],
-            "sta_cut":6,
+            "pa": [
+                "yugawara-dep-down-futsu",
+                "atami-arr-down-futsu"
+            ],
+            "sta": [
+                "JT21"
+            ],
+            "sta_cut": 6.93,
             "time": 4,
             "sta_code": "JT21"
         }
