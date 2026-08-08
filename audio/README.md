@@ -14,12 +14,13 @@ Per-line PA + STA audio + `route.json`. Line-specific IRL/sim mental model lives
 
 ## Folder convention
 
-- `<line>/<diagram>/{pa,sta,route.json}` = standard shape. Diagram = scheduled JR EAST service ID (`1865E`, `1217F`, `3922E`, …). Multi-diagram lines hold one folder per service.
-- **Every shipped line is pooled** — `<line>/{pa,sta}/` shared, `<line>/<diagram>/route.json` carrying `"audio_root": ".."`. One schema, no exceptions: Yamanote was the last flat line and moved to `1208G/` on 2026-08-08.
+- `<line>/{pa,sta}/` + `<line>/<diagram>/route.json` = **the shape, on every shipped line.** Diagram = scheduled JR EAST service ID (`1865E`, `1217F`, `1208G`, …); multi-diagram lines hold one folder per service, single-diagram lines still get one. `route.json` carries `"audio_root": ".."` → [DATA_FORMAT § audio_root Field](../DATA_FORMAT.md).
+- `<line>/<diagram>/{pa,sta,route.json}` (audio beside route.json) = the pre-pool shape, retired 2026-08-08. Only `_joban/tsuchiura` and `_mock/main` still use it.
 - `_archive/<line>/<diagram>/` = preserved-not-shipped past diagrams. Dredge on glob lookup when adding new diagram on same line — old splits often reusable.
 - `_mock/main/` = curated preview catalog. Details → [`_mock/main/README.md`](_mock/main/README.md).
 - Filename-as-store + `_*` prefix rules → [conventions.md § Naming](../.claude/rules/conventions.md).
-- **PA filename default = legacy numeric** (`1.mp3`, `2.mp3`, …). Lines using descriptive `{station}-{dep|arr}` shape (DATA_FORMAT's preferred convention for new lines) are flagged in their entry. Schema reference → [DATA_FORMAT § PA Track Filename Convention](../DATA_FORMAT.md).
+- **PA filenames are descriptive on every shipped line** — `{station}-{dep|arr}-{direction}` plus a train-type tier where two diagrams' announcements differ. `{station}` on a `-dep` slug is the previous **stopping** station, which differs from the previous array element on any diagram that skips. `pa_at_station` uses `{station}-stopping[-N]-{direction}`. Numeric slugs survive only under `_joban/` and `_mock/`. Schema reference → [DATA_FORMAT § PA Track Filename Convention](../DATA_FORMAT.md).
+- **STA filenames take no direction token** — a melody belongs to a platform, and direction is only ever a proxy for it. Keihin (`-south`) and saikyo (`-down`) carry one because they were pooled before that rule; they are kept, not copied.
 
 ---
 
@@ -102,7 +103,6 @@ The whole-loop rule (keep a whole number of melody loops, trim a trailing partia
 ### JT — Tokaido (東海道線)
 
 - **Name:** 東海道線 / Tōkaidō Line
-- **Diagrams:** `1865E`, `3535E`
 - **Diagrams:** `1865E` (普通, stops everywhere), `3535E` (快速アクティー, skips 辻堂 / 大磯 / 二宮 / 鴨宮). Both 下り to 熱海.
 - **Sim quirks:** `1865E` carries `pa_at_station` on 東京 (pre-departure boarding notice) and on 国府津 — junction with Gotemba Line, a dwell notice then a departure-imminent one. `3535E` omits both (same junction, different recording scope).
 - **Audio quirks — the two diagrams share no PA at all.** All 31 same-role pairs are separate takes (correlation 0.08–0.79, nothing near 1.0), sourced from two independent recordings, so every PA file carries a type token. STA is the opposite: all 21 pairs are sample-identical.

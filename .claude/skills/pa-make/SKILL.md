@@ -39,12 +39,12 @@ The user points at a working folder like `audio_src/<line>/<diagram>/` containin
 ## Required input
 
 - Path to the source mp3 (typically `audio_src/<line>/<diagram>/src.mp3`).
-- Which line + diagram the splits belong to (target: `audio/<line>/<diagram>/pa/`) — usually mirrors the source path.
+- Which line + diagram the splits belong to (target: `audio/<line>/pa/`) — usually mirrors the source path.
 - For Step 0 only: **start offset** (where the route's relevant content begins) and **route context** (line, train type, destination, stop list).
 
 ## Working files live under `audio_src/`
 
-**All mid-products of this workflow stay under `audio_src/` (gitignored).** The repo only ever ships the operational outputs (`audio/<line>/<diagram>/pa/*.mp3` and `route.json`). Anything else — source mp3s, trimmed sources, Whisper transcripts, timestamps, splitter scripts, intermediate proposals — is local-only.
+**All mid-products of this workflow stay under `audio_src/` (gitignored).** The repo only ever ships the operational outputs (`audio/<line>/pa/*.mp3` and `route.json`). Anything else — source mp3s, trimmed sources, Whisper transcripts, timestamps, splitter scripts, intermediate proposals — is local-only.
 
 ```
 audio_src/
@@ -174,13 +174,13 @@ Naming: `split_pa.py` if it's the only PA source for this diagram, otherwise `sp
 **PA splitter pattern** — each timestamp = start of one segment, ending at next chronological timestamp; last runs to EOF:
 
 ```python
-"""Split src.mp3 into N PA segments for audio/<line>/<diagram>/pa/."""
+"""Split src.mp3 into N PA segments for audio/<line>/pa/."""
 import subprocess, sys
 from pathlib import Path
 
 SRC = Path(__file__).parent / "src.mp3"
 # parents[3] climbs: <diagram> → <line> → audio_src → project root
-OUT = Path(__file__).resolve().parents[3] / "audio" / "<line>" / "<diagram>" / "pa"
+OUT = Path(__file__).resolve().parents[3] / "audio" / "<line>" / "pa"
 
 # (start_M:SS, output_basename) — segment N runs from SEGMENTS[N][0] to SEGMENTS[N+1][0]
 SEGMENTS = [
@@ -233,7 +233,7 @@ import json
 from pathlib import Path
 ROOT = Path('D:/pids_jre_simulator')   # absolute path — cwd persists across Bash calls
 route = json.load(open(ROOT / 'audio/<line>/<diagram>/route.json', encoding='utf-8'))
-pa_dir = ROOT / 'audio/<line>/<diagram>/pa'
+pa_dir = ROOT / 'audio/<line>/pa'
 on_disk = {p.stem for p in pa_dir.glob('*.mp3')} if pa_dir.exists() else set()
 refs = {x for stop in route['stops'] for x in stop.get('pa', [])}
 print(f'pa: refs={len(refs)} disk={len(on_disk)} missing={sorted(refs-on_disk)} unused={sorted(on_disk-refs)}')
@@ -243,7 +243,7 @@ print(f'pa: refs={len(refs)} disk={len(on_disk)} missing={sorted(refs-on_disk)} 
 ### Step 7 — Trim silence to voice onset
 
 ```bash
-uv run python _dev_scripts/trim_pa_silence.py audio/<line>/<diagram>/pa
+uv run python _dev_scripts/trim_pa_silence.py audio/<line>/pa
 ```
 
 **Voice-onset detection replaces the simple -40 dB gate.** The old `validate_pa.py` check was too crude — it couldn't distinguish recording hiss (-45 to -40 dB) from actual voice, so files with noisy sources kept multi-second noise leads while the validator reported them as "clean."
@@ -296,7 +296,7 @@ Level alone does not separate a good lead from a bad one: `kanda-arr-916H`'s 167
 #### Step 7.5 — Final validate
 
 ```bash
-uv run _dev_scripts/validate_pa.py audio/<line>/<diagram>/pa
+uv run _dev_scripts/validate_pa.py audio/<line>/pa
 ```
 
 Fast -40 dB gate after trimming. Expect 0 flags on low-noise files; a few flags may remain on files where the noise floor sits just above -40 dB in the 80ms pad — treat as false-positive suggestions, not failures. The onset detector is the ground truth.
@@ -308,7 +308,7 @@ uv run python _dev_scripts/verify_pa_listen.py audio/<line>/<diagram>
 uv run python _dev_scripts/verify_pa_listen.py audio/<line>          # pooled line
 ```
 
-Plays first 3s of each PA segment (head), then last 3s before EOF (tail) — sequential auto-playback so you hear both ends. Seeks via `pygame.mixer.music.play(start=offset)` (same mechanism as STA verifier). PASS/FAIL per file, notes editable. Verdicts persist to `audio_src/<line>/<diagram>/pa_verify_results.json`. Includes both `pa` and `pa_at_station` entries.
+Plays first 3s of each PA segment (head), then last 3s before EOF (tail) — sequential auto-playback so you hear both ends. Seeks via `pygame.mixer.music.play(start=offset)` (same mechanism as STA verifier). PASS/FAIL per file, notes editable. Verdicts persist to `audio_src/<line>/pa_verify_results.json`. Includes both `pa` and `pa_at_station` entries.
 
 Keys: P pass  F fail  R replay  E edit note  ↑↓ navigate  Q/ESC quit
 
@@ -334,12 +334,30 @@ Launching it from the Bash tool works — audio reaches the speakers (2026-07-25
 
 ### PA filename convention
 
-`{prev-station}-dep.mp3` / `{this-station}-arr.mp3`
+`{prev-station}-dep-{direction}[-{type}].mp3` / `{this-station}-arr-{direction}[-{type}].mp3`
 
+Every line is pooled, so PA files from every diagram share one folder and the name has to
+survive that. Full grammar and rationale → `WIP_audio_pooling.md § Naming rules`.
+
+- **`{direction}` is mandatory, even on a one-direction line.** Take it from the route's own
+  `remarks.direction`, never pick one: 上り→`up`, 下り→`down`, 南行/北行→`south`/`north`,
+  内回り/外回り→`inner`/`outer`. A pool built without it collides the day a reverse diagram lands.
+- **`{type}` only where a MEASURED difference exists** between two diagrams' takes of the same
+  announcement (`audio_id.same_recording`). Bare means "one file serves the line", which is the
+  signal a later diagram needs. Existing tokens: `kaisoku` / `kakueki` / `futsu` / `acty`.
+- **`{prev}` is the previous STOPPING station, not the previous array element.** On any diagram
+  that skips, those differ — deriving it from `stops[i-1]` produced `tsujido-dep` on Tokaido
+  3535E for an announcement that says 茅ヶ崎. If the line has a diagram whose slugs are already
+  descriptive, assert your derivation reproduces them; that turns it into a free oracle.
+- **`pa_at_station`** → `{station}-stopping[-N]-{direction}[-{type}]`, indexed when a stop has
+  more than one (array order is play order).
 - All lowercase, hyphens within compound names, no diacritics (Hepburn with macrons stripped).
-- 1-PA mid-route stations: use `{prev}-dep` (single PA covers "we just left X, next is Y").
-- Terminus single PA: use `{this}-arr` (only an arrival announcement at end of line).
-- Compound stations: `shin-nihombashi-dep`, `kita-ageo-arr`.
+- 1-PA mid-route stations: `{prev}-dep` (one PA covers "we just left X, next is Y").
+- **Terminus single PA: usually `{this}-arr` — but read the audio, this default is wrong often
+  enough to matter.** Keiyo's 東京 says 次は終点、東京, an announcement made leaving 八丁堀, so it
+  is `hatchobori-dep-up`. First-of-pair is 次は (dep), second is まもなく (arr); a terminus can be
+  either. A mis-set role is permanent once the file is renamed.
+- Compound stations: `shin-nihombashi-dep-down`, `kita-ageo-arr-down`.
 
 ### Japanese → ASCII slug rules
 
@@ -378,7 +396,7 @@ First run on a new machine downloads the ~3 GB `large-v3` model into the local h
 - **First N minutes of a PA source mp3 may be non-PA filler** (silence, intro). The splitter starts at the first real timestamp; everything before is discarded.
 - **6-second gaps between two PA segments are real.** Sometimes JR back-to-backs two announcements. Don't "fix" by merging without asking.
 - **Don't assume per-station PA count.** The timestamps file is ground truth. Count actual entries before sizing route.json `pa` arrays.
-- **Splitter scripts stay with their source folder** (`audio_src/<line>/<diagram>/`). The whole `audio_src/` tree is gitignored — splitters and timestamps live there alongside the raw mp3s, and only the cut output under `audio/<line>/<diagram>/pa/` ships in the repo.
+- **Splitter scripts stay with their source folder** (`audio_src/<line>/<diagram>/`). The whole `audio_src/` tree is gitignored — splitters and timestamps live there alongside the raw mp3s, and only the cut output under `audio/<line>/pa/` ships in the repo.
 - **Whisper is LLM-mediated for matching, not deterministic.** Read the transcript, apply judgment for homophones and special cases — don't write a rigid clusterer.
 - **Always pre-trim** to the user-specified start offset before transcription. Transcribing the entire un-trimmed source pollutes context with content from preceding lines.
 - **Always `large-v3`** for production. Medium loses bilingual content + adds homophone errors. Speed is not the bottleneck on GPU.

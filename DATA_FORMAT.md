@@ -34,7 +34,8 @@ data/
 ├── lines.json               # Rail line catalog (badges, colors, display names) for transfer entries
 ├── line_icons/              # PNG assets for branded line logos (Shinkansen, etc.)
 └── stations.json            # Station metadata (3-letter codes, transfers; more fields over time)
-audio/[line]/[diagram]/route.json   # diagram folder may be omitted for single-diagram lines
+audio/[line]/{pa,sta}/              # per-line shared audio pool — every shipped line
+audio/[line]/[diagram]/route.json   # route data only; "audio_root": ".." points at the pool
 ```
 
 ---
@@ -357,6 +358,7 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 ```json
 {
     "route": "路線名",              // Route name (e.g., 中央線快速電車，埼京線)
+    "audio_root": "..",            // Folder holding this route's pa/ and sta/, relative to the route.json's own folder. Every shipped line uses ".." (the per-line pool). See § audio_root Field.
     "model": "e235_0",             // Optional. Default train-display model for this route (registry key in displays/train_models/__init__.py, e.g. e235_1000 / e235_0). Seeds the setup-screen per-route model dropdown; the user can override per session. Absent / unknown → e235_1000 (DEFAULT_MODEL_KEY).
     "line_code": "JY",             // Optional. Active-line badge code (JY/JK/JC/JO/JU/JT/JJ/JE/JN/JA). Drives transfer-info active-line filter — entries whose badges include this code are dropped. Absent → no filter (renders raw transfers).
     "transfer_view": "JY_inner",   // Optional. Key into each station's `transfers_by_view` map (e.g. JY_inner, JK_south, JO_east). Selects per-station drop/edit ops for this train direction. Absent → no view ops applied.
@@ -370,6 +372,25 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
     "frames": [...]                // Optional. Through-service display frames — partitions the route, LCD swaps at junctions
 }
 ```
+
+#### `audio_root` Field
+
+Folder holding this route's `pa/` and `sta/`, **relative to the route.json's own folder**. Every shipped line carries `".."`, pointing at the per-line pool:
+
+```
+audio/tokaido/pa/            <- 73 PA files, shared
+audio/tokaido/sta/           <- 21 STA files, shared
+audio/tokaido/1865E/route.json   "audio_root": ".."
+audio/tokaido/3535E/route.json   "audio_root": ".."
+```
+
+Absent → audio sits beside `route.json` (the pre-pool shape; only `audio/_mock/main` and `audio/_joban/tsuchiura` still do this).
+
+**Resolution lives in exactly one place: `route_loader.resolve_audio_root(work_dir, route_data)`.** Both consumers call it — `app.py._load_route_data` (→ `self.audio_root` → `AudioPlayer`) and `validate_data.check_route`. Nothing else may join an audio path by hand; two sites did, and both were silently broken by the migration (the OOBE tutorial's asset pre-flight, and the auto-driver's long-approach probe).
+
+**There is deliberately NO search order.** A diagram-then-pool fallback was designed and rejected: legacy PA slugs are diagram-local (`1654T/pa/1.mp3` and `916H/pa/1.mp3` were different announcements), so a missing file would silently resolve to the pool and play the *wrong announcement* with no error — [critical_lessons.md §2](.claude/rules/critical_lessons.md). One root means one resolved path and a loud failure. Do not reintroduce a fallback.
+
+Pool filename grammar (PA direction token, train-type tier, STA verbatim rule) → [audio/README.md](audio/README.md) per-line entries.
 
 #### `pre_stops` Array (Through-Service Pre-Route) — Optional
 
@@ -468,13 +489,13 @@ same split (`font_atlas.STATION_NAMES` declares `split=True` for exactly this).
 
 `pa` array contains filenames (without `.mp3` extension) mapping directly to audio files in `pa/` folder:
 
-- Track reference `"tokyo-dep"` → `audio/[line]/[diagram]/pa/tokyo-dep.mp3`
-- **Preferred convention (new lines):** descriptive `{station}-{dep|arr}` (lowercase, hyphen-separated, no macrons). Reference: `audio/sobu/1217F/`, `audio/takasaki/3922E/`. Pattern:
+- Track reference `"tokyo-dep"` → `resolve_audio_root(work_dir, route_data) / "pa" / "tokyo-dep.mp3"`, which on every shipped line is `audio/[line]/pa/tokyo-dep.mp3` (see § `audio_root` Field)
+- **The convention on every shipped line:** descriptive `{station}-{dep|arr}-{direction}`, plus a train-type tier where two diagrams' announcements differ (lowercase, hyphen-separated, no macrons). Reference: `audio/sobu/pa/`, `audio/takasaki/pa/`. Grammar and per-line specifics → [audio/README.md](audio/README.md). Pattern:
   - `{prev-station}-dep` = Departure announcement (recorded after departing previous station, announcing next stop). Lives in *this* stop's `pa` array.
   - `{this-station}-arr` = Arrival announcement (recorded approaching this station)
   - Compound station names use additional hyphens: `shin-koiwa-dep`, `kita-ageo-arr`
   - Terminus only has `{this}-arr`; first station has no PA at all
-- **Legacy convention (existing lines):** sequential numbers (`"1"`, `"2"`, …) — used by `audio/keiyo/`, `audio/chuo/`. Don't migrate; renderer treats both identically.
+- **Numeric slugs (`"1"`, `"2"`, …) are retired on every shipped line** — the 2026-08-08 pooling converted the last of them (keiyo, yamanote, nambu, tokaido 1865E). They survive only under `audio/_joban/` and `audio/_mock/`, so the renderer's tolerance of both forms is still live, not dead code.
 
 **When modifying PA tracks on numeric-convention line:** only change affected stations. Don't renumber subsequent stations. Example: moving track `"1"` from Station B to Station A only changes those two stations' arrays — every later station keeps existing numbers.
 

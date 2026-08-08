@@ -11,6 +11,7 @@ cycle plus a click-to-jump demo. Step copy lives in
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import time
@@ -22,6 +23,7 @@ import pygame
 import i18n
 from app import AppState, PASimulator
 from app_paths import project_root
+from route_loader import resolve_audio_root
 from displays.train_models.e235_1000 import S_HEIGHT, S_WIDTH
 from tims.widgets import _TUNEABLES_TIMS_BUTTON, draw_tims_button, press_transition
 
@@ -611,10 +613,13 @@ class Tutorial:
     # downstream 鴨宮 (idx 14, pa=["29","30"]) provides distinct dep+arr PAs.
     BOOT_STOP_IDX = 13
 
-    # Audio files the cycle plays. If any are missing, the tutorial aborts
-    # at startup and the caller sets oobe_completed=True so we don't re-prompt.
-    REQUIRED_PA = ("27.mp3", "28.mp3", "29.mp3", "30.mp3")
-    REQUIRED_STA = ("JT14.mp3",)
+    # Audio the cycle plays is DERIVED from route.json (the boot stop and the one
+    # after it), never listed here. A hardcoded list is a second copy of names that
+    # route.json already owns, and it silently disarmed this whole screen once: the
+    # 2026-08-08 audio pooling renamed tokaido's PA from numerics to descriptive
+    # slugs, assets_ok() went False, and embed_setup() bailed — for every NEW user
+    # only, because the caller then sets oobe_completed=True. Invisible on any dev
+    # machine that already had the flag (critical_lessons.md §6).
     REQUIRED_ROUTE = "route.json"
 
     @classmethod
@@ -706,13 +711,27 @@ class Tutorial:
         route = os.path.join(base, cls.REQUIRED_ROUTE)
         if not os.path.isfile(route):
             return False, f"missing {route}"
-        for f in cls.REQUIRED_PA:
-            p = os.path.join(base, "pa", f)
-            if not os.path.isfile(p):
-                return False, f"missing {p}"
-        for f in cls.REQUIRED_STA:
-            p = os.path.join(base, "sta", f)
-            if not os.path.isfile(p):
+        try:
+            with open(route, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError) as e:
+            return False, f"unreadable {route}: {e}"
+        # Audio lives in the per-line pool, not beside route.json. resolve_audio_root
+        # is the one resolver — see its CONTRACT block; nothing else joins audio paths.
+        root = resolve_audio_root(base, data)
+        stops = data.get("stops", [])
+        need: list[tuple[str, str]] = []
+        for idx in (cls.BOOT_STOP_IDX, cls.BOOT_STOP_IDX + 1):
+            if idx >= len(stops):
+                return False, f"{route}: stop {idx} missing (tutorial boots at {cls.BOOT_STOP_IDX})"
+            stop = stops[idx]
+            need += [("pa", n) for n in stop.get("pa", []) + stop.get("pa_at_station", [])]
+            need += [("sta", n) for n in stop.get("sta", [])]
+        if not need:
+            return False, f"{route}: stops {cls.BOOT_STOP_IDX}-{cls.BOOT_STOP_IDX + 1} reference no audio"
+        for kind, name in need:
+            p = root / kind / f"{name}.mp3"
+            if not p.is_file():
                 return False, f"missing {p}"
         return True, ""
 

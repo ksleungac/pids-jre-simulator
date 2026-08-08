@@ -6,7 +6,7 @@ trailing silence (below MIN_SILENCE seconds), the timestamp cut almost certainly
 landed inside speech — usually the previous announcement bleeding in or the
 current one being clipped at the tail.
 
-    uv run _dev_scripts/validate_pa.py audio/sobu/1217F/pa
+    uv run _dev_scripts/validate_pa.py audio/sobu/pa
 """
 
 from __future__ import annotations

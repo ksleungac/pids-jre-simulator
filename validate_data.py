@@ -543,12 +543,28 @@ def check_route(route_path: Path, translations: dict, train_types: dict, issues:
         if not is_first and not is_passing and "time" not in stop:
             issues.append((rel, f"[{i}] {name}: missing required 'time' field"))
 
+    # audio_root shape — checked for EVERY route including fixtures, because a wrong value
+    # surfaces only as N separate "pa/X.mp3 missing" lines, which names the wrong cause.
+    # conventions.md § Tooling: a data-field addition updates this validator in the same change.
+    from route_loader import resolve_audio_root
+
+    raw_root = data.get("audio_root")
+    if raw_root is not None:
+        if not isinstance(raw_root, str):
+            issues.append((rel, f"audio_root must be a string, got {type(raw_root).__name__}"))
+        else:
+            resolved = (route_path.parent / raw_root).resolve()
+            if not str(resolved).startswith(str(AUDIO_ROOT.resolve())):
+                issues.append((rel, f"audio_root {raw_root!r} escapes audio/ (resolves to {resolved})"))
+            elif not resolved.is_dir():
+                issues.append((rel, f"audio_root {raw_root!r} is not a directory ({resolved})"))
+            elif not (resolved / "pa").is_dir() and not (resolved / "sta").is_dir():
+                issues.append((rel, f"audio_root {raw_root!r} holds neither pa/ nor sta/ ({resolved})"))
+
     # Audio file references (cross-ref)
     if not fixture:
         # Resolve through the same single-root helper the runtime uses, so a
         # shared-pool route validates against the pool it will actually read.
-        from route_loader import resolve_audio_root
-
         audio_dir = resolve_audio_root(route_path.parent, data)
         pa_dir = audio_dir / "pa"
         sta_dir = audio_dir / "sta"

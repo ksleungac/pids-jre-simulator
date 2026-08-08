@@ -3,7 +3,7 @@
 Voice onset detected by RMS amplitude with adaptive threshold + sustained-voice gate.
 Room hum transients are filtered out by requiring voice to persist for 200ms.
 
-    uv run python _dev_scripts/trim_pa_silence.py audio/tokaido/1865E/pa
+    uv run python _dev_scripts/trim_pa_silence.py audio/tokaido/pa
 """
 
 import argparse, subprocess, sys

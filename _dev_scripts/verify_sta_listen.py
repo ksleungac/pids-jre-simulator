@@ -5,7 +5,7 @@ then [sta_cut - TAIL_LEAD, EOF] so you hear the music tail → cut → voice
 transition. A short beep marks the exact sta_cut moment during tail playback.
 Click/key in PASS or FAIL per station; final report to stdout.
 
-    uv run python _dev_scripts/verify_sta_listen.py audio/takasaki/3922E
+    uv run python _dev_scripts/verify_sta_listen.py audio/takasaki
 
 Keys: P=Pass  F=Fail  R=Replay  E=Edit note  N=Next without verdict  Q/Esc=Quit
       ←/→ move sta_cut  C commit sta_cut
@@ -31,7 +31,7 @@ start-trim amount (so the cut moment stays anchored to the same content).
 
 Per-station notes: click the ✎ row above the seek bar (or press E) to add /
 edit a note for the current station. Enter to save, Esc to cancel. Notes
-survive across runs (stored in audio_src/<line>/<diagram>/sta_verify_results.json
+survive across runs (stored in audio_src/<line>/sta_verify_results.json
 under the `note` field). Marking PASS auto-resolves the current note (display
 goes dim with strike-through, indicating the concern was checked and OK).
 """
@@ -551,7 +551,7 @@ def main() -> int:
         if unmatched:
             print(f"warning: --only names not found in route: {sorted(unmatched)}", file=sys.stderr)
 
-    # Output: audio_src/<line>/<diagram>/sta_verify_results.json. Mid-products of audio
+    # Output: audio_src/<line>/sta_verify_results.json. Mid-products of audio
     # workflows live under audio_src/ (gitignored), mirroring the operational hierarchy.
     # Falls back to project-root `_sta_verify_<slug>.json` if work_dir isn't under audio/.
     rel_under_audio = [p for p in args.work_dir.parts if p not in (".", "..", "audio")]
@@ -762,7 +762,11 @@ def main() -> int:
                 if sta in stop.get("sta", []):
                     stop["sta_cut"] = new_cut
                     hit = True
-                    break
+                    # No break: one slug can be referenced from SEVERAL stops in the SAME
+                    # route.json — yamanote's loop lists 大崎 twice, keihin points 新子安 at
+                    # 鶴見's melody, nambu shares one file across 矢川 and 西国立. Stopping at
+                    # the first match desyncs the pool inside a single file, which is the
+                    # exact invariant this helper exists to hold.
             if hit:
                 rp.write_text(json.dumps(route_obj, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
                 written.append(rp.parent.name)

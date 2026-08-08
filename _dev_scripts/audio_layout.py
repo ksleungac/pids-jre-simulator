@@ -30,6 +30,15 @@ def discover_route_sources(work_dir: Path, media_subdir: str) -> tuple[list[Path
     """
     media_dir = work_dir / media_subdir
     own = work_dir / "route.json"
+    # Guard BOTH layouts, not just the pooled one. Handing a pooled line's DIAGRAM folder
+    # (which is what these tools' own examples used to say) still finds route.json there and
+    # takes the per-diagram branch, then returns a media_dir that does not exist — the caller
+    # reports "no playable entries", naming the wrong cause. critical_lessons.md §2: fail loud.
+    if not media_dir.is_dir():
+        hint = ""
+        if own.exists() and (work_dir.parent / media_subdir).is_dir():
+            hint = f" — this line is pooled; pass the LINE folder ({work_dir.parent}) instead of the diagram"
+        raise FileNotFoundError(f"{media_subdir} folder not found: {media_dir}{hint}")
     if own.exists():
         stops = json.loads(own.read_text(encoding="utf-8"))["stops"]
         return [own], media_dir, [(own, stops)]
@@ -37,8 +46,6 @@ def discover_route_sources(work_dir: Path, media_subdir: str) -> tuple[list[Path
     route_paths = sorted(work_dir.glob("*/route.json"))
     if not route_paths:
         raise FileNotFoundError(f"no route.json at {own} and no <diagram>/route.json under {work_dir}")
-    if not media_dir.is_dir():
-        raise FileNotFoundError(f"{media_subdir} folder not found: {media_dir}")
 
     loaded = [(p, json.loads(p.read_text(encoding="utf-8"))["stops"]) for p in route_paths]
     return route_paths, media_dir, loaded

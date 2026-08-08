@@ -2,9 +2,9 @@
 
 For each PA in a route, plays the first PREVIEW_DURATION seconds (head→tail cycle).
 Click/key PASS or FAIL per station. Persists verdicts to
-audio_src/<line>/<diagram>/pa_verify_results.json.
+audio_src/<line>/pa_verify_results.json.
 
-    uv run python _dev_scripts/verify_pa_listen.py audio/tokaido/1865E
+    uv run python _dev_scripts/verify_pa_listen.py audio/tokaido
 
 Keys: P=Pass  F=Fail  R=Replay  E=Edit note  N=Next without verdict  Q/Esc=Quit
       ↑↓ navigate  Wheel=scroll sidebar
@@ -229,7 +229,7 @@ def _find_ffmpeg() -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("work_dir", type=Path, help="audio/<line>/<diagram>")
+    ap.add_argument("work_dir", type=Path, help="audio/<line>")
     ap.add_argument(
         "--only",
         help="comma-separated pa basenames to test (e.g. 'tokyo-dep' or 'tokyo-dep,shimbashi-arr')",

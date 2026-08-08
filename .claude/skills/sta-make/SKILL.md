@@ -106,7 +106,7 @@ For PA (announcement) processing, see the **pa-make** skill — separate workflo
 
 ## Working files live under `audio_src/`
 
-**All mid-products of this workflow stay under `audio_src/` (gitignored).** The repo only ever ships the operational outputs (`audio/<line>/<diagram>/sta/*.mp3` and `route.json`). Anything else — source mp3s, timestamps, splitter scripts, trim/splice backup snapshots, by-ear verifier results — is local-only.
+**All mid-products of this workflow stay under `audio_src/` (gitignored).** The repo only ever ships the operational outputs (`audio/<line>/sta/*.mp3` and `route.json`). Anything else — source mp3s, timestamps, splitter scripts, trim/splice backup snapshots, by-ear verifier results — is local-only.
 
 If `audio_src/<line>/<diagram>/` doesn't exist yet (common when revisiting an existing route for Phase B only), create it on demand. Per-line/diagram subfolders mirror the operational hierarchy 1:1.
 
@@ -222,7 +222,7 @@ from pathlib import Path
 SRC = Path(__file__).parent / "sta_source.mp3"
 # parents[3] climbs: <diagram> → <line> → audio_src → project root
 PROJECT = Path(__file__).resolve().parents[3]
-OUT_OP = PROJECT / "audio" / "<line>" / "<diagram>" / "sta"
+OUT_OP = PROJECT / "audio" / "<line>" / "sta"
 OUT_ARCHIVE = PROJECT / "audio" / "_archive" / "<line>" / "<diagram>" / "sta"
 
 SEGMENTS = [
@@ -290,7 +290,7 @@ Replace placeholder `sta_cut` and `sta` fields with the splitter's output values
 - **Stations IRL with no departure melody** (e.g. 千葉 on the Sobu line): same treatment — omit `sta` and `sta_cut`.
 - **Passing stations** (`pa: []`): omit `sta`, `sta_cut`, AND `time` — train doesn't stop, countdown comes from the next PA station's `time`.
 
-**Archive routing is handled by the splitter's per-segment `dest` tag in Step 3** — operational files land in `audio/<line>/<diagram>/sta/`, `"archive"`-tagged files land in `audio/_archive/<line>/<diagram>/sta/` (mirror layout under `_archive/`, no route.json there). The `_` prefix marks "preserved but not shipped" — `_archive/` and `_mock/` both follow this convention.
+**Archive routing is handled by the splitter's per-segment `dest` tag in Step 3** — operational files land in `audio/<line>/sta/`, `"archive"`-tagged files land in `audio/_archive/<line>/<diagram>/sta/` (mirror layout under `_archive/`, no route.json there). The `_` prefix marks "preserved but not shipped" — `_archive/` and `_mock/` both follow this convention.
 
 ### Step 6 — Sanity check refs vs disk
 
@@ -300,7 +300,7 @@ import json
 from pathlib import Path
 ROOT = Path('D:/pids_jre_simulator')   # absolute path — cwd persists across Bash calls
 route = json.load(open(ROOT / 'audio/<line>/<diagram>/route.json', encoding='utf-8'))
-sta_dir = ROOT / 'audio/<line>/<diagram>/sta'
+sta_dir = ROOT / 'audio/<line>/sta'
 on_disk = {p.stem for p in sta_dir.glob('*.mp3')} if sta_dir.exists() else set()
 refs = {x for stop in route['stops'] for x in stop.get('sta', [])}
 print(f'sta refs={len(refs)}  on_disk={len(on_disk)}')
@@ -313,7 +313,7 @@ print(f'unused on disk: {sorted(on_disk - refs)}')
 
 ```bash
 mkdir -p audio/_archive/<line>/<diagram>/sta
-mv audio/<line>/<diagram>/sta/{file1,file2}.mp3 audio/_archive/<line>/<diagram>/sta/
+mv audio/<line>/sta/{file1,file2}.mp3 audio/_archive/<line>/<diagram>/sta/
 ```
 
 Continue to **Phase B**.
@@ -328,7 +328,7 @@ This phase is **always run** — for new splits and for revisits to existing rou
 
 **`verify_sta_listen.py` is the primary tool of this phase, not its final gate.** It shows the waveform, takes a drag-selection, splices it with `X`, retunes `sta_cut` on the same screen, and writes to every `route.json` referencing the file. Artifact removal and cut placement are one pass over one file, not three steps over a corpus.
 
-The detector-first order this skill used to prescribe — detect, propose a table, apply in bulk, then listen — is demoted to background (Steps 7.5, 9, 10). It has failed on every line that has actually been examined:
+**Steps 7.5 and 8–10 below are BACKGROUND, not the path.** They document the detector-first order this skill used to prescribe — detect, propose a table, apply in bulk, then listen — which has failed on every line actually examined:
 
 | line | detector said | truth |
 |---|---|---|
@@ -352,7 +352,7 @@ This is the forward-looking half of `critical_lessons.md § "The instrument is n
 
 ```bash
 mkdir -p audio_src/<line>/<diagram>
-cp -r audio/<line>/<diagram>/sta audio_src/<line>/<diagram>/sta.bak
+cp -r audio/<line>/sta audio_src/<line>/<diagram>/sta.bak
 cp audio/<line>/<diagram>/route.json audio_src/<line>/<diagram>/route.json.bak
 ```
 
@@ -432,7 +432,7 @@ splices = []
 for stop in route["stops"]:
     for name in stop.get("sta", []):
         cut = stop.get("sta_cut")
-        p = Path(f"audio/<line>/<diagram>/sta/{name}.mp3")
+        p = Path(f"audio/<line>/sta/{name}.mp3")
         if cut is None or not p.exists(): continue
         y, sr = librosa.load(p, sr=22050, mono=True)
         env, dt = peak_env(y, sr, WIN_MS)
@@ -461,7 +461,7 @@ for stop in route["stops"]:
 - `kak_start ≥ sta_cut` → no change (KAK was after the cut point)
 - `kak_start < sta_cut < kak_end` → snap sta_cut to `kak_start`
 
-Then proceed to Step 8 (trim) normally — the spliced files now have a clean music→silence→voice structure that trim_sta_silence + detect_sta_cut handle correctly.
+If you are following the background path, Steps 8–10 come next — the spliced files then have a clean music→silence→voice structure that `trim_sta_silence` + `detect_sta_cut` handle correctly. On the verifier-first path (§ "The order") you are already done: the splice and the cut both landed in the same pass, and Step 11's gate has run.
 
 **Pattern B — "2nd-loop snippet"** (recording captured the start of a 2nd melody loop before the staff cut):
 
@@ -504,7 +504,7 @@ Source recordings occasionally have a tiny stutter at the start (e.g., the first
 Trims leading + trailing silence to ~0.2 s pads (lossless stream-copy) and the mid-file silence between music end and voice start to ~1 s (re-encodes, only when detection confidence is high and gap is in a sane range). With `--route`, patches route.json `sta_cut` values down by `lead_trim + mid_trim`.
 
 ```bash
-PYTHONUTF8=1 uv run python _dev_scripts/trim_sta_silence.py audio/<line>/<diagram>/sta \
+PYTHONUTF8=1 uv run python _dev_scripts/trim_sta_silence.py audio/<line>/sta \
     --route audio/<line>/<diagram>/route.json
 ```
 
@@ -520,7 +520,7 @@ Detector compares each `sta_cut` against the [`music_end`, `voice_start`] window
 - **LATE** (`sta_cut > voice_start`): simulator clips the first syllable of the announcement. Always wrong.
 
 ```bash
-PYTHONUTF8=1 uv run python _dev_scripts/detect_sta_cut.py audio/<line>/<diagram>/sta \
+PYTHONUTF8=1 uv run python _dev_scripts/detect_sta_cut.py audio/<line>/sta \
     --truth audio/<line>/<diagram>/route.json
 ```
 
@@ -614,12 +614,12 @@ The trim regions show as red overlays on the seek bar. Status line below the bar
 PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/<line>/<diagram> --only kumagaya
 ```
 
-Results merge into `audio_src/<line>/<diagram>/sta_verify_results.json` (auto-creating the dir under the gitignored `audio_src/` tree) — verdicts for stations not tested this run are preserved from the prior JSON. Read this file to pick up FAILs:
+Results merge into `audio_src/<line>/sta_verify_results.json` (auto-creating the dir under the gitignored `audio_src/` tree) — verdicts for stations not tested this run are preserved from the prior JSON. Read this file to pick up FAILs:
 
 ```python
 import json
 from pathlib import Path
-results = json.loads(Path("audio_src/<line>/<diagram>/sta_verify_results.json").read_text())
+results = json.loads(Path("audio_src/<line>/sta_verify_results.json").read_text())
 fails = [it for it in results["items"] if it["verdict"] == "FAIL"]
 ```
 
@@ -629,7 +629,7 @@ For each FAIL, the detector's reported `music_end` / `voice_start` may not match
 
 ```python
 import librosa, numpy as np
-y, sr = librosa.load("audio/<line>/<diagram>/sta/<sta>.mp3", sr=22050, mono=True)
+y, sr = librosa.load("audio/<line>/sta/<sta>.mp3", sr=22050, mono=True)
 hop = int(sr * 0.05)  # 50ms frames
 rms_db = 20 * np.log10(librosa.feature.rms(y=y, hop_length=hop)[0] + 1e-10)
 for i, t in enumerate(np.arange(len(rms_db)) * 0.05):
@@ -646,10 +646,10 @@ Look for the silence floor (-60 dB or below) marking the real music→voice gap.
 - Fix: probe the waveform manually (above), identify the real silence boundaries, then call `trim_middle_gap` directly with explicit values:
 
 ```bash
-ffmpeg -y -loglevel error -i audio/<line>/<diagram>/sta/<sta>.mp3 \
+ffmpeg -y -loglevel error -i audio/<line>/sta/<sta>.mp3 \
     -filter_complex "[0:a]atrim=0:<keep_until>,asetpts=PTS-STARTPTS[a1];[0:a]atrim=<skip_until>,asetpts=PTS-STARTPTS[a2];[a1][a2]concat=n=2:v=0:a=1[out]" \
     -map "[out]" -q:a 2 <sta>.tmp.mp3
-mv <sta>.tmp.mp3 audio/<line>/<diagram>/sta/<sta>.mp3
+mv <sta>.tmp.mp3 audio/<line>/sta/<sta>.mp3
 ```
 
 Where `keep_until = music_end + 0.5` and `skip_until = voice_start - 0.5` (uses the same arithmetic as `trim_middle_gap`). Then update `sta_cut` to `round(max(music_end, voice_start - 0.5 - 0.5), 1)` accounting for the splice. Re-run Steps 9 + 11 to confirm.
@@ -673,7 +673,7 @@ The combined operation:
 Template:
 
 ```bash
-ffmpeg -y -loglevel error -i audio/<line>/<diagram>/sta/<sta>.mp3 \
+ffmpeg -y -loglevel error -i audio/<line>/sta/<sta>.mp3 \
     -filter_complex "
         [0:a]atrim=0:<music_cut>,asetpts=PTS-STARTPTS[music];
         anullsrc=channel_layout=stereo:sample_rate=22050,atrim=duration=<silence_dur>[silence];
@@ -682,7 +682,7 @@ ffmpeg -y -loglevel error -i audio/<line>/<diagram>/sta/<sta>.mp3 \
         [ms][voice]acrossfade=d=0.02:c1=tri:c2=tri[out]
     " \
     -map "[out]" -q:a 2 <sta>.tmp.mp3
-mv <sta>.tmp.mp3 audio/<line>/<diagram>/sta/<sta>.mp3
+mv <sta>.tmp.mp3 audio/<line>/sta/<sta>.mp3
 ```
 
 Then update `sta_cut` to `<music_cut>` (= start of inserted silence).
@@ -729,10 +729,10 @@ finished corpus and report defects that are not defects. Update it in the same c
 After by-ear gate passes (`PASS` for all stations or user explicitly accepts FAILs):
 
 ```bash
-rm -rf audio/<line>/<diagram>/sta.bak audio/<line>/<diagram>/route.json.bak
+rm -rf audio_src/<line>/sta.bak audio_src/<line>/route.json.bak audio_src/<line>/sta_wave_backup
 ```
 
-The `audio_src/<line>/<diagram>/sta_verify_results.json` artifact can be kept (audit trail) or removed — it gets overwritten on next run anyway, and `audio_src/` is gitignored either way.
+The `audio_src/<line>/sta_verify_results.json` artifact can be kept (audit trail) or removed — it gets overwritten on next run anyway, and `audio_src/` is gitignored either way.
 
 ---
 

@@ -8,7 +8,7 @@
 With --route, patches route.json sta_cut values (decremented by the total amount
 shifted earlier from the file start).
 
-    uv run _dev_scripts/trim_sta_silence.py audio/sobu/1217F/sta --route audio/sobu/1217F/route.json
+    uv run _dev_scripts/trim_sta_silence.py audio/sobu/sta
 
 Idempotent: re-running on already-trimmed files is a no-op.
 """

@@ -7,11 +7,11 @@ mean. The unique flip point is the cut.
 
 Run against the whole sobu/1217F/sta folder for validation:
 
-    uv run _dev_scripts/detect_sta_cut.py audio/sobu/1217F/sta --truth audio/sobu/1217F/route.json
+    uv run _dev_scripts/detect_sta_cut.py audio/sobu/sta --truth audio/sobu/1217F/route.json
 
 Or single file:
 
-    uv run _dev_scripts/detect_sta_cut.py audio/sobu/1217F/sta/tsuga_2_gota-del-vient.mp3
+    uv run _dev_scripts/detect_sta_cut.py audio/sobu/sta/tsuga_2_gota-del-vient.mp3
 """
 
 from __future__ import annotations

@@ -726,17 +726,31 @@ class AutoDriver:
         (skipped). A missing/unreadable PA fails soft → treated as a normal stop
         (base lead), never crashes the drive.
         """
-        pa_dir = Path(self.sim.work_dir) / "pa"
+        # app.py already resolved this through route_loader.resolve_audio_root — reuse it
+        # rather than re-deriving. Joining work_dir/"pa" by hand was correct only while
+        # audio sat beside route.json; since the per-line pool it names a directory that
+        # exists on no shipped line, and the except below swallowed every miss, so the
+        # bump was silently inert on every route (route_loader CONTRACT: nothing else
+        # resolves audio paths; critical_lessons.md §4).
+        pa_dir = Path(self.sim.audio_root) / "pa"
         long_set: set = set()
+        candidates = probed = 0
         for i, st in enumerate(self.sim.stops):
             pa = st.get("pa") or []
             if len(pa) < 2:
-                continue
+                continue  # no arrival announcement — a whole line may be like this (yamanote)
+            candidates += 1
             try:
                 if sf.info(str(pa_dir / (pa[1] + ".mp3"))).duration >= LONG_APPROACH_PA_SEC:
                     long_set.add(i)
-            except Exception:
-                pass
+                probed += 1
+            except (RuntimeError, OSError) as e:
+                print(f"[autodriver] long-approach probe failed for {pa[1]}.mp3: {e}")
+        if candidates and not probed:
+            # Candidates existed but none was readable — the directory is wrong, not the
+            # route. Say so rather than degrading to base lead in silence, which is how
+            # this went unnoticed across every pooled line.
+            print(f"[autodriver] long-approach probe read 0 of {candidates} arrival PAs under {pa_dir} — bump disabled")
         return long_set
 
     def start(self) -> None:

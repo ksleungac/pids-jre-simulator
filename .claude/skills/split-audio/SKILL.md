@@ -11,7 +11,7 @@ triggers:
 
 ## Purpose
 
-Take a continuous source mp3 + timestamps file the user has prepared, produce one mp3 per segment in `audio/<line>/<diagram>/pa/` or `sta/`, and update `route.json` so the simulator references them. Apply the established naming conventions so files are self-documenting and song re-use is visible by glob.
+Take a continuous source mp3 + timestamps file the user has prepared, produce one mp3 per segment in `audio/<line>/pa/` or `sta/`, and update `route.json` so the simulator references them. Apply the established naming conventions so files are self-documenting and song re-use is visible by glob.
 
 ## When to run
 
@@ -66,12 +66,12 @@ Two common patterns to start from — copy the one that matches the format and a
 **PA splitter** — each timestamp = start of one segment, ending at next chronological timestamp; last runs to EOF:
 
 ```python
-"""Split src.mp3 into N PA segments for audio/<line>/<diagram>/pa/."""
+"""Split src.mp3 into N PA segments for audio/<line>/pa/."""
 import subprocess, sys
 from pathlib import Path
 
 SRC = Path(__file__).parent / "src.mp3"
-OUT = Path(__file__).resolve().parents[1] / "audio" / "<line>" / "<diagram>" / "pa"
+OUT = Path(__file__).resolve().parents[1] / "audio" / "<line>" / "pa"
 
 # (start_M:SS, output_basename) — segment N runs from SEGMENTS[N][0] to SEGMENTS[N+1][0]
 SEGMENTS = [
@@ -106,7 +106,7 @@ if __name__ == "__main__":
 
 ```python
 PROJECT = Path(__file__).resolve().parents[1]
-OUT_OP = PROJECT / "audio" / "<line>" / "<diagram>" / "sta"
+OUT_OP = PROJECT / "audio" / "<line>" / "sta"
 OUT_ARCHIVE = PROJECT / "audio" / "_archive" / "<line>" / "<diagram>" / "sta"
 
 SEGMENTS = [
@@ -168,7 +168,7 @@ Replace placeholder `pa` arrays (numbered `["1", "2", ...]`) with descriptive ba
 - **Stations IRL with no departure melody** (e.g. 千葉 on the Sobu line): same treatment — omit `sta` and `sta_cut`.
 - **Passing stations** (`pa: []`): keep them passing — no `sta`, no `sta_cut`, no `time`.
 
-**Archive routing is handled by the splitter's per-segment `dest` tag in Step 3** — operational files land in `audio/<line>/<diagram>/sta/`, `"archive"`-tagged files land in `audio/_archive/<line>/<diagram>/sta/` (mirror layout under `_archive/`, no route.json there). The `_` prefix marks "preserved but not shipped" — `_archive/` and `_mock/` both follow this convention.
+**Archive routing is handled by the splitter's per-segment `dest` tag in Step 3** — operational files land in `audio/<line>/sta/`, `"archive"`-tagged files land in `audio/_archive/<line>/<diagram>/sta/` (mirror layout under `_archive/`, no route.json there). The `_` prefix marks "preserved but not shipped" — `_archive/` and `_mock/` both follow this convention.
 
 ### Step 6 — Sanity check
 
@@ -180,8 +180,8 @@ import json
 from pathlib import Path
 ROOT = Path('D:/pids_jre_simulator')   # absolute path — cwd persists across Bash calls in this harness
 route = json.load(open(ROOT / 'audio/<line>/<diagram>/route.json', encoding='utf-8'))
-pa_dir = ROOT / 'audio/<line>/<diagram>/pa'
-sta_dir = ROOT / 'audio/<line>/<diagram>/sta'
+pa_dir = ROOT / 'audio/<line>/pa'
+sta_dir = ROOT / 'audio/<line>/sta'
 for label, dirpath, key in [('pa', pa_dir, 'pa'), ('sta', sta_dir, 'sta')]:
     on_disk = {p.stem for p in dirpath.glob('*.mp3')} if dirpath.exists() else set()
     refs = {x for stop in route['stops'] for x in stop.get(key, [])}

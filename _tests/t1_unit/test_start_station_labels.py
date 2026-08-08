@@ -1,4 +1,4 @@
-# TIER: T1 — the TIMS start-station grid never offers the terminus (loop duplicate)
+﻿# TIER: T1 — the TIMS start-station grid never offers the terminus (loop duplicate)
 """Locks the #59 fix: a loop route offered its terminus station twice in the
 start-station picker, and the launch bridge resolved the pick by NAME.
 
@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from tims.setup.route_select import _start_station_labels  # noqa: E402
 
-# Yamanote 内回り, verbatim from audio/yamanote/route.json — 30 stops, none passing,
+# Yamanote 内回り, verbatim from audio/yamanote/1208G/route.json — 30 stops, none passing,
 # 大崎 at both ends. Pinned literally so the fixture cannot drift with the data.
 YAMANOTE = [
     "大崎",

@@ -208,7 +208,11 @@ def load_routes():
             print(f"skip {root}: {e}")
             continue
         rel = os.path.relpath(root, base).split(os.sep)
-        diagram = rel[-1] if len(rel) > 1 else d.get("diagram", "")
+        # Every shipped route.json lives at audio/<line>/<diagram>/route.json, so the folder
+        # name IS the diagram. The old `d.get("diagram")` fallback existed only for the flat
+        # audio/yamanote/route.json, which moved to 1208G/ when pooling became universal
+        # (2026-08-08); no route.json has ever carried a "diagram" key.
+        diagram = rel[-1]
         stops_raw = d.get("stops", [])
         stops = [s.get("name", "").replace("\n", "") for s in stops_raw]
         # Stopping-station indices into `stops` — the train can START only at a station it halts at.
