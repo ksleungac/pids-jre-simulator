@@ -23,19 +23,23 @@ def resolve_audio_root(work_dir, route_data: dict) -> Path:
     """Directory holding this route's ``pa/`` and ``sta/`` folders.
 
     # CONTRACT: exactly one audio root per route - never a search order.
-    # Audio lives in ``<work_dir>`` unless route.json declares ``audio_root``
-    # (relative to work_dir; ``".."`` selects a per-line shared pool shared by
-    # every diagram on that line). A diagram-local fallback was rejected:
+    # Audio lives in the PER-LINE POOL (``<work_dir>/..``, shared by every
+    # diagram on that line) unless route.json declares ``audio_root``
+    # otherwise; ``"."`` selects the pre-pool shape where audio sits beside
+    # route.json. Every shipped line is pooled, so the key is authored only by
+    # the two fixtures that are not (``_mock/main``, ``_joban/tsuchiura``) -
+    # the exception is written down, the rule is not.
+    # A diagram-local FALLBACK was rejected and must not be reintroduced:
     # legacy PA slugs are diagram-local ("1.mp3" means different announcements
     # in different diagrams), so a missing file would silently resolve to the
-    # pool and play the WRONG announcement with no error - the exact
+    # other root and play the WRONG announcement with no error - the exact
     # silent-breakage class of critical_lessons.md 2. One root means a missing
-    # track fails loud at its single resolved path.
+    # track fails loud at its single resolved path. Note this is about SEARCH
+    # ORDER, not about which root is the default: the resolved root depends
+    # only on the declared value, never on what happens to be on disk.
     # See DATA_FORMAT.md "audio_root Field".
     """
-    root = Path(work_dir)
-    rel = route_data.get("audio_root")
-    return (root / rel).resolve() if rel else root
+    return (Path(work_dir) / route_data.get("audio_root", "..")).resolve()
 
 
 def finalize_route(route_data: dict, station_db: dict) -> dict:

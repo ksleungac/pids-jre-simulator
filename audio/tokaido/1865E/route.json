@@ -1,6 +1,5 @@
 {
     "route": "東海道線",
-    "audio_root": "..",
     "line_code": "JT",
     "color": [
         244,

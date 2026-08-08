@@ -35,7 +35,7 @@ data/
 ├── line_icons/              # PNG assets for branded line logos (Shinkansen, etc.)
 └── stations.json            # Station metadata (3-letter codes, transfers; more fields over time)
 audio/[line]/{pa,sta}/              # per-line shared audio pool — every shipped line
-audio/[line]/[diagram]/route.json   # route data only; "audio_root": ".." points at the pool
+audio/[line]/[diagram]/route.json   # route data only — no audio_root; absent means the pool
 ```
 
 ---
@@ -358,7 +358,7 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 ```json
 {
     "route": "路線名",              // Route name (e.g., 中央線快速電車，埼京線)
-    "audio_root": "..",            // Folder holding this route's pa/ and sta/, relative to the route.json's own folder. Every shipped line uses ".." (the per-line pool). See § audio_root Field.
+    "audio_root": ".",             // Optional. Only the EXCEPTION is authored: absent = the per-line pool (every shipped line); "." = audio beside route.json. See § audio_root Field.
     "model": "e235_0",             // Optional. Default train-display model for this route (registry key in displays/train_models/__init__.py, e.g. e235_1000 / e235_0). Seeds the setup-screen per-route model dropdown; the user can override per session. Absent / unknown → e235_1000 (DEFAULT_MODEL_KEY).
     "line_code": "JY",             // Optional. Active-line badge code (JY/JK/JC/JO/JU/JT/JJ/JE/JN/JA). Drives transfer-info active-line filter — entries whose badges include this code are dropped. Absent → no filter (renders raw transfers).
     "transfer_view": "JY_inner",   // Optional. Key into each station's `transfers_by_view` map (e.g. JY_inner, JK_south, JO_east). Selects per-station drop/edit ops for this train direction. Absent → no view ops applied.
@@ -373,24 +373,44 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 }
 ```
 
-#### `audio_root` Field
+#### `audio_root` Field — Optional
 
-Folder holding this route's `pa/` and `sta/`, **relative to the route.json's own folder**. Every shipped line carries `".."`, pointing at the per-line pool:
+Folder holding this route's `pa/` and `sta/`, **relative to the route.json's own folder**.
+
+| value | meaning |
+|---|---|
+| *(absent)* | `".."` — the **per-line pool**. Every shipped line. |
+| `"."` | audio sits beside `route.json` (pre-pool shape). Authored only by `_mock/main` and `_joban/tsuchiura`. |
 
 ```
-audio/tokaido/pa/            <- 73 PA files, shared
-audio/tokaido/sta/           <- 21 STA files, shared
-audio/tokaido/1865E/route.json   "audio_root": ".."
-audio/tokaido/3535E/route.json   "audio_root": ".."
+audio/tokaido/pa/                  <- 73 PA files, shared by both diagrams
+audio/tokaido/sta/                 <- 21 STA files, shared
+audio/tokaido/1865E/route.json     <- route data only
+audio/tokaido/3535E/route.json
 ```
 
-Absent → audio sits beside `route.json` (the pre-pool shape; only `audio/_mock/main` and `audio/_joban/tsuchiura` still do this).
+Only the **exception** is written down. All 14 shipped routes said `".."`, a value carrying no information, so it was dropped and the default inverted — `principles.md § "JSON is input grammar"`: author the irreducible, derive the rest.
 
-**Resolution lives in exactly one place: `route_loader.resolve_audio_root(work_dir, route_data)`.** Both consumers call it — `app.py._load_route_data` (→ `self.audio_root` → `AudioPlayer`) and `validate_data.check_route`. Nothing else may join an audio path by hand; two sites did, and both were silently broken by the migration (the OOBE tutorial's asset pre-flight, and the auto-driver's long-approach probe).
+**Resolution lives in exactly one place: `route_loader.resolve_audio_root(work_dir, route_data)`.** Both consumers call it — `app.py._load_route_data` (→ `self.audio_root` → `AudioPlayer`) and `validate_data.check_route`. Nothing else may join an audio path by hand; two sites did, and the pooling migration silently broke both (the OOBE tutorial's asset pre-flight went False for every new user; the auto-driver's long-approach probe went inert on every route).
 
-**There is deliberately NO search order.** A diagram-then-pool fallback was designed and rejected: legacy PA slugs are diagram-local (`1654T/pa/1.mp3` and `916H/pa/1.mp3` were different announcements), so a missing file would silently resolve to the pool and play the *wrong announcement* with no error — [critical_lessons.md §2](.claude/rules/critical_lessons.md). One root means one resolved path and a loud failure. Do not reintroduce a fallback.
+**There is deliberately NO search order.** A diagram-then-pool fallback was designed and rejected: legacy PA slugs were diagram-local (`1654T/pa/1.mp3` and `916H/pa/1.mp3` were different announcements), so a missing file would silently resolve to the other root and play the *wrong announcement* with no error — [critical_lessons.md §2](.claude/rules/critical_lessons.md). One root means one resolved path and a loud failure. The resolved root depends only on the declared (or defaulted) value, never on what happens to be on disk; `_tests/t1_unit/test_resolve_audio_root.py` pins that property.
 
-Pool filename grammar (PA direction token, train-type tier, STA verbatim rule) → [audio/README.md](audio/README.md) per-line entries.
+#### Pool filename grammar
+
+One pool per line means filenames from every diagram share one namespace, so the name has to survive that.
+
+| part | rule |
+|---|---|
+| **PA** | `{prev-station}-{dep\|arr}-{direction}[-{type}]` |
+| `{prev}` on a `-dep` | the previous **stopping** station — differs from the previous array element on any diagram that skips |
+| `{direction}` | from that route's own `remarks.direction`: 上り→`up`, 下り→`down`, 南行/北行→`south`/`north`, 内回り/外回り→`inner`/`outer`. Mandatory, even on a one-direction line — a reverse diagram would otherwise collide. |
+| `{type}` | only where a **measured** difference exists between two diagrams' takes (`audio_id.same_recording`). Bare = one file serves the line. Tokens in use: `kaisoku`, `kakueki`, `futsu`, `acty`; chūō uses a `-{diagram}` tier instead. |
+| **`pa_at_station`** | `{station}-stopping[-N]-{direction}[-{type}]`, indexed when a stop has more than one (array order = play order) |
+| **STA** | **verbatim — no direction token.** A melody belongs to a platform, and direction is only ever a proxy for it. Keihin (`-south`) and saikyo (`-down`) carry one because they were pooled before this rule; kept, not copied. |
+
+One mp3 carries **one `sta_cut`**, wherever it is referenced — including twice within a single `route.json` (yamanote's loop lists 大崎 at both ends; keihin points 新子安 at 鶴見's melody). `validate_data.check_pool_sta_cut_sync` gates it.
+
+Per-line specifics, and what has been verified by ear → [audio/README.md](audio/README.md).
 
 #### `pre_stops` Array (Through-Service Pre-Route) — Optional
 

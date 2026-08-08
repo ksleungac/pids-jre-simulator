@@ -1,7 +1,6 @@
 {
     "route": "中央線快速",
     "line_code": "JC",
-    "audio_root": "..",
     "color": [
         233,
         91,

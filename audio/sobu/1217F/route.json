@@ -1,6 +1,5 @@
 {
     "route": "総武快速線",
-    "audio_root": "..",
     "line_code": "JO",
     "transfer_view": "JO_east",
     "color": [

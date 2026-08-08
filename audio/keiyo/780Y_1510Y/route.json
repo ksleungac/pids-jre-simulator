@@ -1,6 +1,5 @@
 {
     "route": "京葉線",
-    "audio_root": "..",
     "line_code": "JE",
     "color": [
         201,

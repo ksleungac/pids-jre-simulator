@@ -1,6 +1,5 @@
 {
     "route": "山手線",
-    "audio_root": "..",
     "model": "e235_0",
     "line_code": "JY",
     "transfer_view": "JY_inner",

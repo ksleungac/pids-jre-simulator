@@ -1,25 +1,47 @@
 {
     "route": "モック線",
+    "audio_root": ".",
     "line_code": "JY",
     "transfer_view": "JY_inner",
-    "color": [150, 30, 120],
-    "contrast_color": [255, 215, 0],
+    "color": [
+        150,
+        30,
+        120
+    ],
+    "contrast_color": [
+        255,
+        215,
+        0
+    ],
     "type": "各駅停車",
     "dest": "品川･高輪ゲートウェイ",
-    "type_color": [150, 40, 0],
+    "type_color": [
+        150,
+        40,
+        0
+    ],
     "stops": [
         {
             "name": "東京",
-            "pa": ["1", "2"],
-            "sta": [""],
+            "pa": [
+                "1",
+                "2"
+            ],
+            "sta": [
+                ""
+            ],
             "sta_cut": 0,
             "time": 0,
             "sta_code": "JO19"
         },
         {
             "name": "新日本橋",
-            "pa": ["1"],
-            "sta": [""],
+            "pa": [
+                "1"
+            ],
+            "sta": [
+                ""
+            ],
             "sta_cut": 0,
             "time": 2,
             "sta_code": "JO20"
@@ -31,16 +53,26 @@
         },
         {
             "name": "錦糸町",
-            "pa": ["1"],
-            "sta": [""],
+            "pa": [
+                "1"
+            ],
+            "sta": [
+                ""
+            ],
             "sta_cut": 0,
             "time": 6,
             "sta_code": "JO22"
         },
         {
             "name": "上野",
-            "pa": ["1", "2", "3"],
-            "sta": [""],
+            "pa": [
+                "1",
+                "2",
+                "3"
+            ],
+            "sta": [
+                ""
+            ],
             "sta_cut": 0,
             "time": 2,
             "sta_code": "JM05"
@@ -57,32 +89,49 @@
         },
         {
             "name": "船橋",
-            "pa": ["1", "2"],
-            "sta": [""],
+            "pa": [
+                "1",
+                "2"
+            ],
+            "sta": [
+                ""
+            ],
             "sta_cut": 0,
             "time": 10,
             "sta_code": "JO25"
         },
         {
             "name": "津田沼",
-            "pa": ["1"],
-            "sta": [""],
+            "pa": [
+                "1"
+            ],
+            "sta": [
+                ""
+            ],
             "sta_cut": 0,
             "time": 4,
             "sta_code": "JO26"
         },
         {
             "name": "高輪ゲートウェイ",
-            "pa": ["1"],
-            "sta": [""],
+            "pa": [
+                "1"
+            ],
+            "sta": [
+                ""
+            ],
             "sta_cut": 0,
             "time": 4,
             "sta_code": "JM09"
         },
         {
             "name": "品川",
-            "pa": ["1"],
-            "sta": [""],
+            "pa": [
+                "1"
+            ],
+            "sta": [
+                ""
+            ],
             "sta_cut": 0,
             "time": 3,
             "sta_code": "JM10"

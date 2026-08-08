@@ -1,10 +1,10 @@
 """Resolve the audio folder layout for the by-ear verifiers.
 
-Two layouts exist since per-line audio pooling (see WIP_audio_pooling.md):
+Two layouts exist since per-line audio pooling (see DATA_FORMAT.md § audio_root Field):
 
     per-diagram   audio/<line>/<diagram>/route.json  +  <diagram>/{pa,sta}/
     pooled line   audio/<line>/<diagram>/route.json  +  <line>/{pa,sta}/
-                  (route.json carries "audio_root": "..")
+                  (the default; route.json writes no audio_root)
 
 Under a pool one mp3 has SEVERAL referrers, which is what breaks the old
 `work_dir/route.json` assumption: the pool folder has `pa/` and `sta/` but no

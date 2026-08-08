@@ -1,6 +1,5 @@
 {
     "route": "埼京線",
-    "audio_root": "..",
     "line_code": "JA",
     "transfer_view": "JA_north",
     "color": [

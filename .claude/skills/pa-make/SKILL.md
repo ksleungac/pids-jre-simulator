@@ -341,7 +341,7 @@ Launching it from the Bash tool works — audio reaches the speakers (2026-07-25
 `{prev-station}-dep-{direction}[-{type}].mp3` / `{this-station}-arr-{direction}[-{type}].mp3`
 
 Every line is pooled, so PA files from every diagram share one folder and the name has to
-survive that. Full grammar and rationale → `WIP_audio_pooling.md § Naming rules`.
+survive that. Full grammar and rationale → `DATA_FORMAT.md § Pool filename grammar`.
 
 - **`{direction}` is mandatory, even on a one-direction line.** Take it from the route's own
   `remarks.direction`, never pick one: 上り→`up`, 下り→`down`, 南行/北行→`south`/`north`,

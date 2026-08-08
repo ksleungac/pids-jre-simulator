@@ -1,6 +1,5 @@
 {
     "route": "高崎線",
-    "audio_root": "..",
     "line_code": "JU",
     "color": [
         244,

@@ -31,21 +31,22 @@ def check(cond: bool, msg: str) -> None:
 def main() -> int:
     wd = Path("audio/tokaido/1865E")
 
-    # ".." — the pool. Every shipped route.json carries this.
-    got = resolve_audio_root(wd, {"audio_root": ".."})
-    check(got == (wd / "..").resolve(), f'audio_root ".." must resolve to the line folder, got {got}')
-    check(got.name == "tokaido", f'audio_root ".." must land on audio/tokaido, got {got.name}')
-
-    # Absent — audio beside route.json. Still used by _mock/main and _joban/tsuchiura.
+    # ABSENT — the per-line pool. This is the default because every shipped line is pooled,
+    # so the key carries no information there and is not authored (2026-08-08 graduation).
     got = resolve_audio_root(wd, {})
-    check(Path(got) == wd, f"absent audio_root must return the work_dir unchanged, got {got}")
+    check(got == (wd / "..").resolve(), f"absent audio_root must default to the line pool, got {got}")
+    check(got.name == "tokaido", f"absent audio_root must land on audio/tokaido, got {got.name}")
 
-    # "." — beside route.json, stated explicitly.
+    # ".." — the same thing said explicitly.
+    check(resolve_audio_root(wd, {"audio_root": ".."}) == got, "an explicit '..' must equal the default")
+
+    # "." — audio beside route.json. THE authored exception: _mock/main, _joban/tsuchiura.
     got = resolve_audio_root(wd, {"audio_root": "."})
     check(got == wd.resolve(), f'audio_root "." must resolve to the work_dir, got {got}')
+    check(got.name == "1865E", f'audio_root "." must stay in the diagram folder, got {got.name}')
 
     # A str work_dir is what app.py hands it (self.work_dir).
-    got = resolve_audio_root(str(wd), {"audio_root": ".."})
+    got = resolve_audio_root(str(wd), {})
     check(got.name == "tokaido", f"str work_dir must behave like Path, got {got}")
 
     # THE contract: exactly one root, NO search order. The property that distinguishes it
@@ -57,16 +58,17 @@ def main() -> int:
     # construction for any implementation — a claim about pathlib, not about this function.
     # A resolver implementing exactly the forbidden fallback passed it.
     empty = Path("audio/_nonexistent_line/_nonexistent_diagram")
-    declared = resolve_audio_root(empty, {"audio_root": ".."})
-    check(
-        declared == (empty / "..").resolve(),
-        f"root must follow the DECLARED value even when that folder holds no pa/ or sta/ "
-        f"(a fallback would divert to the work_dir here), got {declared}",
-    )
-    check(
-        Path(declared) != empty.resolve(),
-        "root must not fall back to the work_dir when the declared pool is empty — that is a search order",
-    )
+    for label, data, want in (
+        ("default (pool)", {}, (empty / "..").resolve()),
+        ("explicit '..'", {"audio_root": ".."}, (empty / "..").resolve()),
+        ("explicit '.'", {"audio_root": "."}, empty.resolve()),
+    ):
+        got = resolve_audio_root(empty, data)
+        check(
+            got == want,
+            f"{label}: root must follow the declared/default value even when that folder holds "
+            f"no pa/ or sta/ — a fallback would divert here. want {want}, got {got}",
+        )
 
     for msg in FAILURES:
         print(f"  FAIL: {msg}")

@@ -560,20 +560,23 @@ def check_route(route_path: Path, translations: dict, train_types: dict, issues:
     from route_loader import resolve_audio_root
 
     raw_root = data.get("audio_root")
-    if raw_root is not None:
-        if not isinstance(raw_root, str):
-            issues.append((rel, f"audio_root must be a string, got {type(raw_root).__name__}"))
-        else:
-            resolved = (route_path.parent / raw_root).resolve()
+    shown = repr(raw_root) if raw_root is not None else "(absent → the per-line pool)"
+    if raw_root is not None and not isinstance(raw_root, str):
+        issues.append((rel, f"audio_root must be a string, got {type(raw_root).__name__}"))
+    else:
+        # Check the RESOLVED root whether or not the key is authored: absent now MEANS the
+        # pool, so the 14 shipped routes (which no longer carry it) still get shape-checked.
+        resolved = resolve_audio_root(route_path.parent, data)
+        if not _is_within(resolved, AUDIO_ROOT.resolve()):
             # Path containment, NOT a string prefix: "../../../audio_src/<line>" startswith
             # ".../audio" and would have passed, resolving into this workflow's own gitignored
             # working tree — clean on the authoring machine, no audio in the shipped zip.
-            if not _is_within(resolved, AUDIO_ROOT.resolve()):
-                issues.append((rel, f"audio_root {raw_root!r} escapes audio/ (resolves to {resolved})"))
-            elif not resolved.is_dir():
-                issues.append((rel, f"audio_root {raw_root!r} is not a directory ({resolved})"))
-            elif not (resolved / "pa").is_dir() and not (resolved / "sta").is_dir():
-                issues.append((rel, f"audio_root {raw_root!r} holds neither pa/ nor sta/ ({resolved})"))
+            issues.append((rel, f"audio_root {shown} escapes audio/ (resolves to {resolved})"))
+        elif not resolved.is_dir():
+            issues.append((rel, f"audio_root {shown} is not a directory ({resolved})"))
+        elif not fixture and not (resolved / "pa").is_dir() and not (resolved / "sta").is_dir():
+            # Fixtures are exempt: _mock/main ships no audio at all (preview uses _SilentAudio).
+            issues.append((rel, f"audio_root {shown} holds neither pa/ nor sta/ ({resolved})"))
 
     # Audio file references (cross-ref)
     if not fixture:

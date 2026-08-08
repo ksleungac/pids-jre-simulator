@@ -586,7 +586,7 @@ PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/<line>       
 PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/_joban/tsuchiura    # per-diagram layout only
 ```
 
-**Pooled lines**: pass the LINE folder. The verifier finds `<line>/*/route.json`, merges the STA union across diagrams (ordered by the diagram referencing the most), and warns if two diagrams disagree on a shared file's `sta_cut`. Every write — interactive trim or cut nudge — lands in **all** route.json files referencing that mp3; patching one desyncs the pool. See `WIP_audio_pooling.md § Tooling must be pool-aware`.
+**Pooled lines**: pass the LINE folder. The verifier finds `<line>/*/route.json`, merges the STA union across diagrams (ordered by the diagram referencing the most), and warns if two diagrams disagree on a shared file's `sta_cut`. Every write — interactive trim or cut nudge — lands in **all** route.json files referencing that mp3; patching one desyncs the pool. See `DATA_FORMAT.md § audio_root Field`.
 
 Per station, the script:
 1. Plays `[0, 3 s]` — confirms the music head is intact (no clipped attack).

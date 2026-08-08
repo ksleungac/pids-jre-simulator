@@ -1,6 +1,5 @@
 {
     "route": "南武線",
-    "audio_root": "..",
     "line_code": "JN",
     "color": [
         255,

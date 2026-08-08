@@ -488,10 +488,11 @@ def load_route_sources(work_dir: Path) -> tuple[list[Path], Path, list[dict]]:
     Per-diagram:  <work_dir>/route.json      + <work_dir>/sta/
     Pooled line:  <work_dir>/*/route.json    + <work_dir>/sta/
 
-    A pooled line (route.json carries "audio_root": "..") shares one sta folder
+    A pooled line (the default — route.json writes no audio_root) shares one sta folder
     across several diagrams, so one mp3 is referenced by several route.json
-    files and a sta_cut edit has to land in EVERY one of them — see
-    WIP_audio_pooling.md. The returned stop list is the union across diagrams,
+    files — and sometimes by several STOPS within one — and a sta_cut edit has to
+    land in every one of them. `validate_data.check_pool_sta_cut_sync` gates that;
+    see DATA_FORMAT.md § audio_root Field. The returned stop list is the union across diagrams,
     ordered by the diagram that references the most STAs.
 
     Raises FileNotFoundError when neither layout is present.
