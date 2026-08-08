@@ -14,9 +14,10 @@ pool slugs that already exist.
 > naming rules, and the measured facts behind them. Refuses: schema reference (→
 > [DATA_FORMAT.md](DATA_FORMAT.md)), per-line IRL notes (→ [audio/README.md](audio/README.md)).
 >
-> **Graduates when** every multi-diagram line is migrated: fold the `audio_root` +
+> **Graduates when** every shipped line is migrated — single-diagram included, since pooling
+> is now the only schema (yamanote excepted, and the table says why): fold the `audio_root` +
 > naming rules into `DATA_FORMAT.md`, the per-line status into `audio/README.md`,
-> then delete this file.
+> then delete this file. Remaining: keiyo, tokaido, nambu.
 
 ---
 
@@ -29,11 +30,21 @@ pool slugs that already exist.
 | tokaido | 1865E, 3535E | ☐ | ☐ | 11.9 MB; PA already descriptive in 3535E (underscore separator) |
 | nambu | 4027F, 603F | ☐ | ☐ | 7.6 MB |
 | saikyo | 1349F, 759K | ☑ | ☑ | **Done 2026-08-08**, 92 → 66 files, 28 → 22 MB. Legacy folders dropped. STA by-ear 25/25, PA all pass |
-| yamanote | *(flat)* | n/a | n/a | already one audio folder — the pool shape, pre-existing |
-| sobu, takasaki, keiyo | single | n/a | n/a | nothing to share until a 2nd diagram lands |
+| sobu | 1217F | ☑ | ☑ | **Done 2026-08-08.** Single diagram, so a pure move: 28 PA gain `-down`, 16 STA verbatim (platform-bearing slugs) |
+| takasaki | 3922E | ☑ | ☑ | **Done 2026-08-08.** Same shape — 30 PA gain `-down`, 16 STA verbatim |
+| keiyo | 780Y_1510Y | ☐ | ☐ | Single diagram, but PA is numeric → needs the descriptive mapping. 上り → `-up` |
+| yamanote | *(flat)* | n/a | n/a | **Stays flat, deliberately.** `audio/yamanote/{pa,sta,route.json}` already resolves through the same one-root mechanism (`resolve_audio_root` returns the work dir, which holds `pa/` and `sta/`) — the degenerate case of this schema, not a second one. It cannot take a direction token either: one route.json serves both 内回り and 外回り |
 
-Single-diagram lines need no migration. Migrate a line when it gains a diagram, or
-opportunistically.
+**Every shipped line is migrated, single-diagram included — pooling is the one schema going
+forward** (author, 2026-08-08). A single-diagram line has nothing to dedup, so its migration
+is a pure move plus the PA direction token, with no by-ear gate: the audio bytes are untouched
+and the only gates that apply are "every reference resolves" and "every pooled file is
+byte-identical to a snapshot original". This supersedes the earlier rule that single-diagram
+lines could wait until they gained a second diagram, which would have left three lines on the
+old shape permanently.
+
+`_`-prefixed trees stay out: `_joban` is unshipped with an incomplete route.json, `_mock` is a
+preview fixture.
 
 ---
 
@@ -62,15 +73,17 @@ path and a loud failure. Do not reintroduce a fallback.
 
 ## Naming rules
 
-### Direction is the outermost token — always, even on a one-direction line
+### Direction is the outermost token on PA — always, even on a one-direction line
 
-**The pool is per LINE, and a line runs both ways.** Direction partitions it absolutely:
-the opposite direction uses the other platform, so every STA melody differs, and every PA
-names a different next station and a different transfer set. A pool built without the
-token silently collides the day a reverse diagram lands — `JK12_YHM.mp3` northbound is not
-`JK12_YHM.mp3` southbound. Stamp it during the migration, when the whole line is already
-being rewritten; retrofitting it later means touching every file and every `pa`/`sta` array
-a second time.
+**The pool is per LINE, and a line runs both ways.** Every PA names a different next station
+and a different transfer set in the opposite direction, so a pool built without the token
+silently collides the day a reverse diagram lands. Stamp it during the migration, when the
+whole line is already being rewritten; retrofitting it later means touching every file and
+every `pa` array a second time.
+
+**STA is the exception — see the STA rule below.** A melody is a property of the platform, so
+a slug that already records the platform needs no direction token; one that records only the
+station does.
 
 Take the token from the route's own `remarks.direction` — never pick one. JR runs three
 different axes and which one a line uses is a property of that line:
@@ -85,14 +98,32 @@ different axes and which one a line uses is a property of that line:
 `south`/`north` also match the `transfer_view` vocabulary already in `data/stations.json`
 (`JK_south`, `JA_north`, `JO_north`), so this is existing spelling, not a new one.
 
-### STA — direction appended, nothing else touched
+### STA — direction only when nothing else discriminates the platform
 
-STA filenames are already station-derived (`JC02.mp3`), so the same name means the same
-station **within one direction**, and pooling is a pure move plus the direction token:
-`JK12_YHM` → `JK12_YHM-south`. Hyphen, so `_` keeps meaning "station code" and everything
-before the `-` stays the legacy name verbatim. STA takes no train-type token — a melody is
-a property of the platform, not the service (measured: all 35 STA shared between keihin's
-快速 and 各駅停車 diagrams are sample-identical).
+**A melody belongs to a PLATFORM, so the platform is what the name must pin down.**
+Direction is a proxy for it — the opposite direction uses the other platform — and a proxy
+is only needed when the real thing is absent:
+
+| slug already carries | example | pooled name |
+|---|---|---|
+| a platform field | `bakurocho_2_hassha-beru` (sobu) | **verbatim** — platform is the discriminator |
+| station identity only | `JK12_YHM` (keihin), `JA13` (saikyo) | `JK12_YHM-south` — append the direction |
+
+Appending the token to a platform-bearing slug is not merely redundant, it costs something:
+the trailing song-id field is globbable (`ls *_gota-del-vient.mp3` shows every station playing
+that song — `sta-make § STA filename convention`), and a token appended after it lands *inside*
+that field and breaks the glob. On sobu that glob spans 4 stations for one song, 3 for another.
+(2026-08-08, author: *"sta no need up or down, only pa needs it, sta in sobu and takasaki is by
+platform."*)
+
+Takasaki is the in-between case — bare `ageo`, no platform recorded — and stays verbatim too,
+because the fix if a 上り diagram ever lands is to add the **platform** field the convention
+already defines, not to bolt on a direction.
+
+Otherwise pooling STA is a pure move. Hyphen when the token IS appended, so `_` keeps meaning
+"station code" and everything before the `-` stays the legacy name verbatim. STA takes no
+train-type token — a melody is a property of the platform, not the service (measured: all 35
+STA shared between keihin's 快速 and 各駅停車 diagrams are sample-identical).
 
 Chūō's STA follow the legacy `sta_code` style. Newer lines (e.g. takasaki) use the richer
 `{station}_{platform}_{song-id}` slug — **do not retrofit that during pooling.** It's an

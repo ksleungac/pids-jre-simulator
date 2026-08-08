@@ -1,10 +1,23 @@
 {
     "route": "総武快速線",
+    "audio_root": "..",
     "line_code": "JO",
     "transfer_view": "JO_east",
-    "color": [22, 64, 152],
-    "contrast_color": [116, 18, 34],
-    "type_color": [22, 64, 152],
+    "color": [
+        22,
+        64,
+        152
+    ],
+    "contrast_color": [
+        116,
+        18,
+        34
+    ],
+    "type_color": [
+        22,
+        64,
+        152
+    ],
     "type": "快速",
     "remarks": {
         "direction": "下り",
@@ -13,105 +26,208 @@
     },
     "dest": "成田空港",
     "frames": [
-        {"from": "久里浜", "to": "千葉",     "line": "yokosuka_sobu.sobu"},
-        {"from": "千葉",   "to": "成田空港", "line": "narita_line"}
+        {
+            "from": "久里浜",
+            "to": "千葉",
+            "line": "yokosuka_sobu.sobu"
+        },
+        {
+            "from": "千葉",
+            "to": "成田空港",
+            "line": "narita_line"
+        }
     ],
     "pre_stops": [
-        {"name": "久里浜",   "sta_code": "JO01"},
-        {"name": "衣笠",     "sta_code": "JO02"},
-        {"name": "横須賀",   "sta_code": "JO03"},
-        {"name": "田浦",     "sta_code": "JO04"},
-        {"name": "東逗子",   "sta_code": "JO05"},
-        {"name": "逗子",     "sta_code": "JO06"},
-        {"name": "鎌倉",     "sta_code": "JO07"},
-        {"name": "北鎌倉",   "sta_code": "JO08"},
-        {"name": "大船",     "sta_code": "JO09"},
-        {"name": "戸塚",     "sta_code": "JO10"},
-        {"name": "東戸塚",   "sta_code": "JO11"},
-        {"name": "保土ヶ谷", "sta_code": "JO12"},
-        {"name": "横浜",     "sta_code": "JO13"},
-        {"name": "新川崎",   "sta_code": "JO14"},
-        {"name": "武蔵小杉", "sta_code": "JO15"},
-        {"name": "西大井",   "sta_code": "JO16"},
-        {"name": "品川",     "sta_code": "JO17"},
-        {"name": "新橋",     "sta_code": "JO18"}
+        {
+            "name": "久里浜",
+            "sta_code": "JO01"
+        },
+        {
+            "name": "衣笠",
+            "sta_code": "JO02"
+        },
+        {
+            "name": "横須賀",
+            "sta_code": "JO03"
+        },
+        {
+            "name": "田浦",
+            "sta_code": "JO04"
+        },
+        {
+            "name": "東逗子",
+            "sta_code": "JO05"
+        },
+        {
+            "name": "逗子",
+            "sta_code": "JO06"
+        },
+        {
+            "name": "鎌倉",
+            "sta_code": "JO07"
+        },
+        {
+            "name": "北鎌倉",
+            "sta_code": "JO08"
+        },
+        {
+            "name": "大船",
+            "sta_code": "JO09"
+        },
+        {
+            "name": "戸塚",
+            "sta_code": "JO10"
+        },
+        {
+            "name": "東戸塚",
+            "sta_code": "JO11"
+        },
+        {
+            "name": "保土ヶ谷",
+            "sta_code": "JO12"
+        },
+        {
+            "name": "横浜",
+            "sta_code": "JO13"
+        },
+        {
+            "name": "新川崎",
+            "sta_code": "JO14"
+        },
+        {
+            "name": "武蔵小杉",
+            "sta_code": "JO15"
+        },
+        {
+            "name": "西大井",
+            "sta_code": "JO16"
+        },
+        {
+            "name": "品川",
+            "sta_code": "JO17"
+        },
+        {
+            "name": "新橋",
+            "sta_code": "JO18"
+        }
     ],
     "stops": [
         {
             "name": "東京",
             "pa": [],
-            "sta": ["tokyo_4_jr-sh5-1"],
+            "sta": [
+                "tokyo_4_jr-sh5-1"
+            ],
             "sta_code": "JO19",
             "sta_cut": 15.6,
             "time": 0
         },
         {
             "name": "新日本橋",
-            "pa": ["tokyo-dep"],
-            "sta": ["shin-nihombashi_2_hassha-beru"],
+            "pa": [
+                "tokyo-dep-down"
+            ],
+            "sta": [
+                "shin-nihombashi_2_hassha-beru"
+            ],
             "sta_code": "JO20",
             "sta_cut": 12.2,
             "time": 2
         },
         {
             "name": "馬喰町",
-            "pa": ["shin-nihombashi-dep"],
-            "sta": ["bakurocho_2_hassha-beru"],
+            "pa": [
+                "shin-nihombashi-dep-down"
+            ],
+            "sta": [
+                "bakurocho_2_hassha-beru"
+            ],
             "sta_code": "JO21",
             "sta_cut": 6.2,
             "time": 2
         },
         {
             "name": "錦糸町",
-            "pa": ["bakurocho-dep"],
-            "sta": ["kinshicho_4_gota-del-vient"],
+            "pa": [
+                "bakurocho-dep-down"
+            ],
+            "sta": [
+                "kinshicho_4_gota-del-vient"
+            ],
             "sta_code": "JO22",
             "sta_cut": 28.6,
             "time": 4
         },
         {
             "name": "新小岩",
-            "pa": ["kinshicho-dep", "shin-koiwa-arr"],
-            "sta": ["shin-koiwa_4_gota-del-vient"],
+            "pa": [
+                "kinshicho-dep-down",
+                "shin-koiwa-arr-down"
+            ],
+            "sta": [
+                "shin-koiwa_4_gota-del-vient"
+            ],
             "sta_code": "JO23",
             "sta_cut": 16.6,
             "time": 4
         },
         {
             "name": "市川",
-            "pa": ["shin-koiwa-dep", "ichikawa-arr"],
-            "sta": ["ichikawa_4_rakuraku-tetsudo-ryoko"],
+            "pa": [
+                "shin-koiwa-dep-down",
+                "ichikawa-arr-down"
+            ],
+            "sta": [
+                "ichikawa_4_rakuraku-tetsudo-ryoko"
+            ],
             "sta_code": "JO24",
             "sta_cut": 17.3,
             "time": 5
         },
         {
             "name": "船橋",
-            "pa": ["ichikawa-dep", "funabashi-arr"],
-            "sta": ["funabashi_4_horidei"],
+            "pa": [
+                "ichikawa-dep-down",
+                "funabashi-arr-down"
+            ],
+            "sta": [
+                "funabashi_4_horidei"
+            ],
             "sta_code": "JO25",
             "sta_cut": 19.3,
             "time": 6
         },
         {
             "name": "津田沼",
-            "pa": ["funabashi-dep", "tsudanuma-arr"],
-            "sta": ["tsudanuma_1_horidei"],
+            "pa": [
+                "funabashi-dep-down",
+                "tsudanuma-arr-down"
+            ],
+            "sta": [
+                "tsudanuma_1_horidei"
+            ],
             "sta_code": "JO26",
             "sta_cut": 19.2,
             "time": 4
         },
         {
             "name": "稲毛",
-            "pa": ["tsudanuma-dep", "inage-arr"],
-            "sta": ["inage_4_horidei"],
+            "pa": [
+                "tsudanuma-dep-down",
+                "inage-arr-down"
+            ],
+            "sta": [
+                "inage_4_horidei"
+            ],
             "sta_code": "JO27",
             "sta_cut": 10.1,
             "time": 6
         },
         {
             "name": "千葉",
-            "pa": ["inage-dep"],
+            "pa": [
+                "inage-dep-down"
+            ],
             "sta_code": "JO28",
             "time": 4
         },
@@ -122,63 +238,99 @@
         },
         {
             "name": "都賀",
-            "pa": ["chiba-dep", "tsuga-arr"],
-            "sta": ["tsuga_2_gota-del-vient"],
+            "pa": [
+                "chiba-dep-down",
+                "tsuga-arr-down"
+            ],
+            "sta": [
+                "tsuga_2_gota-del-vient"
+            ],
             "sta_code": "JO30",
             "sta_cut": 55.3,
             "time": 4
         },
         {
             "name": "四街道",
-            "pa": ["tsuga-dep", "yotsukaido-arr"],
-            "sta": ["yotsukaido_2"],
+            "pa": [
+                "tsuga-dep-down",
+                "yotsukaido-arr-down"
+            ],
+            "sta": [
+                "yotsukaido_2"
+            ],
             "sta_code": "JO31",
             "sta_cut": 20.0,
             "time": 4
         },
         {
             "name": "物井",
-            "pa": ["yotsukaido-dep", "monoi-arr"],
-            "sta": ["monoi_1_gota-del-vient"],
+            "pa": [
+                "yotsukaido-dep-down",
+                "monoi-arr-down"
+            ],
+            "sta": [
+                "monoi_1_gota-del-vient"
+            ],
             "sta_code": "JO32",
             "sta_cut": 19.5,
             "time": 4
         },
         {
             "name": "佐倉",
-            "pa": ["monoi-dep"],
-            "sta": ["sakura_2_verde-rayo-v2"],
+            "pa": [
+                "monoi-dep-down"
+            ],
+            "sta": [
+                "sakura_2_verde-rayo-v2"
+            ],
             "sta_code": "JO33",
             "sta_cut": 35.3,
             "time": 4
         },
         {
             "name": "酒々井",
-            "pa": ["sakura-dep", "shisui-arr"],
-            "sta": ["shisui_gota-del-vient"],
+            "pa": [
+                "sakura-dep-down",
+                "shisui-arr-down"
+            ],
+            "sta": [
+                "shisui_gota-del-vient"
+            ],
             "sta_code": "JO34",
             "sta_cut": 25.5,
             "time": 6
         },
         {
             "name": "成田",
-            "pa": ["shisui-dep", "narita-arr"],
-            "sta": ["narita_3_suito-koru"],
+            "pa": [
+                "shisui-dep-down",
+                "narita-arr-down"
+            ],
+            "sta": [
+                "narita_3_suito-koru"
+            ],
             "sta_code": "JO35",
             "sta_cut": 30.7,
             "time": 6
         },
         {
             "name": "空港第2ビル",
-            "pa": ["narita-dep", "airport-terminal-2-arr"],
-            "sta": ["airport-terminal-2_chaimu-3b4"],
+            "pa": [
+                "narita-dep-down",
+                "airport-terminal-2-arr-down"
+            ],
+            "sta": [
+                "airport-terminal-2_chaimu-3b4"
+            ],
             "sta_code": "JO36",
             "sta_cut": 27.3,
             "time": 9
         },
         {
             "name": "成田空港",
-            "pa": ["narita-airport-arr"],
+            "pa": [
+                "narita-airport-arr-down"
+            ],
             "sta_code": "JO37",
             "time": 2
         }

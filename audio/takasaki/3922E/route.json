@@ -1,5 +1,6 @@
 {
     "route": "高崎線",
+    "audio_root": "..",
     "line_code": "JU",
     "color": [
         244,
@@ -32,8 +33,8 @@
         {
             "name": "赤羽",
             "pa": [
-                "ueno-dep",
-                "akabane-arr"
+                "ueno-dep-down",
+                "akabane-arr-down"
             ],
             "sta": [
                 "akabane"
@@ -45,8 +46,8 @@
         {
             "name": "浦和",
             "pa": [
-                "akabane-dep",
-                "urawa-arr"
+                "akabane-dep-down",
+                "urawa-arr-down"
             ],
             "sta": [
                 "urawa"
@@ -63,8 +64,8 @@
         {
             "name": "大宮",
             "pa": [
-                "urawa-dep",
-                "omiya-arr"
+                "urawa-dep-down",
+                "omiya-arr-down"
             ],
             "sta": [
                 "omiya"
@@ -81,8 +82,8 @@
         {
             "name": "上尾",
             "pa": [
-                "omiya-dep",
-                "ageo-arr"
+                "omiya-dep-down",
+                "ageo-arr-down"
             ],
             "sta": [
                 "ageo"
@@ -99,8 +100,8 @@
         {
             "name": "桶川",
             "pa": [
-                "ageo-dep",
-                "okegawa-arr"
+                "ageo-dep-down",
+                "okegawa-arr-down"
             ],
             "sta": [
                 "okegawa"
@@ -117,8 +118,8 @@
         {
             "name": "鴻巣",
             "pa": [
-                "okegawa-dep",
-                "konosu-arr"
+                "okegawa-dep-down",
+                "konosu-arr-down"
             ],
             "sta": [
                 "konosu"
@@ -145,8 +146,8 @@
         {
             "name": "熊谷",
             "pa": [
-                "konosu-dep",
-                "kumagaya-arr"
+                "konosu-dep-down",
+                "kumagaya-arr-down"
             ],
             "sta": [
                 "kumagaya"
@@ -158,8 +159,8 @@
         {
             "name": "籠原",
             "pa": [
-                "kumagaya-dep",
-                "kagohara-arr"
+                "kumagaya-dep-down",
+                "kagohara-arr-down"
             ],
             "sta": [
                 "kagohara"
@@ -171,8 +172,8 @@
         {
             "name": "深谷",
             "pa": [
-                "kagohara-dep",
-                "fukaya-arr"
+                "kagohara-dep-down",
+                "fukaya-arr-down"
             ],
             "sta": [
                 "fukaya"
@@ -184,8 +185,8 @@
         {
             "name": "岡部",
             "pa": [
-                "fukaya-dep",
-                "okabe-arr"
+                "fukaya-dep-down",
+                "okabe-arr-down"
             ],
             "sta": [
                 "okabe"
@@ -197,8 +198,8 @@
         {
             "name": "本庄",
             "pa": [
-                "okabe-dep",
-                "honjo-arr"
+                "okabe-dep-down",
+                "honjo-arr-down"
             ],
             "sta": [
                 "honjo"
@@ -210,8 +211,8 @@
         {
             "name": "神保原",
             "pa": [
-                "honjo-dep",
-                "kanhobara-arr"
+                "honjo-dep-down",
+                "kanhobara-arr-down"
             ],
             "sta": [
                 "kanhobara"
@@ -223,8 +224,8 @@
         {
             "name": "新町",
             "pa": [
-                "kanhobara-dep",
-                "shinmachi-arr"
+                "kanhobara-dep-down",
+                "shinmachi-arr-down"
             ],
             "sta": [
                 "shinmachi"
@@ -236,8 +237,8 @@
         {
             "name": "倉賀野",
             "pa": [
-                "shinmachi-dep",
-                "kuragano-arr"
+                "shinmachi-dep-down",
+                "kuragano-arr-down"
             ],
             "sta": [
                 "kuragano"
@@ -249,8 +250,8 @@
         {
             "name": "高崎",
             "pa": [
-                "kuragano-dep",
-                "takasaki-arr"
+                "kuragano-dep-down",
+                "takasaki-arr-down"
             ],
             "sta": [
                 "takasaki"

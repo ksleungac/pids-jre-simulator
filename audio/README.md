@@ -76,7 +76,8 @@ Ordered by JR EAST line code. Standard fields omitted (= follows convention). En
   - Pre-route Yokosuka stations (横須賀 → 新橋) modeled via `pre_stops` in `route.json`; simulator's active route begins at 東京. See [DATA_FORMAT § pre_stops Array](../DATA_FORMAT.md).
   - IRL frames swap at 千葉 (Sōbu Rapid yields to Sōtobō / Narita Line views). Modeling deferred — see [GitHub Issues](https://github.com/ksleungac/pids-jre-simulator/issues) (`display` label).
   - 千葉 has no STA melody IRL — terminus-only station for through-service inbound, `sta` + `sta_cut` omitted on that stop.
-- **Audio quirks:** PA = descriptive (`{station}-{dep|arr}`).
+- **Audio quirks:** PA = descriptive (`{station}-{dep|arr}-down`). STA uses the rich `{station}_{platform}_{song-id}` slug and carries **no** direction token — the platform field already discriminates it, and appending one would land inside the globbable song-id field (4 stations share `gota-del-vient`, 3 share `horidei`).
+- **Audio layout:** pooled — `audio/sobu/{pa,sta}/` with `"audio_root": ".."`. See [WIP_audio_pooling.md](../WIP_audio_pooling.md).
 - **Naming asymmetry:** folder `audio/sobu/` ↔ `lines.json` slug `yokosuka_sobu`. Same physical line, different namespaces. Don't conflate when refactoring either side.
 
 ### JT — Tokaido (東海道線)
@@ -90,7 +91,8 @@ Ordered by JR EAST line code. Standard fields omitted (= follows convention). En
 
 - **Name:** 高崎線 / Takasaki Line
 - **Diagrams:** `3922E`
-- **Audio quirks:** PA = descriptive (e.g. `kita-ageo-arr`).
+- **Audio quirks:** PA = descriptive (e.g. `kita-ageo-arr-down`). STA is bare station (`ageo`, `kumagaya`) with no platform and no direction token — if a 上り diagram ever lands, add the **platform** field the slug convention already defines rather than a direction token.
+- **Audio layout:** pooled — `audio/takasaki/{pa,sta}/` with `"audio_root": ".."`. See [WIP_audio_pooling.md](../WIP_audio_pooling.md).
 
 ### JY — Yamanote (山手線)
 
