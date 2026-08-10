@@ -41,9 +41,9 @@ from auto_input.driver import (  # noqa: E402
     _crop_cell,
     guard_distance,
 )
-from auto_input.hud_layout import PROFILES  # noqa: E402
+from auto_input.hud_layout import DOWNSCALE_PROFILE, PROFILES, profile_for  # noqa: E402
 from auto_input.ocr import DEFAULT_TEMPLATES_DIR, build_templates, load_badge_anchors, seg_for_scale  # noqa: E402
-from auto_input.sampling import GuardState, read_hud  # noqa: E402
+from auto_input.sampling import GuardState, downscale_hud, read_hud  # noqa: E402
 
 MAX_PLAUSIBLE_ACCEL_KMH_S = 6.0  # commuter EMU: ~3 accel, ~4.5 emergency brake
 # The HUD speed is an INTEGER, so at short dt quantization dominates the physical bound:
@@ -66,24 +66,42 @@ def main() -> int:
     vs = container.streams.video[0]
     w, h = vs.codec_context.width, vs.codec_context.height
     fps = float(vs.average_rate)
-    profile = PROFILES.get((w, h))
+    profile = profile_for(w, h)
     if profile is None:
-        sys.exit(f"video is {w}x{h} — no ResolutionProfile. Supported: {sorted(PROFILES)}")
+        sys.exit(
+            f"video is {w}x{h} — outside the supported scope (16:9 or taller, width a multiple of 16, "
+            f"fitted 16:9 viewport 1080p or larger). Observed: {sorted(PROFILES)}"
+        )
+    if not profile.verified:
+        print(
+            f"[note] {w}x{h} has not been driven — geometry derived from the 16:9 fractions "
+            f"(letterbox bar {profile.capture_region[1]}px, capture {profile.capture_region}, HUD {profile.hud_bbox}). "
+            f"A wrong bar reads as badge=None on EVERY frame — distinguish that from genuine degraded input."
+        )
 
+    # `profile` is what the recording CAPTURED; DOWNSCALE_PROFILE is what READS it —
+    # production downscales the HUD into the 1080p model, so this must too or the replay
+    # describes a pipeline nobody runs. Reading natively instead would ALSO load the wrong
+    # anchor set on any resolution whose native cells aren't 1440p-sized: the shapes
+    # mismatch, classify_badge_state skips every anchor, and every frame reports badge=None
+    # — a diagnostic returning confident garbage (`critical_lessons.md` §11).
     templates = build_templates()
-    seg = seg_for_scale(profile.scale)
-    badges_dir = DEFAULT_TEMPLATES_DIR / profile.badges_subdir if profile.badges_subdir else None
+    seg = seg_for_scale(DOWNSCALE_PROFILE.scale)
+    badges_dir = DEFAULT_TEMPLATES_DIR / DOWNSCALE_PROFILE.badges_subdir if DOWNSCALE_PROFILE.badges_subdir else None
     anchors = load_badge_anchors(badges_dir)
-    try:
-        from auto_input.ocr import _get_red_digit_templates
+    # Red digits are per-resolution, so they follow the READ profile like everything else —
+    # the same expression driver.py evaluates. Taking the 1440p set here instead would read
+    # the speed limit against glyphs production never loads.
+    red_dir = (
+        DEFAULT_TEMPLATES_DIR / DOWNSCALE_PROFILE.templates_subdir / "digits_red"
+        if DOWNSCALE_PROFILE.templates_subdir
+        else DEFAULT_TEMPLATES_DIR / "digits_red"
+    )
+    red_templates = build_templates(red_dir) if red_dir.exists() else None
 
-        red_templates = _get_red_digit_templates()
-    except Exception:
-        red_templates = None
-
-    # The recording is the FULL desktop, so the HUD sits at its screen-relative origin.
-    # read_hud indexes by profile.hud_bbox_in_capture, so swap that to the screen bbox —
-    # same trick test_ocr_reads uses for its quadrant fixtures.
+    # The recording is the FULL desktop, not the capture quadrant, so the HUD sits at its
+    # screen-relative origin. downscale_hud cuts by hud_bbox_in_capture, so swap that to the
+    # screen bbox — same trick test_ocr_reads uses for its quadrant fixtures.
     from dataclasses import replace
 
     prof = replace(profile, hud_bbox_in_capture=profile.hud_bbox)
@@ -102,8 +120,8 @@ def main() -> int:
         bgra = np.dstack([rgb[:, :, 2], rgb[:, :, 1], rgb[:, :, 0], np.full(rgb.shape[:2], 255, np.uint8)])
         ts = i / fps
         r = read_hud(
-            bgra,
-            prof,
+            downscale_hud(bgra, prof),
+            DOWNSCALE_PROFILE,
             templates,
             red_templates,
             anchors,

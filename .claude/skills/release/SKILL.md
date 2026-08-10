@@ -122,6 +122,14 @@ Surface this list to the user before drafting — gives them a chance to flag co
 
 - **<Another route>.** …
 
+### Auto-PA display support
+
+| | |
+|---|---|
+| **Tested** | 1920×1080 · 1920×1200 · 2560×1440 · 4K |
+| **Also works** | any other 16:9 or 16:10 display whose picture area is 1080p or larger |
+| **Not supported** | ultrawide (21:9) |
+
 ---
 
 **Distribution:** `JRE-PA-Simulator-v<VERSION>-distribution.zip` is self-contained — extract and run. The standalone `JRE-PA-Simulator.exe` is also attached for users who already have `fonts/`, `data/`, `audio/`, and `ocr_templates/` folders alongside it.
@@ -145,6 +153,8 @@ Each bullet starts with a bolded headline noun followed by `.` then the descript
 - Lead with implementation jargon. "GOLDEN-rule row-grouping" → "Per-station transfer-info display showing connecting lines."
 - Narrate prior behavior or the bug's backstory. Users don't care what it used to do — state only what they get now. "English lower LCD used to show Japanese; now renders English" → "English lower LCD." Drop the "previously / now-fixed" framing entirely.
 - Over-explain a user-facing change with internal mechanics. Once the headline conveys the capability, stop — trim supporting clauses that only describe how it works.
+
+**Auto-PA display-support table — READ it from the code each release, never recall it.** **Tested** = the `PROFILES` keys in `auto_input/hud_layout.py`, which is that dict's whole job (a record of what was driven, not of what works). **Also works** is DELIBERATELY NARROWER than what `_viewport_for` permits, and that gap is authored, not an oversight to "correct": the code admits any aspect 16:9-or-taller because the letterbox fit is one mechanism, but only 16:9 and 16:10 have ever been driven, so the row promises only those. Widening it to "16:9 or taller" would put 4:3 / 3:2 in a release note on zero evidence. **Not supported** = wider than 16:9, which the code refuses outright. It goes in every release, changed or not — "does my monitor work" is the first thing a user asks about OCR, and the answer has moved in three of the last four releases. Write it in display terms (`1920×1200`, `ultrawide`), never in profile / viewport vocabulary. Drop the section entirely only if a release ships no OCR feature at all.
 
 **Distribution footer** — update if the bundled folder list changed since the prior release. v0.5.3 ships `ocr_templates/` for the first time → mention it in the footer.
 

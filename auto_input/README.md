@@ -271,30 +271,37 @@ Three things learned choosing it, all measured rather than reasoned:
 
 **Fails loud on a short grab.** numpy slices past the end silently, and downscaling a partial HUD is worse than not downscaling: the resize restores the model's dimensions, so every downstream shape check passes and the readers return confident garbage.
 
-**`--legacy-ocr` (debug only)** reads at the capture's own resolution with its per-resolution templates — the approach downscaling replaces. Only for isolating a downscale-side fault, and it only works on a resolution that already has a hand-calibrated profile. Drive logs record it as `ocr_legacy` in the meta line.
+**Downscaling is the only read path.** The per-resolution path it replaced rode a `--legacy-ocr` debug flag, retired 2026-08-09 once three live drives (1080p / 1440p / 4K) had confirmed the downscale path — it survived only at the two hand-calibrated resolutions, and promoting 4K's geometry silently armed it at a third where its anchors no longer matched the cell. Drive logs before that date carry an `ocr_legacy` key in the meta line; nothing reads it.
 
 ### What a profile means, and what gets interpolated
 
-**A `PROFILES` entry means that geometry has been confirmed on a live drive at least once.** It is a record of testing, not of capability — the reads themselves need nothing per-resolution.
+**A `PROFILES` entry means that geometry has been confirmed on a live drive at least once.** It is a record of observation, not of capability; the reads themselves need nothing per-resolution.
 
-Everything else follows from one measured fact: **the HUD sits at the same FRACTION of the screen for every 16:9 resolution.** Verified to the digit across both tested profiles — `x/W = 0.859375`, `y/H = 0.013889`, `h/H = 1/3` identical at 1440p and 1080p, and the capture region is always `(W/2, 0, W, H/2)`. The game scales the HUD without reflow, so a third 16:9 size lands on the same fractions.
+Everything else follows from two measured facts.
+
+**One: the HUD sits at the same FRACTION of the viewport at every size.** Verified to the digit across both hand-calibrated profiles — `x/W = 0.859375`, `y/H = 0.013889`, `h/H = 1/3` identical at 1440p and 1080p, and the capture region is always `(W/2, 0, W, H/2)` of the viewport. The game scales the HUD without reflow, so any other size lands on the same fractions.
+
+**Two: the viewport is not always the desktop.** On a desktop taller than 16:9 the game fits a 16:9 viewport and letterboxes it. Measured on a 1920×1200 capture: exactly 60 px of pure black top and bottom, inner region exactly 1920×1080, HUD at `(1650, 75)` — the 1080p geometry plus the bar. Confirmed by sweeping the HUD origin ±4 px through the production badge matcher, which put a sharp minimum at dead centre (3.6 mean-abs-diff, against 18.7 one pixel out in x and 28.8 in y). `_viewport_for` fits the viewport; a 16:9 desktop falls out of the same arithmetic with a zero bar, so there is one code path rather than a letterbox special case.
 
 | capture | handling |
 |---|---|
-| **In `PROFILES`** | live-drive tested; used as authored |
-| **16:9, ≥ 1080p, no entry** | **interpolated** from the fractions above (`profile_for`), announced at startup as untested |
-| **Below 1080p** | out of scope for now |
-| **Non-16:9** (16:10, 21:9 …) | **untested — the fractions must NOT be assumed to hold.** Nobody has checked whether the HUD keeps its position when the aspect changes |
+| **In `PROFILES`** | observed; used as authored |
+| **16:9, viewport ≥ 1080p, no entry** | **derived** from the fractions above (`profile_for`), announced at startup as unobserved |
+| **16:10** | **derived against the letterboxed viewport.** 1920×1200 is measured; 2560×1600 / 3840×2400 are the same aspect at a different size, so the fit carries |
+| **Taller still** (4:3, 3:2 …) | derived by the same arithmetic *when the width allows it* (below), but **no desktop of that aspect has ever been seen** — the letterbox fit is measured only at 16:10. Permitted rather than refused because it is one mechanism, not a per-aspect rule; announced at startup with the bar it assumed, so a wrong fit is diagnosable from the first line of output |
+| **Viewport below 1080p** | **refused** — the bars carry no pixels the readers can use, so the floor is on the viewport, not the desktop |
+| **Width not a multiple of 16** | **refused.** No whole-pixel 16:9 height fits, and which way the game rounds the half pixel — or whether it splits the leftover row between the bars — is unmeasured. This is what actually stops most 3:2 panels: 3240×2160 and 3000×2000 both fail here even though their aspect and viewport are fine, while 2256×1504 passes. Rounding would be inventing the answer; one screenshot at 3240×2160 would settle it |
+| **Wider than 16:9** (21:9 …) | **refused.** Presumably pillarboxed by the same logic, but nobody has seen one, and a guess reads at the wrong screen position rather than degrading. One screenshot would settle it |
 
-An interpolated profile carries `verified=False`. It reads normally — geometry is the only thing being guessed and downscaling handles the rest — but it bars `--legacy-ocr`, which needs a native template set that only a calibrated resolution has.
+An interpolated profile carries `verified=False`. It reads normally — geometry is the only thing being guessed and downscaling handles the rest — and the flag changes nothing beyond the startup NOTE it prints.
 
-**Promotion is a one-line change:** once a 16:9 resolution has been live-driven, add its `ResolutionProfile` to `PROFILES` so the entry records that it was tested.
+**Promotion is a one-line change:** once a resolution has been driven, add `(w, h): replace(_derive(w, h), verified=True)` to `PROFILES` so the entry records that it was seen. `_derive` rather than a hand-authored literal keeps the arithmetic in one home, so a promoted profile cannot drift from what derivation would have produced.
 
 **`ResolutionProfile`** (frozen dataclass, `auto_input/hud_layout.py`) — `capture_region`, `hud_bbox`, `hud_bbox_in_capture`, cell bboxes (`badge_bbox`, `distance_value_bbox`, `speed_value_bbox`, `speed_limit_value_bbox`), `templates_subdir`, `badges_subdir`, `scale`. `PROFILES` maps `(desktop_w, desktop_h)` → profile. `DOWNSCALE_PROFILE` is the 1080p one with its HUD origin at `(0,0)`, since a downscaled frame IS the HUD.
 
 **`SegConfig`** — frozen dataclass of all segmentation thresholds (`digit_min_h`, `digit_min_w`, text-band Y bounds, gap limits). `SEG_DEFAULT` = 1440p values; `seg_for_scale(s)` returns a proportionally scaled copy. All readers take an optional `seg=`. The capture loop passes `seg_for_scale(read_profile.scale)`, so in practice every read runs at the model's scale.
 
-**Templates** — dark digits (0–9) are extracted at 1440p and NN-resized onto the glyph in `compare()`, so they serve any size. Red digits and badge anchors are per-resolution (bolder stroke / different pentagon dimensions): `ocr_templates/digits_red/` + `badges/` at 1440p, `ocr_templates/1080p/…` at 1080p. Downscaling means only the 1080p sets are loaded at runtime; the 1440p sets remain for `--legacy-ocr` and the calibration extractor.
+**Templates** — dark digits (0–9) are extracted at 1440p and NN-resized onto the glyph in `compare()`, so they serve any size. Red digits and badge anchors are per-resolution (bolder stroke / different pentagon dimensions): `ocr_templates/digits_red/` + `badges/` at 1440p, `ocr_templates/1080p/…` at 1080p. Downscaling means only the 1080p sets are loaded at runtime; the 1440p sets remain for the T3 fixture suite and the calibration extractor.
 
 Design, open questions, and the 4K resampler caveat: [WIP_ocr_multiresolution.md](../WIP_ocr_multiresolution.md).
 
@@ -314,7 +321,7 @@ All bboxes = `(x, y, w, h)`. Cell bboxes = HUD-relative; HUD bbox = canonical sc
 
 Position invariant across language modes (EN/JA), game states (running/stopped/at-platform), and scenes — verified against 7 reference screenshots.
 
-**Resolution gate.** Production AutoDriver runs a bootstrap full-frame `camera.grab()` at startup → probes `(w, h)` → `PROFILES.get((w, h))` → fatal if not found. Prevents OCR running with wrong-resolution bboxes / templates. Sibling to other fail-loud invariants in [critical_lessons.md](.claude/rules/critical_lessons.md).
+**Resolution gate.** Production AutoDriver runs a bootstrap full-frame `camera.grab()` at startup → probes `(w, h)` → `profile_for(w, h)`, which returns the observed entry when there is one and otherwise derives the geometry against the fitted 16:9 viewport → fatal only when the size is out of scope (§ "What a profile means, and what gets interpolated"). Prevents OCR running with wrong-resolution bboxes. Sibling to other fail-loud invariants in [critical_lessons.md](.claude/rules/critical_lessons.md).
 
 ## Capture: dxcam (DXGI Output Duplication)
 
@@ -322,8 +329,8 @@ Position invariant across language modes (EN/JA), game states (running/stopped/a
 
 ```python
 import dxcam
-from auto_input.hud_layout import PROFILES
-profile = PROFILES[(desktop_w, desktop_h)]  # resolved at startup from bootstrap grab
+from auto_input.hud_layout import profile_for
+profile = profile_for(desktop_w, desktop_h)  # observed entry, else derived; None = out of scope
 camera = _open_capture_camera(output_color="BGRA")  # adapter-enumerating; native BGRA
 frame = camera.grab(region=profile.capture_region)  # right-half quadrant, resolution-dependent
 ```
@@ -622,14 +629,14 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 | `auto_input/` | Package — public surface re-exports `AutoDriver`, `generate_report` from `__init__.py`. Internal submodules below. |
 | `auto_input/driver.py` | **Primary** — `AutoDriver` class (in-process daemon thread) + `_Detector` state machine + `generate_report()` (drive-report trigger, called by the band Save button). All auto-input logic lives here. |
 | `tims/band.py` | **Live OCR panel** — `render(surf, status, sim_state, stops)` draws the shared TIMS status band from the `auto_input_status` dict; returns `{home/save/pause}` hit-rects. `BAND_H` = the panel height (re-exported as `constants.DEBUG_PANEL_HEIGHT`). Shared with the `tims.setup` flow. |
-| `auto_input/hud_layout.py` | HUD + cell bbox constants for 2560×1440 (canonical desktop coords + region-cut derived coords) |
+| `auto_input/hud_layout.py` | Resolution profiles + viewport derivation (`_viewport_for` / `_derive` / `profile_for`), the `PROFILES` observed-record, and `DOWNSCALE_PROFILE` (the one 1080p model every capture is read through). The flat 1440p constants at the bottom are the backward-compat tail for the dev tools + extractor. |
 | `auto_input/ocr.py` | OCR pipeline + badge classifier; runnable for offline validation (`uv run python -m auto_input.ocr`) |
 | `main.py` | Reads `auto_input` / `lead_m` / `interval_s` from setup-screen config dict. Spawns `AutoDriver` when `auto_input=True` and passes same flag to `PASimulator`. |
 | `tims/setup/` | OCR Auto-PA launch cluster + Lead/Interval steppers (`pa_setting.py` / `ocr_setting.py`; the retired classic `setup.py` held a toggle pill + steppers under the route list). `_handle_band_click` updates state; selected route's Enter returns config dict including auto-input fields. |
 | `app.py` | `PASimulator`: allocates debug sub-surface in `_init_pygame`; `pending_next_pa` flag checked alongside keyboard in `_handle_input_main`; `auto_input_status` dict written by AutoDriver, read by `_render_panel()` which delegates to `tims.band.render`. `MOUSEBUTTONDOWN` events in the panel area go to `_handle_band_click` (band's home/save/pause rects). `drive_log_path` attribute stashes live JSONL path so the report can find it. `run()` returns `"home"`/`"quit"`; band Home → return to setup. **No panel rendering logic lives in app.py.** |
 | `constants.py` | `DEBUG_PANEL_HEIGHT` — re-exported from `tims.band.BAND_H` (single source; the band owns its height). |
 | `auto_input/sampling.py` | **THE per-cycle read path** — `read_hud()` (crop → 4 readers → 3 guards, in a load-bearing order) + `GuardState` / `Reading` + `downscale_hud()` (HUD → the 1080p model, § "Resolution handling"). Called by BOTH `AutoDriver` and `ocr_observe.py`, so the diagnostic cannot drift from production. Carries a `# CONTRACT:` block on the ordering. |
-| `_dev_scripts/ocr_observe.py` | Standalone OCR corpus collector — calls `read_hud`, dumps full-HUD PNGs + `reads.jsonl` (RAW beside GUARDED). Observation only, fires nothing. Output split per capture resolution: `_experiments/live_captures/<WxH>/<timestamp>/`. `--canonical` runs the downscale path so the live readout is that path. |
+| `_dev_scripts/ocr_observe.py` | Standalone OCR corpus collector — calls `read_hud`, dumps full-HUD PNGs + `reads.jsonl` (RAW beside GUARDED). Observation only, fires nothing. Always reads through the downscale path, so the corpus describes what production runs. Output split per capture resolution: `_experiments/live_captures/<height>p/<timestamp>/`. |
 | `_dev_scripts/test_dxcam.py` | Diagnostic — full-desktop dxcam capture + brightness check |
 | `ocr_templates/digits/*.png` | **Runtime input** — 10 pre-extracted digit glyphs (~20×30 binary PNGs). Loaded by `build_templates()`. Reused at all resolutions via NN-resize. Committed. |
 | `ocr_templates/digits_red/*.png` | **Runtime input** — 10 red-font digit glyphs (1440p). Loaded by `build_templates(red_dir)`. Committed. |
@@ -642,24 +649,22 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 | `_tests/t3_invariant/test_ocr_reads.py` | **T3 test** — asserts the production OCR pipeline reads correct values from committed HUD fixtures (badge + speed-limit + stopping-offset), both resolutions, no local calibration needed. Runs at `/build` pre-flight via `run_all.py`. `--deep` also sweeps `_ocr_calibration*/` when present. Replaced the former `validate_ocr.py`. |
 | `_tests/fixtures/ocr/<res>/` | **Committed test input** — `manifest.json` (stem → type + expected value, the single ground-truth source), `cells/*.png` (full-coverage cropped cells), `frames/*.png` (capture-region quadrant crops for crop-geometry). ~KB per cell; a few quadrant frames per resolution. |
 | `_recordings/drive_<line>_<diagram>_<TS>.jsonl` | **Blackbox / drive recorder log** — one file per AutoDriver lifetime. Line 0 = `_type: "meta"` (route/diagram/dest/stops + `desktop_resolution` / `ocr_profile_resolution` / `ocr_scale` for resolution self-diagnosis); **the sample line is written BEFORE `detector.update()` runs**, so its observed-flags / `at_station` reflect the state the cycle STARTED with — a fire that lands this cycle shows up on the NEXT sample. Offline analysis that forgets this reads a normal departure as a desync; subsequent lines mix `_type: "event"` — two families, **badge transitions** (arrival / departure / passing_start / passing_end) and **diagnostic markers**, log-only, each paired by ts with its sample (`cross_reject` / `score_gate` / `distance_reject` / `offset_reject` / `reentry_1a` / `reentry_1b`) — and `_type: "sample"` (one OCR sample cycle, all OCR fields + sim state including `at_station` / `cnt_pa_at_station` / `at_station_observed` / `reentry_pending` / `inferred_state` / `segment_start_stop`). Written inside `auto_input/driver.py`'s capture loop with per-line `flush()` for crash safety. Local-only / gitignored. Field additions backward-compatible (plot_drive ignores unknowns); field removals or renames require coordinated update with `plot_drive.py`. |
-| `_experiments/live_captures/<WxH>/<ts>/` | `ocr_observe` dumps, split per capture resolution (gitignored — `_experiments/` is artifact-only). PNGs are the NATIVE HUD crop, not the downscaled one, so a dump can be re-cropped and re-read offline at any geometry. |
+| `_experiments/live_captures/<height>p/<ts>/` | `ocr_observe` dumps, split per capture resolution (gitignored — `_experiments/` is artifact-only). PNGs are the NATIVE HUD crop, not the downscaled one, so a dump can be re-cropped and re-read offline at any geometry. |
 | `fonts/ShinGoPr6N-Medium.otf` | Latin + CJK font used by debug panel for station names |
 
 ## Adding a new resolution
 
 Downscaling is what makes this short. No calibration screenshots, no template extraction, no per-resolution tuning — the reads happen on the 1080p model whatever the capture size. What is still needed is **where the HUD sits in the frame**, which cannot be derived because it depends on the game's own layout.
 
-1. Add a `ResolutionProfile` to `auto_input/hud_layout.py` and register it in `PROFILES`. `_scale_bbox(bbox, s)` scales the 1440p reference; the game HUD "only scales, no other changes" across resolutions, so the scaled values are the starting point. `templates_subdir` / `badges_subdir` are unused on the downscale path — set them for `--legacy-ocr` only if that resolution will ever be debugged natively.
+1. Usually nothing. `profile_for` already derives every in-scope size, so a new resolution is only worth an entry once someone has *seen* it read — `(w, h): replace(_derive(w, h), verified=True)` in `PROFILES`. `templates_subdir` / `badges_subdir` are unused at runtime; leave them at the derived defaults unless the resolution is gaining its own T3 fixture set.
 2. Verify the HUD is actually where the profile says. One `ocr_observe` run at that resolution dumps the HUD crop; if the crop is framed correctly the reads follow.
 3. Optional but recommended: capture one frame into `_tests/fixtures/ocr/<res>/` with a `manifest.json` (`resolution`, `profile_key`, `source_dir`, `cells`, `frames`) so T3 locks the new geometry. `uv run python _dev_scripts/extract_ocr_assets.py` regenerates the fixture set from the manifest.
 4. `uv run python _tests/t3_invariant/test_ocr_reads.py` — must PASS before committing.
 
-**Legacy per-resolution calibration** (only if a resolution needs its own native template set for `--legacy-ocr`): capture the full `_ocr_calibration_<res>/` screenshot set, add `BADGE_ANCHOR_FILES_<res>` + `KNOWN_LIMIT_VALUES_<res>` to `_dev_scripts/extract_ocr_assets.py` with extraction passes in `main()`, then run the extractor to produce `ocr_templates/<res>/badges/` + `digits_red/`. Dark digit templates are never re-extracted — `compare()` NN-resizes the 1440p set onto the glyph at runtime.
-
 ## Limitations
 
-- **Supported resolutions**: 2560×1440 and 1920×1080. Reads run on the 1080p model regardless (§ "Resolution handling"), so a new resolution needs a `ResolutionProfile` entry — where the HUD sits in the capture — but no template extraction of its own.
-- **Primary monitor only**: capture targets the display Windows marks Primary (the primary output is tried first by `_open_capture_camera`). The game must run on the primary monitor, and the **primary monitor's own resolution** must be a supported one — a supported-resolution game on a *secondary* monitor is never captured, because the startup probe reads the primary's resolution and disables the driver if it isn't 2560×1440 or 1920×1080. A secondary monitor's placement does not offset the capture (region coords are output-local).
+- **Supported resolutions**: any desktop that is 16:9 **or taller** whose fitted 16:9 viewport is 1080p or larger — the game letterboxes into that viewport and the geometry is derived against it. **Evidence tiers matter here:** 16:9 and 16:10 have both been driven; 4:3 / 3:2 are permitted by the same arithmetic but no desktop of that aspect has ever been seen, so they announce themselves at startup as derived. Reads run on the 1080p model whatever the capture size, so nothing per-resolution is extracted; a size absent from `PROFILES` is derived and announced at startup (§ "What a profile means, and what gets interpolated"). Refused, with the driver disabled, on any of three counts: a **viewport below 1080p**; a **width that is not a multiple of 16** (no whole-pixel 16:9 height fits — this is what stops 3240×2160 and 3000×2000, though 2256×1504 passes); or anything **wider than 16:9** (21:9). Each is unmeasured rather than impossible, and refusing beats guessing, because a wrong geometry reads confidently instead of degrading.
+- **Primary monitor only**: capture targets the display Windows marks Primary (the primary output is tried first by `_open_capture_camera`). The game must run on the primary monitor, and the **primary monitor's own resolution** must be in scope — a game on a *secondary* monitor is never captured, because the startup probe reads the primary's resolution and disables the driver if it is out of scope. A secondary monitor's placement does not offset the capture (region coords are output-local).
 - **Multi-GPU / hybrid graphics**: `_open_capture_camera` enumerates all adapters, so a primary display driven by a non-zero adapter is now found automatically. The unrecoverable case is a Microsoft-Hybrid (Optimus) system whose captured display is owned by the **discrete** GPU — DDA is unsupported against the dGPU by design, every dxgi combo raises `DXGI_ERROR_UNSUPPORTED`, and the driver disables (full traceback logged). User-side workarounds and the winrt fallback: [#97](https://github.com/ksleungac/pids-jre-simulator/issues/97).
 - **Game must be visible**: HUD area (top-right) must not be covered.
 - **Game must be actively rendering**: minimized/alt-tabbed games may stop rendering and produce stale captures.

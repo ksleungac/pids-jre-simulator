@@ -176,6 +176,17 @@ After a visible change, if a CHEAP IMMEDIATE preview lets the user verify, just 
 - Change lands in an immediate preview (`preview_display.py`, a `_dev_scripts/preview_*` harness, a headless screenshot) → launch / render it while reporting.
 - Change is only reachable by navigating the live app → report + let the user launch; still gate genuinely irreversible / outward-facing actions.
 
+### Draw spatial structure — prose loses
+When the answer is "where is this relative to that" — capture regions, crop chains, bounding boxes, layout offsets — render a labelled overlay on the REAL artifact and hand over the path, instead of describing it.
+
+**Why:** prose forces the reader to rebuild the picture; the picture IS the answer. Examples:
+- (2026-08-09) Several rounds of prose about the 1920×1200 OCR capture geometry didn't land — user: *"so basically you capture what? with or without the black bar? than crop to only that? can you draw to illustrate"*. One diagram settled it, then: *"next time you will use image like that to explain to me."*
+
+**How to apply:**
+- Derive every coordinate by CALLING production (import the profile / layout fn), never by restating numbers — the drawing then also checks the code (cf. § "A second implementation of a production decision drifts silently").
+- Compose on the real frame / live render, not a schematic. Repo root as `screenshot_*.png`; report the path, read it back ONCE to confirm it rendered, then stop.
+- Scope is spatial structure. A table still wins for a list, a decision, or a status report — and that table goes in the chat message (`conventions.md` § Tooling).
+
 ### Ground reasoning in the user's stated terms
 When working through user-stated logic, reason strictly in the vocabulary and frame the user used. Don't import adjacent context unless the user invoked it.
 
@@ -488,6 +499,13 @@ subtly wrong rather than as a failure. Examples:
   restated — is the smell. Drive the real thing and record what it asked for.
 - Enumeration by SAMPLING is the other half: if coverage comes from driving, the drive must be
   exhaustive over the state space, and a mechanical gate must fail on a gap rather than trusting it.
+- **Adopting "the production path" is all-or-nothing — enumerate its components.** Partial adoption
+  is worse than none, because the tool now claims the contract in its docstring while one input
+  still differs. (2026-08-10) Moving `ocr_replay_video` onto the downscale path took geometry, seg
+  thresholds and badge anchors from `DOWNSCALE_PROFILE` and left the RED digit templates on the
+  1440p set — which had been correct on the native path it replaced, so the fix broke a case that
+  previously worked. List every argument the production call site passes and take each from the
+  same source; a diff of the two call sites is the check.
 
 ### A simplification must carry its constraints forward
 When a design collapses to something simpler, re-derive which parts of the original were load-bearing. A constraint that was correct in the complex design is still correct in the simple one — dropping it alongside the scaffolding it lived in is silent, and only surfaces as a user-visible defect.

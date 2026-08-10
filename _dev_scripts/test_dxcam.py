@@ -7,7 +7,6 @@ Then open _experiments/live_captures/desktop_test.png to see what dxcam returned
 
 from __future__ import annotations
 
-import ctypes
 import sys
 import time
 from pathlib import Path
@@ -15,10 +14,14 @@ from pathlib import Path
 import dxcam
 import pygame
 
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(2)
-except (AttributeError, OSError):
-    ctypes.windll.user32.SetProcessDPIAware()
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from window_utils import declare_dpi_awareness  # noqa: E402
+
+# Production's declaration, not a local copy — awareness decides what a capture SEES, so a
+# diagnostic that declares it differently from the app is measuring a different desktop
+# (`principles.md` § "A second implementation of a production decision drifts silently").
+declare_dpi_awareness()
 
 
 def main() -> int:

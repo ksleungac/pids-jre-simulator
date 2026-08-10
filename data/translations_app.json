@@ -80,14 +80,14 @@
     "zh_CN": "功能说明"
   },
   "setup.ocr_disclaimer.resolution": {
-    "en": "Preview · tested on 1080P / 1440P / 4K (16:9)",
-    "zh_HK": "此功能仍在預覽階段，已測試 1080P / 1440P / 4K（16:9）",
-    "zh_CN": "此功能仍在预览阶段，已测试 1080P / 1440P / 4K（16:9）"
+    "en": "Preview · tested on 1080P / 1440P / 4K, and 1920×1200 (16:10)",
+    "zh_HK": "此功能仍在預覽階段，已測試 1080P / 1440P / 4K，以及 1920×1200（16:10）",
+    "zh_CN": "此功能仍在预览阶段，已测试 1080P / 1440P / 4K，以及 1920×1200（16:10）"
   },
   "setup.ocr_disclaimer.resolution_extended": {
-    "en": "Other 16:9 resolutions at 1080P or higher also work, but are not yet tested.",
-    "zh_HK": "其他 1080P 或以上的 16:9 解像度同樣可用，但未經測試。",
-    "zh_CN": "其他 1080P 或以上的 16:9 分辨率同样可用，但未经测试。"
+    "en": "Other 16:9 and 16:10 displays at 1080P or higher also work, but are not yet tested.",
+    "zh_HK": "其他 1080P 或以上的 16:9 及 16:10 解像度同樣可用，但未經測試。",
+    "zh_CN": "其他 1080P 或以上的 16:9 及 16:10 分辨率同样可用，但未经测试。"
   },
   "setup.ocr_disclaimer.dual_gpu": {
     "en": "Laptops with two graphics chips: Windows may run this app on the high-performance GPU, which blocks screen capture and leaves Auto-PA with nothing to read. If Auto-PA never starts, set this app to Power saving under Windows Settings > System > Display > Graphics, then restart it.",

@@ -243,6 +243,13 @@ rigour and is the thing that makes the blind spot invisible.
 - When a predicate stands in for a question (`fonts/` exists ⇒ ShinGo loadable), name both and ask
   what would separate them. A deliberate change that makes a resource PARTIAL is the classic
   separator, and it usually lives in the build script rather than the code being reasoned about.
+  **ADDING A MEMBER TO AN ENUMERATION is the other one.** A gate reading `profile.verified` as
+  "has a native template set here" was exactly true while the only verified profiles were the two
+  hand-calibrated ones. Promoting 4K — geometry live-confirmed, templates never extracted — split
+  the two questions and silently armed `--legacy-ocr` at a resolution whose badge anchors no longer
+  matched the cell, so it would have started cleanly and then classified nothing. Nothing about the
+  gate changed; the set it quantified over did. Ask of any promotion: which dormant predicate was
+  only true because this set was smaller? (2026-08-10 — resolved by deleting the flag, not the gate.)
 - A check whose inputs are absent in the deployed frame must be SKIPPED there explicitly, not left to
   compute a degenerate value and compare it. Ask where each check's inputs come from, per frame.
 - Count the frames a suite covers, not the cases. Five gates over one frame is one frame.

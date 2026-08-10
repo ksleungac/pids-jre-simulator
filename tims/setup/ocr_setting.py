@@ -212,8 +212,8 @@ def _build_content(w):
     paragraph("setup.ocr_disclaimer.intro", max_w=LEFT_COL_W)
     y += 6
     # Two support tiers, mirroring hud_layout's `verified` flag: AMBER = the resolutions a live
-    # drive has actually run on (PROFILES entries), DIM = every other 16:9 at 1080p or above,
-    # whose geometry is interpolated from the ratio and expected-but-unproven.
+    # drive has actually run on (PROFILES entries), DIM = every other 16:9 or 16:10 display whose
+    # fitted 16:9 picture area is 1080p or above, its geometry derived and expected-but-unproven.
     paragraph("setup.ocr_disclaimer.resolution", color=AMBER, max_w=LEFT_COL_W)
     paragraph("setup.ocr_disclaimer.resolution_extended", color=DIM, max_w=LEFT_COL_W)
     y += 8

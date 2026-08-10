@@ -52,7 +52,6 @@ def _run_drive(config):
                 sim,
                 lead_m=config.get("lead_m", 900),
                 interval_s=config.get("interval_s", 3),
-                legacy_ocr=config.get("legacy_ocr", False),
             )
             sim.auto_driver = driver  # exposes pause toggle to the band click handler
             driver.start()
@@ -73,12 +72,6 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Japanese Train PA Simulator")
-    parser.add_argument(
-        "--legacy-ocr",
-        action="store_true",
-        help="Debug: read the HUD at the capture's own resolution with its per-resolution templates, "
-        "instead of downscaling it into the 1080p model. No effect unless OCR Auto-PA is on.",
-    )
     parser.add_argument(
         "--stream",
         action="store_true",
@@ -157,9 +150,6 @@ def main():
             frame_stream.stop()
             pygame.quit()
             return
-        # Debug lever, not a setting — the per-resolution path is what downscaling replaces,
-        # so it rides a CLI flag rather than settings.json / the OCR page.
-        config["legacy_ocr"] = args.legacy_ocr
         # Tear down the setup window before the drive builds its own (taller, panel-carved) window.
         pygame.display.quit()
         action = _run_drive(config)

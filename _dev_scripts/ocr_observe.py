@@ -21,7 +21,7 @@ No synthetic keystrokes, no PA firing, no simulator coupling — it only watches
 Run:  uv run python _dev_scripts/ocr_observe.py --interval 0.5
 Flags:
   --interval N   seconds between samples, fractions ok (default 1.0)
-  --res 1080p|1440p   override resolution (default: auto-detect from first frame)
+  --res 1080p|1200p|1440p|2160p   override resolution (default: auto-detect from first frame)
   --no-dump      console only, write no PNGs (quick sanity check)
   --out DIR      output dir (default _experiments/live_captures/<res>/<timestamp>/)
 Stop: Ctrl+C
@@ -30,13 +30,11 @@ Stop: Ctrl+C
 from __future__ import annotations
 
 import argparse
-import ctypes
 import json
 import sys
 import time
 from pathlib import Path
 
-import dxcam
 import pygame
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -46,26 +44,35 @@ from auto_input.driver import (  # noqa: E402
     _accept_stopping_offset,
     _apply_badge_reject_gate,
     _crop_cell,
+    _open_capture_camera,
     guard_distance,
 )
 from auto_input.hud_layout import DOWNSCALE_PROFILE, PROFILES, profile_for  # noqa: E402
 from auto_input.ocr import DEFAULT_TEMPLATES_DIR, build_templates, load_badge_anchors, seg_for_scale  # noqa: E402
 from auto_input.sampling import GuardState, downscale_hud, read_hud  # noqa: E402
+from window_utils import declare_dpi_awareness  # noqa: E402
 
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(2)
-except (AttributeError, OSError):
-    ctypes.windll.user32.SetProcessDPIAware()
+# DPI awareness decides what the resolution probe SEES — a DPI-unaware process reads a
+# 1920x1200 desktop at 125% scaling as 1536x960, whose fitted viewport is 864 and therefore
+# out of scope. A local copy of the declaration could drift from production's and silently
+# select a different profile in a script whose whole contract is observing what production
+# observes, so call production's (`principles.md` § "A second implementation of a production
+# decision drifts silently"; dev importing production is the allowed direction).
+declare_dpi_awareness()
 
-_RES_FLAG_MAP = {"1080p": (1920, 1080), "1440p": (2560, 1440), "2160p": (3840, 2160)}
+# Derived from PROFILES, never re-typed: the --res choices ARE the driven resolutions, so a
+# hand-kept copy would go stale the next time one is promoted (`conventions.md` § Tooling,
+# canonical-source duplication).
+_RES_FLAG_MAP = {f"{h}p": (w, h) for (w, h) in PROFILES}
 DEFAULT_OUT = Path(__file__).parent.parent / "_experiments" / "live_captures"
 
 
 def resolve_profile(camera, forced: str | None):
     """Same startup contract as AutoDriver: probe a full frame, resolve a profile, fail loud.
 
-    `profile_for` returns a live-tested profile when one exists and interpolates any other
-    16:9 desktop >= 1080p; None means outside that scope.
+    `profile_for` returns a driven profile when one exists and derives any other desktop that
+    is 16:9 or taller, whose width is a multiple of 16, and whose fitted 16:9 viewport is
+    >= 1080p. None means outside that scope — all three conditions, not just the last.
     """
     if forced:
         prof = profile_for(*_RES_FLAG_MAP[forced])
@@ -78,9 +85,15 @@ def resolve_profile(camera, forced: str | None):
             h, w = probe.shape[:2]
             prof = profile_for(w, h)
             if prof is None:
-                sys.exit(f"desktop is {w}x{h} — outside the supported scope (16:9, 1080p or larger). Live-tested: {sorted(PROFILES)}")
+                sys.exit(
+                    f"desktop is {w}x{h} — outside the supported scope. Needs: 16:9 or taller (never wider), "
+                    f"width a multiple of 16, fitted 16:9 viewport 1080p or larger. Observed: {sorted(PROFILES)}"
+                )
             if not prof.verified:
-                print(f"[note] {w}x{h} has no live-tested profile — geometry interpolated from the 16:9 fractions (HUD {prof.hud_bbox}).")
+                print(
+                    f"[note] {w}x{h} has not been driven — geometry derived from the 16:9 fractions "
+                    f"(letterbox bar {prof.capture_region[1]}px, capture {prof.capture_region}, HUD {prof.hud_bbox})."
+                )
             return prof
         time.sleep(0.2)
     sys.exit("dxcam returned no frame on the resolution probe — is the game rendering on the primary monitor?")
@@ -95,9 +108,12 @@ def main() -> int:
     args = ap.parse_args()
 
     pygame.init()
-    camera = dxcam.create(output_color="BGRA")
+    # Production's adapter/output walk, not a bare dxcam.create() — on a hybrid-GPU laptop
+    # index 0 raises DXGI_ERROR_UNSUPPORTED (`critical_lessons.md` §8), so the bare call fails
+    # on exactly the machines whose OCR reports most need collecting.
+    camera = _open_capture_camera("BGRA")
     if camera is None:
-        sys.exit("dxcam.create() returned None — DXGI capture unavailable.")
+        sys.exit("no DXGI capture combo succeeded — see the traceback above (critical_lessons §8).")
     profile = resolve_profile(camera, args.res)
 
     # `profile` is what to CAPTURE; DOWNSCALE_PROFILE is what READS it — production
@@ -107,12 +123,15 @@ def main() -> int:
     seg = seg_for_scale(DOWNSCALE_PROFILE.scale)
     badges_dir = DEFAULT_TEMPLATES_DIR / DOWNSCALE_PROFILE.badges_subdir if DOWNSCALE_PROFILE.badges_subdir else None
     badge_anchors = load_badge_anchors(badges_dir)
-    try:
-        from auto_input.ocr import _get_red_digit_templates
-
-        red_templates = _get_red_digit_templates()
-    except Exception:
-        red_templates = None
+    # Red digits are per-resolution, so they follow the READ profile like everything else —
+    # the same expression driver.py evaluates. Taking the 1440p set here instead would read
+    # the speed limit against glyphs production never loads.
+    red_dir = (
+        DEFAULT_TEMPLATES_DIR / DOWNSCALE_PROFILE.templates_subdir / "digits_red"
+        if DOWNSCALE_PROFILE.templates_subdir
+        else DEFAULT_TEMPLATES_DIR / "digits_red"
+    )
+    red_templates = build_templates(red_dir) if red_dir.exists() else None
 
     # Split by capture resolution — cell geometry is resolution-specific and nothing IN the
     # PNGs says which. `<height>p` to match every other per-resolution dir in the project

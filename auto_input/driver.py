@@ -40,19 +40,13 @@ import pygame
 import soundfile as sf
 
 from .hud_layout import DOWNSCALE_PROFILE, PROFILES, profile_for
-from .sampling import GuardState, Reading, downscale_hud, read_hud  # noqa: F401  (Reading re-exported for the 1b diagnostic)
+from .sampling import GuardState, downscale_hud, read_hud
 from .ocr import (
     DEFAULT_TEMPLATES_DIR,
     MAX_DRIVABLE_SPEED_KMH,
     Templates,
     build_templates,
-    classify_badge_state,
     load_badge_anchors,
-    read_distance,
-    read_speed,
-    read_speed_limit,
-    read_speed_tenths,
-    read_stopping_offset,
     seg_for_scale,
 )
 
@@ -190,7 +184,7 @@ def _build_stops_meta(sim) -> list[dict]:
     return out
 
 
-def _open_drive_log(sim, probe_wh, read_profile, legacy: bool = False) -> tuple[Optional[TextIO], Optional[Path]]:
+def _open_drive_log(sim, probe_wh, read_profile) -> tuple[Optional[TextIO], Optional[Path]]:
     """Open a fresh JSONL log for this drive session and write the meta header.
 
     ``probe_wh`` is the raw dxcam desktop probe ``(w, h)``; ``read_profile`` is the profile
@@ -221,8 +215,6 @@ def _open_drive_log(sim, probe_wh, read_profile, legacy: bool = False) -> tuple[
             "desktop_resolution": [probe_wh[0], probe_wh[1]],
             "ocr_profile_resolution": [read_profile.desktop_w, read_profile.desktop_h],
             "ocr_scale": read_profile.scale,
-            # True only when --legacy-ocr forced the per-resolution path (debug).
-            "ocr_legacy": legacy,
             "stops": _build_stops_meta(sim),
         }
         f.write(json.dumps(meta, ensure_ascii=False) + "\n")
@@ -687,11 +679,6 @@ class AutoDriver:
     # status flag — last OCR readings stay frozen on screen so the user can
     # inspect them without the live stream overwriting.
     paused: bool = False
-    # Debug lever (main.py --legacy-ocr): read at the capture's own resolution using its
-    # per-resolution templates, instead of downscaling into the 1080p model. Only for
-    # isolating a downscale-side fault — it is the approach the downscale path replaces,
-    # and it only works on a resolution that already has a hand-calibrated profile.
-    legacy_ocr: bool = False
 
     # Internal state — set by _run on thread start
     _detector: _Detector = field(init=False)
@@ -796,10 +783,10 @@ class AutoDriver:
             # Disable the auto-driver; the rest of the app keeps running.
             return
         self._camera = camera  # tracked so stop() can release it (see the _camera field note)
-        # Resolution gate. HUD bboxes scale per ResolutionProfile; templates
-        # reused across resolutions via NN-resize in compare(). Probe desktop
-        # dims → PROFILES.get((w,h)) → fail loud if unsupported so user sees
-        # the cause instead of silent OCR garbage at wrong bbox geometry.
+        # Resolution gate. Probe desktop dims → profile_for(w,h), which returns the
+        # observed entry when there is one and otherwise derives the geometry against the
+        # fitted 16:9 viewport → fail loud only when the size is OUT OF SCOPE, so the user
+        # sees the cause instead of silent OCR garbage at wrong bbox geometry.
         # One-shot full grab gives the desktop dims; bounded retry mirrors the
         # main-loop retry pattern (dxcam can return None right after create()).
         probe = None
@@ -817,31 +804,28 @@ class AutoDriver:
         if profile is None:
             tested = ", ".join(f"{w}×{h}" for w, h in sorted(PROFILES))
             print(
-                f"[AutoDriver] FATAL: desktop resolution {pw}×{ph} is outside the supported scope "
-                f"(16:9 at 1080p or larger). Live-tested: {tested}. Auto-driver disabled."
+                f"[AutoDriver] FATAL: desktop resolution {pw}×{ph} is outside the supported scope. "
+                f"Needs: 16:9 or TALLER (never wider), width a MULTIPLE OF 16, and a fitted 16:9 "
+                f"viewport of 1080p or larger. Observed so far: {tested}. Auto-driver disabled."
             )
             return
         if not profile.verified:
+            # Name the BAR, not just the HUD box: on a taller-than-16:9 desktop the letterbox
+            # offset is the part being guessed, and it is the first thing to suspect in a
+            # "the OCR reads nothing" report (`critical_lessons.md` §8 — give the degraded
+            # path a line worth quoting back).
             print(
-                f"[AutoDriver] NOTE: {pw}×{ph} has no live-tested profile — geometry interpolated "
-                f"from the 16:9 fractions (HUD {profile.hud_bbox}). Expected to be correct; watch the reads."
+                f"[AutoDriver] NOTE: {pw}×{ph} has not been driven — geometry derived from the 16:9 fractions "
+                f"(letterbox bar {profile.capture_region[1]}px, capture {profile.capture_region}, HUD {profile.hud_bbox}). "
+                f"Expected to be correct; watch the reads."
             )
-        if self.legacy_ocr and not profile.verified:
-            # Legacy reads natively and needs a template set extracted at THIS resolution.
-            # An interpolated profile has none, so every read would silently fail.
-            print(f"[AutoDriver] --legacy-ocr is not available at {pw}×{ph} (no native template set). Using the downscale path.")
-            self.legacy_ocr = False
-
-        # `profile` always describes the CAPTURE — which region to grab and where the HUD
-        # sits in it. The READ side (cell bboxes, seg thresholds, templates, anchors) is
-        # normally DOWNSCALE_PROFILE: the HUD is shrunk into the one 1080p model, so a new
-        # desktop resolution needs no profile and no templates of its own.
-        #
-        # `legacy_ocr` reads at the capture's own resolution with its per-resolution
-        # templates instead — a debug lever for isolating a downscale-side fault, not a
-        # supported path. Keeping capture and read as SEPARATE variables is what stops a
-        # cell being cropped at one geometry and thresholded at another.
-        read_profile = profile if self.legacy_ocr else DOWNSCALE_PROFILE
+        # `profile` describes the CAPTURE — which region to grab and where the HUD sits in
+        # it. The READ side (cell bboxes, seg thresholds, templates, anchors) is always
+        # DOWNSCALE_PROFILE: the HUD is shrunk into the one 1080p model, so a new desktop
+        # resolution needs no profile and no templates of its own. Keeping capture and read
+        # as SEPARATE variables is what stops a cell being cropped at one geometry and
+        # thresholded at another.
+        read_profile = DOWNSCALE_PROFILE
         seg = seg_for_scale(read_profile.scale)
 
         # Dark digit templates: always load from 1440p set. The resize-in-compare
@@ -875,10 +859,7 @@ class AutoDriver:
         )
         hw, hh = profile.hud_bbox_in_capture[2], profile.hud_bbox_in_capture[3]
         rw, rh = read_profile.hud_bbox_in_capture[2], read_profile.hud_bbox_in_capture[3]
-        if self.legacy_ocr:
-            print(f"[AutoDriver] LEGACY OCR (debug): reading the HUD at its native {hw}×{hh} with the {profile.desktop_h}p template set.")
-        else:
-            print(f"[AutoDriver] OCR: HUD {hw}×{hh} -> {rw}×{rh}, read by the {read_profile.desktop_h}p model.")
+        print(f"[AutoDriver] OCR: HUD {hw}×{hh} -> {rw}×{rh}, read by the {read_profile.desktop_h}p model.")
 
         # Probe arrival-PA durations once → the long-approach set. These stops
         # fire arrival LONG_APPROACH_BUMP_M earlier so their long guides finish
@@ -893,7 +874,7 @@ class AutoDriver:
         # each sample below appends a line + flushes for crash safety. Path is
         # also stashed on the simulator so the debug-bar Report button can find
         # the live log to render.
-        log_file, log_path = _open_drive_log(self.sim, (pw, ph), read_profile, self.legacy_ocr)
+        log_file, log_path = _open_drive_log(self.sim, (pw, ph), read_profile)
         if log_path is not None:
             print(f"[AutoDriver] Recording drive log -> {log_path}")
             self.sim.drive_log_path = log_path
@@ -962,9 +943,8 @@ class AutoDriver:
                     # distance guard needs as its reference-frame signal.
                     # Downscale BEFORE the read so every cell this cycle is cropped from one
                     # frame at one geometry (sampling.py CONTRACT step 0). At 1080p this is a
-                    # plain copy; under --legacy-ocr the native frame goes through untouched.
-                    if not self.legacy_ocr:
-                        frame = downscale_hud(frame, profile)
+                    # plain copy.
+                    frame = downscale_hud(frame, profile)
 
                     sample_ts = time.time()
                     r = read_hud(
