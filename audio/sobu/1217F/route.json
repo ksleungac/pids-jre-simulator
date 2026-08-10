@@ -118,7 +118,7 @@
                 "tokyo_4_jr-sh5-1"
             ],
             "sta_code": "JO19",
-            "sta_cut": 15.6,
+            "sta_cut": 14.75,
             "time": 0
         },
         {
@@ -130,7 +130,7 @@
                 "shin-nihombashi_2_hassha-beru"
             ],
             "sta_code": "JO20",
-            "sta_cut": 12.2,
+            "sta_cut": 11.37,
             "time": 2
         },
         {
@@ -142,7 +142,7 @@
                 "bakurocho_2_hassha-beru"
             ],
             "sta_code": "JO21",
-            "sta_cut": 6.2,
+            "sta_cut": 5.41,
             "time": 2
         },
         {
@@ -154,7 +154,7 @@
                 "kinshicho_4_gota-del-vient"
             ],
             "sta_code": "JO22",
-            "sta_cut": 28.6,
+            "sta_cut": 17.11,
             "time": 4
         },
         {
@@ -193,7 +193,7 @@
                 "funabashi_4_horidei"
             ],
             "sta_code": "JO25",
-            "sta_cut": 19.3,
+            "sta_cut": 18.51,
             "time": 6
         },
         {
@@ -206,7 +206,7 @@
                 "tsudanuma_1_horidei"
             ],
             "sta_code": "JO26",
-            "sta_cut": 19.2,
+            "sta_cut": 18.26,
             "time": 4
         },
         {
@@ -219,7 +219,7 @@
                 "inage_4_horidei"
             ],
             "sta_code": "JO27",
-            "sta_cut": 10.1,
+            "sta_cut": 9.25,
             "time": 6
         },
         {
@@ -245,7 +245,7 @@
                 "tsuga_2_gota-del-vient"
             ],
             "sta_code": "JO30",
-            "sta_cut": 55.3,
+            "sta_cut": 50.96,
             "time": 4
         },
         {
@@ -258,7 +258,7 @@
                 "yotsukaido_2"
             ],
             "sta_code": "JO31",
-            "sta_cut": 20.0,
+            "sta_cut": 17.14,
             "time": 4
         },
         {
@@ -271,7 +271,7 @@
                 "monoi_1_gota-del-vient"
             ],
             "sta_code": "JO32",
-            "sta_cut": 19.5,
+            "sta_cut": 16.83,
             "time": 4
         },
         {
@@ -283,7 +283,7 @@
                 "sakura_2_verde-rayo-v2"
             ],
             "sta_code": "JO33",
-            "sta_cut": 35.3,
+            "sta_cut": 24.87,
             "time": 4
         },
         {
@@ -296,7 +296,7 @@
                 "shisui_gota-del-vient"
             ],
             "sta_code": "JO34",
-            "sta_cut": 25.5,
+            "sta_cut": 17.37,
             "time": 6
         },
         {
@@ -322,7 +322,7 @@
                 "airport-terminal-2_chaimu-3b4"
             ],
             "sta_code": "JO36",
-            "sta_cut": 27.3,
+            "sta_cut": 21.64,
             "time": 9
         },
         {

@@ -27,7 +27,7 @@
             "sta": [
                 "JY24_OSK"
             ],
-            "sta_cut": 10.9,
+            "sta_cut": 10.76,
             "time": 0,
             "sta_code": "JY24"
         },
@@ -39,7 +39,7 @@
             "sta": [
                 "JY25_SGW"
             ],
-            "sta_cut": 11.6,
+            "sta_cut": 11.58,
             "time": 3,
             "sta_code": "JY25"
         },
@@ -51,7 +51,7 @@
             "sta": [
                 "JY27"
             ],
-            "sta_cut": 11.6,
+            "sta_cut": 11.55,
             "dest": "東京･上野",
             "time": 3,
             "sta_code": "JY27"
@@ -88,7 +88,7 @@
             "sta": [
                 "JY30"
             ],
-            "sta_cut": 8.6,
+            "sta_cut": 8.45,
             "time": 2,
             "sta_code": "JY30"
         },
@@ -112,7 +112,7 @@
             "sta": [
                 "JY02_KND"
             ],
-            "sta_cut": 11.6,
+            "sta_cut": 11.46,
             "dest": "上野･池袋",
             "time": 2,
             "sta_code": "JY02"
@@ -125,7 +125,7 @@
             "sta": [
                 "JY03_AKB"
             ],
-            "sta_cut": 9.1,
+            "sta_cut": 7.39,
             "time": 2,
             "sta_code": "JY03"
         },
@@ -149,7 +149,7 @@
             "sta": [
                 "JY05_UEN"
             ],
-            "sta_cut": 13.55,
+            "sta_cut": 11.33,
             "time": 2,
             "sta_code": "JY05"
         },
@@ -283,7 +283,7 @@
             "sta": [
                 "JY16"
             ],
-            "sta_cut": 8.2,
+            "sta_cut": 7.75,
             "time": 2,
             "sta_code": "JY16"
         },
@@ -307,7 +307,7 @@
             "sta": [
                 "JY18"
             ],
-            "sta_cut": 11.6,
+            "sta_cut": 11.4,
             "dest": "渋谷･品川",
             "time": 2,
             "sta_code": "JY18"
@@ -320,7 +320,7 @@
             "sta": [
                 "JY19"
             ],
-            "sta_cut": 11.2,
+            "sta_cut": 11.08,
             "time": 2,
             "sta_code": "JY19"
         },
@@ -332,7 +332,7 @@
             "sta": [
                 "JY20_SBY"
             ],
-            "sta_cut": 13.5,
+            "sta_cut": 12.91,
             "time": 2,
             "sta_code": "JY20"
         },
@@ -357,7 +357,7 @@
             "sta": [
                 "JY22"
             ],
-            "sta_cut": 10.1,
+            "sta_cut": 10.06,
             "time": 3,
             "sta_code": "JY22"
         },
@@ -369,7 +369,7 @@
             "sta": [
                 "JY23"
             ],
-            "sta_cut": 9.2,
+            "sta_cut": 8.72,
             "time": 2,
             "sta_code": "JY23"
         },
@@ -381,7 +381,7 @@
             "sta": [
                 "JY24_OSK"
             ],
-            "sta_cut": 10.9,
+            "sta_cut": 10.76,
             "time": 2,
             "sta_code": "JY24"
         }
