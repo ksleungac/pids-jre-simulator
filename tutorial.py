@@ -371,11 +371,17 @@ def _pred_step7_approached(tut: "Tutorial") -> bool:
     State-based predicate (not action-based) because the falling-into-STOPPING
     transition happens silently — `_next_in_approaching`'s pa-exhausted branch
     flips at_station=True without firing audio. So we read sim state directly.
+
+    Gated on PA only, never `is_playing()`. This step allows free PgUp exploration,
+    and the last sta track loops until cut or departure — so an `is_playing()` gate
+    would wait on a melody that never ends and soft-lock the step. What it actually
+    wants is "the arrival announcement has finished"; a platform melody running
+    underneath is exactly what the real thing sounds like and blocks nothing.
     """
     if tut.sim is None:
         return False
     s = tut.sim.state
-    return s.at_station and s.curr_stop == 14 and not tut.sim.audio.is_playing()
+    return s.at_station and s.curr_stop == 14 and not tut.sim.audio.is_pa_playing()
 
 
 def _pred_step8_clicked(tut: "Tutorial") -> bool:
@@ -570,7 +576,11 @@ STEPS: tuple[Step, ...] = (
     # hear both. [Next] handler exhausts pa_at_station so step 4's PgDn
     # correctly calls _advance_to_next_stop instead of replaying entry [1].
     Step(2, 1, frozenset({ACT_PGDN}), _pred_action_flow_complete, next_handler=_skip_step2, skip_handler=_skip_step2, lock_after_first_action=False),
-    # Step 3: STA can be restarted (each PgUp re-cuts from sta_cut position).
+    # Step 3: the departure melody. Press 1 starts it LOOPING [0, sta_cut); press 2 is
+    # the conductor's cut to the closing announcement; a later press loops it again.
+    # NOTE: the step's i18n copy still teaches the pre-2026-08-11 three-press model
+    # ("start a second play" / "press one more to cut") and is knowingly out of sync —
+    # it is user-facing text in 3 locales awaiting an author rewrite, not a discovery.
     Step(3, 2, frozenset({ACT_PGUP}), _pred_action_flow_complete, lock_after_first_action=False),
     Step(4, 3, frozenset({ACT_PGDN}), _pred_action_flow_complete, skip_handler=_skip_step4),
     # Step 5 (Approaching): arrival announcement. Tokaido 1865E has no passing
@@ -649,8 +659,9 @@ class Tutorial:
         self.step_entered_at = time.time()
         self.state_stack: list[AppState] = []  # per-step snapshots for [Back]
         self._action_in_step: bool = False  # set by dispatcher when user fires the step's action
-        # Step 3 (departure melody) walks the user through 3 PgUps: 1st full
-        # play, 2nd start, 3rd cut. Action prompt switches per press count.
+        # Step 3 (departure melody) counts PgUps to drive the action prompt. The model is
+        # now 2 presses — loop, then cut — while the prompt copy still describes 3; see
+        # the STEPS entry for step 3.
         self._step3_pgup_count: int = 0
         # Step 7 (click-jump) allows PgDn/PgUp for free exploration alongside
         # clicks. The post-click body swap should fire on click only — track
@@ -1460,7 +1471,15 @@ class Tutorial:
         """
         if self.sim is None or self.current_step in (1, 7, 8):
             return None
-        audio_playing = self.sim.audio.is_playing()
+        # PA only, never `is_playing()`. `audio_playing` drives two things — whether a
+        # non-mid-play stage renders its prompt, and (through _pred_action_flow_complete)
+        # whether [Next] enables. The departure melody now LOOPS until cut or departure,
+        # so counting it here means step 3 goes silent-prompted and [Next]-disabled
+        # forever after the first PgUp: the melody never ends, so audio never "settles".
+        # What the gate wants is the announcement finishing; a platform melody running
+        # underneath is the real thing and must not block the flow. Same fix as
+        # _pred_step7_approached.
+        audio_playing = self.sim.audio.is_pa_playing()
         if self.current_step == 2:
             pa_at = self.sim.stops[self.sim.state.curr_stop].get("pa_at_station", [])
             total = len(pa_at)

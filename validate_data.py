@@ -710,6 +710,62 @@ def check_pool_sta_cut_sync(route_paths: list, issues: list) -> None:
                 issues.append((label, f"sta/{slug}.mp3 has {len(cuts)} different sta_cut values — one file, one cut: {detail}"))
 
 
+def check_sta_last_is_melody(route_paths: list, issues: list) -> None:
+    """A multi-entry `sta` list needs a `sta_cut` that lands inside its LAST file.
+
+    The list became positionally significant on 2026-08-11: the last entry is the
+    departure melody and loops `[0, sta_cut)` until cut, while every earlier entry plays
+    through once with `sta_cut` ignored. So one stop's single cut describes exactly one
+    file — the last. See DATA_FORMAT.md § `sta` Array.
+
+    WHAT THIS CANNOT CATCH: whether the last entry really IS the melody. Reversing Saikyo
+    大宮's two entries leaves the cut inside the new last file too (both run 12–14 s), so
+    this check passes on the exact mis-ordering that motivated it — measured, not assumed.
+    Deciding which file is a melody and which is an announcement needs content analysis,
+    and every derived instrument tried on that question here has returned a confident
+    wrong answer (`critical_lessons.md` §11). It stays a by-ear property.
+
+    What it DOES catch: a multi-entry stop with no `sta_cut` at all, and a cut that falls
+    outside its last file — a live risk now, because a cut authored against an earlier
+    entry can sit past the end of a shorter last one.
+    """
+    from route_loader import resolve_audio_root
+
+    for rp in route_paths:
+        try:
+            data = load(rp)
+        except Exception:
+            continue  # malformed route.json is already reported by check_route
+        sta_dir = Path(resolve_audio_root(rp.parent, data)) / "sta"
+        for stop in data.get("stops") or []:
+            entries = [s for s in (stop.get("sta") or []) if s]
+            if len(entries) < 2:
+                continue
+            where = f"{rp.parent.name}:{stop.get('name')}"
+            cut = stop.get("sta_cut")
+            if cut is None:
+                issues.append(
+                    (where, f"{len(entries)} sta entries but no sta_cut — the last entry ({entries[-1]}) is the looping melody and needs one")
+                )
+                continue
+            last = sta_dir / f"{entries[-1]}.mp3"
+            if not last.exists():
+                continue  # missing-file is already reported by check_route
+            try:
+                import soundfile as sf
+
+                dur = sf.info(str(last)).duration
+            except Exception:
+                continue
+            if not 0 < float(cut) < dur:
+                issues.append(
+                    (
+                        where,
+                        f"sta_cut {cut} is outside the LAST sta file {entries[-1]}.mp3 (0–{dur:.2f}s) — the cut belongs to the melody, which must be last",
+                    )
+                )
+
+
 def main():
     quiet = "--quiet" in sys.argv
     route_arg = None
@@ -764,6 +820,7 @@ def main():
     # they must not be able to fail the release gate.
     scan = [route_arg] if route_arg else [p for p in route_paths if not is_fixture(p.parent.relative_to(AUDIO_ROOT).as_posix())]
     check_pool_sta_cut_sync(scan, issues)
+    check_sta_last_is_melody(scan, issues)
 
     if not issues:
         if not quiet and route_arg is None:

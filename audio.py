@@ -21,7 +21,12 @@ _temp_dir = tempfile.mkdtemp(prefix="pa_simulator_audio_")
 _temp_file_paths = [
     os.path.join(_temp_dir, "temp_audio_1.mp3"),
     os.path.join(_temp_dir, "temp_audio_2.mp3"),
-    os.path.join(_temp_dir, "temp_sta.mp3"),
+    # WAV, not MP3, and only for STA. The last track LOOPS at `sta_cut`, and an mp3
+    # encode pads the slice out to a whole frame — measured ~40ms on every write,
+    # which under a loop is 40ms of silence injected into the seam on every pass.
+    # WAV is sample-exact, and skipping the encode makes the write cheaper too. The
+    # file is transient: `mixer.Sound()` reads it fully into memory at construction.
+    os.path.join(_temp_dir, "temp_sta.wav"),
 ]
 _STA_TEMP_INDEX = 2
 
@@ -102,6 +107,13 @@ class AudioPlayer:
         # (is_sta_playing() returns False), so the drift is invisible.
         self._sta_play_start_ts: Optional[float] = None
         self._sta_duration_s: float = 0.0
+        # The last sta track loops `[0, sta_cut)` until cut or departure. The tail
+        # `[sta_cut, end]` is decoded at the SAME time as the head and parked here,
+        # so `cut_to_tail` is a channel swap rather than a second 155ms decode.
+        # Both are cleared whenever nothing is armed, so a stale tail from a
+        # previous stop can never be cut into.
+        self._sta_tail_sound: Optional[mixer.Sound] = None
+        self._sta_looping: bool = False
 
     def play_pa(self, stop_index: int, pa_index: int) -> None:
         """Load and play PA announcement with loudness normalization.
@@ -144,13 +156,17 @@ class AudioPlayer:
         except (IndexError, KeyError) as e:
             print(f"PA-at-station playback error: {e}")
 
-    def play_sta(self, stop_index: int, sta_index: int, cut_position: float = 0) -> None:
+    def play_sta(self, stop_index: int, sta_index: int, cut_position: float = 0, loop: bool = False) -> None:
         """Load and play departure melody (sta = station melody).
 
         Args:
             stop_index: Index of the current stop
             sta_index: Index of the STA track within the stop
-            cut_position: Position in seconds to start playback (default 0)
+            cut_position: `sta_cut` — the loop end and the tail start, in seconds
+            loop: True for the LAST sta track, which loops ``[0, cut_position)``
+                until the user cuts it (`cut_to_tail`) or departs. False plays the
+                whole file once — every non-last track, for which `sta_cut` has no
+                meaning at all.
         """
         try:
             sta_tracks = self.stops[stop_index].get("sta", [])
@@ -162,7 +178,7 @@ class AudioPlayer:
                 return
 
             track_path = os.path.join(self.sta_dir, track_name + ".mp3")
-            self._load_and_play_sta(track_path, cut_position=cut_position)
+            self._load_and_play_sta(track_path, cut_position=cut_position, loop=loop)
         except (IndexError, KeyError) as e:
             print(f"STA playback error: {e}")
 
@@ -212,14 +228,33 @@ class AudioPlayer:
             # Don't toggle index on error so we can retry
             self._temp_index = 1 - self._temp_index
 
-    def _load_and_play_sta(self, track_path: str, cut_position: float = 0) -> None:
-        """STA playback path. Uses a dedicated mixer.Channel so STA can
-        overlap PA (mixer.music). Sound.play() has no start-offset arg, so
-        sta_cut is implemented by slicing leading samples off the
-        normalized array before writing the temp file.
+    def _load_and_play_sta(self, track_path: str, cut_position: float = 0, loop: bool = False) -> None:
+        """STA playback path. Uses a dedicated mixer.Channel so STA can overlap PA
+        (mixer.music). Sound.play() has no start-offset arg, so `sta_cut` is
+        implemented by slicing the normalized array before writing the temp file.
+
+        The LOOP shape (`loop=True`, the last sta track): the file splits at
+        `cut_position` into a head that repeats and a tail that plays once. Both
+        Sounds are built HERE, from the one decode, and the tail is cached on
+        `_sta_tail_sound` for `cut_to_tail`. That is what makes the cut instant —
+        decoding on the press instead would put ~155ms of loudness metering between
+        the keystroke and the announcement, and the cut is the conductor's, so it
+        has to land when it is pressed.
+
+        A single temp path serves both writes: Sound() loads the whole file into
+        memory at construction, so the head's file is free the moment its Sound
+        exists (the same property the double-buffered PA path exists to work
+        around, and does not hold there).
         """
         if not os.path.exists(track_path):
             print(f"STA file not found: {track_path}")
+            # Clear the arm on the way out, like the except branch below. Nothing is
+            # playing, so a loop flag or a cached tail from the PREVIOUS stop would be a
+            # tail the next press could cut into. Not reachable today (a press only cuts
+            # while a loop is genuinely running), but the invariant is "these two are set
+            # together and cleared together", and this was the one exit that broke it.
+            self._sta_looping = False
+            self._sta_tail_sound = None
             return
 
         try:
@@ -228,25 +263,30 @@ class AudioPlayer:
             loudness = meter.integrated_loudness(data)
             normalized = pyln.normalize.loudness(data, loudness, TARGET_LOUDNESS)
 
-            if cut_position > 0:
-                start_sample = int(cut_position * rate)
-                if 0 < start_sample < len(normalized):
-                    normalized = normalized[start_sample:]
+            cut_sample = int(cut_position * rate) if cut_position > 0 else 0
+            # A cut outside the file is no cut at all — play the whole thing once
+            # rather than looping an empty head or an entire track forever.
+            if not (0 < cut_sample < len(normalized)):
+                cut_sample, loop = 0, False
 
             write_path = _temp_file_paths[_STA_TEMP_INDEX]
-            sf.write(write_path, normalized, rate)
-
-            # Sound() loads the entire file into memory, so the temp file
-            # is free to be overwritten on the next STA play. Channel.play
-            # auto-stops the previous sound on the channel — matches the
-            # restart-from-sta_cut semantic.
+            head = normalized[:cut_sample] if loop else normalized
+            sf.write(write_path, head, rate)
             self._sta_sound = mixer.Sound(write_path)
+
+            if loop:
+                sf.write(write_path, normalized[cut_sample:], rate)
+                self._sta_tail_sound = mixer.Sound(write_path)
+            else:
+                self._sta_tail_sound = None
+
             # Unpause first in case the channel was previously paused via the
             # End-key — Channel.play on a paused channel can otherwise leave
             # the new sound stuck silent.
             self._sta_channel.unpause()
-            self._sta_channel.play(self._sta_sound, fade_ms=AUDIO_FADE_MS)
+            self._sta_channel.play(self._sta_sound, loops=-1 if loop else 0, fade_ms=AUDIO_FADE_MS)
             self._sta_paused = False
+            self._sta_looping = loop
             self._sta_duration_s = self._sta_sound.get_length()
             self._sta_play_start_ts = time.monotonic()
         except Exception as e:
@@ -254,6 +294,37 @@ class AudioPlayer:
             # A failed fresh-play attempt invalidates any prior pause state —
             # nothing is playing, so "paused" is incoherent.
             self._sta_paused = False
+            self._sta_looping = False
+            self._sta_tail_sound = None
+
+    def cut_to_tail(self) -> bool:
+        """The conductor's cut: stop the looping melody and play `[sta_cut, end]` once.
+
+        Returns False when there is nothing to cut to (no loop armed, or the track
+        had no usable `sta_cut`), so the caller can fall back rather than swallow
+        the press. Channel.play replaces whatever is on the channel, so the melody
+        stops mid-phrase exactly as it does on a real platform.
+        """
+        if self._sta_tail_sound is None:
+            return False
+        self._sta_channel.unpause()
+        self._sta_channel.play(self._sta_tail_sound, fade_ms=AUDIO_FADE_MS)
+        self._sta_paused = False
+        self._sta_looping = False
+        self._sta_duration_s = self._sta_tail_sound.get_length()
+        self._sta_play_start_ts = time.monotonic()
+        return True
+
+    def stop_sta(self) -> None:
+        """Stop ONLY the STA stream, leaving PA untouched.
+
+        Departing kills the melody, and the departure also fires the next stop's
+        pa[0] through mixer.music — so this cannot be the both-streams `stop()`.
+        """
+        self._sta_channel.stop()
+        self._sta_paused = False
+        self._sta_looping = False
+        self._sta_tail_sound = None
 
     def pause(self) -> None:
         """Pause both PA and STA streams. Used by jump_to_stop /
@@ -286,6 +357,16 @@ class AudioPlayer:
         """True if PA (mixer.music) is currently playing."""
         return mixer.music.get_busy()
 
+    def is_sta_looping(self) -> bool:
+        """True only while the departure melody is actually looping.
+
+        The cut must be gated on THIS, never on `is_sta_playing()` + "cnt_sta points
+        at the last track". Those two come apart on a multi-track stop: playing the
+        non-last track advances the counter to the last index while that track is
+        still sounding, so the next press would cut a melody that never started.
+        """
+        return self._sta_looping and self.is_sta_playing()
+
     def is_sta_playing(self) -> bool:
         """True if STA is currently playing. A paused channel reports busy
         in pygame; the explicit ``_sta_paused`` flag excludes it."""
@@ -303,6 +384,12 @@ class AudioPlayer:
             return self._current_start_offset + pos_ms / 1000.0
         if self.is_sta_playing() and self._sta_play_start_ts is not None:
             elapsed = time.monotonic() - self._sta_play_start_ts
+            # A looping melody has no single elapsed position — it is at
+            # `elapsed % head_length`, which is what a listener hears and what a
+            # progress bar should show. Without the modulo it saturates at the end
+            # on the first pass and sits there for as long as the loop runs.
+            if self._sta_looping and self._sta_duration_s > 0:
+                return elapsed % self._sta_duration_s
             return min(elapsed, self._sta_duration_s)
         return None
 
@@ -320,6 +407,8 @@ class AudioPlayer:
         mixer.music.stop()
         self._sta_channel.stop()
         self._sta_paused = False
+        self._sta_looping = False
+        self._sta_tail_sound = None
 
     def cleanup(self) -> None:
         """Clean up resources. Caller-driven only — never tied to GC.

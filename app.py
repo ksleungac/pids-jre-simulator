@@ -114,6 +114,13 @@ class _SilentAudio:
     def pause_sta(self) -> None: ...
     def unpause(self) -> None: ...
     def stop(self) -> None: ...
+    def stop_sta(self) -> None: ...
+
+    def cut_to_tail(self) -> bool:
+        # False = "no tail armed", which is also the truth in preview: nothing plays,
+        # so nothing can be cut. _next_sta falls through to its replay path.
+        return False
+
     def is_playing(self) -> bool:
         return False
 
@@ -121,6 +128,9 @@ class _SilentAudio:
         return False
 
     def is_sta_playing(self) -> bool:
+        return False
+
+    def is_sta_looping(self) -> bool:
         return False
 
     def position(self) -> Optional[float]:
@@ -242,6 +252,21 @@ class PASimulator:
         # to False after firing — so auto-fires take the same code path as manual
         # PageDown presses. See auto_input/README.md.
         self.pending_next_pa: bool = False
+
+        # Page Up is EDGE-triggered, unlike Page Down / End which are level-triggered
+        # with a wait() throttle. `_next_sta` picks its branch from playback state, so a
+        # level-triggered poll turns ONE physical press into two actions: poll 1 starts
+        # the melody, poll 2 (~33ms later at 30fps, key still down) sees it playing and
+        # takes the second branch. Loading a track takes ~155ms and a keypress runs
+        # 80-200ms, so it fired on roughly half of presses. Reported as "the melody
+        # sometimes won't replay from the head" — before the loop redesign the second
+        # branch restarted at sta_cut, so a press meant to replay landed on the
+        # closing-door announcement instead. It survives the redesign unchanged: poll 2
+        # now sees `is_sta_looping()` and cuts. A throttle would only narrow the window;
+        # both branch rules mean "press AGAIN", so the edge is the thing to test. Page
+        # Down keeps its level-trigger deliberately — held-key self-retry is what
+        # `pending_next_pa` relies on.
+        self._pageup_was_down: bool = False
 
         # Set by _handle_lcd_click on a successful click-jump. A click-jump is
         # Layer-1-authoritative (user intent): App jumps to STOPPING@curr_stop.
@@ -626,6 +651,13 @@ class PASimulator:
         through the same code path. See auto_input/README.md.
         """
         try:
+            # Sample Page Up ONCE per frame and derive the press EDGE. Must run every
+            # frame, including frames where a branch below never looks at it, or the
+            # flag never clears on release and the next press is swallowed.
+            pageup_down = keyboard.is_pressed("page_up")
+            pageup_edge = pageup_down and not self._pageup_was_down
+            self._pageup_was_down = pageup_down
+
             # Re-entry silent advance (AutoDriver Layer 3 → Layer 1 catch-up).
             # Single-shot signal from the OCR thread; consumed here so AppState
             # mutation stays on the main thread. No audio, no failing precondition
@@ -644,8 +676,11 @@ class PASimulator:
                 self.pending_next_pa = False
                 self._next_pa()
                 pygame.time.wait(KEY_REPEAT_DELAY)
-            elif keyboard.is_pressed("page_up"):
-                self._next_sta()
+            elif pageup_down:
+                # Still gated on the key being DOWN so a held Page Up keeps blocking the
+                # End branch exactly as before; only the ACTION moved to the edge.
+                if pageup_edge:
+                    self._next_sta()
             elif keyboard.is_pressed("end") and self.audio.is_playing():
                 # When both PA + STA overlap, pause STA preferentially —
                 # the in-train PA carries info, the platform melody is the
@@ -715,8 +750,13 @@ class PASimulator:
 
         Pauses any in-flight audio so a jump during PA playback gives a
         clean handoff (no stale audio playing over the new state).
+
+        STA is STOPPED rather than paused: a paused loop is suspended, not ended,
+        and it belongs to the platform being left behind. Pause is the right verb
+        for PA, whose stream is re-loaded wholesale by the next announcement.
         """
         self.audio.pause()
+        self.audio.stop_sta()
         if not self.stops:
             return
         target = max(0, min(target, len(self.stops) - 1))
@@ -881,6 +921,13 @@ class PASimulator:
         self.state.is_last_pa = False
         self.state.departure_time = time.time()
         self.state.cnt_sta = 0
+        # Departing kills the melody, and this is the ONE funnel out of STOPPING — the
+        # manual Page Down exhaust path and the AutoDriver's silent re-entry catch-up both
+        # arrive here. Placed with the other departure resets, BELOW the two guards that
+        # return without advancing (the no-more-stopping clamp and the non-circular
+        # terminus): on those the train has not left, so the platform melody should not
+        # stop. STA-only — the departure fires the next stop's pa[0] on mixer.music below.
+        self.audio.stop_sta()
         if not silent:
             self.audio.play_pa(self.state.curr_stop, 0)
         self.upper.set_state(self.state.curr_stop, 0, at_station=False, cnt_pa_at_station=self.state.cnt_pa_at_station)
@@ -911,11 +958,21 @@ class PASimulator:
             self.upper.draw()
 
     def _next_sta(self) -> None:
-        """Play next station melody.
+        """Play the station melody, modelling the real platform.
 
-        Behavior:
-        - If not playing: Play from start
-        - If already playing: Restart from sta_cut position (like a preview skip)
+        The LAST sta track is the departure melody: it plays from the head and loops
+        ``[0, sta_cut)`` until the user cuts it or departs, exactly as the melody
+        runs on a platform until the conductor cuts it. A press while it loops IS
+        that cut — jump to `sta_cut` and play the closing announcement once.
+
+        Every OTHER track plays straight through, once. `sta_cut` does not apply to
+        them at all; it is a property of the last track, not of the stop (only one
+        stop in the corpus has more than one track — saikyo 大宮, whose first entry
+        is an arrival door-opening announcement played at the platform).
+
+        `cnt_sta` walks forward and SATURATES at the last index, which is what makes
+        the whole model fall out of one discriminator: on a single-track stop it
+        never leaves 0, so every press is "the last track".
         """
         if not self.stops:
             return
@@ -927,17 +984,25 @@ class PASimulator:
         if not sta_tracks or sta_tracks == [""]:
             return
 
-        # Get cut position (default to 0 if not specified)
         cut_position = current_stop_data.get("sta_cut", 0)
+        is_last = self.state.cnt_sta >= len(sta_tracks) - 1
 
-        # If STA is already playing, restart from cut position. PA on its
-        # own channel doesn't trigger the restart path.
-        if self.audio.is_sta_playing():
-            self.audio.play_sta(self.state.curr_stop, self.state.cnt_sta, cut_position)
-            return
+        # A press while the melody is LOOPING is the conductor's cut. Gated on the
+        # loop itself, not on `is_last and is_sta_playing()` — those come apart on a
+        # multi-track stop, where playing the non-last track advances cnt_sta to the
+        # last index while that track is still sounding, so the next press would cut
+        # a melody that had never started.
+        if self.audio.is_sta_looping():
+            if self.audio.cut_to_tail():
+                return
+            # NOTE: deliberately unreachable today — `is_sta_looping()` is only true when
+            # `_load_and_play_sta` armed the loop, and that same block is the only place a
+            # tail is built, so a running loop always has one. (A stop with an absent or
+            # out-of-range sta_cut never arms the loop at all, so it does not reach here.)
+            # Kept as belt-and-braces against a future path that arms a loop without a
+            # tail: falling through replays rather than swallowing the press.
 
-        # Otherwise, play from start
-        self.audio.play_sta(self.state.curr_stop, self.state.cnt_sta, 0)
+        self.audio.play_sta(self.state.curr_stop, self.state.cnt_sta, cut_position if is_last else 0, loop=is_last)
 
         if self.state.cnt_sta < len(sta_tracks) - 1:
             self.state.cnt_sta += 1

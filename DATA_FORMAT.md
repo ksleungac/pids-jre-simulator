@@ -586,7 +586,18 @@ State machine consumes both lists, surfaces separate "STOPPING at station" displ
 
 **Exception — an arrival terminus MAY carry `sta` when the recording is an arrival announcement.** The slot holds platform audio, not strictly departure melodies: some stations have several STA entries, one of which plays after the train stops with the doors open. Saikyo 1349F's 川越 carries the end-of-journey announcement this way (`kawagoe-down`, `sta_cut` at the chime→voice boundary). `validate_data.py` forbids `sta` only on passing stops and `pre_stops`, and `_next_sta` has no terminus branch, so this needs no code change. Whether the user plays it is their choice. (2026-08-08, author decision.)
 | `["JC01"]` | Single STA audio file |
-| `["JC01", "JC01_1"]` | Multiple STA audio files (variants) |
+| `["JC01", "JC01_1"]` | Multiple entries — **order is significant, see below** |
+
+**THE LAST ENTRY IS THE DEPARTURE MELODY, and `sta_cut` is ITS property.** Since 2026-08-11 the two positions behave differently and are not interchangeable:
+
+| position | behaviour |
+|---|---|
+| **last entry** | plays from the head and **loops `[0, sta_cut)`** until the user cuts it or the train departs. A further press is the conductor's cut — jump to `sta_cut`, play the tail once, stop |
+| **any earlier entry** | plays straight through, once. **`sta_cut` does not apply to it at all** |
+
+So a stop's single `sta_cut` describes only the last file, and ordering `["melody", "announcement"]` would loop the announcement at a cut measured for the melody. The corpus's only multi-entry stop is Saikyo 大宮 — `["JA26_OMY-down", "JA26_OMY_1-down"]`, an arrival door-opening announcement first, the melody last, which is the correct order and the real platform sequence.
+
+**Ordering is an authoring rule, not a validated one.** `validate_data.py` checks that a multi-entry stop carries a `sta_cut` inside its last file — it cannot tell which file is the melody, and reversing 大宮's two entries passes it (both run 12–14 s, so the cut stays in range). Telling a melody from an announcement needs content analysis, which on this corpus has repeatedly returned confident wrong answers. Get the order right when authoring; the ear is the only gate on it.
 
 **Note:** `sta` field contains actual audio filenames (without `.mp3`). Two filename styles coexist (renderer treats both identically):
 - **Legacy** — `sta_code` plus optional disambiguation suffix (`JC01`, `JC01_OSK`, `JK47_OMY`).

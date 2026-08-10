@@ -44,6 +44,7 @@ goes dim with strike-through, indicating the concern was checked and OK).
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import shutil
 import subprocess
@@ -840,8 +841,16 @@ def main() -> int:
         item = items[idx]
         src = Path(item["path"])
         bak = Path("audio_src") / src.parent.parent.name / "sta_wave_backup" / src.name
+        # Session-scoped, matching the write side. `bak.exists()` alone is a CROSS-session
+        # fact — snapshots are never deleted — so on a file an earlier session spliced and
+        # this one has not, U would restore that session's starting audio and report
+        # success, discarding its hand work. `cut_before_splice` holds exactly the slugs
+        # this run has spliced; both halves of undo must key on the same event.
+        if item["sta"] not in cut_before_splice:
+            print(f"nothing spliced this session for {src.name}", file=sys.stderr)
+            return False
         if not bak.exists():
-            print(f"no snapshot for {src.name} — nothing spliced this session", file=sys.stderr)
+            print(f"snapshot missing for {src.name} — cannot restore", file=sys.stderr)
             return False
         player.stop()
         pygame.mixer.music.unload()
@@ -879,10 +888,16 @@ def main() -> int:
             print("selection too short to splice", file=sys.stderr)
             return False
         src = Path(item["path"])
-        # keep an original so a bad cut is recoverable outside this session too
+        # Snapshot before THIS SESSION's first splice of the file, overwriting whatever an
+        # earlier session left. The previous form wrote only when absent, which silently
+        # aimed U at a different generation: on a line spliced in a prior session, one
+        # keystroke restored the audio that session STARTED from and discarded everything
+        # it had done — 24 files and 64.1 s of hand work, on Nambu, with the status line
+        # reporting a successful restore. `cut_before_splice` already records the same
+        # event session-scoped, so gating both on it restores audio and cut to one moment.
         bak_dir = Path("audio_src") / src.parent.parent.name / "sta_wave_backup"
         bak_dir.mkdir(parents=True, exist_ok=True)
-        if not (bak_dir / src.name).exists():
+        if item["sta"] not in cut_before_splice:
             shutil.copy2(src, bak_dir / src.name)
         cut_before_splice.setdefault(item["sta"], item["sta_cut"])
         player.stop()
@@ -1235,11 +1250,20 @@ def main() -> int:
                 continue
             full_items.append({"stop": stop["name"], "sta": sta, "sta_cut": session_cuts.get(sta, float(sta_cut_v))})
 
+    # Verdicts carry the DATE they were given. Without it a PASS from months ago and one
+    # from ten minutes ago are identical in this file, so a run that splices a file but
+    # never re-passes it leaves a green verdict describing audio that no longer exists —
+    # and `audio/README.md`, which is written from here, inherits the claim. Stamped only
+    # when THIS run recorded the verdict; otherwise the prior stamp carries through.
+    today = datetime.date.today().isoformat()
+
     merged_items = []
     for fi in full_items:
         sta = fi["sta"]
+        checked = prior_by_sta.get(sta, {}).get("checked")
         if sta in verdicts:
             verdict = verdicts[sta]  # this run's verdict wins
+            checked = today
         elif sta in prior_by_sta:
             verdict = prior_by_sta[sta].get("verdict", "NOT_REVIEWED")
         else:
@@ -1248,6 +1272,8 @@ def main() -> int:
         note = notes.get(sta, prior_by_sta.get(sta, {}).get("note", ""))
         resolved = notes_resolved.get(sta, prior_by_sta.get(sta, {}).get("note_resolved", False))
         item = {**fi, "verdict": verdict, "note": note}
+        if checked:
+            item["checked"] = checked
         if note:
             item["note_resolved"] = bool(resolved)
         merged_items.append(item)
