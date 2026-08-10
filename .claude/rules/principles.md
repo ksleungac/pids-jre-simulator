@@ -435,7 +435,13 @@ A tool's output is not the fact it was meant to establish. Before a comparison /
 - **Mutation-prove a new gate at birth** — not only regression fixtures (§ "Test real logic"), but every
   linter rule, assertion, coverage count and staleness guard. Break the thing it guards, confirm it
   fires, restore. A gate that reports clean on its first run has told you nothing until it has also
-  reported dirty on demand.
+  reported dirty on demand. **And when the mutation shows the gate CANNOT fail on the case that
+  motivated it, say so where the gate lives — do not quietly keep it and let the surrounding doc
+  imply coverage.** (2026-08-11) A validator check written to catch a mis-ordered `sta` list passed
+  with the list reversed, because both files were similar lengths so the cut stayed in range. It
+  still catches two real errors, so it stayed — with the gap named in its own docstring and in
+  `DATA_FORMAT.md`, and the ordering rule marked as by-ear. A check kept for what it does catch is
+  fine; a check believed to cover more than it does is how a whole class goes unwatched.
 - **Snapshot a metric BEFORE anything that writes what it measures.** If the measuring pass shares
   state with the measured system, order decides the answer.
 - Print N alongside every aggregate. A total with no count attached cannot be distinguished from a total over nothing.
