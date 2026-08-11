@@ -1,4 +1,4 @@
-﻿# assets/
+# assets/
 
 README screenshots for all three READMEs (EN / zh-HK / zh-CN).
 
