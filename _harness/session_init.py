@@ -55,7 +55,21 @@ def git_sync():
             text=True,
             encoding="utf-8",
         )
-        print(f"=== Git sync — pulled {behind} commit(s) ===\n{result.stdout.strip()}\n")
+        if result.returncode != 0:
+            # git writes its "Updating <old>..<new>" header before it checks whether the
+            # working tree is in the way, so stdout reads like a completed fast-forward on
+            # a run that aborted. The exit code is the only thing that separates them —
+            # never report the pull from result.stdout.
+            detail = (result.stderr or result.stdout).strip()
+            print(
+                f"=== Git sync — FAILED, still {behind} commit(s) behind ===\n"
+                f"{detail}\n"
+                f"  This checkout is NOT current. Usual cause: a dirty file that also\n"
+                f"  changed upstream — stash or commit it, then re-run:\n"
+                f"    git merge --ff-only origin/master\n"
+            )
+        else:
+            print(f"=== Git sync — pulled {behind} commit(s) ===\n{result.stdout.strip()}\n")
     else:
         print(
             f"=== Git sync — NEEDS MANUAL RESOLUTION ===\n"
