@@ -72,6 +72,14 @@ Never suggest, offer, or ask about committing — no "want me to commit?", no "/
 - Status question ("is there anything left?", "what's uncommitted?") → state the facts including uncommitted changes; do NOT append "want me to commit it?"
 - Recap and commit are both user-invoked; neither gets a proactive nudge.
 
+### Harness faults: fix them, don't narrate them
+A defect in the harness itself (`_harness/`, hooks, session scripts, dev tooling) gets fixed silently, without a proposal turn — provided the fix changes nothing about how the project behaves for the user. Report it in one line if at all. A GATE is the exception: changing when a hook fires, or what it blocks, has a real implication and needs an ask.
+
+**Why:** harness bugs cost the user attention twice — once reading the report, once answering a question they have no stake in. Examples:
+- (2026-08-11) Surfaced a `session_init.py` bug that reported successful git pulls which had actually aborted, fixed it, then asked whether to also scope a commit hook and whether to add a test. User: *"no need. now. […] for harness problems just fix itself (not changing the behaviour or implication for me)."*
+
+**How to apply:** harness-internal + behaviour-neutral → just fix it. Touches a gate, a commit path, or anything the user would notice → ask.
+
 ### Announce self-launched multi-step processes
 When kicking off a self-directed multi-step process (a review+fix pass, a coherence sweep, an audit, a subagent fan-out), NAME it explicitly before running — don't slide into it. Self-launching is fine; the unheralded surprise is what reads as off.
 
@@ -451,6 +459,17 @@ A tool's output is not the fact it was meant to establish. Before a comparison /
 - The user asserting a contrary fact about their own domain outranks the instrument — re-check the instrument, not the assertion.
 - **A comparison rendered for the USER to judge is an instrument too.** Before presenting arms side by side, confirm they actually differ — print the sizes, the parameters, the diff count. (2026-07-27) A four-row scaling comparison had rows 1 and 2 produced by the identical `transform.scale` call; the user picked a filter from two copies of one image, and only caught it by noticing they looked the same.
 
+### Enumerate the reachable space, not the combinatorial one
+Exhaustive search over combinations is the right instrument for "can this happen at all" — it settles what reading the code cannot. But enumerate what the SYSTEM can actually produce, not the Cartesian product of every field. Name the impossible combinations from the domain and exclude them BEFORE searching, and say which ones you dropped.
+
+**Why:** the unpruned product buries the answer in cases that cannot occur, and the reader has to re-derive which rows were real. Examples:
+- (2026-08-11) Searched 1,048,576 detector sample streams to settle whether a departure PA could go missing (badge × speed × 5 frames of corruption). Half the alphabet was unreachable — `("STOPPED", 80)` is the badge cell and the speed cell disagreeing in a way the game never renders. The conclusion held, but the search was several times larger than the question needed. User: *"some combinations are not possible or shouldn't be considered significant, then we shouldn't waste time on that."*
+
+**How to apply:**
+- State the physical constraint first ("the game never shows STOPPED above 0 km/h"), prune on it, and report the pruning alongside the result.
+- Prune for COST, never for correctness. A negative result ("no case exists") survives pruning, because the space only shrank. A positive result must then be checked for REACHABILITY — otherwise you have found a case the system cannot produce and will chase a phantom.
+- Never prune by what feels unlikely, only by what the domain forbids. Unlikely-but-possible is exactly the degraded case that ships broken (`critical_lessons §7`), and a hand-narrowed axis list is how a gate goes blind (`critical_lessons §9`).
+
 ### Test the change, not just the bug
 Exercise the change's full blast radius before saying done. Smoke test on the bug-fix target is necessary but not sufficient.
 
@@ -480,6 +499,25 @@ Companion bound on the above: the "ships with a test" bar is for the **silent-fa
 - A regression fixture must DISCRIMINATE — fail when the fix is reverted; verify it does. A downstream backstop can mask a naive one (2026-07-21: a `19.1→19` speed-cell passed with AND without the decimal fix because `_rectify_speed(191)=19`; swapped for a rectify-proof `5.3→5`).
 - **Discrimination decays — re-run the mutation after ANY later change to the guarded code, its constants, or the fixture.** Verified-once is not verified. (2026-07-21) A logo-suppression assertion was mutation-proven, then a floor retune (2s→4s) plus a `reveal_slot` semantic change silently made it inert; the review caught it, and the first repair was ALSO inert (it sampled the guard state *after* the stepped frame, so it already held the mutated value).
 - Never read the constant under test into the test — pin the expected value literally. A fixture that imports `FLOOR` scales its own expectations with any mutation of `FLOOR` and stops discriminating.
+
+### A fixture is not an observation
+A test case that encodes a domain fact is evidence only if it was SAMPLED from reality. One authored to lock a design's intent is that intent restated — it agrees with the code by construction and proves nothing about the world. Check a fixture's provenance before letting it overrule a change; its comment usually says which it is.
+
+**Why:** a green fixture reads as ground truth whichever way it was born. Examples:
+- (2026-08-11) The distance guard's T1 case `("STOPPED","MOVING",1800,3)` asserted a departure carries a large distance jump. I read it as observed behaviour, concluded my change would break a normal departure, and rebuilt the rule around it. Its own comment said *"accepted unconditionally"* — the original design's intent, not a drive. The author then stated the physical fact (the dwell refresh completes while the badge still reads STOPPED), and the fixture was simply wrong. A full design flip and back, off a file that was never a measurement.
+
+**How to apply:**
+- Ask of any fixture you are about to reason FROM: sampled, or authored? A round illustrative number (`3 → 1800`) and a comment describing intent rather than a capture are the tells.
+- When a fixture and a domain owner disagree, the owner wins — then fix the fixture and say in-comment which it now is.
+- Cross-ref § "A measurement is a claim until the instrument is calibrated": a fixture is an instrument too.
+
+### Don't justify a change by demoting an input the architecture trusts
+When a system ranks its inputs (this one: badge > distance/speed), an argument of the form "this branch only fires when the trusted input is wrong" is circular — it borrows the reliability of A to gate B, then denies it to win the argument. Argue from the invariant instead; a correct rule holds whatever the trusted input is doing.
+
+**Why:** the circular version sounds like evidence and quietly inverts the trust model. Examples:
+- (2026-08-11) I justified removing a `MOVING→PASSING` guard exemption as "that branch only fires on badge misreads." User: *"we've already agreed badge is the most stable read; when you use badge to enhance the logic of a less accurate read, you can't back assume badge itself is unreliable, otherwise you are trapped in this loop."* The same conclusion follows without the circularity — the exemption exists to absorb a change of the distance TARGET, and that transition has no target change to absorb.
+
+**How to apply:** state the rule so it stands on the invariant, not on a reliability claim about a specific read. If the justification needs the trusted input to be unreliable, you have the wrong justification, not necessarily the wrong change.
 
 ### A second implementation of a production decision drifts silently
 When a tool, test, harness, baker or proof needs to know what production does, it must CALL

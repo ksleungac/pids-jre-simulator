@@ -39,6 +39,10 @@ Test: *if I finish this, does what the user can do change?* No → it's a commit
 
 A parent with sub-issues shows progress as a `completed/total` count; a long-lived `Refs`-only ticket keeps its state only in git log.
 
+**A "signal missed → action suppressed" bug must name a scenario where the signal is missed AND the action is still wanted.** Write the scenario before filing. If the same evidence gates both — if the read whose absence loses the signal is the read that made the action necessary — the two cannot come apart and there is no bug. Reasoning forward from "here is a signal that can be missed" produces a report with a real mechanism, a real consequence, and nothing joining them; it reads as rigorous and is empty. (2026-08-11: #84 claimed a missed `STOPPED→MOVING` suppresses the departure PA. But the `STOPPED` badge is what fires at-station and moves the app into STOPPING — no `STOPPED` read means the app never registered the arrival, so there is no departure to announce. Author's question, which is the test: *"under what case is this missed yet the departure PA still needs playing?"* — there is none.) Generalizes past OCR: any cache invalidation, dirty flag, or edge-triggered handler where the same observation both arms the state and justifies the action.
+
+**Always write an issue as `#N "title"` — never the bare number.** Applies to every prose surface: chat, commit bodies, issue comments, recaps. A bare `#105` forces the reader to go look it up before the sentence means anything, and a list of bare numbers is unreadable. Commit trailers (`Closes #N`) are exempt — that's a machine token. 2026-08-11: user — *"don't just name the numbers only, hard to relocate, mention the issue name and number."*
+
 Session start prints the open / in-progress / recently-closed / stale summary; `/session-recap` reconciles against `gh issue list` (closure is authoritative — no keyword guessing).
 
 ## Run

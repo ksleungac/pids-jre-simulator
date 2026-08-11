@@ -47,9 +47,9 @@ The Scope rule above governs WHICH FILES. WHICH LINES within them is a separate 
 ### Fix-confidence gating on surfaces you didn't build
 The Scope rule (above) excludes files you didn't touch. A sharper axis applies when the run IS in scope but you lack the DESIGN context — a release-prep / whole-code scan of features built across prior sessions, not your own diff. There, gate each finding on **fix-confidence**, not file-ownership:
 - **obvious-safe** — mechanical, zero behavioral ambiguity (hard-rule violation, palette / canonical-source derivation, dead code with grep-confirmed zero callers, stale docstring/comment) → apply inline.
-- **needs-context** — requires the module's design / layout-calibration / state-machine intent → **defer to a GitHub issue** (`gh issue create --label review-finding`); do NOT fix blind.
+- **needs-context** — requires the module's design / layout-calibration / state-machine intent → do NOT fix blind. **Ask the user** (see Triage policy: a needs-context finding is exactly the class where they are the missing input). A ticket is the last resort, not the first.
 
-A "looks safe" fix on code you don't understand is how review+fix introduces new bugs. Have the reviewer tag every finding with this flag (obvious-safe | needs-context) so triage is mechanical. Real bugs on out-of-focus surfaces still get LOGGED (not dropped) — deferral is not dismissal. (2026-07-16: user — *"your fixer does not have context for working on these tasks, might introduce new bugs, so delve to TODO for nonobvious tasks."*)
+A "looks safe" fix on code you don't understand is how review+fix introduces new bugs. Have the reviewer tag every finding with this flag (obvious-safe | needs-context) so triage is mechanical. (2026-07-16: user — *"your fixer does not have context for working on these tasks, might introduce new bugs, so delve to TODO for nonobvious tasks."*) The don't-fix-blind half is intact; what changed is the outlet — the 2026-07-16 quote predates the finding that the TODO/issue path silently accumulates.
 
 ### Release-prep / whole-code scope: fold in `/vibe-check`
 `review-dirty`'s lenses are diff/module-oriented. For a FULL release-prep sweep ("whole code scan for release", "prepare for release"), the reviewer must ALSO apply **`vibe-check`'s smell list** — the codebase-mess lens (dead code, duplication, canonical-source drift, integration residue) that a lens-by-lens review under-weights. Fold vibe-check's smells into the reviewer brief; don't run `review-dirty` alone. NOT for dirty-diff reviews — those don't need the whole-codebase sweep. (2026-07-16: user — *"reviewer should take advantage of vibe check."*)
@@ -80,13 +80,17 @@ while [[ $ISSUES_FOUND == "true" && $CYCLE_COUNT -lt $MAX_CYCLES ]]; do
   # Collect reviewer feedback (simplified - in practice would parse actual output)
   REVIEW_FEEDBACK="$(cat .claude/.ralph-feedback.json 2>/dev/null || echo '{\"issues_found\": false}')"
 
-  # Extract blocking issues — loop continues while ANY architectural-critical OR critical exists.
-  # warning/info findings don't block stop (they route to deferred-findings logging in Step 2c).
+  # TWO SEPARATE GATES — do not collapse them.
+  #   HAS_BLOCKING decides whether the LOOP RUNS AGAIN (architectural-critical | critical only).
+  #   HAS_ANY decides whether the FIX PASS RUNS THIS CYCLE (any finding at all).
+  # A warning-only cycle must still run Step 2b — findings get fixed, not logged — and then stop.
+  # Collapsing these is how "warnings still get fixed" became prose the loop didn't honour.
   HAS_BLOCKING=$(echo "$REVIEW_FEEDBACK" | grep -oE '"severity": *"(architectural-critical|critical)"' || echo "")
+  HAS_ANY=$(echo "$REVIEW_FEEDBACK" | grep -oE '"severity": *"' || echo "")
   ISSUES_FOUND=$([ -n "$HAS_BLOCKING" ] && echo "true" || echo "")
 
-  # Step 2b: If issues found, YOU (main agent) fix them
-  if [[ -n "$ISSUES_FOUND" ]]; then
+  # Step 2b: If the reviewer returned ANY finding, YOU (main agent) fix them now
+  if [[ -n "$HAS_ANY" ]]; then
     echo "Issues found. YOU (main agent) should fix them based on the feedback."
 
     # Read and parse the reviewer feedback
@@ -110,10 +114,10 @@ while [[ $ISSUES_FOUND == "true" && $CYCLE_COUNT -lt $MAX_CYCLES ]]; do
     ISSUES_FOUND=false
   fi
 
-  # Step 2c: Triage deferred findings (NEW — runs each cycle)
-  # If you (main agent) chose to defer any finding rather than fix it
-  # (uncertain, parallel-WIP collision, scope creep, user said "not now"), route per the
-  # Triage policy section below. Do NOT silently drop deferred findings.
+  # Step 2c: Triage anything you did NOT fix this cycle (runs each cycle)
+  # Default is that this list is EMPTY — findings get fixed, not deferred.
+  # For each one you left: route per the Triage policy section below (fix / ask the
+  # user / drop). Filing an issue requires that the finding needs the USER's input.
 
   # Step 2d: Report cycle completion and prepare for next cycle
   if [[ $ISSUES_FOUND == "true" ]]; then
@@ -131,20 +135,23 @@ done
 
 ## Triage policy for deferred findings
 
-When you (main agent) decide to defer a finding rather than fix it during a cycle, file it as a **GitHub issue** (`gh issue create`) regardless of severity. The daily-log routing path (`memory/YYYY-MM-DD.md`) is **not used** — daily logs are narrative continuity / metacognitive observations only per `session-recap/SKILL.md`. Code-related obligations live as forward state in the issue backlog.
+**The default is FIX IT, in the cycle. A deferred item is an exception that has to earn itself.**
 
-**Exception — staleness/cleanup pass on your OWN just-landed refactor.** When the review is checking a refactor YOU just built for residue (stale comments/docs, dead code the deletion orphaned) — not triaging unfamiliar surfaces — prefer fixing EVERY finding inline; do NOT file follow-up issues for residue you can safely sweep now. Filing tickets for your own sweepable residue just grows the backlog with work you're already positioned to finish. (2026-07-23: user — *"don't spawn any more residue tasks to follow-up."*) The issue-filing default still holds for findings on code you DIDN'T build or can't safely fix blind (the fix-confidence gating above).
+A finding you are able to act on is work, not a ticket. File an issue for one reason only: **the finding needs the USER as its input** — a design direction, a product-use-critical call, something with a real implication for how they use the thing. That is not a severity. A critical bug you can fix gets fixed, not filed; a small change that alters how the product behaves for them may genuinely need asking.
+
+Anything you cannot fix AND that does not need the user is **dropped** — named in the cycle report, not recorded. A backlog entry nobody is going to open is worse than no entry: it costs a line in every session-start summary and reads as owed work forever. (2026-08-11: a release-prep scan filed 35 findings in one day; 12 were still open three weeks later, untouched since the minute they were created, none of them needing the user. User — *"it should not produce deferred items unless that items need input for me, it's a big design direction, product use critical, that has actual implication to me."* Supersedes the severity-keyed routing table, and generalizes the too-narrow 2026-07-23 own-residue exception that was scoped to just your own just-landed refactor.)
 
 ### Routing rule
 
-Every deferred finding → a GitHub issue with the `review-finding` label (plus the area label — `auto-input` / `display` / `chrome-i18n` / … — so it groups on the board).
+For each finding, in order:
 
-| Severity | Files an issue? |
-|---|---|
-| `architectural-critical` | yes — surfaces in the session-start backlog summary |
-| `critical` | yes |
-| `warning` | yes |
-| `info` | yes if the user explicitly defers OR you auto-defer with a real reason. **Drop** if the ASK-flag was answered "not real" (no value tracking these). |
+1. **Can you fix it?** → fix it now, in this cycle. Regardless of severity. This is the overwhelming majority.
+2. **Can't fix it, and it needs the user's judgment** (design direction · product-use-critical · real implication for them) → **ask them in the session**. That is the outlet, not a ticket. File an issue only if they defer it, or if the session is ending with the question unanswered.
+3. **Can't fix it, doesn't need the user** → drop it. One line in the cycle report saying what you saw and why you left it. No issue.
+
+An issue that does get filed carries the `review-finding` label plus its area label (`auto-input` / `display` / `chrome-i18n` / …). The daily-log routing path (`memory/YYYY-MM-DD.md`) is **not used** — daily logs are narrative continuity only per `session-recap/SKILL.md`.
+
+**This does not license fixing blind.** "Can you fix it" means you understand the code well enough to be right, not that an edit is available — see the fix-confidence gating above. The change is where a `needs-context` finding goes: to the user as a question, not to the backlog as a ticket.
 
 ### Dedup logic
 
@@ -183,7 +190,7 @@ rm -f .claude/.ralph-*.json 2>/dev/null || true
 
 ## Key Features:
 - **Cycle Counting**: Tracks and reports review+fix iterations
-- **Stop Conditions**: Stops when no blocking issues remain (`architectural-critical` or `critical`) or max cycles reached (10). `warning`/`info` findings route to deferred-findings logging (see Triage policy below) without blocking.
+- **Stop Conditions**: Stops when no blocking issues remain (`architectural-critical` or `critical`) or max cycles reached (10). `warning`/`info` findings don't block the stop — they still get fixed in-cycle where you can (see Triage policy).
 - **Role Separation**: Reviewer (opus) reads only, Fixer (opus, main agent) applies fixes
 - **Context Passing**: Feedback passed between agents for iterative improvement
 - **Graceful Degradation**: Clean up temporary files, handle errors
