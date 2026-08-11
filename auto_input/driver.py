@@ -144,6 +144,26 @@ BADGE_NONE_SCORE_GATE = 0.80
 # approach reads + OCR jitter pass, while the 1000m+ single-frame spikes are still rejected.
 DISTANCE_GUARD_SLACK_M = 50.0
 
+# The ONLY badge pairs across which the HUD re-points its distance at a NEW target, so the metre
+# count legitimately jumps and the physical v·Δt bound cannot apply:
+#   STOPPED→STOPPED  the dwell refresh — having arrived, the HUD re-targets the NEXT station
+#   PASSING→PASSING  cleared one passed-through station, re-targets the next one
+#   PASSING→MOVING   cleared the LAST passed-through station, re-targets the stopping station
+# Everything else is the same target getting nearer: ordinary travel. In particular
+# STOPPED→MOVING carries NO re-point — the dwell refresh happens only after the badge reads
+# STOPPED (author-stated 2026-08-11), so by the departure edge the anchor already holds the next
+# station's distance and the departure's own motion is ~3.75 m (a train's quickest ~3 km/h/s over
+# one 3 s sample) against a ~162 m allowance.
+#
+# The set is decided by what is PHYSICALLY possible, never by sampling timing. A coarse
+# SAMPLE_INTERVAL_S can make the refresh first *observed* on a MOVING→STOPPED pair (no sample
+# landed between the stop and the refresh), which is then gated — deliberately not designed
+# around; the lever for that is the interval, not the guard. Author-stated 2026-08-11.
+#
+# The direction half is safe because the parked distance is the green ±cm stopping offset, i.e.
+# ≈0, and the refresh takes it UP. There is no phase where a re-point moves the number down.
+DISTANCE_RETARGET_PAIRS = frozenset({("STOPPED", "STOPPED"), ("PASSING", "PASSING"), ("PASSING", "MOVING")})
+
 
 def _dump_misread_speed_limit_cell(cell: np.ndarray, sl_val: int, sl_score: float, ts: float) -> None:
     """Save a low-confidence speed-limit cell crop as PNG for offline calibration.
@@ -352,20 +372,23 @@ def guard_distance(
     last valid value). The ceiling speed, not the current frame's (co-corrupted on spike frames),
     keeps the bound false-reject-proof while still catching the 1000m+ spikes.
 
-    Gate ONLY during steady MOVING travel. A STOPPED/PASSING frame — on EITHER the prior or the
-    current badge — is a reference-frame-in-flux where distance legitimately jumps (departure
-    STOPPED→MOVING, PASSING→MOVING or MOVING→PASSING switch, a passing run): accept + re-anchor
-    unconditionally, so `v·Δt` never wrongly rejects it. A `badge=None` degraded frame while the
-    PRIOR badge was MOVING IS still gated (not reset) — else a confident-but-garbage spike on an
+    # CONTRACT: the guard runs everywhere except a **re-point** — a `DISTANCE_RETARGET_PAIRS`
+    # pair AND an upward jump. Both conditions are load-bearing; the direction half is what
+    # makes a one-frame PASSING misread harmless.
+    # See auto_input/README.md § "Distance plausibility guard" for why each pair, and why no other.
+
+    Every other frame is gated, `badge=None` included — else a confident-but-garbage spike on an
     unreadable-badge frame would re-anchor and poison the guard. No consensus latch: a genuine
     double spike is rejected on both frames (held) and self-heals when a plausible read near the
     anchor returns. `prev_badge` is the detector's prior-frame badge (guard runs before
-    `detector.update`). See auto_input/README.md § "Distance plausibility guard".
+    `detector.update`).
     """
     if distance is None:
         return None, False  # OCR dropout, not a spike — pass through (the detector tolerates None)
-    if last_valid is None or prev_badge != "MOVING" or badge in ("STOPPED", "PASSING"):
-        return distance, False  # boot, or reference-frame in flux (either badge) → accept + re-anchor
+    if last_valid is None:
+        return distance, False  # boot — no anchor to compare against yet
+    if (prev_badge, badge) in DISTANCE_RETARGET_PAIRS and distance > last_valid:
+        return distance, False  # HUD re-pointed at a new target → accept + re-anchor
     max_delta = (MAX_DRIVABLE_SPEED_KMH / 3.6) * dt_s + DISTANCE_GUARD_SLACK_M
     if abs(distance - last_valid) > max_delta:
         return last_valid, True  # implausible single-frame spike → hold last valid
@@ -525,9 +548,14 @@ class _Detector:
         # mis-classified segments inherit observed-flags from the previous
         # segment and skip both PAs entirely. Resetting on
         # STOPPED→(MOVING|PASSING) makes the detector resilient to that misread.
-        # Mid-segment MOVING↔PASSING transitions remain silent — those are the
-        # legitimate "we're crossing a passing-through station" markers within
-        # an already-active segment.
+        # Mid-segment PASSING→MOVING remains silent — that is the legitimate
+        # "we've cleared the last passing-through station" marker within an
+        # already-active segment. The reverse, MOVING→PASSING, is physically
+        # impossible (passing stations all lie BEFORE the stopping station, so
+        # once the HUD targets the stop there is nothing left to pass), so an
+        # observed one is a MISREAD, not a state change — also silent here,
+        # which is the correct handling either way. See auto_input/README.md
+        # § "Badge" → "Only four badge transitions are physically possible".
         if badge is not None and self.prev_badge is not None and badge != self.prev_badge:
             if self.prev_badge == "STOPPED" and badge in ("MOVING", "PASSING"):
                 events.append("STOPPED->MOVING")
@@ -697,7 +725,7 @@ class AutoDriver:
     _limit_change_ts: float = field(default=0.0, init=False)
     # Distance plausibility guard anchor: last VALID remaining-distance read + its ts. A read that
     # moves further from this than the train physically could (v·Δt) is a spike → held. See
-    # guard_distance. Guard is active only during steady MOVING; any STOPPED/PASSING frame re-anchors.
+    # guard_distance. Re-anchors only on a re-point: a DISTANCE_RETARGET_PAIRS pair AND upward.
     _guard_state: GuardState = field(default_factory=GuardState, init=False)
     # Stop indices whose arrival PA is long enough to warrant the long-approach
     # lead bump (see LONG_APPROACH_PA_SEC). Probed once from audio headers on
@@ -940,7 +968,7 @@ class AutoDriver:
                     # diagnostic observes exactly what production does. Reader + guard ORDER is
                     # load-bearing; the contract lives in auto_input/sampling.py. `prev_badge` is
                     # the PRIOR frame's badge (detector.update runs after), which is what the
-                    # distance guard needs as its reference-frame signal.
+                    # distance guard needs to detect a re-point.
                     # Downscale BEFORE the read so every cell this cycle is cropped from one
                     # frame at one geometry (sampling.py CONTRACT step 0). At 1080p this is a
                     # plain copy.
