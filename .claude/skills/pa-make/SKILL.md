@@ -104,6 +104,16 @@ uv run _dev_scripts/transcribe_pa.py audio_src/<line>/<diagram>/src_from<MIN>.mp
 - **Stock hallucinations on non-speech audio** — ご視聴ありがとうございました / "Thank you for watching." / ご覧いただきありがとうございました. A melody-only file returns these, so a sweep counting non-empty transcripts reports announcements that do not exist.
 - **Prompt echo** — this script primes the model with *「これはJR東日本の電車内アナウンスです。次の駅、お乗り換え、お降り、各駅停車などの案内が含まれます。」*, and a file with no speech gets it echoed back verbatim. Harder to spot than the stock hallucinations because it reads as exactly the right vocabulary. Any transcript containing 〜などの案内が含まれます is the prime, not the file. (2026-08-08: read as a real-but-garbled announcement on a Saikyo file.)
 
+**0.3.0.a — And one absence that is not silence: a language-locked pass drops the other language
+entirely.** `transcribe_pa.py` auto-detects once and stamps the result in the JSON's `language`
+field, so a Japanese-dominant file comes back `"language": "ja"` and its English announcements
+return *nothing at all* — no garbled text to notice, just missing segments. This is not a `medium`
+problem; large-v3 does it too. 2026-08-12 on Keiyo: 2 of 5 clusters transcribed empty, and the
+transcript ended at 22 s on a 34 s file that has speech to 32 s. **Cross-check the transcript's
+segment spans against `audio_id.structure`'s activity blocks before concluding anything about a
+file's content** — a block with no transcript is the signature. Re-run the window on its own
+(`ffmpeg -ss/-to` a clip, then transcribe that) and auto-detect lands on `en`.
+
 **0.3.a — Homophone watch-list (build per-route as new ones surface)**
 
 Whisper's large-v3 still mistranscribes some rare station names. NOT bugs to fix — model's best phonetic guess. Recognise them and cross-reference with the English transcript or JO code:
@@ -119,11 +129,28 @@ Add new entries when other routes surface their own quirks.
 
 **0.3.b — Special case: pre-mamonaku approach passes**
 
-Some stations have **additional approach warnings** broadcast before the standard `間もなく X` — typically when the train has to pass distinctive points (level crossings, curves, restricted-speed zones) on its way in. These are part of the {this}-arr cluster IRL, NOT the {prev}-dep cluster.
+Some stations get an **extra approach warning** ahead of the standard `間もなく X`, broadcast because
+the train is about to run through **points**. The English version says so outright — `We will be
+changing to another track` — which is what identifies the cause; the Japanese `この先電車が揺れますので…`
+only describes the effect.
 
-Symptom in the transcript: a noticeable gap (10–20 s) between the previous cluster's safety/info messages and the actual `間もなく`, with extra `この先電車が揺れますので…` or English `We will be changing to another track` in between.
+**The cause fixes the position.** The warning is about what is coming, so it sits at the HEAD of a
+cluster — head of a `{prev}-dep` (points just outside the station being left) or head of a
+`{this}-arr` (points on the way in). It does not trail. When it precedes a `間もなく`, it is part of
+that arr cluster IRL, NOT the preceding dep cluster.
 
-When you see this pattern, set the {this}-arr timestamp at the start of the *pre-mamonaku* cluster, not at the `間もなく` line. Sobu's 市川 is the canonical example (16:06 vs the cleaner 16:21). The user will recognise these per route — flag when you spot one.
+**So a 揺れます at the END of a segment is a mis-cut boundary, not a quirk** — the train has already
+passed the points by then, so the announcement belongs to the next segment and the cut before it was
+placed too late. Signature: an over-long `-dep` file (30 s+) whose tail carries 揺れますので… /
+つり革、手すりに…. Keiyo `minami-funabashi-dep-up` was 34.3 s holding 20.6 s of 二俣新町 approach
+material; repaired 2026-08-12 by moving everything from 13.68 s to the head of
+`futamata-shimmachi-arr-up`.
+
+Symptom while reading a transcript, before any cut is made: a 10–20 s gap between the previous
+cluster's safety/info messages and the actual `間もなく`, with the warning in between. Set the
+{this}-arr timestamp at the start of the *pre-mamonaku* cluster, not at the `間もなく` line. Sobu's
+市川 is the canonical example (16:06 vs the cleaner 16:21). The user will recognise these per
+route — flag when you spot one.
 
 **0.4 Output proposal + apply safety margin via the formatter.** Build the mapping JSON:
 
@@ -255,6 +282,11 @@ uv run python _dev_scripts/trim_pa_silence.py audio/<line>/pa
 `trim_pa_silence.py` uses the same onset principle as the STA pipeline: detect where voice actually starts (first frame above noise_floor + 12 dB with a +6 dB/30ms attack slope), then stream-copy trim to leave **~80 ms of silence before voice onset**. Trail trimming is left to `validate_pa.py`'s simple threshold (trail is less critical).
 
 - **Idempotent** on already-trimmed files — onset is detected, gap ≤ TARGET → skip.
+- **It does not know a lead was authored on purpose.** `TARGET_S = 0.080` and
+  `lead_trim = max(0, onset - TARGET_S)`, so any deliberate buffer larger than 80 ms — the 0.5 s
+  left at the head of a hand-spliced segment, say — is trimmed away on the next pass, silently
+  re-cutting a file the ear has already passed. Run this step BEFORE hand splices, not after, and
+  if a pool has authored leads, pass only the files you mean to trim.
 - **Noisy-source recordings** (flat hum at -50 to -45 dB) — the onset detector sees the flat profile vs. the sharp voice attack and trims correctly. The old -40 dB gate saw the hum as "content" and skipped.
 
 #### Step 7.3 — Trim-amount summary
@@ -407,6 +439,14 @@ First run on a new machine downloads the ~3 GB `large-v3` model into the local h
 - **The trim offset must be added back** when converting Whisper output (relative to trimmed input) to original-source seconds for the splitter. The `voice_onsets` in the JSON for the formatter expects absolute coordinates.
 - **Voice onset detection beats the -40 dB gate.** Recording hiss / hum at -45 to -50 dB sits above the simple validator's threshold but is clearly not voice — flat amplitude profile, no attack slope. `trim_pa_silence.py` uses onset detection (noise_floor + 12 dB + 6 dB/30ms delta) which handles variable noise floors correctly. If `validate_pa.py` flags files post-trim with `MISSING LEAD` but onset detection passed, trust onset — the remaining gap is noise, not voice.
 - **Backup before trimming.** `trim_pa_silence.py` modifies files in place (lossless stream-copy). Snapshot `pa/` + `route.json` into `audio_src/<line>/<diagram>/` first — same convention as sta-make Step 7.
+- **Repair splices: cut ~0.5 s BEFORE the onset, and know the buffer is not durable.** When moving
+  content between two already-cut segments (a mis-placed boundary, § 0.3.b), take the onset from
+  `audio_id.structure` and cut half a second ahead of it — cutting *at* the onset leaves no lead and
+  mp3 frame granularity (~26 ms) can land the cut inside the attack. But `trim_pa_silence.py`
+  normalizes every lead to `TARGET_S = 0.080`, so a later trim pass over that line **silently
+  re-cuts the authored buffer to 80 ms — on a file the ear has already passed.** Either run the trim
+  before the by-ear gate, or accept that the pool's lead is 80 ms and that the 0.5 s only ever
+  protected the cut itself. 2026-08-12, Keiyo: user asked for the 0.5 s explicitly.
 
 ## Documentation hook
 
