@@ -55,6 +55,8 @@ import numpy as np
 import pygame
 
 from audio_layout import discover_route_sources, order_by_reference_count
+from verify_ui import CUT_MARKER, WAVE_GAMMA, draw_button, draw_wave, find_font, wave_peaks
+from verify_ui import find_ffmpeg as _find_ffmpeg
 
 WINDOW_W, WINDOW_H = 1180, 680
 
@@ -82,7 +84,6 @@ BTN_H        = 56
 ROW_BUTTONS  = ROW_HINTS + HINT_LINE * 2 + 14
 # fmt: on
 
-WAVE_GAMMA = 0.5  # amplitude curve; a KAK quieter than the melody is invisible at linear scale
 LIST_W = 280  # left-column station list width
 LIST_TOP = 60
 ROW_H = 26
@@ -108,119 +109,7 @@ HEAD_TINT = (60, 130, 90)  # green-ish — head segment that gets played
 CUT_LEAD_TINT = (180, 130, 60)  # amber — TAIL_LEAD seconds before sta_cut (also played)
 VOICE_TINT = (170, 70, 70)  # red — voice region from sta_cut to EOF (also played)
 UNTOUCHED_TINT = (60, 60, 70)  # dim gray — region between head end and tail start (skipped)
-CUT_MARKER = (255, 255, 255)
 CURSOR = (255, 240, 100)
-
-
-def find_font(size: int) -> pygame.font.Font:
-    for candidate in ("fonts/ShinGoPr6N-Medium.otf", "fonts/HelveticaNeue-Bold.otf"):
-        p = Path(candidate)
-        if p.exists():
-            return pygame.font.Font(str(p), size)
-    return pygame.font.SysFont(None, size)
-
-
-def draw_button(screen: pygame.Surface, rect: pygame.Rect, label: str, color: tuple[int, int, int], font: pygame.font.Font, hover: bool) -> None:
-    fill = tuple(min(255, c + 30) for c in color) if hover else color
-    pygame.draw.rect(screen, fill, rect, border_radius=8)
-    pygame.draw.rect(screen, (255, 255, 255), rect, width=2, border_radius=8)
-    txt = font.render(label, True, (255, 255, 255))
-    screen.blit(txt, txt.get_rect(center=rect.center))
-
-
-_WAVE_CACHE: dict[tuple[str, float], np.ndarray] = {}
-
-
-def wave_peaks(path: Path, columns: int) -> np.ndarray:
-    """(2, columns) min/max envelope of the file, for the waveform strip.
-
-    Cached per (path, mtime) so a splice invalidates it automatically. Decoding is via
-    ffmpeg to mono f32 — the same route every other tool here uses.
-    """
-    key = (str(path), path.stat().st_mtime)
-    hit = _WAVE_CACHE.get(key)
-    if hit is not None and hit.shape[1] == columns:
-        return hit
-    try:
-        raw = subprocess.run(
-            [_find_ffmpeg(), "-v", "error", "-i", str(path), "-f", "f32le", "-ac", "1", "-ar", "8000", "-"],
-            capture_output=True,
-            check=True,
-        ).stdout
-    except (subprocess.CalledProcessError, OSError):
-        return np.zeros((2, columns), dtype=np.float32)
-    y = np.frombuffer(raw, dtype=np.float32)
-    if y.size < columns:
-        y = np.pad(y, (0, columns - y.size))
-    step = y.size // columns
-    body = y[: step * columns].reshape(columns, step)
-    out = np.vstack([body.min(axis=1), body.max(axis=1)]).astype(np.float32)
-    _WAVE_CACHE.clear()
-    _WAVE_CACHE[key] = out
-    return out
-
-
-def draw_wave(
-    screen: pygame.Surface,
-    rect: pygame.Rect,
-    path: Path,
-    duration: float,
-    sel: tuple[float, float] | None,
-    cut: float,
-    font: pygame.font.Font,
-) -> None:
-    """Waveform strip spanning the same [0, duration] as the seek bar.
-
-    Exists so a KAK can be found by eye and removed by hand: on hot/limited sources the
-    click is often QUIETER than the melody, so no automatic threshold separates them.
-    """
-    pygame.draw.rect(screen, (22, 26, 32), rect, border_radius=3)
-    if duration <= 0 or rect.w <= 2:
-        return
-    peaks = wave_peaks(path, rect.w)
-    mid = rect.y + rect.h // 2
-    half = rect.h // 2 - 1
-    # Amplitude guides at the raw levels the curve maps to — so "how loud is that blip"
-    # stays answerable by eye rather than by running a probe.
-    guides = ((1.0, "0"), (0.316, "-10"), (0.1, "-20"), (0.0316, "-30"))
-    for frac, _ in guides:
-        dy = int((frac**WAVE_GAMMA) * half)
-        for yy in (mid - dy, mid + dy):
-            pygame.draw.line(screen, (44, 52, 62), (rect.x + 1, yy), (rect.right - 1, yy))
-    pygame.draw.line(screen, (58, 68, 80), (rect.x + 1, mid), (rect.right - 1, mid))
-    for i in range(rect.w):
-        lo, hi = float(peaks[0, i]), float(peaks[1, i])
-        hs = (abs(hi) ** WAVE_GAMMA) * (1 if hi >= 0 else -1)
-        ls = (abs(lo) ** WAVE_GAMMA) * (1 if lo >= 0 else -1)
-        pygame.draw.line(screen, (86, 150, 200), (rect.x + i, mid - int(hs * half)), (rect.x + i, mid - int(ls * half)))
-    if sel:
-        a, b = sorted(sel)
-        xa = rect.x + int(rect.w * max(0.0, min(1.0, a / duration)))
-        xb = rect.x + int(rect.w * max(0.0, min(1.0, b / duration)))
-        ov = pygame.Surface((max(1, xb - xa), rect.h), pygame.SRCALPHA)
-        ov.fill((255, 70, 70, 90))
-        screen.blit(ov, (xa, rect.y))
-        for xx in (xa, xb):
-            pygame.draw.line(screen, (255, 90, 90), (xx, rect.y), (xx, rect.y + rect.h), 1)
-        label = font.render(f"{(b - a) * 1000:.0f} ms", True, (255, 190, 190))
-        lx = min(max(xa + 4, rect.x + 4), rect.right - label.get_width() - 6)
-        pad = label.get_rect(topleft=(lx, rect.y + 5)).inflate(8, 4)
-        chip = pygame.Surface(pad.size, pygame.SRCALPHA)
-        chip.fill((120, 30, 30, 210))
-        screen.blit(chip, pad.topleft)
-        screen.blit(label, (lx, rect.y + 5))
-    for frac, lbl in guides:
-        dy = int((frac**WAVE_GAMMA) * half)
-        tag = font.render(lbl, True, (128, 140, 154))
-        for yy in (mid - dy, mid + dy):
-            tr = tag.get_rect(midright=(rect.right - 5, yy))
-            back = pygame.Surface(tr.inflate(6, 2).size, pygame.SRCALPHA)
-            back.fill((22, 26, 32, 190))
-            screen.blit(back, tr.inflate(6, 2).topleft)
-            screen.blit(tag, tr.topleft)
-    cx = rect.x + int(rect.w * max(0.0, min(1.0, cut / duration)))
-    pygame.draw.line(screen, CUT_MARKER, (cx, rect.y), (cx, rect.y + rect.h), 2)
-    pygame.draw.polygon(screen, CUT_MARKER, [(cx - 5, rect.y), (cx + 5, rect.y), (cx, rect.y + 7)])
 
 
 def draw_seek_bar(
@@ -305,29 +194,6 @@ def draw_seek_bar(
     label_cut = font.render(f"sta_cut {sta_cut:.2f}s", True, FG)
     cut_label_x = max(rect.x, min(rect.right - label_cut.get_width(), cut_x - label_cut.get_width() // 2))
     screen.blit(label_cut, (cut_label_x, rect.y - 24))
-
-
-def _find_ffmpeg() -> str:
-    """Return path to ffmpeg.exe / ffmpeg. Falls back to common Windows install
-    locations when not on PATH (winget Gyan.FFmpeg, chocolatey, etc.)."""
-    found = shutil.which("ffmpeg")
-    if found:
-        return found
-    candidates = [
-        Path.home()
-        / "AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.1-full_build/bin/ffmpeg.exe",
-        Path("C:/ProgramData/chocolatey/bin/ffmpeg.exe"),
-        Path("C:/ffmpeg/bin/ffmpeg.exe"),
-        Path("C:/Program Files/ffmpeg/bin/ffmpeg.exe"),
-    ]
-    # Also try winget glob — version dirs change
-    winget_root = Path.home() / "AppData/Local/Microsoft/WinGet/Packages"
-    if winget_root.exists():
-        candidates.extend(winget_root.glob("Gyan.FFmpeg_*/ffmpeg-*/bin/ffmpeg.exe"))
-    for c in candidates:
-        if c.exists():
-            return str(c)
-    return "ffmpeg"  # last resort — let subprocess raise its FileNotFoundError
 
 
 def _make_beep(duration_s: float = 0.08, freq: float = 880.0, volume: float = 0.4) -> pygame.mixer.Sound:
@@ -524,30 +390,54 @@ def load_route_sources(work_dir: Path) -> tuple[list[Path], Path, list[dict]]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("work_dir", type=Path, help="audio/<line>/<diagram>, or audio/<line> for a pooled line")
+    ap.add_argument("work_dir", type=Path, nargs="?", help="audio/<line>/<diagram>, or audio/<line> for a pooled line")
     ap.add_argument(
         "--only",
         help="comma-separated sta basenames to test (e.g. 'kumagaya' or 'kumagaya,konosu'). Existing JSON verdicts for un-tested stations are preserved.",
     )
+    ap.add_argument(
+        "--files",
+        type=Path,
+        nargs="+",
+        help="verify loose mp3s that NO route.json references yet (pool-ahead audio). "
+        "sta_cut cannot be written to a route in this mode — it is kept in the results JSON "
+        "and printed on exit, so the number survives until a diagram exists.",
+    )
+    ap.add_argument("--sta-cut", type=float, help="initial sta_cut for --files mode (default 0)")
     args = ap.parse_args()
     only: set[str] | None = set(s.strip() for s in args.only.split(",")) if args.only else None
 
-    try:
-        route_paths, sta_dir, stops = load_route_sources(args.work_dir)
-    except (FileNotFoundError, KeyError) as e:
-        print(e, file=sys.stderr)
-        return 1
-
     items: list[dict] = []
-    for stop in stops:
-        sta_cut = stop.get("sta_cut")
-        for sta in stop.get("sta", []):
-            path = sta_dir / f"{sta}.mp3"
-            if not path.exists() or sta_cut is None:
-                continue
-            if only is not None and sta not in only:
-                continue
-            items.append({"stop": stop["name"], "sta": sta, "sta_cut": float(sta_cut), "path": path})
+    if args.files:
+        missing = [p for p in args.files if not p.exists()]
+        if missing:
+            print(f"not found: {', '.join(str(p) for p in missing)}", file=sys.stderr)
+            return 1
+        # No route backs these, so there is nothing to patch and nothing to merge.
+        route_paths, sta_dir = [], args.files[0].parent
+        # Results still land beside the line they belong to (audio/<line>/sta/x.mp3 -> <line>).
+        args.work_dir = sta_dir.parent
+        for p in args.files:
+            items.append({"stop": p.stem, "sta": p.stem, "sta_cut": float(args.sta_cut or 0.0), "path": p})
+        print(f"loose-file mode: {len(items)} file(s), no route.json — sta_cut is NOT written to a route")
+    else:
+        if args.work_dir is None:
+            ap.error("work_dir is required unless --files is given")
+        try:
+            route_paths, sta_dir, stops = load_route_sources(args.work_dir)
+        except (FileNotFoundError, KeyError) as e:
+            print(e, file=sys.stderr)
+            return 1
+
+        for stop in stops:
+            sta_cut = stop.get("sta_cut")
+            for sta in stop.get("sta", []):
+                path = sta_dir / f"{sta}.mp3"
+                if not path.exists() or sta_cut is None:
+                    continue
+                if only is not None and sta not in only:
+                    continue
+                items.append({"stop": stop["name"], "sta": sta, "sta_cut": float(sta_cut), "path": path})
 
     if not items:
         msg = f"no matching STAs (filter --only={args.only})" if only else "no playable STA entries (need sta + sta_cut + file on disk)"
@@ -761,6 +651,11 @@ def main() -> int:
         On a pooled line several diagrams share one file, so patching a single
         route.json desyncs the pool. Returns the diagram names written.
         """
+        if not route_paths:
+            # Loose-file mode: nothing references this mp3 yet, so there is no route to
+            # patch. Say so rather than returning an empty list — that reads as a
+            # successful write of zero files, which is how a cut goes missing.
+            return ["no route.json — value kept in the results file"]
         written = []
         for rp in route_paths:
             route_obj = json.loads(rp.read_text(encoding="utf-8"))
@@ -1243,12 +1138,17 @@ def main() -> int:
 
     # build the full route's items list (unfiltered) so the JSON always reflects route order
     full_items = []
-    for stop in stops:
-        sta_cut_v = stop.get("sta_cut")
-        for sta in stop.get("sta", []):
-            if sta_cut_v is None:
-                continue
-            full_items.append({"stop": stop["name"], "sta": sta, "sta_cut": session_cuts.get(sta, float(sta_cut_v))})
+    if not route_paths:
+        # Loose-file mode: there is no route to walk, and no unfiltered superset to
+        # reconstruct — the files handed in ARE the whole set.
+        full_items = [{"stop": it["stop"], "sta": it["sta"], "sta_cut": session_cuts[it["sta"]]} for it in items]
+    else:
+        for stop in stops:
+            sta_cut_v = stop.get("sta_cut")
+            for sta in stop.get("sta", []):
+                if sta_cut_v is None:
+                    continue
+                full_items.append({"stop": stop["name"], "sta": sta, "sta_cut": session_cuts.get(sta, float(sta_cut_v))})
 
     # Verdicts carry the DATE they were given. Without it a PASS from months ago and one
     # from ten minutes ago are identical in this file, so a run that splices a file but
@@ -1292,6 +1192,14 @@ def main() -> int:
             "not_reviewed": summary_nr,
         },
     }
+    if not route_paths:
+        # Loose-file mode: no route holds these, so the results file is the only place the
+        # value lands. Print it too — audio_src/ is gitignored and does not travel.
+        loose = {it["sta"]: round(it["sta_cut"], 2) for it in items}
+        payload["loose_sta_cut"] = loose
+        print("\nsta_cut values (NOT written to any route.json — record these):")
+        for sta, cut in loose.items():
+            print(f"  {sta}  sta_cut = {cut}")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"\nResults written to {out_path}")

@@ -588,6 +588,15 @@ PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/_joban/tsuchi
 
 **Pooled lines**: pass the LINE folder. The verifier finds `<line>/*/route.json`, merges the STA union across diagrams (ordered by the diagram referencing the most), and warns if two diagrams disagree on a shared file's `sta_cut`. Every write — interactive trim or cut nudge — lands in **all** route.json files referencing that mp3; patching one desyncs the pool. See `docs/DATA_FORMAT.md § audio_root Field`.
 
+**Pool-ahead audio — `--files`.** Discovery walks `route.json` `sta` refs, so a melody collected for a station **no diagram stops at yet** is invisible to the verifier and cannot be gated at all. That is the normal case when a line is built station-by-station ahead of its routes (2026-08-18, utsunomiya 黒磯 / 那須塩原 — both cut before any 黒磯-origin diagram existed).
+
+```bash
+PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py \
+    --files audio/<line>/sta/<name>.mp3 --sta-cut <seconds>
+```
+
+Splice / trim / undo all work normally. **`C` cannot write a cut** — there is no route to hold it — so the value goes into the results JSON and is PRINTED on exit. `audio_src/` is gitignored, so **record the number in this line's `Audio state` in `audio/README.md`** or it does not survive to a fresh clone. `persist_cut` says so explicitly rather than returning an empty write-list, which would read as a successful write of zero files — the shape in which a cut goes missing.
+
 Per station, the script:
 1. Plays `[0, 3 s]` — confirms the music head is intact (no clipped attack).
 2. Brief silence (~0.5 s).

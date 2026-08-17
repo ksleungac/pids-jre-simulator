@@ -114,6 +114,31 @@ segment spans against `audio_id.structure`'s activity blocks before concluding a
 file's content** — a block with no transcript is the signature. Re-run the window on its own
 (`ffmpeg -ss/-to` a clip, then transcribe that) and auto-detect lands on `en`.
 
+**0.3.0.b — Segment-level timestamps DRIFT; word-level timestamps are the clock.**
+
+Whisper's per-segment `start` is not a measurement of when the audio begins — it drifts by several
+seconds and re-anchors at long pauses, so a source with edits or long gaps desynchronises the
+transcript from the file. On an announcement compilation (2026-08-17, utsunomiya) the full-file
+pass put the first announcement at 10:11.9 when it truly starts at 10:18.4, and four more of that
+route's long announcements were 6.3–7.0 s early. **Transcribing a short probe clip does not fix
+it** — probes drift the other way, and one put a cluster 6 s EARLIER than the measured onset.
+
+Two instruments do not drift, and they agree with each other:
+
+- `model.transcribe(..., word_timestamps=True)` — alignment-anchored. On the same file every one
+  of the five long announcements landed within 0.6 s of the waveform.
+- `audio_id.structure` block onsets — measured from the samples, so they are ground truth for
+  "where does audio start" and settle any dispute.
+
+So: take cluster START times from word-level output or a block onset, never from `segment.start`.
+Cross-check the two before cutting; where they agree the cut is safe, and where they disagree the
+block onset wins.
+
+**Do NOT calibrate a global offset from nearest-block matching.** Trying that on utsunomiya
+produced deltas clustered at −6 / 0 / +6 s and a meaningless median, because the matcher hops to an
+adjacent onset whenever blocks sit ~6 s apart. That is the measurement failing, not a real offset —
+`principles.md § "A measurement is a claim until the instrument is calibrated"`.
+
 **0.3.a — Homophone watch-list (build per-route as new ones surface)**
 
 Whisper's large-v3 still mistranscribes some rare station names. NOT bugs to fix — model's best phonetic guess. Recognise them and cross-reference with the English transcript or JO code:
@@ -344,9 +369,22 @@ uv run python _dev_scripts/verify_pa_listen.py audio/<line>              # every
 uv run python _dev_scripts/verify_pa_listen.py audio/_joban/tsuchiura    # per-diagram layout only
 ```
 
-Plays first 3s of each PA segment (head), then last 3s before EOF (tail) — sequential auto-playback so you hear both ends. Seeks via `pygame.mixer.music.play(start=offset)` (same mechanism as STA verifier). PASS/FAIL per file, notes editable. Verdicts persist to `audio_src/<line>/pa_verify_results.json`. Includes both `pa` and `pa_at_station` entries.
+Plays the file straight through from wherever playback started. PASS/FAIL per file, notes editable. Verdicts persist to `audio_src/<line>/pa_verify_results.json`. Includes both `pa` and `pa_at_station` entries.
 
-Keys: P pass  F fail  R replay  E edit note  ↑↓ navigate  Q/ESC quit
+**It shows a WAVEFORM and edits the mp3** — same tools as the STA verifier, minus everything about `sta_cut` (a PA file has no cut moment, so no marker is drawn). Shared primitives live in `_dev_scripts/verify_ui.py`.
+
+| Key | Action |
+|-----|--------|
+| click waveform / seek bar | play from there to EOF |
+| drag on the waveform, then `X` / `Del` | splice that region OUT of the mp3 — the only way to remove something from the MIDDLE |
+| `[` `]` / `,` `.` | head-trim / tail-trim (Shift = fine 0.01 s), `T` applies both |
+| `U` | undo — restore from the snapshot taken before this run's first edit |
+| `Z` | clear pending trim + selection |
+| P pass · F fail · R replay · E note · ↑↓ navigate · Q quit | |
+
+Snapshots land in `audio_src/<line>/pa_wave_backup/`. Both trim and splice are destructive lossless recuts, and `U` keys on an in-memory record of what THIS run edited — never on the backup existing (`conventions.md § "An undo, a snapshot…"`).
+
+**No preview cycle.** It used to sample 3 s of head and 3 s of tail; that hides the middle, which is where a mis-cut boundary or foreign content actually sits. Free playback replaced it 2026-08-18.
 
 **Pooled lines**: pass the LINE folder. Layout discovery is shared with the STA verifier via `_dev_scripts/audio_layout.py`; entries are deduped so an mp3 referenced by several diagrams plays once. PA has no `sta_cut`, so nothing writes to route.json — the trim touches only the mp3.
 

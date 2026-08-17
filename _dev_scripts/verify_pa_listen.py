@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
-"""Quick by-ear PA verifier with manual start-trim controls.
+"""Quick by-ear PA verifier with waveform, trim and splice controls.
 
-For each PA in a route, plays the first PREVIEW_DURATION seconds (head→tail cycle).
+For each PA in a route, plays the file straight through from wherever you started it.
 Click/key PASS or FAIL per station. Persists verdicts to
 audio_src/<line>/pa_verify_results.json.
 
@@ -9,13 +9,24 @@ audio_src/<line>/pa_verify_results.json.
 
 Keys: P=Pass  F=Fail  R=Replay  E=Edit note  N=Next without verdict  Q/Esc=Quit
       ↑↓ navigate  Wheel=scroll sidebar
-      [/] adjust start-trim  T apply trim  Z reset trim
+      [/] adjust start-trim   ,/. adjust end-trim   T apply trim   Z reset pending
+      CLICK the waveform or seek bar = play from there, straight through to the end
+      DRAG on the waveform then X/Del = splice that region out of the mp3
+      U = undo — restore the file from the snapshot taken before this run's first edit
       (hold Shift while adjusting for fine 0.01s steps)
 
-Interactive trim: drag the red marker on the seek bar (or use [/]) to set the cut
-point. R replays from the trim offset in continuous scrub mode (no 3s cycle) so you
-can hear exactly where voice starts. T commits the trim by lossless-cutting the mp3
-with ffmpeg.
+Click-to-play matches the STA verifier's idiom, minus everything about `sta_cut` — a
+PA file has no cut moment, so the waveform draws no marker and playback simply runs
+from wherever you clicked to EOF rather than cycling head→tail.
+
+Two different edits, deliberately distinct. TRIM removes from the head or the tail;
+SPLICE removes a region from the MIDDLE, which is the only way to take out something
+like a live-conductor announcement sitting between two automated ones. Both are
+lossless stream copies, and both are destructive — hence the snapshot behind U.
+
+The waveform exists because no automatic threshold separates wanted speech from
+unwanted speech; you have to see it and judge it. Shares `draw_wave` with the STA
+verifier via verify_ui.
 """
 
 from __future__ import annotations
@@ -30,14 +41,42 @@ from pathlib import Path
 import pygame
 
 from audio_layout import discover_route_sources, order_by_reference_count
+from verify_ui import draw_button, draw_wave, find_font
+from verify_ui import find_ffmpeg as _find_ffmpeg
+from verify_ui import splice_out
 
-WINDOW_W, WINDOW_H = 1040, 540
-LIST_W = 280
-LIST_TOP = 60
-ROW_H = 26
+# fmt: off
+# Detail-pane vertical layout. Every row DERIVES from the one above it, so growing the
+# waveform can never silently land on top of something — the same rule the STA verifier
+# learned the hard way.
+LIST_W       = 280
+LIST_TOP     = 60
+ROW_H        = 26
+PAD_X        = 20
+ROW_PROGRESS = 36
+ROW_TITLE    = 72
+ROW_SUB      = 110
+ROW_NOTE     = 134
+NOTE_H       = 26
+ROW_PHASE    = ROW_NOTE + NOTE_H + 10
+PHASE_H      = 24
+ROW_WAVE     = ROW_PHASE + PHASE_H + 10
+WAVE_H       = 230
+ROW_SEEK     = ROW_WAVE + WAVE_H + 30      # +30 leaves room for the seek bar's own top label
+SEEK_H       = 18
+ROW_STATUS   = ROW_SEEK + SEEK_H + 14
+STATUS_LINE  = 20
+ROW_HINTS    = ROW_STATUS + STATUS_LINE * 2 + 10
+HINT_LINE    = 22
+BTN_H        = 56
+ROW_BUTTONS  = ROW_HINTS + HINT_LINE * 3 + 12
+WINDOW_W     = 1180
+WINDOW_H     = ROW_BUTTONS + BTN_H + 22
+# fmt: on
+
 FADE_MS = 120
-PREVIEW_DURATION = 3.0
 TARGET_PAD = 0.08  # silence before voice onset after trim
+MIN_SPLICE_S = 0.02  # below this a selection is a stray click, not an edit
 
 BG = (24, 24, 28)
 PANEL = (38, 38, 44)
@@ -56,29 +95,6 @@ TRIM_OVERLAY = (200, 60, 60)
 CURSOR = (255, 240, 100)
 
 
-def find_font(size: int) -> pygame.font.Font:
-    for candidate in ("fonts/ShinGoPr6N-Medium.otf", "fonts/HelveticaNeue-Bold.otf"):
-        p = Path(candidate)
-        if p.exists():
-            return pygame.font.Font(str(p), size)
-    return pygame.font.SysFont(None, size)
-
-
-def draw_button(
-    screen: pygame.Surface,
-    rect: pygame.Rect,
-    label: str,
-    color: tuple[int, int, int],
-    font: pygame.font.Font,
-    hover: bool,
-) -> None:
-    fill = tuple(min(255, c + 30) for c in color) if hover else color
-    pygame.draw.rect(screen, fill, rect, border_radius=8)
-    pygame.draw.rect(screen, (255, 255, 255), rect, width=2, border_radius=8)
-    txt = font.render(label, True, (255, 255, 255))
-    screen.blit(txt, txt.get_rect(center=rect.center))
-
-
 def draw_seek_bar(
     screen: pygame.Surface,
     rect: pygame.Rect,
@@ -86,24 +102,21 @@ def draw_seek_bar(
     position: float | None,
     font: pygame.font.Font,
     trim_start: float = 0.0,
+    trim_end: float = 0.0,
 ) -> None:
+    """`trim_start` / `trim_end` are PENDING cut amounts in seconds, measured inward
+    from each end of the file. Both render as a red hatch over what would be removed."""
     if duration <= 0:
         return
 
     def x_for(t: float) -> int:
         return rect.x + int(rect.w * (max(0.0, min(duration, t)) / duration))
 
-    head_end = min(PREVIEW_DURATION, duration)
-
-    # Base bar (untouched gray)
+    # Base bar (unplayed gray). Playback now runs to EOF, so there is no "preview
+    # region" to shade — the only meaningful tint is how far the cursor has reached.
     pygame.draw.rect(screen, UNTOUCHED_TINT, rect, border_radius=4)
 
-    # Head preview region (0 → PREVIEW_DURATION, offset by trim_start)
-    head_end_x = x_for(head_end)
-    if head_end_x > rect.x:
-        pygame.draw.rect(screen, PLAYED_TINT, (rect.x, rect.y, head_end_x - rect.x, rect.h))
-
-    # Played portion up to cursor (tinted on top)
+    # Played portion up to cursor
     if position is not None and position > 0:
         pos_x = x_for(position)
         if pos_x > rect.x:
@@ -117,6 +130,14 @@ def draw_seek_bar(
         screen.blit(s, (rect.x, rect.y))
         # Red marker line at trim-start
         pygame.draw.line(screen, TRIM_OVERLAY, (ts_x, rect.y - 8), (ts_x, rect.bottom + 8), 2)
+
+    # Pending end-trim overlay: red hatch over [duration - trim_end, duration]
+    if trim_end > 0:
+        te_x = x_for(max(0.0, duration - trim_end))
+        s = pygame.Surface((max(1, rect.right - te_x), rect.h), pygame.SRCALPHA)
+        s.fill((*TRIM_OVERLAY, 140))
+        screen.blit(s, (te_x, rect.y))
+        pygame.draw.line(screen, TRIM_OVERLAY, (te_x, rect.y - 8), (te_x, rect.bottom + 8), 2)
 
     pygame.draw.rect(screen, (90, 90, 100), rect, width=1, border_radius=4)
 
@@ -135,97 +156,48 @@ def draw_seek_bar(
 
 
 class Player:
-    """IDLE -> HEAD -> GAP -> TAIL -> DONE. Scrub mode: HEAD plays indefinitely (no stop/cycle)."""
+    """IDLE -> PLAYING -> DONE. Plays from an offset straight through to EOF.
+
+    There is deliberately no head/tail preview cycle. PA segments are short and the
+    judgement being made is about their whole content — where the announcement starts,
+    whether anything foreign is inside it — so sampling 3 seconds off each end hides
+    exactly the middle you need to hear.
+    """
 
     def __init__(self) -> None:
         self.state = "IDLE"
-        self._head_stop_at = 0
-        self._gap_until = 0
-        self._tail_start = 0.0
         self._seg_start_ms = 0
-        self._head_start_offset = 0.0
+        self._from = 0.0
         self._path: Path | None = None
-        self._scrub = False
 
-    def begin(self, path: Path, duration: float = 0.0, head_start: float = 0.0, scrub: bool = False) -> None:
+    def begin(self, path: Path, duration: float = 0.0, from_time: float = 0.0) -> None:
         pygame.mixer.music.stop()
         pygame.mixer.music.unload()
         pygame.mixer.music.load(str(path))
         try:
-            pygame.mixer.music.play(start=head_start)
+            pygame.mixer.music.play(start=from_time)
         except pygame.error:
+            # Some builds refuse a start offset on mp3; fall back to the head so the
+            # file still plays rather than silently doing nothing.
             pygame.mixer.music.play()
+            from_time = 0.0
         self._path = path
-        self._head_start_offset = head_start
-        self._tail_start = max(head_start, duration - PREVIEW_DURATION)
-        self._scrub = scrub
-        self._head_stop_at = 0  # scrub mode: no auto-stop
-        if not scrub:
-            now = pygame.time.get_ticks()
-            self._head_stop_at = now + int(PREVIEW_DURATION * 1000)
+        self._from = from_time
         self._seg_start_ms = pygame.time.get_ticks()
-        self.state = "HEAD"
+        self.state = "PLAYING"
 
     def position(self) -> float | None:
-        now = pygame.time.get_ticks()
-        if self.state == "HEAD":
-            return self._head_start_offset + (now - self._seg_start_ms) / 1000.0
-        if self.state == "TAIL":
-            return self._tail_start + (now - self._seg_start_ms) / 1000.0
-        if self.state == "GAP":
-            return self._head_start_offset + PREVIEW_DURATION
+        if self.state == "PLAYING":
+            return self._from + (pygame.time.get_ticks() - self._seg_start_ms) / 1000.0
         return None
 
     def tick(self) -> None:
-        now = pygame.time.get_ticks()
-        if self.state == "HEAD":
-            if not pygame.mixer.music.get_busy():
-                self.state = "GAP" if (not self._scrub and self._tail_start > self._head_start_offset) else "DONE"
-            elif not self._scrub and self._head_stop_at > 0 and now >= self._head_stop_at:
-                pygame.mixer.music.fadeout(FADE_MS)
-                self._gap_until = now + FADE_MS + 300
-                self.state = "GAP"
-        elif self.state == "GAP":
-            if now >= self._gap_until and self._tail_start > self._head_start_offset:
-                assert self._path is not None
-                pygame.mixer.music.stop()
-                pygame.mixer.music.unload()
-                pygame.mixer.music.load(str(self._path))
-                try:
-                    pygame.mixer.music.play(start=self._tail_start)
-                except pygame.error:
-                    pygame.mixer.music.play()
-                self._seg_start_ms = pygame.time.get_ticks()
-                self.state = "TAIL"
-            elif now >= self._gap_until:
-                self.state = "DONE"
-        elif self.state == "TAIL":
-            if not pygame.mixer.music.get_busy():
-                self.state = "DONE"
+        if self.state == "PLAYING" and not pygame.mixer.music.get_busy():
+            self.state = "DONE"
 
     def stop(self) -> None:
         pygame.mixer.music.fadeout(FADE_MS)
         self.state = "DONE"
-
-
-def _find_ffmpeg() -> str:
-    found = shutil.which("ffmpeg")
-    if found:
-        return found
-    candidates = [
-        Path.home()
-        / "AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.1-full_build/bin/ffmpeg.exe",
-        Path("C:/ProgramData/chocolatey/bin/ffmpeg.exe"),
-        Path("C:/ffmpeg/bin/ffmpeg.exe"),
-        Path("C:/Program Files/ffmpeg/bin/ffmpeg.exe"),
-    ]
-    winget_root = Path.home() / "AppData/Local/Microsoft/WinGet/Packages"
-    if winget_root.exists():
-        candidates.extend(winget_root.glob("Gyan.FFmpeg_*/ffmpeg-*/bin/ffmpeg.exe"))
-    for c in candidates:
-        if c.exists():
-            return str(c)
-    return "ffmpeg"
 
 
 def main() -> int:
@@ -326,27 +298,70 @@ def main() -> int:
     edit_mode = False
     edit_buffer = ""
     trim_start: float = 0.0
-    dragging_trim = False
+    trim_end: float = 0.0
+    sel: tuple[float, float] | None = None  # waveform selection, absolute file seconds
+    dragging_wave = False
+    scrub_from: float | None = None  # where a click-to-play started, for the phase label
+    # Session-scoped record of which slugs THIS RUN has destructively edited (trim or
+    # splice). Both halves of undo key on it, never on the snapshot file existing:
+    # snapshots are never deleted, so `bak.exists()` is a CROSS-session fact, and on a
+    # file an earlier session edited it would restore that older generation — silently
+    # discarding this session's work while printing success.
+    edited_this_run: set[str] = set()
 
     def begin_with_trim(replay: bool = False) -> None:
-        nonlocal trim_start
-        # Start playback with optional trim offset. In scrub mode (trim>0+replay) plays continuously without cycling.
+        """Play the current item from its head — or from the pending head-trim on replay,
+        so R lets you hear what the trim would leave."""
+        nonlocal trim_start, scrub_from
         item = items[idx]
         offset = trim_start if replay else 0.0
-        scrub = trim_start > 0 and replay
         if not replay:
             trim_start = 0.0  # fresh navigation resets trim
-        player.begin(item["path"], item.get("duration", 0.0), head_start=offset, scrub=scrub)
+        scrub_from = offset
+        player.begin(item["path"], item.get("duration", 0.0), from_time=offset)
 
     player.begin(items[idx]["path"], items[idx].get("duration", 0.0))
 
-    btn_w, btn_h = 150, 56
+    btn_w, btn_h = 150, BTN_H
     detail_x = LIST_W + 40
-    pass_rect = pygame.Rect(detail_x, WINDOW_H - 90, btn_w, btn_h)
-    fail_rect = pygame.Rect(detail_x + btn_w + 20, WINDOW_H - 90, btn_w, btn_h)
-    replay_rect = pygame.Rect(detail_x + 2 * (btn_w + 20), WINDOW_H - 90, btn_w, btn_h)
-    note_rect = pygame.Rect(detail_x, 134, WINDOW_W - detail_x - 20, 26)
-    seek_rect = pygame.Rect(detail_x, 230, WINDOW_W - detail_x - 20, 18)
+    detail_w = WINDOW_W - detail_x - PAD_X
+    pass_rect = pygame.Rect(detail_x, ROW_BUTTONS, btn_w, btn_h)
+    fail_rect = pygame.Rect(detail_x + btn_w + 20, ROW_BUTTONS, btn_w, btn_h)
+    replay_rect = pygame.Rect(detail_x + 2 * (btn_w + 20), ROW_BUTTONS, btn_w, btn_h)
+    note_rect = pygame.Rect(detail_x, ROW_NOTE, detail_w, NOTE_H)
+    wave_rect = pygame.Rect(detail_x, ROW_WAVE, detail_w, WAVE_H)
+    seek_rect = pygame.Rect(detail_x, ROW_SEEK, detail_w, SEEK_H)
+
+    def wave_time_at_x(x: int) -> float:
+        dur = items[idx].get("duration", 0.0)
+        if dur <= 0 or wave_rect.w <= 0:
+            return 0.0
+        frac = (x - wave_rect.x) / wave_rect.w
+        return max(0.0, min(dur, frac * dur))
+
+    def seek_time_at_x(x: int) -> float:
+        dur = items[idx].get("duration", 0.0)
+        if dur <= 0 or seek_rect.w <= 0:
+            return 0.0
+        frac = (x - seek_rect.x) / seek_rect.w
+        return max(0.0, min(dur, frac * dur))
+
+    def play_from(t: float) -> None:
+        """Play from `t` to EOF — the click-to-play path."""
+        nonlocal scrub_from
+        item = items[idx]
+        scrub_from = max(0.0, t)
+        player.begin(item["path"], item.get("duration", 0.0), from_time=scrub_from)
+
+    def measure(path: Path) -> float:
+        """Re-read a file's duration after an edit. The mixer holds the previous bytes,
+        so unload before asking."""
+        pygame.mixer.music.stop()
+        pygame.mixer.music.unload()
+        try:
+            return pygame.mixer.Sound(str(path)).get_length()
+        except pygame.error:
+            return 0.0
 
     def current_verdict_for(pa: str) -> str:
         if pa in verdicts:
@@ -354,9 +369,11 @@ def main() -> int:
         return prior_verdicts.get(pa, "")
 
     def jump_to(new_idx: int) -> None:
-        nonlocal idx, edit_mode, list_scroll, trim_start
+        nonlocal idx, edit_mode, list_scroll, trim_start, trim_end, sel
         edit_mode = False
         trim_start = 0.0
+        trim_end = 0.0
+        sel = None
         idx = max(0, min(len(items) - 1, new_idx))
         if idx < list_scroll:
             list_scroll = idx
@@ -409,19 +426,40 @@ def main() -> int:
         except AttributeError:
             pass
 
+    def _snapshot_dir(src: Path) -> Path:
+        return Path("audio_src") / src.parent.parent.name / "pa_wave_backup"
+
+    def _snapshot_once(item: dict) -> None:
+        """Copy the file aside before THIS RUN's first destructive edit of it.
+
+        Overwrites whatever an earlier session left, so the snapshot always describes
+        the bytes this run started from. Keyed on `edited_this_run` — see its
+        declaration for why `bak.exists()` is the wrong gate.
+        """
+        if item["pa"] in edited_this_run:
+            return
+        src = Path(item["path"])
+        bak_dir = _snapshot_dir(src)
+        bak_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, bak_dir / src.name)
+        edited_this_run.add(item["pa"])
+
     def apply_trim() -> bool:
-        nonlocal trim_start
-        if trim_start <= 0:
+        """T — remove `trim_start` from the head and `trim_end` from the tail."""
+        nonlocal trim_start, trim_end
+        if trim_start <= 0 and trim_end <= 0:
             return False
         item = items[idx]
         src = Path(item["path"])
         dur = item.get("duration", 0.0)
-        keep_start = trim_start
-        if keep_start >= dur - 0.1:
+        new_dur = dur - trim_start - trim_end
+        if new_dur <= 0.1:
+            print("trim would leave nothing", file=sys.stderr)
             return False
-        new_dur = dur - keep_start
         player.stop()
+        pygame.mixer.music.stop()
         pygame.mixer.music.unload()
+        _snapshot_once(item)
         tmp = src.with_suffix(".tmp.mp3")
         cmd = [
             _find_ffmpeg(),
@@ -429,7 +467,7 @@ def main() -> int:
             "-loglevel",
             "error",
             "-ss",
-            f"{keep_start:.3f}",
+            f"{trim_start:.3f}",
             "-i",
             str(src),
             "-t",
@@ -443,10 +481,74 @@ def main() -> int:
             shutil.move(str(tmp), str(src))
         except (subprocess.CalledProcessError, OSError) as e:
             print(f"trim failed for {src.name}: {e}", file=sys.stderr)
+            tmp.unlink(missing_ok=True)
             return False
-        item["duration"] = new_dur
-        print(f"trimmed {item['pa']}: -{keep_start:.3f}s start  new dur {new_dur:.2f}s")
+        item["duration"] = measure(src) or new_dur
+        print(f"trimmed {item['pa']}: -{trim_start:.3f}s head  -{trim_end:.3f}s tail  " f"new dur {item['duration']:.2f}s")
         trim_start = 0.0
+        trim_end = 0.0
+        begin_with_trim()
+        return True
+
+    def do_splice() -> bool:
+        """X / Del — remove the selected region from the middle of the file."""
+        nonlocal sel
+        if sel is None:
+            return False
+        item = items[idx]
+        src = Path(item["path"])
+        dur = item.get("duration", 0.0)
+        a, b = sorted(sel)
+        a, b = max(0.0, a), min(dur, b)
+        if b - a < MIN_SPLICE_S:
+            print("selection too short to splice", file=sys.stderr)
+            return False
+        player.stop()
+        pygame.mixer.music.stop()
+        pygame.mixer.music.unload()
+        _snapshot_once(item)
+        try:
+            splice_out(src, a, b, duration=dur)
+        except (subprocess.CalledProcessError, OSError, ValueError) as e:
+            print(f"splice failed for {src.name}: {e}", file=sys.stderr)
+            return False
+        # ffmpeg's concat demuxer answers a bad path by SKIPPING that entry and still
+        # exiting 0, so the resulting duration is the gate here — never the return code.
+        actual = measure(src)
+        expected = dur - (b - a)
+        if actual <= 0 or abs(actual - expected) > 0.5:
+            print(
+                f"WARNING {src.name}: expected ~{expected:.2f}s after splice, measured {actual:.2f}s — check it",
+                file=sys.stderr,
+            )
+        item["duration"] = actual or expected
+        print(f"spliced {item['pa']}: removed [{a:.3f},{b:.3f}] ({(b - a) * 1000:.0f}ms)  " f"new dur {item['duration']:.2f}s")
+        sel = None
+        begin_with_trim()
+        return True
+
+    def undo_edit() -> bool:
+        """U — restore the file from the snapshot taken before this run's first edit."""
+        nonlocal sel, trim_start, trim_end
+        item = items[idx]
+        src = Path(item["path"])
+        if item["pa"] not in edited_this_run:
+            print(f"nothing edited this session for {src.name}", file=sys.stderr)
+            return False
+        bak = _snapshot_dir(src) / src.name
+        if not bak.exists():
+            print(f"snapshot missing for {src.name} — cannot restore", file=sys.stderr)
+            return False
+        player.stop()
+        pygame.mixer.music.stop()
+        pygame.mixer.music.unload()
+        shutil.copy2(bak, src)
+        edited_this_run.discard(item["pa"])
+        item["duration"] = measure(src)
+        sel = None
+        trim_start = 0.0
+        trim_end = 0.0
+        print(f"restored {item['pa']} from snapshot  dur {item['duration']:.2f}s")
         begin_with_trim()
         return True
 
@@ -496,10 +598,20 @@ def main() -> int:
                         trim_start = max(0.0, trim_start - step)
                     elif ev.key == pygame.K_RIGHTBRACKET:  # ]
                         trim_start = min(cur_dur - 0.1, trim_start + step)
+                    elif ev.key == pygame.K_COMMA:  # ,
+                        trim_end = max(0.0, trim_end - step)
+                    elif ev.key == pygame.K_PERIOD:  # .
+                        trim_end = min(cur_dur - 0.1, trim_end + step)
                     elif ev.key == pygame.K_t:
                         apply_trim()
+                    elif ev.key in (pygame.K_x, pygame.K_DELETE):
+                        do_splice()
+                    elif ev.key == pygame.K_u:
+                        undo_edit()
                     elif ev.key == pygame.K_z:
                         trim_start = 0.0
+                        trim_end = 0.0
+                        sel = None
                         begin_with_trim()  # replay from 0
             elif ev.type == pygame.TEXTINPUT and edit_mode:
                 edit_buffer += ev.text
@@ -513,12 +625,14 @@ def main() -> int:
                 else:
                     if note_rect.collidepoint(ev.pos):
                         start_edit()
+                    elif wave_rect.collidepoint(ev.pos):
+                        # Anchor both ends at the press. Whether this becomes a selection
+                        # or a play-from depends on whether the mouse moves before release.
+                        dragging_wave = True
+                        t0 = wave_time_at_x(ev.pos[0])
+                        sel = (t0, t0)
                     elif seek_rect.collidepoint(ev.pos):
-                        # Start trim drag: set trim marker to click position
-                        dragging_trim = True
-                        dur = items[idx].get("duration", 0.0)
-                        frac = (ev.pos[0] - seek_rect.x) / max(1, seek_rect.w)
-                        trim_start = round(max(0.0, min(dur - 0.1, frac * dur)), 2)
+                        play_from(seek_time_at_x(ev.pos[0]))
                     else:
                         row = list_row_at(ev.pos)
                         if row is not None:
@@ -529,15 +643,18 @@ def main() -> int:
                             record("FAIL")
                         elif replay_rect.collidepoint(ev.pos):
                             begin_with_trim(replay=True)
-            elif ev.type == pygame.MOUSEMOTION and dragging_trim:
-                dur = items[idx].get("duration", 0.0)
-                frac = (ev.pos[0] - seek_rect.x) / max(1, seek_rect.w)
-                trim_start = round(max(0.0, min(dur - 0.1, frac * dur)), 2)
+            elif ev.type == pygame.MOUSEMOTION and dragging_wave:
+                if sel is not None:
+                    sel = (sel[0], wave_time_at_x(ev.pos[0]))
             elif ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
-                if dragging_trim:
-                    dragging_trim = False
-                    if trim_start > 0:
-                        begin_with_trim(replay=True)
+                if dragging_wave:
+                    dragging_wave = False
+                    # A press that never moved is a click, and a click means "play from
+                    # here" — the same thing the seek bar does. Only an actual drag
+                    # leaves a region behind for X to splice out.
+                    if sel is not None and abs(sel[1] - sel[0]) < MIN_SPLICE_S:
+                        play_from(sel[0])
+                        sel = None
 
         player.tick()
         item = items[idx]
@@ -572,17 +689,18 @@ def main() -> int:
             screen.blit(font_small.render("\u25bc", True, DIM), (LIST_W - 16, WINDOW_H - 16))
 
         # Right: detail panel
-        panel_rect = pygame.Rect(LIST_W + 20, 20, WINDOW_W - LIST_W - 40, WINDOW_H - 130)
+        panel_rect = pygame.Rect(LIST_W + 20, 20, WINDOW_W - LIST_W - 40, ROW_HINTS - 34)
         pygame.draw.rect(screen, PANEL, panel_rect, border_radius=10)
 
         progress = font_h2.render(f"{idx + 1} / {len(items)}", True, DIM)
-        screen.blit(progress, (detail_x, 36))
+        screen.blit(progress, (detail_x, ROW_PROGRESS))
 
         head = font_h1.render(f"{item['stop']}", True, FG)
-        screen.blit(head, (detail_x, 72))
+        screen.blit(head, (detail_x, ROW_TITLE))
 
-        sub = font_body.render(f"{item['pa']}.mp3   {item['duration']:.1f}s", True, DIM)
-        screen.blit(sub, (detail_x, 110))
+        edited_mark = "  ·  edited this session" if item["pa"] in edited_this_run else ""
+        sub = font_body.render(f"{item['pa']}.mp3   {item['duration']:.1f}s{edited_mark}", True, DIM)
+        screen.blit(sub, (detail_x, ROW_SUB))
 
         # Note row
         pa = item["pa"]
@@ -614,43 +732,48 @@ def main() -> int:
                 placeholder = font_body.render("\u270e  (click to add note)", True, (90, 90, 100))
                 screen.blit(placeholder, (note_rect.x + 4, note_rect.y + 2))
 
-        offset_str = f" [from {trim_start:.2f}s]" if trim_start > 0 else ""
-        if player._scrub:
-            phase_label = f"scrubbing from {trim_start:.1f}s — listen for voice onset"
-        else:
-            phase_label = {
-                "HEAD": f"playing head  [0 → {PREVIEW_DURATION:.0f}s]",
-                "GAP": "head done — loading tail...",
-                "TAIL": f"playing tail  [{PREVIEW_DURATION:.0f}s from end]",
-                "DONE": "playback done — verdict?",
-                "IDLE": "",
-            }.get(player.state, "")
-        phase_color = ACCENT if player.state in ("HEAD", "TAIL") else DIM
+        from_t = scrub_from if scrub_from is not None else 0.0
+        phase_label = {
+            "PLAYING": f"playing from {from_t:.2f}s → end",
+            "DONE": "playback done — verdict?",
+            "IDLE": "",
+        }.get(player.state, "")
+        phase_color = ACCENT if player.state == "PLAYING" else DIM
         phase = font_h2.render(phase_label, True, phase_color)
-        screen.blit(phase, (detail_x, 160))
+        screen.blit(phase, (detail_x, ROW_PHASE))
 
         dur = item["duration"]
         pos = player.position()
         if dur > 0 and pos is not None and pos > dur:
             pos = dur
 
-        draw_seek_bar(screen, seek_rect, dur, pos, font_small, trim_start=trim_start)
+        # PA files carry no sta_cut, so the waveform draws no cut marker.
+        draw_wave(screen, wave_rect, item["path"], dur, sel, None, font_small)
+        draw_seek_bar(screen, seek_rect, dur, pos, font_small, trim_start=trim_start, trim_end=trim_end)
 
-        # Trim status line
-        if trim_start > 0:
-            new_dur = dur - trim_start
-            trim_msg = f"pending trim: -{trim_start:.2f}s start  →  new dur {new_dur:.2f}s"
-            screen.blit(font_small.render(trim_msg, True, TRIM_OVERLAY), (detail_x, 268))
+        # Pending-edit status lines
+        status_y = ROW_STATUS
+        if trim_start > 0 or trim_end > 0:
+            new_dur = dur - trim_start - trim_end
+            trim_msg = f"pending trim: -{trim_start:.2f}s head  -{trim_end:.2f}s tail  →  new dur {new_dur:.2f}s   [T apply]"
+            screen.blit(font_small.render(trim_msg, True, TRIM_OVERLAY), (detail_x, status_y))
+            status_y += STATUS_LINE
+        if sel is not None:
+            a, b = sorted(sel)
+            sel_msg = f"selection: [{a:.2f}s → {b:.2f}s]  {(b - a) * 1000:.0f}ms   [X splice it out]"
+            screen.blit(font_small.render(sel_msg, True, TRIM_OVERLAY), (detail_x, status_y))
 
         if edit_mode:
             hint = font_body.render("Enter save   Esc cancel", True, ACCENT)
+            screen.blit(hint, (detail_x, ROW_HINTS))
         else:
             hint_lines = [
                 "P pass   F fail   R replay   E edit note   ↑↓ navigate   Q quit",
-                "Trim:  drag seek bar  or  [/] adjust   T apply   Z reset   (Shift = fine 0.01s)",
+                "Click anywhere on the waveform or seek bar to play from there",
+                "Trim: [/] head  ,/. tail  T apply   ·   Drag waveform: X splice  U undo  Z clear",
             ]
-            screen.blit(font_body.render(hint_lines[0], True, DIM), (detail_x, WINDOW_H - 148))
-            screen.blit(font_body.render(hint_lines[1], True, DIM), (detail_x, WINDOW_H - 124))
+            for n, line in enumerate(hint_lines):
+                screen.blit(font_body.render(line, True, DIM), (detail_x, ROW_HINTS + n * HINT_LINE))
 
         draw_button(screen, pass_rect, "PASS  (P)", PASS_COLOR, font_btn, pass_rect.collidepoint(mouse))
         draw_button(screen, fail_rect, "FAIL  (F)", FAIL_COLOR, font_btn, fail_rect.collidepoint(mouse))
