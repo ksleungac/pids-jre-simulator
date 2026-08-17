@@ -10,7 +10,7 @@ triggers:
 
 ## Purpose
 
-Reproduce the PyInstaller build locally: produce a one-file exe with version metadata embedded, stage the distribution folder (`dist-release/JRE-PA-Simulator/`), and stop there. Zipping and GitHub release are separate, opt-in steps — `release.ps1` is the all-in-one path; this skill is the "just build and let me test" path.
+Reproduce the PyInstaller build locally: produce a one-file exe with version metadata embedded, stage the distribution folder (`dist-release/JRE-PA-Simulator/`), and stop there. Zipping and GitHub release are separate, opt-in steps — `/release` picks up from the artifacts this skill stages (the old all-in-one `release.ps1` was retired in `9bfe431`); this skill is the "just build and let me test" path.
 
 ## Required input
 
