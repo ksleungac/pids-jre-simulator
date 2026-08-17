@@ -64,6 +64,6 @@ Recording the ground we've explicitly decided NOT to walk, so future sessions do
 - **Full-desktop OCR** instead of window-bound capture. Privacy + perf concerns.
 - **Tesseract-based OCR.** Too heavy; pixel-perfect template match works.
 - **Mac build.** The companion game (JR EAST Train Sim Real) is Windows-only — no Mac audience exists for this app. Not worth the porting cost.
-- **Scaling to lines the game already covers** (Sobu local, Yokosuka, etc. — newer game routes ship with PA, don't duplicate).
+- ~~**Scaling to lines the game already covers**~~ — **rescoped 2026-08-15, no longer closed off.** Gaps-first is a *priority* rule, not a permission rule: a post-cutoff route the game already voices is still worth building when wanted, and the gap list is nearly exhausted. What stays closed is duplicating a route's PA *in order to compete with the game's own recordings* — that contest is unwinnable against the operator's source audio and was never the point. See [COVERAGE.md](docs/COVERAGE.md).
 - **In-car advertising / news / weather screen.** IRL the pair of screens above a door splits duties — one runs service info, the other ads. Only the service screen is modelled, deliberately: the ad content is out of scope. Author-stated 2026-08-18.
 - **OCR-as-display-layer fidelity-purity argument.** OCR is an *input layer* (replaces PageDown press), not display. Don't recycle.

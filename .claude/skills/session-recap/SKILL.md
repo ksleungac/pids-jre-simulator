@@ -108,6 +108,7 @@ Consult this before ANY doc write, not only at recap time.
 | Primitive-scoped rules (never SysFont, never `Path(__file__).parent`, path resolution via `app_paths`) | `conventions.md` AND inline `# CONTRACT:` at known call sites | rules files alone |
 | Mock route layout, test-station roles | `audio/_mock/main/README.md` | rules files |
 | Per-line IRL + sim quirks | `audio/README.md` | rules files, CLAUDE.md |
+| Game-vs-app route coverage, diagram gaps, what to build next | `docs/COVERAGE.md` | CLAUDE.md (mental model keeps only the scope fence + that coverage is dated), GitHub Issues |
 | Values that shape judgment | `.claude/rules/principles.md` | CLAUDE.md |
 | Style, naming, tooling | `.claude/rules/conventions.md` | CLAUDE.md |
 | Red lines | `.claude/rules/redlines.md` | CLAUDE.md |
