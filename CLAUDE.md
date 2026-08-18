@@ -18,8 +18,9 @@ Run `uv run _harness/session_init.py` — dumps today's + yesterday's memory, ME
 
 ## Working loop (GitHub Issues)
 
-Backlog = **GitHub Issues** ([repo issues](https://github.com/ksleungac/pids-jre-simulator/issues)). `TODO.md` is now only a pointer + the closed-off-paths ledger. Area labels: `auto-input` · `display` · `chrome-i18n` · `distribution` · `housekeeping` · `review-finding` · `build-incident`.
+Backlog = **GitHub Issues** ([repo issues](https://github.com/ksleungac/pids-jre-simulator/issues)) — **strictly defects and near-term implementation tasks, nothing else**. `TODO.md` holds the two things that are not issues: **§ Directions** (wanted, not yet scoped) and the **closed-off-paths ledger** (decided never). `_harness/session_init.py` prints the Directions headings at session start. Area labels: `auto-input` · `display` · `chrome-i18n` · `distribution` · `housekeeping` · `review-finding` · `build-incident`.
 
+- **Never close an issue opened by someone else** unless the author says to. An outside contributor's ticket is theirs; closing it is an outward-facing act on their contribution, and "it's covered by a doc now" is not a reason. 2026-08-18: author — *"don't close other people's issue unless i say so."*
 - **Pick up** an issue → `gh issue edit <N> --add-label in-progress` + a stamp comment (so a concurrent session/PC sees it's taken — don't double-pick).
 - **Park** it → swap `in-progress` for `deferred` + a one-line reason comment.
 - **Finish** → the commit carries `Closes #<N>` (progress commits: `Refs #<N>`); pushing to `master` auto-closes. See `/commit`.
@@ -34,6 +35,8 @@ Test: *if I finish this, does what the user can do change?* No → it's a commit
 | **Plain issue** | one outcome, one sitting — most things |
 | **Parent + sub-issues** | outcome spans sessions/stages. `gh issue edit <parent> --add-sub-issue <N>` (gh ≥ 2.96). Parent tracks `completed/total` natively and closes when the outcome is real; each stage closes as it lands |
 | **Not an issue** | no user-visible change |
+
+**Refined-ness is a SECOND gate, after outcome-ness.** A feature named in a mental-model conversation is not a ticket, even when it genuinely is an outcome the author wants — a want is not a scope. File it once there is a mechanism to build, not when it is first spoken. (2026-08-18: three issues opened off one such conversation; two closed within the hour. Author — *"unless it's really refined, don't open as an issue … don't want my gh to be flooded with issues."*) Closing one of these is **not** a closed-off path — it does not go in the `TODO.md` ledger, because the author does intend to return to it; it is unscoped, not abandoned. It goes to **`TODO.md` § Directions**, whose headings `session_init.py` prints at session start — which is the moment the author asks what to work on, and the moment a domain doc is NOT open. Each entry carries its own description, so picking one up later needs no re-explaining; that re-stating is the actual pain a ticket was standing in for. Promote = scope it, open an issue, delete the entry. Abandon = move it down into the closed-off ledger. (2026-08-18, via `/third-man`: the question is not where the text lives, it is what PUSHES it at session start — `principles.md` § "Natural adoption gates tool value".)
 
 **`Closes #N` only when you did everything #N describes.** Doing less is a signal the scope was wrong — fix by splitting a stage out **under** the outcome, never by closing it and opening a peer. A peer orphans the outcome: the two tickets read as unrelated, so the feature has no single tracking home. (2026-07-20: closed #71 "window mirroring" after shipping only its display-only stage and filed stage 2 as a sibling; user — *"can you not closes the issue just for a new stage?"*. Restructured to #71 parent → #77 stage 1 / #76 stage 2.)
 
@@ -65,7 +68,7 @@ What this project is modeling. Keep in head — shapes every design decision. Im
 - **Lines** — only build for routes the game does NOT already ship recordings for. The lines in `audio/` are old routes the game hasn't touched.
 - **Diagrams** — full-line diagram is canonical per route. Other diagrams only worth building for a **different stopping pattern** (rapid vs local, etc.).
 
-**Distribution is lightly public** — GitHub + YouTube (~1800 plays), some railfans use it. **Fidelity bar is high:** elements iterate against IRL reference photos until pixel-correct. "Good enough" is rejected.
+**Distribution is lightly public** — GitHub + YouTube (~1800 plays). Some of those users are **active collaborators, not passive downloaders**: they trade IM / email with the author, know the data model and the OCR pipeline, and test on their own hardware — the re-entry departure-PA bug came from a viewer's testing. So a defect that will not reproduce here is not a dead end; the reporter is an instrument (`critical_lessons.md §§7–8`). **Fidelity bar is high:** elements iterate against IRL reference photos until pixel-correct. "Good enough" is rejected.
 
 ### Distribution & deployment artifact
 
@@ -81,10 +84,9 @@ Build mechanics live in `/build` skill.
 
 **Mature phase** — heavy architecture done, audio pipeline mature, visual fidelity high. Future work:
 
-- **Steady state**: new train models (E235-0 Yamanote next, then E231-500 / E233 — re-skin, not re-architecture) + display fidelity polish.
-- **Two speculative side-quests competing for budget:**
-  - **OCR automation** — template-match game HUD at ~5 Hz on window-bound capture. Closes the 3-year companion-app loop. **1080p is the canonical resolution and the absolute-stability target** — the multi-resolution path downscales every input to 1080p, so the crisp higher-native 1440p is not the bar; the real user's softened 1080p capture is (`WIP_ocr_multiresolution.md`, `critical_lessons.md §7`).
-  - **Distribution polish** — signed installer, first-run smoothness.
+- **Steady state**: new train models (**E233-0 next** — a re-skin, and its LCD is close to E233-1000's, so one skin serves both Chūō and Keihin-Tōhoku, whose audio already ships) + display fidelity polish.
+- **OCR auto-drive is the PRIMARY interface, not a side-quest.** Assume every user runs it — it was the most-requested feature and is how the app is actually used (author, 2026-08-18). Template-match game HUD at ~5 Hz on window-bound capture. **1080p is the canonical resolution and the absolute-stability target** — the multi-resolution path downscales every input to 1080p, so the crisp higher-native 1440p is not the bar; the real user's softened 1080p capture is (`WIP_ocr_multiresolution.md`, `critical_lessons.md §7`). The one remaining user-facing gap is **unusual aspect ratios**, which is what makes resolution support outrank the rest of this list.
+- **Distribution polish** — signed installer, first-run smoothness. Real, and secondary to the above.
 - **Closed-off** (don't re-propose): memory hooking `*saf.dll`, decrypting SimDATA, audio fingerprinting, full-desktop OCR, tesseract, scaling to lines the game already covers, Mac build.
 
 ### Train family

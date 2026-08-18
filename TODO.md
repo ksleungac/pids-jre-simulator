@@ -10,6 +10,42 @@ Only the **closed-off paths** ledger stays in-repo below — it's an anti-backlo
 
 ---
 
+## Directions — wanted, not yet scoped
+
+Paths the author intends to walk **some day**, held here rather than as GitHub Issues: a direction has no closure event, so as a ticket it reads as owed work forever. The opposite pole of the closed-off ledger below — these are *yes, later*, not *never*.
+
+Each entry carries its own description on purpose, so picking one up needs no re-explaining. `_harness/session_init.py` prints these headings at session start. Promoting one = scope it, open an issue, delete the entry here. Abandoning one = move it down into the closed-off ledger.
+
+### Standalone on a phone or tablet, without the PC
+
+Today the app mirrors its window to a browser (`--stream` / `--stream-lan`), which still needs the PC running. Running on the device *alone* is a different thing, and it stays open rather than rejected. A port was weighed and declined: it means owning two renderers, so every train model and every calibration round is paid for twice on a project whose whole value is calibration fidelity; `audio/` is ~585 MB and not bundleable into a mobile build; and OCR auto-drive is structurally PC-only, so a standalone build permanently forks the product into with-auto-drive and without. If real demand appears the path is pygbag/WASM with per-route asset download, because it reuses the renderer instead of duplicating it. Full reasoning: `WIP_frame_streaming.md` § "Why streaming and not a port". *(#1 "提案：探索移动端 / 平板电脑支持" stays OPEN — it is an outside contributor's issue, not ours to close)*
+
+### The mirrored window becomes a real second screen
+
+Stage 1 ships: the whole app window mirrors over HTTP, so the display can sit on a tablet instead of covering the game — which is the actual point, screen real estate, not fidelity. What is left is the rest of that idea: touch input from the remote device, an in-app toggle instead of launch flags, and making the stream faster (the author's own next-release wish). Touch has a prerequisite nobody has built — a shared window↔LCD coordinate transform, because `_handle_lcd_click` and `_update_hover_cursor` both subtract a fixed panel height today and silently misfire the moment a scaled surface is involved. Locked design decisions and the stage-2 spec: `WIP_frame_streaming.md`. *(was #71, #73, #76)*
+
+### OCR that does not misread, rather than OCR that guards its misreads
+
+Accuracy today is earned through a stack of guards layered on the reader. The target is no misreads at all, which is a fair bar for a fixed font at a fixed size in a fixed position — real-world OCR handles handwriting and photographs. Rate measured at roughly 1 misread per 960 samples before the 2026-07-22 fixes. Four approaches, all measured that day: register glyphs by centroid/moments instead of a threshold-derived bounding box, because the box's own edges move when the threshold clips a column, so the registration frame itself shifts; slice digit cells by known geometry instead of rediscovering the layout from column runs every frame, which deletes a failure class rather than guarding it; fuse several frames before reading, since the driver samples ~3 Hz from a 60 fps source and discards 19 of every 20; and separate empty-cell detection from the adaptive threshold, which sits pinned at its clamp ceiling on ~82% of bright-content frames. *(was #91 parent + #92, #93, #94, #95)*
+
+### Auto-drive fires more of what a driver would
+
+Three wants against the same surface. **Multi-PA stops** — `_next_pa()` plays one announcement per call, so a transfer hub with three auto-fires only the first and the user presses for the rest; either space several `pending_next_pa` flags by audio duration, or chain them. **STA auto-fire** — deliberately not modelled, because the departure melody is the station master's IRL and not the driver's; the plumbing exists if that ever changes. **Announcements anchored to distance rather than to a press** — IRL the PA is geographic, and the arrival side already works that way (`arrival_lead_m`, 900 m base), while the 次は side fires on entering APPROACHING instead. The author's proposed shape is to carry the trigger distance in the PA filename, `d1234` = fires below 1234 m, which fits `principles.md` § "Filename-as-store" and needs no schema change. Only meaningful under auto-drive; manual has no distance to anchor to. *(was #9, #12, #124)*
+
+### Transfer info covers every station, on every model
+
+The pipeline is built and verified against ~48 stations. Filling it out is blocked deliberately: adding stations only pays once the models that render them exist, so it waits on E233. Three parked threads — populating `stations.json` beyond the current corpus, prioritising stations served by at least one LCD-equipped line, with `transfers_by_view` entered as raw observations and never derived; declaring E233's own badge policy when that model lands, since its sub-series render some entries as colour squares rather than icons and that belongs in its own `transfer_info.py` rather than a parameterised DSL; and the English size trade-off, with the shinkansen row parked at 12 pt. *(was #20, #21, #23)*
+
+### The 585 MB corpus gets smaller
+
+Two levers, neither taken. Encoding runs 75–321 kbps at 48 kHz stereo and much of it is mono content in a stereo container; normalising to ~96–128 kbps mono would take the corpus to roughly 250–350 MB, a bigger lever than pooling was — and it is lossy and irreversible, so it wants a deliberate decision rather than a sweep. Separately, different stations often play the same melody (高尾 / 荻窪 / 西八王子 share one; ~57 MB of such duplication corpus-wide), which the per-line pool cannot collapse because each file is the melody *plus* that station's own closing announcement, so no two files are actually identical. Collapsing them means splitting the two apart and changing how STA plays. *(was #119, #120)*
+
+### Display fidelity threads waiting on evidence
+
+Three that cannot proceed until something external arrives. **Pale-brand line colours** — Sōbu yellow `#FFD400` and Yamanote yellow-green render at full saturation and would be hard to read as eyebrow text on a white card; a W3C relative-luminance darkening was drafted and reverted, waiting on a drive recording that shows the problem for real. **Passing stations in the 5-station view** — drawn as an empty countdown ring, a degenerate reuse of a calibrated primitive; the proper native chevron needs calibration that does not exist. **Terminus fidelity** — the 8-station lock and the E235-0 ahead-walks measure to `len(stops)` rather than `dest_stop_idx`, which only shows on a route whose data runs past its operational terminus; blocked on a Sōbu reference photo of what the real display does there. **The E235-0 5-station view's own finetune sits here too** — marker sizes, positions and sweep timing, plus a re-probe of Yamanote's `contrast_color` (currently `[101,20,5]`, taken off a maxresdefault frame where JPEG clips saturated red; it wants a cleaner reference shot). *(was #2, #14, #99, #103)*
+
+---
+
 ## Closed-off paths (don't re-propose)
 
 Recording the ground we've explicitly decided NOT to walk, so future sessions don't re-litigate:
@@ -21,4 +57,5 @@ Recording the ground we've explicitly decided NOT to walk, so future sessions do
 - **Tesseract-based OCR.** Too heavy; pixel-perfect template match works.
 - **Mac build.** The companion game (JR EAST Train Sim Real) is Windows-only — no Mac audience exists for this app. Not worth the porting cost.
 - **Scaling to lines the game already covers** (Sobu local, Yokosuka, etc. — newer game routes ship with PA, don't duplicate).
+- **In-car advertising / news / weather screen.** IRL the pair of screens above a door splits duties — one runs service info, the other ads. Only the service screen is modelled, deliberately: the ad content is out of scope. Author-stated 2026-08-18.
 - **OCR-as-display-layer fidelity-purity argument.** OCR is an *input layer* (replaces PageDown press), not display. Don't recycle.

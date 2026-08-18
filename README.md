@@ -35,7 +35,9 @@ From [**Releases**](https://github.com/ksleungac/pids-jre-simulator/releases/lat
 
 Pick a line and diagram on the setup screen, press Enter to start.
 
-**Page Down drives everything.** The simulation is fully manual — the train doesn't advance on a timer; every announcement and every stop happens only when you press Page Down.
+**Automatic or manual.** The simulator can read the game's own on-screen display and play each announcement at the right moment — press **OCR Auto Start** on the PA-setting screen, then just drive. It needs the game running on your primary monitor at a supported resolution. This is how most people run it.
+
+**Driving manually, Page Down drives everything.** The train doesn't advance on a timer — every announcement and every stop happens when you press Page Down.
 
 | Key | Action |
 |-----|--------|
@@ -55,6 +57,7 @@ The upper LCD cycles between Japanese, Furigana, and English. Major JR East inte
 - More route diagrams
 - Additional LCD styles (E233-0, E231, …)
 - Enhanced Lower LCD
+- Support for more screen sizes and aspect ratios
 
 ---
 

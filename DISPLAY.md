@@ -147,6 +147,20 @@ To freeze the language AND the lower's slot together, set `scheduler.enabled = F
 
 ---
 
+## IRL divergences (deliberate)
+
+Where the simulator knowingly departs from a real E235. Each row is a design choice with a reason — a fidelity finding filed against any of them is a false positive. IRL column is author-stated, 2026-08-18.
+
+| IRL | Simulator | Why |
+|---|---|---|
+| Upper's language change and lower's content change run on **independent rhythms** | One `ChangeScheduler` drives both on a shared beat under one floor | Two uncoordinated clocks produced sub-second view flashes (#78); the coupling IS that fix |
+| Transfer info surfaces around the **second flip after stopping** | `at_station` rising edge force-switches to TRANSFER at once, bypassing the floor | Transfer info is why the stop matters; immediacy was chosen over fidelity |
+| The route bar is a **minority** of lower-screen time — delays, お知らせ and general info each take a turn, and there are many of them | Two or three slots rotate, so the route bar dominates | The other content types do not exist here; there is nothing to rotate against |
+| The display advances to the next station **when the train starts moving** | Advances when the announcement audio finishes | Manual drive has no motion signal at all; under OCR auto-drive the speed read supplies one |
+| Every door has its own screen, and only the **opening side** shows the arrival content (door state, transfer info, stair / escalator position) | One screen, content keyed to the stop | No door-side data axis exists |
+
+---
+
 ## Change scheduler
 
 `ChangeScheduler` (`displays/base.py`) is the single owner of every discrete view change. Constructed in `app.py` beside upper/lower; ticked once per frame from the main loop, after `update_skip_progress` (slot membership reads `cursor_pos`) and before both draws.

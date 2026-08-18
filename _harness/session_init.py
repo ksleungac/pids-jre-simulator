@@ -2,7 +2,8 @@
 """Session initialization — dump memory context + GitHub-Issues backlog in one shot.
 
 Replaces 3-4 separate Read calls at session start.
-Outputs: today's memory, yesterday's memory, MEMORY.md index, GitHub-Issues backlog summary.
+Outputs: today's memory, yesterday's memory, MEMORY.md index, GitHub-Issues backlog
+summary, and the TODO.md long-term directions (which are deliberately NOT issues).
 
 Usage:
     uv run _harness/session_init.py
@@ -179,6 +180,33 @@ def gh_backlog(stale_days=14, closed_lookback_days=3):
     print()
 
 
+def directions():
+    """Print the TODO.md "Directions" headings — long-term paths that are NOT issues.
+
+    A direction has no closure event, so it cannot live in the tracker without
+    reading as owed work forever. It lives in TODO.md and gets PUSHED here at
+    session start, because that is the moment the author asks what to work on.
+    Each entry in that file carries its own description; only headings print."""
+    todo = Path(__file__).resolve().parent.parent / "TODO.md"
+    if not todo.exists():
+        return
+    lines = todo.read_text(encoding="utf-8").splitlines()
+    titles, inside = [], False
+    for ln in lines:
+        if ln.startswith("## "):
+            inside = ln.startswith("## Directions")
+            continue
+        if inside and ln.startswith("### "):
+            titles.append(ln[4:].strip())
+    if not titles:
+        return
+    print(f"=== Directions — wanted, not yet scoped ({len(titles)}) ===")
+    for t in titles:
+        print(f"  · {t}")
+    print("  full description per entry: TODO.md § Directions")
+    print()
+
+
 def main():
     git_sync()
 
@@ -230,6 +258,7 @@ def main():
         print(f"=== Harness integrity check failed: {e} ===\n")
 
     gh_backlog()
+    directions()
 
 
 if __name__ == "__main__":
