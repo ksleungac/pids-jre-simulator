@@ -145,6 +145,7 @@ Anything you cannot fix AND that does not need the user is **dropped** — named
 
 For each finding, in order:
 
+0. **Is it a Lens-1 finding with no `trigger`?** → drop it, one line in the cycle report. `review-dirty` § "Trace gate" forces these to `info`; a mechanism nobody can reach is not a defect, and "fixing" it means adding a guard for a case that cannot occur. Do NOT harden against an untriggerable path.
 1. **Can you fix it?** → fix it now, in this cycle. Regardless of severity. This is the overwhelming majority.
 2. **Can't fix it, and it needs the user's judgment** (design direction · product-use-critical · real implication for them) → **ask them in the session**. That is the outlet, not a ticket. File an issue only if they defer it, or if the session is ending with the question unanswered.
 3. **Can't fix it, doesn't need the user** → drop it. One line in the cycle report saying what you saw and why you left it. No issue.

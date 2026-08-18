@@ -160,6 +160,19 @@ Severity: a stale / false-green test → `critical` (it actively misleads); a mi
 - `warning` — Lens 2 smell that is not on the exception list, OR Lens 1 issue that does not break anything but should be fixed
 - `info` — uncertain findings, ASK-before-confidently-flagging items, low-confidence smells
 
+## Trace gate — a behavioral finding must carry its execution trace (Lens 1 only)
+
+Before a Lens-1 correctness finding may be reported above `info`, write the path that produces it:
+
+- **Premises** — the state the code is in when the path is entered (what is set, what was read, which branch armed it).
+- **Trace** — the steps from that state to the wrong outcome, naming the actual lines.
+- **Divergence** — the one step where behavior departs from what the code intends.
+- **Trigger** — a concrete input or sequence a person could perform to reach it: a keypress order, a route + stop, an OCR sample, an absent-settings first run.
+
+**Cannot fill Trigger → the finding is `info`, never higher.** A mechanism with no reachable trigger is the shape `CLAUDE.md` § \"Issue scope\" already bars — real mechanism, real consequence, nothing joining them. Downgrade, never suppress: uncertainty lowers severity, it never deletes the finding.
+
+**Scope is Lens 1 behavioral claims ONLY.** Lens 2 / 3 / 4 findings are structural — a `_*/` import, a literal that should derive, a stale docstring, a missing test. They have no execution semantics to trace, and demanding one turns the gate into paperwork that costs turns and proves nothing. Naming the rule and the site IS the proof there.
+
 ## DO NOT:
 - Make any changes to code
 - Commit anything
@@ -191,6 +204,8 @@ $ARGUMENTS
       \"issue\": \"Brief description\",
       \"severity\": \"architectural-critical\",
       \"rule_citation\": \"<doc section> or null\",
+      \"trace\": \"Lens 1 only — premises → steps → divergence. null for Lens 2/3/4\",
+      \"trigger\": \"Lens 1 only — concrete input/sequence reaching it. null forces severity to info\",
       \"suggestion\": \"Specific fix suggestion\"
     }
   ],
