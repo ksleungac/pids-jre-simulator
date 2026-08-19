@@ -14,7 +14,7 @@ What backs `font` depends only on whether the font files are present:
   ATLAS   served from a baked atlas. No font files need to exist.
 
 # CONTRACT: LCD renderers resolve fonts through lcd_font() — never a bare
-# pygame.font.Font(), never pygame.font.SysFont(). See WIP_font_atlas.md.
+# pygame.font.Font(), never pygame.font.SysFont(). See docs/wip/WIP_font_atlas.md.
 # A renderer that constructs its own Font bypasses this seam: it keeps working
 # in dev, where the fonts exist, and fails in a build that ships none — the
 # invisible-in-dev failure mode critical_lessons.md §4 is about.
@@ -297,7 +297,7 @@ def lit(*strings: str) -> Source:
 # `split=True` tracks a data-format convention: a space inside a station name
 # means "render over two vertical lines", so `さいたま 新都心` is drawn as
 # `さいたま` + `新都心` — two strings that are values in no JSON file. See
-# DATA_FORMAT.md § "Station names". The validator surfaced this on keihin/727B;
+# docs/DATA_FORMAT.md § "Station names". The validator surfaced this on keihin/727B;
 # before the declaration, both parts were in the atlas only because that stop
 # happens to be reachable.
 STATION_NAMES = at(

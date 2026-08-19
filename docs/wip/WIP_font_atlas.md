@@ -444,7 +444,7 @@ combos still owe their coverage to reachability.
 some state happened to reach it:
 
 - `さいたま` / `新都心` — a space inside a station name is the data format's own two-line break marker
-  (author, 2026-07-30). Was undocumented; now in `DATA_FORMAT.md`, and `STATION_NAMES` carries
+  (author, 2026-07-30). Was undocumented; now in `docs/DATA_FORMAT.md`, and `STATION_NAMES` carries
   `split=True`.
 - `·` and the `·`-split parts of a line name — `compact_dots` swaps the JSON's `・` for a narrower
   U+00B7 and `render_with_dot_pad` then renders each part *and* the dot alone. Neither the substituted

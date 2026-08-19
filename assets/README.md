@@ -7,7 +7,7 @@ README screenshots for all three READMEs (EN / zh-HK / zh-CN).
 **When updating screenshots, treat as a data task — read before regenerating:**
 
 - `audio/README.md` — per-line layout. Every shipped line is pooled: `audio/<line>/{pa,sta}/` shared, `audio/<line>/<diagram>/route.json` alongside
-- `DATA_FORMAT.md` — where data lives (transfers → `data/stations.json` keyed by station name, not `route.json` stops)
+- `docs/DATA_FORMAT.md` — where data lives (transfers → `data/stations.json` keyed by station name, not `route.json` stops)
 
 ## Files
 

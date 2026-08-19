@@ -15,9 +15,9 @@ Run: `uv run main.py --stream` → `http://127.0.0.1:8541/` · `--stream-lan` fo
 ## EDIT-CONTRACT
 
 - **Holds:** the locked spec, the rejected alternatives (so they are not re-proposed), and transitional notes while the feature is in flight.
-- **Does NOT hold:** anything already true of shipped code — that belongs in `APP.md`. Measurements that stop being decision-relevant get cut, not archived.
+- **Does NOT hold:** anything already true of shipped code — that belongs in `docs/APP.md`. Measurements that stop being decision-relevant get cut, not archived.
 - **Rejected alternatives stay** until graduation — they are the record of what was already considered.
-- **Graduation trigger:** when mirroring becomes a real user-facing feature (an in-app toggle rather than a launch flag), dissolve into `APP.md` (§ streaming) and delete this doc. Single-commit restructure, no parallel-existence period. Stage 1 shipping as a launch-flag-only feature is NOT the trigger — the doc still holds the stage-2 spec and the rejected alternatives.
+- **Graduation trigger:** when mirroring becomes a real user-facing feature (an in-app toggle rather than a launch flag), dissolve into `docs/APP.md` (§ streaming) and delete this doc. Single-commit restructure, no parallel-existence period. Stage 1 shipping as a launch-flag-only feature is NOT the trigger — the doc still holds the stage-2 spec and the rejected alternatives.
 
 ---
 

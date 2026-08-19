@@ -373,7 +373,7 @@ Launching it from the Bash tool works — audio reaches the speakers (2026-07-25
 `{prev-station}-dep-{direction}[-{type}].mp3` / `{this-station}-arr-{direction}[-{type}].mp3`
 
 Every line is pooled, so PA files from every diagram share one folder and the name has to
-survive that. Full grammar and rationale → `DATA_FORMAT.md § Pool filename grammar`.
+survive that. Full grammar and rationale → `docs/DATA_FORMAT.md § Pool filename grammar`.
 
 - **`{direction}` is mandatory, even on a one-direction line.** Take it from the route's own
   `remarks.direction`, never pick one: 上り→`up`, 下り→`down`, 南行/北行→`south`/`north`,
@@ -463,6 +463,6 @@ After split + route.json update lands: if this work surfaced anything line-speci
 - **sta-make** skill — STA (departure melody + closing-door) processing. Different conventions; `sta_cut` placement + by-ear verification have no PA analog.
 - **split-audio** skill — generic continuous-source splitter for a new route. Pa-make's Step 3 splitter pattern is the PA-specific variant.
 - `audio/README.md` — per-line IRL + sim quirks catalog (write-gate target above).
-- `DATA_FORMAT.md` — `route.json` schema reference.
+- `docs/DATA_FORMAT.md` — `route.json` schema reference.
 - `validate_data.py` — checks that audio files referenced by routes exist on disk.
-- [feedback_proactive_skill_updates.md](../../../memory/feedback_proactive_skill_updates.md) — reminder to update this skill inline when new lessons surface (new homophones, new special cases).
+- Update this skill inline when new lessons surface (new homophones, new special cases).

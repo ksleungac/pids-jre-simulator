@@ -6,7 +6,7 @@
 # station translation merge, dest_furigana lookup) to produce the runtime
 # route_data. Renderers consume the runtime shape via direct key access -
 # no fallback logic, no recomputation per draw.
-# See DATA_FORMAT.md "Stop-Level Destination Override".
+# See docs/DATA_FORMAT.md "Stop-Level Destination Override".
 
 import json
 from pathlib import Path
@@ -38,7 +38,7 @@ def resolve_audio_root(work_dir, route_data: dict) -> Path:
     # track fails loud at its single resolved path. Note this is about SEARCH
     # ORDER, not about which root is the default: the resolved root depends
     # only on the declared value, never on what happens to be on disk.
-    # See DATA_FORMAT.md "audio_root Field".
+    # See docs/DATA_FORMAT.md "audio_root Field".
     """
     return (Path(work_dir) / route_data.get("audio_root", "..")).resolve()
 
@@ -114,7 +114,7 @@ def _resolve_frames(route_data: dict) -> None:
     Fails loud (KeyError / ValueError) on any unresolved station, bad line
     slug, non-abutting boundary, or incomplete coverage. The
     ``check_route_loads`` smoke test in validate_data.py exercises this at
-    validate time. See DATA_FORMAT.md § frames.
+    validate time. See docs/DATA_FORMAT.md § frames.
     """
     frames = route_data.get("frames")
     if not frames:

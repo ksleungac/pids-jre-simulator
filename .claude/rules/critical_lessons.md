@@ -131,7 +131,7 @@ The 1080p speed OCR dropped the decimal on ~40% of a user's frames (19.1 → "19
 
 **Pattern:**
 - Reproduce against the USER's captured artifact — run the production pipeline over their recording / uploaded frame; don't trust a fresh local capture to represent theirs.
-- The stable target is the DEGRADED case. For this project that is **1080p at real capture quality** — the planned multi-resolution path downscales all inputs to 1080p, so 1080p is canonical and must be absolutely stable (see `WIP_ocr_multiresolution.md`), NOT the crisp dev frame or the higher-native 1440p.
+- The stable target is the DEGRADED case. For this project that is **1080p at real capture quality** — the multi-resolution path downscales all inputs to 1080p, so 1080p is canonical and must be absolutely stable (`auto_input/README.md` § "Resolution handling"), NOT the crisp dev frame or the higher-native 1440p.
 - A detector resting on a feature at the binarization floor (one-pixel margin) is a bug even when it passes on dev — widen the tolerance.
 
 **Scope:** all OCR / vision reads; anything whose correctness depends on input pixel fidelity.

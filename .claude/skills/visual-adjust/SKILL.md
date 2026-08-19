@@ -206,7 +206,7 @@ When the work is about **region territory** (where an element's drawing should a
 - **Under-clears** — untinted patches *inside* what should be a fully-painted region mean the clear rect is smaller than the region's confinement
 - **Glyph escapes** — text/glyphs landing on top of a *neighboring* region's tint is a containment violation
 
-The principle: **anything a region draws (bg fill, glyphs, decorations) must visually stay inside that region's confinement.** Clear rect is not special — it's just one of the things drawn. Same rule for all of them. See `DISPLAY.md` "Element Clear-Background Convention" for the full statement.
+The principle: **anything a region draws (bg fill, glyphs, decorations) must visually stay inside that region's confinement.** Clear rect is not special — it's just one of the things drawn. Same rule for all of them. See `docs/DISPLAY.md` "Element Clear-Background Convention" for the full statement.
 
 ### Two checks: D1 (cheap) and D2 (real)
 
@@ -236,7 +236,7 @@ When pixel-probing for containment, **isolate the region** so neighbors' content
   glyph footprint. All three mode renderers (Japanese / Furigana / English) share the
   same territory for the same element. Adding a new region: register it in
   `_DEBUG_COLORS` AND the Region Map comment block at the top of the LCD module.
-  See `DISPLAY.md` "Element Clear-Background Convention" for full rules,
+  See `docs/DISPLAY.md` "Element Clear-Background Convention" for full rules,
   including the band-bottom clamp that prevents the station's tall 2-line variant
   from clobbering the prefix/clock above.
 - **Shell flakiness**: paths in this repo can vary between machines; rely on

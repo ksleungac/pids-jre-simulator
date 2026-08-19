@@ -85,7 +85,7 @@ Build mechanics live in `/build` skill.
 **Mature phase** — heavy architecture done, audio pipeline mature, visual fidelity high. Future work:
 
 - **Steady state**: new train models (**E233-0 next** — a re-skin, and its LCD is close to E233-1000's, so one skin serves both Chūō and Keihin-Tōhoku, whose audio already ships) + display fidelity polish.
-- **OCR auto-drive is the PRIMARY interface, not a side-quest.** Assume every user runs it — it was the most-requested feature and is how the app is actually used (author, 2026-08-18). Template-match game HUD at ~5 Hz on window-bound capture. **1080p is the canonical resolution and the absolute-stability target** — the multi-resolution path downscales every input to 1080p, so the crisp higher-native 1440p is not the bar; the real user's softened 1080p capture is (`WIP_ocr_multiresolution.md`, `critical_lessons.md §7`). The one remaining user-facing gap is **unusual aspect ratios**, which is what makes resolution support outrank the rest of this list.
+- **OCR auto-drive is the PRIMARY interface, not a side-quest.** Assume every user runs it — it was the most-requested feature and is how the app is actually used (author, 2026-08-18). Template-match game HUD at ~5 Hz on window-bound capture. **1080p is the canonical resolution and the absolute-stability target** — the multi-resolution path downscales every input to 1080p, so the crisp higher-native 1440p is not the bar; the real user's softened 1080p capture is (`auto_input/README.md`, `critical_lessons.md §7`). The one remaining user-facing gap is **unusual aspect ratios**, which is what makes resolution support outrank the rest of this list.
 - **Distribution polish** — signed installer, first-run smoothness. Real, and secondary to the above.
 - **Closed-off** (don't re-propose): memory hooking `*saf.dll`, decrypting SimDATA, audio fingerprinting, full-desktop OCR, tesseract, scaling to lines the game already covers, Mac build.
 
@@ -116,13 +116,13 @@ Behaviors true on real trains, mirrored by the simulator:
 - **Stop-level destination override.** Circular routes change destination mid-route.
 - **Station code badge** — 3-letter Roman for ~22 major interchange stations. Source: `data/stations.json`.
 - **Compound destinations** use `&` separator on real PIDS.
-- **English uses modified Hepburn with macrons** (Tōkyō, Chūō). Encoding details in [DATA_FORMAT.md](DATA_FORMAT.md).
-- **Through-service combined frame.** Modeled via `pre_stops` in route.json. See [DATA_FORMAT.md § "pre_stops Array"](DATA_FORMAT.md).
+- **English uses modified Hepburn with macrons** (Tōkyō, Chūō). Encoding details in [docs/DATA_FORMAT.md](docs/DATA_FORMAT.md).
+- **Through-service combined frame.** Modeled via `pre_stops` in route.json. See [docs/DATA_FORMAT.md § "pre_stops Array"](docs/DATA_FORMAT.md).
 - **PA and STA are independent audio sources** — overlap freely. PA on `mixer.music`, STA on dedicated `mixer.Channel`.
 
 ### App state machine
 
-Each stop: **APPROACHING_EARLY** → **APPROACHING_FINAL** → **STOPPING** → next stop. PageDown drives transitions; `jump_to_stop` lands in STOPPING@target. Full spec in [DISPLAY.md § Unified State Machine](DISPLAY.md).
+Each stop: **APPROACHING_EARLY** → **APPROACHING_FINAL** → **STOPPING** → next stop. PageDown drives transitions; `jump_to_stop` lands in STOPPING@target. Full spec in [docs/DISPLAY.md § Unified State Machine](docs/DISPLAY.md).
 
 **Auto-fire asymmetry:** APPROACHING auto-fires `pa[0]` (passive-listening window). STOPPING has no auto-fire — every `pa_at_station` entry plays only on user press.
 
@@ -162,7 +162,7 @@ pids_jre_simulator/
 ├── constants.py                       # Cross-model only: TIME_SCALE=60, FRAME_RATE=15, audio, setup palette
 ├── app_paths.py                       # Canonical project_root() — sole PyInstaller path resolver
 ├── font_atlas.py                      # LCD font seam: live fonts (dev) or pre-rendered atlas
-│                                       #   (ship). lcd_font() + text_parts(). WIP_font_atlas.md
+│                                       #   (ship). lcd_font() + text_parts(). docs/wip/WIP_font_atlas.md
 ├── i18n.py                            # App-chrome i18n: settings, locale detect, t(), font helper
 ├── frame_stream.py                    # Opt-in window mirroring over HTTP (--stream / --stream-lan)
 ├── route_loader.py                    # finalize_route: JSON → runtime closure with derived fields
@@ -182,11 +182,13 @@ pids_jre_simulator/
 │   ├── translations_app.json          # App-chrome strings (en / zh_HK / zh_CN)
 │   └── stations.json                  # Station metadata (3-letter codes)
 ├── auto_input/                        # OCR-driven auto-PA (driver + ocr + hud_layout)
-├── tims/                              # TIMS cab-console UI package (see APP.md)
+├── tims/                              # TIMS cab-console UI package (see docs/APP.md)
 │   ├── widgets.py                     # Draw primitives (bevel buttons, AA-off low-res text)
 │   ├── chrome.py                      # Shared vocabulary (PALETTE, button presets, role fonts)
 │   ├── band.py                        # Persistent status band (setup screens + live OCR panel)
 │   └── setup/                         # Setup/OOBE flow screens (tims.setup.run = entry)
+├── docs/                              # Domain docs — APP / DATA_FORMAT / DISPLAY / DISPLAY_E235
+│   └── wip/                           # In-flight design docs; each carries its own delete trigger
 ├── memory/                            # Daily logs + MEMORY.md index (untracked; canonical =
 │                                       #   origin/memory ref via _harness/publish_memory.py)
 └── audio/
@@ -197,7 +199,7 @@ pids_jre_simulator/
 ## Key Features
 
 1. **Display Cycling** (1 beat = 4s): KANJI → FURIGANA → ENGLISH. Destination always kanji.
-2. **Lower-LCD view alternation**: full-route ↔ 8-station zoomed (+ transfer when in window). One `ChangeScheduler` owns language + slot on a shared beat so no two changes collide — see [DISPLAY.md § Change scheduler](DISPLAY.md).
+2. **Lower-LCD view alternation**: full-route ↔ 8-station zoomed (+ transfer when in window). One `ChangeScheduler` owns language + slot on a shared beat so no two changes collide — see [docs/DISPLAY.md § Change scheduler](docs/DISPLAY.md).
 3. **Real-Time Countdown**: `TIME_SCALE=60`, floor division, forces "1" on last PA.
 4. **Station Skip**: Time-based red arrow progression through passing stations.
 5. **Single train-position index**: `state.curr_stop` is stored; `state.cursor_pos` is derived (lags during skip animation).
@@ -216,9 +218,9 @@ Yellow hint square = multiple PA tracks available.
 
 Consult when needed, not upfront:
 
-- **App architecture / setup flow** → [APP.md](APP.md)
-- **Data/JSON** → [DATA_FORMAT.md](DATA_FORMAT.md)
-- **LCD displays** → [DISPLAY.md](DISPLAY.md) (cross-model); [DISPLAY_E235.md](DISPLAY_E235.md) (per-sub-series)
+- **App architecture / setup flow** → [docs/APP.md](docs/APP.md)
+- **Data/JSON** → [docs/DATA_FORMAT.md](docs/DATA_FORMAT.md)
+- **LCD displays** → [docs/DISPLAY.md](docs/DISPLAY.md) (cross-model); [docs/DISPLAY_E235.md](docs/DISPLAY_E235.md) (per-sub-series)
 - **Audio/Diagram** → `/pa-make` or `/sta-make` skill; per-line quirks in [audio/README.md](audio/README.md)
 - **Auto-input / OCR** → [auto_input/README.md](auto_input/README.md)
 - **Testing / test suite + hierarchy** → [_tests/README.md](_tests/README.md)

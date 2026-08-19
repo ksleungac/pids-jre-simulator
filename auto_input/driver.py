@@ -42,6 +42,7 @@ import soundfile as sf
 from .hud_layout import DOWNSCALE_PROFILE, PROFILES, profile_for
 from .sampling import GuardState, downscale_hud, read_hud
 from .ocr import (
+    BADGE_ANCHOR_FILES,
     DEFAULT_TEMPLATES_DIR,
     MAX_DRIVABLE_SPEED_KMH,
     Templates,
@@ -179,12 +180,39 @@ def _dump_misread_speed_limit_cell(cell: np.ndarray, sl_val: int, sl_score: floa
         print(f"[AutoDriver] misread cell dump failed: {e}")
 
 
+def badge_anchor_problems(badges_dir: Path, anchors: dict, read_profile) -> list[str]:
+    """Why this anchor set cannot be trusted, one line per reason; empty = usable.
+
+    # CONTRACT: every DECLARED anchor must be present AND the model's cell shape.
+    # Three silent-skip layers stack here — `load_badge_anchors` skips a missing file,
+    # `classify_badge_state` skips a shape-mismatched anchor, and a cell where all of
+    # them mismatch returns (None, inf). So a partial or wrong-scale set starts the
+    # driver cleanly, reads no badge for the whole drive, and fires no PA, with nothing
+    # printed anywhere — and `any(anchors.values())` is still True throughout.
+    # Measured 2026-08-19: dropping running_ja / passing_en / passing_ja is invisible to
+    # the entire test suite, and losing BOTH passing anchors leaves a PASSING cell 0.94
+    # under BADGE_DIFF_REJECT on a CRISP fixture — inside the margin a softened real
+    # capture eats (critical_lessons.md §7), where it misreads as MOVING and defeats the
+    # arrival gate. Locked by _tests/t1_unit/test_auto_driver.py § "badge anchor set".
+    """
+    want_h, want_w = read_profile.badge_bbox[3], read_profile.badge_bbox[2]
+    declared = {stem for stems in BADGE_ANCHOR_FILES.values() for stem in stems}
+    absent = sorted(s for s in declared if not (badges_dir / f"{s}.png").exists())
+    wrong = sorted({f"{a.shape[1]}x{a.shape[0]}" for group in anchors.values() for a in group if a.shape[:2] != (want_h, want_w)})
+    out = []
+    if absent:
+        out.append(f"missing: {absent}")
+    if wrong:
+        out.append(f"wrong shape: {wrong} (model cell is {want_w}x{want_h})")
+    return out
+
+
 def _build_stops_meta(sim) -> list[dict]:
     """Per-stop dicts for the meta line. Self-contained — plot tool doesn't need
     to re-load route.json. PASSING stations included in geographic order with
     stops_here=False so the plot can mark them on the timeline.
 
-    `stops_here` discriminator: per project convention (DATA_FORMAT.md), passing
+    `stops_here` discriminator: per project convention (docs/DATA_FORMAT.md), passing
     stations have NO `time` field while stopping stations always have one (even
     `time: 0` for the start station). NOT `bool(pa)` — terminus / starting
     stations may have empty `pa` but the train still stops there.
@@ -856,9 +884,8 @@ class AutoDriver:
         read_profile = DOWNSCALE_PROFILE
         seg = seg_for_scale(read_profile.scale)
 
-        # Dark digit templates: always load from 1440p set. The resize-in-compare
-        # approach (compare() in ocr.py) handles cross-resolution matching without
-        # needing a separate 1080p dark-digit template set.
+        # Dark digit templates are resolution-agnostic: compare() resizes each glyph
+        # onto the candidate, so the one set serves whatever the model is.
         templates = build_templates()
         missing = set("0123456789") - templates.glyphs.keys()
         if missing:
@@ -866,19 +893,24 @@ class AutoDriver:
             print("[AutoDriver] Re-run `uv run python _dev_scripts/extract_ocr_assets.py` to re-extract from _ocr_calibration/.")
             return
 
-        # Red digit templates: prefer resolution-specific set; fall back to the
-        # global cache (1440p) via None so read_speed_limit uses _get_red_digit_templates().
-        red_dir = (
-            DEFAULT_TEMPLATES_DIR / read_profile.templates_subdir / "digits_red"
-            if read_profile.templates_subdir
-            else DEFAULT_TEMPLATES_DIR / "digits_red"
-        )
+        # Red digits and badge anchors are cut at the model's scale, so there is one
+        # set of each. Both fail loud rather than degrading — a missing red set would
+        # silently stop reading the speed limit.
+        red_dir = DEFAULT_TEMPLATES_DIR / "digits_red"
         red_templates: Templates | None = build_templates(red_dir) if red_dir.exists() else None
+        missing_red = set("0123456789") - (red_templates.glyphs.keys() if red_templates else set())
+        if missing_red:
+            print(f"[AutoDriver] FATAL: missing red digit templates at {red_dir}: {sorted(missing_red)} — auto-driver disabled.")
+            print("[AutoDriver] Re-run `uv run python _dev_scripts/extract_ocr_assets.py` to re-extract.")
+            return
 
-        badges_dir = DEFAULT_TEMPLATES_DIR / read_profile.badges_subdir
+        badges_dir = DEFAULT_TEMPLATES_DIR / "badges"
         badge_anchors = load_badge_anchors(badges_dir)
-        if not any(badge_anchors.values()):
-            print(f"[AutoDriver] FATAL: no badge anchors at {badges_dir} — auto-driver disabled.")
+        problems = badge_anchor_problems(badges_dir, badge_anchors, read_profile)
+        if problems:
+            print(f"[AutoDriver] FATAL: badge anchors at {badges_dir} unusable — auto-driver disabled.")
+            for line in problems:
+                print(f"[AutoDriver]   {line}")
             print("[AutoDriver] Re-run `uv run python _dev_scripts/extract_ocr_assets.py` to re-extract.")
             return
         print(
@@ -1390,7 +1422,7 @@ class AutoDriver:
           - in transit (1A/1B)              → the previous stopping station
 
         "Stopping station" detected via `stop.get("time") is not None` — the
-        canonical DATA_FORMAT.md discriminator (passing stations have NO `time`
+        canonical docs/DATA_FORMAT.md discriminator (passing stations have NO `time`
         field), matching `_build_stops_meta`'s `stops_here` test in this module.
         Routes with passing-through stops mean the previous stopping station may
         be several indices back (e.g. chuo Shinjuku → previous stop skips 大久保 /

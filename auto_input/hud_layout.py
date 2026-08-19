@@ -18,7 +18,8 @@ taller than 16:9 is letterboxed, so the derivation carries a bar offset. Scope a
 its three refusals are documented at ``_viewport_for``. The existing flat module-level constants (``HUD_BBOX``,
 ``BADGE_BBOX``, etc.) remain unchanged for backward compatibility with the
 ``*_from_surface`` helpers in ``ocr.py`` (1b dev-tool path) and the calibration
-extractor in ``_dev_scripts/extract_ocr_assets.py`` — both are 1440p-only tools.
+extractor in ``_dev_scripts/extract_ocr_assets.py``. Both read 1440p source
+screenshots; the extractor's model-set passes go through ``PROFILE_1920_1080``.
 
 ``DOWNSCALE_PROFILE`` is what actually reads every frame: one 1080p model that every
 capture is downscaled into, so a new resolution needs no templates of its own — only
@@ -55,12 +56,6 @@ class ResolutionProfile:
     distance_value_bbox: tuple[int, int, int, int]
     speed_value_bbox: tuple[int, int, int, int]
     speed_limit_value_bbox: tuple[int, int, int, int]
-    # Subdirectory under ocr_templates/ for digit glyph PNGs.
-    # Empty string = root ocr_templates/digits/ (1440p).
-    # "1080p" = ocr_templates/1080p/digits/ (1080p).
-    templates_subdir: str
-    # Subdirectory under ocr_templates/ for badge anchor PNGs.
-    badges_subdir: str
     # Scale relative to 1440p. Used by seg_for_scale() in ocr.py to derive
     # per-resolution segmentation thresholds.
     scale: float
@@ -95,8 +90,6 @@ PROFILE_2560_1440 = ResolutionProfile(
     distance_value_bbox      = (120, 314, 230,  55),
     speed_value_bbox         = (120, 165, 230,  55),
     speed_limit_value_bbox   = (120, 215, 230,  55),
-    templates_subdir         = "",
-    badges_subdir            = "badges",
     scale                    = 1.0,
 )
 # fmt: on
@@ -131,8 +124,6 @@ PROFILE_1920_1080 = ResolutionProfile(
     distance_value_bbox      = _scale_bbox((120, 314, 230,  55), _S),
     speed_value_bbox         = _scale_bbox((120, 165, 230,  55), _S),
     speed_limit_value_bbox   = _scale_bbox((120, 215, 230,  55), _S),
-    templates_subdir         = "1080p",
-    badges_subdir            = "1080p/badges",
     scale                    = _S,
 )
 # fmt: on
@@ -202,11 +193,6 @@ def _interpolate_profile(desktop_w: int, desktop_h: int, view_h: int, bar_y: int
         distance_value_bbox=_scale_bbox((120, 314, 230, 55), s),
         speed_value_bbox=_scale_bbox((120, 165, 230, 55), s),
         speed_limit_value_bbox=_scale_bbox((120, 215, 230, 55), s),
-        # Unused at runtime — the 1080p model owns the cell bboxes and templates, and every
-        # capture is downscaled into it. Kept on the dataclass for the 1440p/1080p calibrated
-        # profiles, which the T3 fixture suite and the extractor still read.
-        templates_subdir="",
-        badges_subdir="badges",
         scale=s,
         verified=False,
     )
@@ -278,27 +264,16 @@ DOWNSCALE_PROFILE = replace(
 
 # ─── Flat constants (1440p) — backward compat ─────────────────────────────────
 # Consumed by crop_cell_from_surface / *_from_surface helpers in ocr.py (1b
-# dev-tool path) and extract_ocr_assets.py. These are 1440p-only tools; do not
-# update them when adding new resolution profiles.
-
-# dxcam capture region (left, top, right, bottom) — matches dxcam.grab(region=)
-# signature. Top-right quadrant of 2560×1440 desktop; HUD lives entirely inside
-# this quadrant. Restricting capture to this region cuts dxcam's per-frame work
-# by ~75% versus full-desktop grabs. Production OCR path uses this; 1b dev tool
-# (`_dev_scripts/ocr_observe.py`) uses the same region grab as production against the
-# canonical HUD_BBOX coordinates below.
-CAPTURE_REGION_2560_1440 = _CAPTURE_REGION_2560_1440
+# dev-tool path) and by extract_ocr_assets.py's 1440p source passes. Nothing on
+# the read path reads them; do not update them when adding a resolution profile.
+# SPEED_VALUE_BBOX is the exception with no consumer at all — its helper went with
+# the dead speed_cell_from_surface (2026-08-19). Kept so the four cell geometries
+# stay documentable as a set; don't hunt for its caller.
 
 # Full HUD bounding box on the 2560x1440 game window (x, y, w, h) — canonical
 # desktop-coordinate reference. Used by the *_from_surface helpers (1b path) and
 # the calibration extractor.
 HUD_BBOX = _HUD_BBOX_2560_1440
-
-# HUD bbox translated into CAPTURE_REGION_2560_1440-relative coordinates.
-# Production path (`auto_input/driver.py:_crop_cell`) consumes this against the
-# region-grabbed frame. Derived, not authored — change CAPTURE_REGION or
-# HUD_BBOX and this updates automatically.
-HUD_BBOX_IN_CAPTURE = _HUD_IN_CAPTURE_2560_1440
 
 # Cells within the HUD crop (HUD-relative coordinates)
 # Value cells contain the right-aligned numeric+unit text only (label excluded).

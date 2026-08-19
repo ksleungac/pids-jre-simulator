@@ -662,7 +662,7 @@ def compose_text_parts(font, text, color, width, collapse=False, script="japanes
     # compression ratio, or the collapse branch elsewhere — not a baker, not a
     # test, not a proof script. A second implementation drifts silently, and the
     # drift renders as correct-looking text at the wrong spacing.
-    # See WIP_font_atlas.md.
+    # See docs/wip/WIP_font_atlas.md.
 
     Offsets are integers in every branch, so pulling x out of the original
     `int(x + sep * i)` and adding it back at blit time is exact, not approximate:

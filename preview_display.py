@@ -127,7 +127,7 @@ def parse_args():
     parser.add_argument(
         "--edit",
         action="store_true",
-        help="Open the calibration editor (WIP_calibration_editor.md). Sim freezes; "
+        help="Open the calibration editor (docs/wip/WIP_calibration_editor.md). Sim freezes; "
         "click an editable element on the LCD to focus its `_TUNEABLES_*` dict; ←/→ nudge "
         "values; Ctrl+S writes back to source. ESC to quit.",
     )
@@ -232,7 +232,7 @@ def main():
         # the chosen model — silent mismatch + nonsensical layout. Fail loud.
         if args.model != "e235_0":
             print(f"[error] --edit requires --model e235_0 (got --model {args.model}).")
-            print("        Editor v1 scope is e235_0 only - see WIP_calibration_editor.md.")
+            print("        Editor v1 scope is e235_0 only - see docs/wip/WIP_calibration_editor.md.")
             sys.exit(1)
         _run_edit_loop(sim, overlay_path=args.overlay)
         sim.cleanup()

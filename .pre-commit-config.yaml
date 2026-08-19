@@ -11,7 +11,7 @@
 #                                 asset paths → project_root()). conventions.md § Tooling.
 #   - no-ttf-fonts       — ban .ttf files in fonts/ (conventions.md § Tooling)
 #   - spdx-header        — every .py carries `# SPDX-License-Identifier: MIT`
-#                          (WIP_licensing.md; LICENSE grants only authored code/docs)
+#                          (docs/wip/WIP_licensing.md; LICENSE grants only authored code/docs)
 #   - no-tracked-ignored — a tracked file matched by .gitignore (an ignore rule added
 #                          without `git rm --cached`)
 
@@ -61,7 +61,7 @@ repos:
         files: ^fonts/.*\.ttf$
 
       - id: spdx-header
-        name: Require SPDX-License-Identifier header (WIP_licensing.md)
+        name: Require SPDX-License-Identifier header (docs/wip/WIP_licensing.md)
         entry: python _dev_scripts/check_spdx.py
         language: python
         types: [python]
@@ -74,7 +74,7 @@ repos:
   - repo: local
     hooks:
       - id: no-tracked-ignored
-        name: No tracked file matched by .gitignore (WIP_licensing.md)
+        name: No tracked file matched by .gitignore (docs/wip/WIP_licensing.md)
         entry: python _dev_scripts/check_tracked_ignored.py
         language: python
         # Repo-state check, not a file check: an ignore rule added WITHOUT

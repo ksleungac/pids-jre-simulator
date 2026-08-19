@@ -11,15 +11,15 @@ Companion module that automates PA-firing in the simulator by reading JR EAST Tr
 > - Code-snippet illustrations of how a class looks — link `file:line` instead
 > - Speculative future sections ("When X is implemented, …") — defer until needed
 > - Design-discussion rationale (multi-paragraph framings of *why* a model exists) — the rule lives here; the rationale lives in `memory/YYYY-MM-DD.md`
-> - Facts already in [CLAUDE.md](CLAUDE.md) mental model / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
+> - Facts already in [CLAUDE.md](../CLAUDE.md) mental model / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
 >
-> **Voice:** new reference-shaped entries (schema, OCR pipeline rules, event tables, layer specs, contracts) stay compressed — tables, `=` for definitional equivalence, no narrative padding. Rationale-shaped passages ("Mental model" framings, "Why not X" framings, narrative examples) run as ordinary prose. Both in complete sentences where they use prose at all, per [CLAUDE.md § Writing tone](CLAUDE.md).
+> **Voice:** new reference-shaped entries (schema, OCR pipeline rules, event tables, layer specs, contracts) stay compressed — tables, `=` for definitional equivalence, no narrative padding. Rationale-shaped passages ("Mental model" framings, "Why not X" framings, narrative examples) run as ordinary prose. Both in complete sentences where they use prose at all, per [CLAUDE.md § Writing tone](../CLAUDE.md).
 >
 > **Before adding:** name the section your edit merges into OR the content it replaces. If neither — you're appending, which is the failure mode this contract fights.
 >
 > **Additions > ~10 lines:** present the diff to the user first. Heavy additions get gated, not auto-applied.
 >
-> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](.claude/rules/principles.md).
+> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](../.claude/rules/principles.md).
 
 ## Mental model
 
@@ -66,7 +66,7 @@ The Layer 1 ↔ Layer 2 coupling (1A⇒2B, 1B⇒2C, 1C⇒2A — Layer 2 derived 
 
 ### Layer 1 — App (sim's own state machine)
 
-State on `AppState` (`curr_stop`, `cnt_pa`, `cnt_pa_at_station`, `at_station`). Exists whether auto-driver enabled or not. Three press-driven sub-states per stop: `APPROACHING_EARLY` → `APPROACHING_FINAL` → `STOPPING`. Spec in [DISPLAY.md § Unified State Machine](DISPLAY.md); mental-model summary in [CLAUDE.md § App state machine](CLAUDE.md). Auto-driver triggers transitions by setting `pending_next_pa=True`, same code path as manual PageDown.
+State on `AppState` (`curr_stop`, `cnt_pa`, `cnt_pa_at_station`, `at_station`). Exists whether auto-driver enabled or not. Three press-driven sub-states per stop: `APPROACHING_EARLY` → `APPROACHING_FINAL` → `STOPPING`. Spec in [docs/DISPLAY.md § Unified State Machine](../docs/DISPLAY.md); mental-model summary in [CLAUDE.md § App state machine](../CLAUDE.md). Auto-driver triggers transitions by setting `pending_next_pa=True`, same code path as manual PageDown.
 
 ### Layer 2 — AutoDriver belief
 
@@ -229,6 +229,10 @@ Properties, by construction: a normal stopping pattern can never activate re-ent
               ▼
 [HUD region  (350×480 @ 1440p  |  262×360 @ 1080p)]
               │
+              │ sampling.downscale_hud — area/box resize into the ONE model
+              ▼
+[HUD @ 262×360, whatever the desktop was]     ← every cell bbox below is the model's
+              │
        ┌──────┼──────┐
        ▼      ▼      ▼
   [Distance][Speed][Badge]
@@ -285,6 +289,8 @@ Three things learned choosing it, all measured rather than reasoned:
 - **Sharper is not better here, and neither is more faithful.** Cubic scored WORST of everything tried — its edge ringing creates halos the Otsu threshold misreads. The failure mode for this pipeline is a thin stroke falling below the threshold, not aliasing.
 - **Don't tune the resampler on synthetic blur.** An area+unsharp variant beat everything on a gaussian-blur sweep (193 vs 178 across a broad parameter plateau) and then destroyed the decimal digit on **145 of 792 real driven frames**. Gaussian blur is a uniform low-pass that re-sharpening recovers from; real capture degradation is not, and the unsharp overshoot disturbs the 3–4 pixel decimal dot. Validate on real frames — see [principles.md § "Validate against the outcome, not a proxy"](../.claude/rules/principles.md).
 
+**What the resize costs, measured.** A downscaled 1440p HUD has edge acutance 0.351, against 0.361 for a reporter's real degraded 1080p capture and 0.529 for a crisp dev one — the resize spends about one real-world degradation budget up front, and still reads 26/26 on the 1440p calibration set, because the §7-era hardening was built for exactly that softness. Under added blur both paths hold identically to σ=1.0; from σ=1.5 the downscaled one loses two more reads, and **the whole gap is the tenths digit** — log/report only, degrading to `None` rather than to a wrong integer. Every decision-driving read (badge, speed, speed_limit, stopping_offset) tracks the native path exactly, so the cost falls on the one field that cannot affect a fire.
+
 **Fails loud on a short grab.** numpy slices past the end silently, and downscaling a partial HUD is worse than not downscaling: the resize restores the model's dimensions, so every downstream shape check passes and the readers return confident garbage.
 
 **Downscaling is the only read path.** The per-resolution path it replaced rode a `--legacy-ocr` debug flag, retired 2026-08-09 once three live drives (1080p / 1440p / 4K) had confirmed the downscale path — it survived only at the two hand-calibrated resolutions, and promoting 4K's geometry silently armed it at a third where its anchors no longer matched the cell. Drive logs before that date carry an `ocr_legacy` key in the meta line; nothing reads it.
@@ -292,6 +298,17 @@ Three things learned choosing it, all measured rather than reasoned:
 ### What a profile means, and what gets interpolated
 
 **A `PROFILES` entry means that geometry has been confirmed on a live drive at least once.** It is a record of observation, not of capability; the reads themselves need nothing per-resolution.
+
+What the three observed drives read, all through `ocr_observe` on the production path:
+
+| | 1440p (ratio 0.75) | 4K (0.50) | 1920×1200 (1.00, letterboxed) |
+|---|---|---|---|
+| samples | 792 / 453 s | 941 / 566 s | 1493 / 840 s (2 drives) |
+| badge / speed / distance / limit | 100 / 100 / 98.4 / 100 % | 99.1 / 99.3 / 98.2 / 99.4 % | 99.3 / 99.3 / 98.6 / 99.3 % |
+| speed_score median | 0.880 | 0.883 | 0.897 |
+| badge_diff median (reject at 50) | 9.8 | 10.1 | 1.2 |
+
+Halving the ratio costs nothing measurable — scores are flat, and speed is fractionally *higher* at 4K, which is the metric that would move first if the resampler under-filtered. The 4K read-rate dip is one 4-second black-screen event at the end of that run, not a steady rate; **0 frames lost speed while the badge read fine**, so the pipeline degrades as a whole frame or not at all, never as isolated garbage. The 1440p distance figure is not a miss rate either: eleven of its thirteen nulls are the train parked with the shared cell showing `1cm`, where the metre reader correctly returns `None` (§ "Stopping offset").
 
 Everything else follows from two measured facts.
 
@@ -313,13 +330,13 @@ An interpolated profile carries `verified=False`. It reads normally — geometry
 
 **Promotion is a one-line change:** once a resolution has been driven, add `(w, h): replace(_derive(w, h), verified=True)` to `PROFILES` so the entry records that it was seen. `_derive` rather than a hand-authored literal keeps the arithmetic in one home, so a promoted profile cannot drift from what derivation would have produced.
 
-**`ResolutionProfile`** (frozen dataclass, `auto_input/hud_layout.py`) — `capture_region`, `hud_bbox`, `hud_bbox_in_capture`, cell bboxes (`badge_bbox`, `distance_value_bbox`, `speed_value_bbox`, `speed_limit_value_bbox`), `templates_subdir`, `badges_subdir`, `scale`. `PROFILES` maps `(desktop_w, desktop_h)` → profile. `DOWNSCALE_PROFILE` is the 1080p one with its HUD origin at `(0,0)`, since a downscaled frame IS the HUD.
+**`ResolutionProfile`** (frozen dataclass, `auto_input/hud_layout.py`) — `capture_region`, `hud_bbox`, `hud_bbox_in_capture`, cell bboxes (`badge_bbox`, `distance_value_bbox`, `speed_value_bbox`, `speed_limit_value_bbox`), `scale`. Only `capture_region` and `hud_bbox_in_capture` do anything on a non-model profile — they say what to grab and where the HUD is inside it; the cell bboxes that read it come from `DOWNSCALE_PROFILE`. `PROFILES` maps `(desktop_w, desktop_h)` → profile. `DOWNSCALE_PROFILE` is the 1080p one with its HUD origin at `(0,0)`, since a downscaled frame IS the HUD.
 
 **`SegConfig`** — frozen dataclass of all segmentation thresholds (`digit_min_h`, `digit_min_w`, text-band Y bounds, gap limits). `SEG_DEFAULT` = 1440p values; `seg_for_scale(s)` returns a proportionally scaled copy. All readers take an optional `seg=`. The capture loop passes `seg_for_scale(read_profile.scale)`, so in practice every read runs at the model's scale.
 
-**Templates** — dark digits (0–9) are extracted at 1440p and NN-resized onto the glyph in `compare()`, so they serve any size. Red digits and badge anchors are per-resolution (bolder stroke / different pentagon dimensions): `ocr_templates/digits_red/` + `badges/` at 1440p, `ocr_templates/1080p/…` at 1080p. Downscaling means only the 1080p sets are loaded at runtime; the 1440p sets remain for the T3 fixture suite and the calibration extractor.
+**Templates — one set of each, because there is one model.** `ocr_templates/digits_red/` (13–16×20 px) and `ocr_templates/badges/` (83×30) are cut at the model's scale and are what every read uses. `ocr_templates/digits/` (dark, 0–9) is cut at 1440p and NN-resized onto the candidate in `compare()`, so it is scale-free by construction — that is why it needs no model-scale twin. Nothing here is per-resolution: the second sets, and the native reads that consumed them, were deleted 2026-08-19 when downscaling became the only path.
 
-Design, open questions, and the 4K resampler caveat: [WIP_ocr_multiresolution.md](../WIP_ocr_multiresolution.md).
+The shapes still refused above are refused for want of a measurement, and the designed-but-unapproved replacement (a user-drawn HUD box, presets, auto-propose) is held as a direction rather than a ticket: [TODO.md](../TODO.md) § "The HUD is found on any screen shape, not just the ones measured".
 
 ## HUD layout
 
@@ -327,9 +344,7 @@ All bboxes = `(x, y, w, h)`. Cell bboxes = HUD-relative; HUD bbox = canonical sc
 
 | Constant | Value | Notes |
 |---|---|---|
-| `CAPTURE_REGION_2560_1440` | `(1280, 0, 2560, 720)` | dxcam region= signature (left, top, right, bottom). Top-right quadrant of the primary monitor (coords are output-local, not virtual-desktop). Production grab path; cuts capture work ~75% vs full-monitor |
 | `HUD_BBOX` | `(2200, 20, 350, 480)` | Canonical screen-relative position. Consumed by `*_from_surface` helpers (1b dev tool) + calibration extractor |
-| `HUD_BBOX_IN_CAPTURE` | `(920, 20, 350, 480)` | Derived: `HUD_BBOX` minus `CAPTURE_REGION_2560_1440` origin. Consumed by production `_crop_cell` against region-grabbed frame |
 | `DISTANCE_VALUE_BBOX` | `(120, 314, 230, 55)` | Right side of "Distance" / "残距離" row (shared with stopping-offset) |
 | `SPEED_VALUE_BBOX` | `(120, 165, 230, 55)` | Right side of "Speed" / "速度" row |
 | `SPEED_LIMIT_VALUE_BBOX` | `(120, 215, 230, 55)` | Right side of "Speed Limit" / "最高速度" row — red digits, line-dependent |
@@ -337,7 +352,7 @@ All bboxes = `(x, y, w, h)`. Cell bboxes = HUD-relative; HUD bbox = canonical sc
 
 Position invariant across language modes (EN/JA), game states (running/stopped/at-platform), and scenes — verified against 7 reference screenshots.
 
-**Resolution gate.** Production AutoDriver runs a bootstrap full-frame `camera.grab()` at startup → probes `(w, h)` → `profile_for(w, h)`, which returns the observed entry when there is one and otherwise derives the geometry against the fitted 16:9 viewport → fatal only when the size is out of scope (§ "What a profile means, and what gets interpolated"). Prevents OCR running with wrong-resolution bboxes. Sibling to other fail-loud invariants in [critical_lessons.md](.claude/rules/critical_lessons.md).
+**Resolution gate.** Production AutoDriver runs a bootstrap full-frame `camera.grab()` at startup → probes `(w, h)` → `profile_for(w, h)`, which returns the observed entry when there is one and otherwise derives the geometry against the fitted 16:9 viewport → fatal only when the size is out of scope (§ "What a profile means, and what gets interpolated"). Prevents OCR running with wrong-resolution bboxes. Sibling to other fail-loud invariants in [critical_lessons.md](../.claude/rules/critical_lessons.md).
 
 ## Capture: dxcam (DXGI Output Duplication)
 
@@ -421,7 +436,7 @@ These are fields on `SegConfig` (frozen dataclass, `auto_input/ocr.py`). `SEG_DE
 - **Dark text `Nm`** — distance to the **next station in sequence**, pass-throughs included — NOT the total to the next stopping station. Shown during transit, AND at the platform after the cm display dismisses (~5s post-arrival). While the badge reads MOVING the two coincide (no pass-through is left before the stop), which is why "next stopping station" reads correct in transit and is wrong at a platform on a rapid service. The distinction is load-bearing for the distance guard: per-station re-targeting is exactly what produces the upward re-points it exempts, and a total-to-the-stop reading would only ever count down (§ "Distance plausibility guard").
 - **Green text `±Ncm`** — stopping offset from the platform's stop mark. Shown briefly after `MOVING→STOPPED` (~5s window). Sign shown only for negative (train stopped past the mark); `0` and positives omit the sign character.
 
-Both readers run unconditionally each capture cycle. Their masks are mutually exclusive (`gray < 70` for m-distance, `(G - max(R,B)) > 30` for cm-offset), so at most one returns non-None per frame. JSONL records both fields each sample; display priority gives cm precedence (transient signal of interest), falls through to m otherwise.
+Both readers run unconditionally each capture cycle. Their masks are mutually exclusive (`gray < 70` for m-distance, `(G - max(R,B)) > 30` for cm-offset), so at most one returns non-None per frame — **except across the swap itself**. As the train crawls the last metre the cell changes m→cm while the badge still reads MOVING, and for 2–3 frames the masks stop separating and BOTH readers fire on the same pixels (`dist=78` and `offset=78` together). The offset copy is discarded by its STOPPED gate; the metre copy passes through as a phantom distance that appears to go UP, which the distance guard then catches. Observed identically on native 1440p, so downscaling is not implicated. JSONL records both fields each sample; display priority gives cm precedence (transient signal of interest), falls through to m otherwise.
 
 **Badge-gated acceptance (driver, not reader).** `read_stopping_offset` is state-agnostic, but the driver trusts its value only when the badge groundtruth says STOPPED (`_accept_stopping_offset` in `driver.py`). The green ±cm read is phantom-prone — scenery-green bleed through the semi-transparent HUD can fabricate a ±cm value mid-transit — so it is gated on `badge == "STOPPED"`. **Badge read > (distance, speed):** the badge is the most reliable read on the HUD (canonical, clean pixel-diff separation), strictly more reliable than the speed/distance digit reads, so it is the SOLE gate — deliberately NOT speed-gated (folding in the noisier speed read would only add false-rejects, no phantom protection the badge doesn't already give). Same badge-only rule as `FIRE_AT_STATION`. Rejections emit an `offset_reject` drive-log event (pairs with the same-ts sample) so a valid offset ever lost to a badge misread stays visible. The reader also domain-clamps `|offset| ≤ 500cm` (the game's stop zone); a larger magnitude is a garbage green read → `None`.
 
@@ -474,12 +489,12 @@ Pixel-diff against 6 anchor templates:
 ```python
 BADGE_ANCHOR_FILES = {
     "MOVING":  ["running_en",  "running_ja"],
-    "STOPPED": ["stopping_en", "stopping_next_station", "stopping_ja"],  # stopping_ja = 1080p alt
-    "PASSING": ["passing_en",  "passing_jp",            "passing_ja"],   # passing_ja  = 1080p alt
+    "STOPPED": ["stopping_en", "stopping_ja"],
+    "PASSING": ["passing_en",  "passing_ja"],
 }
 ```
 
-`load_badge_anchors(badges_dir)` silently skips missing files — each resolution dir loads its own 6 available crops. 1440p dir has the original 6 stems; 1080p dir has `stopping_ja` + `passing_ja` in place of `stopping_next_station` + `passing_jp`.
+`load_badge_anchors(badges_dir)` silently skips missing files, so a stem listed here but absent on disk costs an anchor without an error. The dict carried three stems per state until 2026-08-19, when the second (1440p) anchor dir was deleted — the extra stems were its filenames.
 
 Per frame: crop badge cell, compute mean-abs-diff against each anchor, pick state with lowest-diff anchor. Language-agnostic — whichever anchor matches best determines state, regardless of which language user plays in.
 
@@ -563,7 +578,7 @@ When OCR Auto-PA enabled at setup screen, `PASimulator` allocates an extra `DEBU
 
 ### Layout
 
-The live panel's layout (left OCR-state column / centre speed·limit·distance readout / message strips / [pause][save][home] cluster) lives in `tims/band.py` + [APP.md § Persistent status band](../APP.md). It reads the status-dict fields below. The OCR-panel migration DROPPED the old confidence-colour tint (green/yellow/orange OCR-score) — too debug for the public band; the raw Layer-2 badge folds onto the state line instead.
+The live panel's layout (left OCR-state column / centre speed·limit·distance readout / message strips / [pause][save][home] cluster) lives in `tims/band.py` + [docs/APP.md § Persistent status band](../docs/APP.md). It reads the status-dict fields below. The OCR-panel migration DROPPED the old confidence-colour tint (green/yellow/orange OCR-score) — too debug for the public band; the raw Layer-2 badge folds onto the state line instead.
 
 The historical 3-line `draw_debug_panel` layout (ShinGoPr6N @ 14pt, `dep✓ arr·` flags, confidence colours) has been removed — `tims.band.render` is now the sole panel renderer.
 
@@ -669,10 +684,8 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 | `_dev_scripts/ocr_observe.py` | Standalone OCR corpus collector — calls `read_hud`, dumps full-HUD PNGs + `reads.jsonl` (RAW beside GUARDED). Observation only, fires nothing. Always reads through the downscale path, so the corpus describes what production runs. Output split per capture resolution: `_experiments/live_captures/<height>p/<timestamp>/`. |
 | `_dev_scripts/test_dxcam.py` | Diagnostic — full-desktop dxcam capture + brightness check |
 | `ocr_templates/digits/*.png` | **Runtime input** — 10 pre-extracted digit glyphs (~20×30 binary PNGs). Loaded by `build_templates()`. Reused at all resolutions via NN-resize. Committed. |
-| `ocr_templates/digits_red/*.png` | **Runtime input** — 10 red-font digit glyphs (1440p). Loaded by `build_templates(red_dir)`. Committed. |
-| `ocr_templates/badges/*.png` | **Runtime input** — 6 badge cell crops (111×40 RGB, 1440p). Loaded by `load_badge_anchors()`. Committed. |
-| `ocr_templates/1080p/digits_red/*.png` | **Runtime input** — 10 red-font digit glyphs (1080p, ~14×20 px). Committed. |
-| `ocr_templates/1080p/badges/*.png` | **Runtime input** — 6 badge cell crops (83×30 RGB, 1080p). Committed. |
+| `ocr_templates/digits_red/*.png` | **Runtime input** — 10 red-font digit glyphs at the model's scale (13–16×20 px). Loaded by `build_templates(red_dir)`. Committed. |
+| `ocr_templates/badges/*.png` | **Runtime input** — 6 badge cell crops (83×30 RGB) at the model's scale. Loaded by `load_badge_anchors()`. Committed. |
 | `_ocr_calibration/*.png` | **Local-only** 1440p source screenshots (~33 MB). Gitignored. Source for `extract_ocr_assets.py`. |
 | `_ocr_calibration_1080p/*.png` | **Local-only** 1080p source screenshots. Gitignored. Source for 1080p extraction passes. |
 | `_dev_scripts/extract_ocr_assets.py` | One-shot extractor: reads `_ocr_calibration*/` → writes `ocr_templates/` AND the committed T3 test fixtures under `_tests/fixtures/ocr/<res>/` (cells + quadrant frames, per each resolution's `manifest.json`). Run after re-capturing sources, then commit diff. |
@@ -686,9 +699,9 @@ Stop with Ctrl+C. Script prints one line per sample (badge state, speed, distanc
 
 Downscaling is what makes this short. No calibration screenshots, no template extraction, no per-resolution tuning — the reads happen on the 1080p model whatever the capture size. What is still needed is **where the HUD sits in the frame**, which cannot be derived because it depends on the game's own layout.
 
-1. Usually nothing. `profile_for` already derives every in-scope size, so a new resolution is only worth an entry once someone has *seen* it read — `(w, h): replace(_derive(w, h), verified=True)` in `PROFILES`. `templates_subdir` / `badges_subdir` are unused at runtime; leave them at the derived defaults unless the resolution is gaining its own T3 fixture set.
+1. Usually nothing. `profile_for` already derives every in-scope size, so a new resolution is only worth an entry once someone has *seen* it read — `(w, h): replace(_derive(w, h), verified=True)` in `PROFILES`. Nothing per-resolution is extracted — the templates are the model's, whatever the capture size.
 2. Verify the HUD is actually where the profile says. One `ocr_observe` run at that resolution dumps the HUD crop; if the crop is framed correctly the reads follow.
-3. Optional but recommended: capture one frame into `_tests/fixtures/ocr/<res>/` with a `manifest.json` (`resolution`, `profile_key`, `source_dir`, `cells`, `frames`) so T3 locks the new geometry. `uv run python _dev_scripts/extract_ocr_assets.py` regenerates the fixture set from the manifest.
+3. Optional but recommended: capture one frame into `_tests/fixtures/ocr/<res>/` with a `manifest.json` (`resolution`, `profile_key`, `source_dir`, `cells`, `frames`) so T3 locks the new geometry. `uv run python _dev_scripts/extract_ocr_assets.py` regenerates the fixture set from the manifest. **A `frames` entry pins the cell bbox it names, and a quadrant holds every cell** — so give a second entry the optional `file` key to re-read a different cell out of a frame another entry already writes, rather than committing a duplicate of the same pixels. `cells` are model-scale only, since there is one template set.
 4. `uv run python _tests/t3_invariant/test_ocr_reads.py` — must PASS before committing.
 
 ## Limitations

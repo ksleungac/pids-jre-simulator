@@ -7,7 +7,7 @@ slot rotation, through-service swap, restart screen — is a whole number of
 beats. Authoring in seconds is what let a written 6s render as an observed 8s:
 an off-grid duration silently defers to the next allowed moment, so the number
 in the source stopped describing the screen. Whole beats make written ==
-observed by construction. See DISPLAY.md § "Change scheduler".
+observed by construction. See docs/DISPLAY.md § "Change scheduler".
 """
 
 import time
@@ -56,7 +56,7 @@ class ModeCycler:
 
     # CONTRACT: freeze a forced mode with `cycler.enabled = False`, NOT `paused`
     # (silently creates a new attr; un-freezes on the next interval).
-    # See DISPLAY.md § "⚠️ Cycler.enabled vs Cycler.paused". Has bitten preview scripts.
+    # See docs/DISPLAY.md § "⚠️ Cycler.enabled vs Cycler.paused". Has bitten preview scripts.
     def __init__(self, mode_displays: dict, default_mode: DisplayMode = DisplayMode.ENGLISH):
         """
         Initialize mode cycler.
@@ -73,7 +73,7 @@ class ModeCycler:
     # CONTRACT: the cycler does NOT tick itself. ChangeScheduler (below) owns
     # every discrete change; it queries `is_due` and calls `advance`. A caller
     # that advances this directly re-introduces the uncoordinated second clock
-    # the scheduler exists to remove. See DISPLAY.md § "Change scheduler".
+    # the scheduler exists to remove. See docs/DISPLAY.md § "Change scheduler".
     def seed(self, current_time: float) -> None:
         """Anchor the language timer at boot (real wall-clock, never 0.0)."""
         self.last_switch_time = current_time
@@ -130,7 +130,7 @@ class ChangeScheduler:
     language is also due; if the language ticked first and stamped
     ``last_change``, the slot would then see delta 0 < floor, block, and
     **never rotate again**. Atomic evaluation + batching is what makes the
-    floor safe. See DISPLAY.md § "Change scheduler".
+    floor safe. See docs/DISPLAY.md § "Change scheduler".
 
     A due-but-blocked change is not queued: due-ness is recomputed from
     timestamps every frame and applies on the first frame the floor allows.

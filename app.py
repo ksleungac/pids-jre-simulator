@@ -25,7 +25,7 @@ class AppState:
     """Holds the current state of the application."""
 
     # CONTRACT: Layer 1 (App) state machine cycles APPROACHING_EARLY → APPROACHING_FINAL → STOPPING per stop.
-    # See DISPLAY.md § "Unified State Machine" for transitions; § "Edge cases & guards" for non-obvious behavior.
+    # See docs/DISPLAY.md § "Unified State Machine" for transitions; § "Edge cases & guards" for non-obvious behavior.
     # Non-obvious field semantics:
     #   cnt_pa — DEAD during STOPPING (at_station overrides prefix; cnt_pa is not read until _advance_to_next_stop).
     #   cnt_pa_at_station — `-1` is the pre-first sentinel ("next press plays [0]").
@@ -63,7 +63,7 @@ class AppState:
         return self.curr_stop - max(0, self.skip - self.skip_progress)
 
     # CONTRACT: skip-animation state owner — renderer stays pure.
-    # See DISPLAY.md § "Station Skip Logic (full spec)".
+    # See docs/DISPLAY.md § "Station Skip Logic (full spec)".
     # Wrong: mutating skip from the renderer. Right: bump skip_progress here; cursor_pos auto-derives.
     def update_skip_progress(self, current_time: float) -> None:
         """Advance ``skip_progress`` through passing stations based on elapsed time.
@@ -793,7 +793,7 @@ class PASimulator:
 
         # Lands in STOPPING@target — the unified model treats jump as
         # "I'm at platform X." Next press cycles pa_at_station (or advances
-        # if empty). See DISPLAY.md § "Unified State Machine".
+        # if empty). See docs/DISPLAY.md § "Unified State Machine".
         self.state.curr_stop = target
         self.state.cnt_pa = 0
         self.state.cnt_pa_at_station = -1
@@ -807,10 +807,10 @@ class PASimulator:
         self.upper.set_state(target, 0, at_station=True, cnt_pa_at_station=self.state.cnt_pa_at_station)
 
     # CONTRACT: unified state machine cycles APPROACHING -> STOPPING -> APPROACHING.
-    # See DISPLAY.md § "Unified State Machine" — entry to STOPPING is a no-audio
+    # See docs/DISPLAY.md § "Unified State Machine" — entry to STOPPING is a no-audio
     # press; exit from STOPPING is the advance press that plays the next stop's pa[0].
     # CONTRACT: terminus_idx = dest_stop_idx for non-circular routes (NOT
-    # len(stops)-1). See DISPLAY.md § "Terminus (`dest_stop_idx`)". Route data
+    # len(stops)-1). See docs/DISPLAY.md § "Terminus (`dest_stop_idx`)". Route data
     # may extend past dest for through-running reference (Keihin 727B 磯子→大船).
     def _next_pa(self) -> None:
         """Advance the state machine by one press."""

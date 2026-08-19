@@ -13,15 +13,15 @@ This document defines the JSON data formats used by the PA Simulator for route c
 > - Code-snippet illustrations of how a class looks — link `file:line` instead
 > - Speculative future sections ("When X is implemented, …") — defer until needed
 > - Design-discussion rationale (multi-paragraph framings of *why* a model exists) — the rule lives here; the rationale lives in `memory/YYYY-MM-DD.md`
-> - Facts already in [CLAUDE.md](CLAUDE.md) mental model / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
+> - Facts already in [CLAUDE.md](../CLAUDE.md) mental model / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
 >
-> **Voice:** new reference-shaped entries (schemas, field semantics, render contracts) stay compressed — tables, `=` for definitional equivalence, no narrative padding. Rationale-shaped passages (incident traces, design rationale, "why this matters" framings, anything labeled "Convention rationale" or similar) run as ordinary prose. Both in complete sentences where they use prose at all, per [CLAUDE.md § Writing tone](CLAUDE.md).
+> **Voice:** new reference-shaped entries (schemas, field semantics, render contracts) stay compressed — tables, `=` for definitional equivalence, no narrative padding. Rationale-shaped passages (incident traces, design rationale, "why this matters" framings, anything labeled "Convention rationale" or similar) run as ordinary prose. Both in complete sentences where they use prose at all, per [CLAUDE.md § Writing tone](../CLAUDE.md).
 >
 > **Before adding:** name the section your edit merges into OR the content it replaces. If neither — you're appending, which is the failure mode this contract fights.
 >
 > **Additions > ~10 lines:** present the diff to the user first. Heavy additions get gated, not auto-applied.
 >
-> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](.claude/rules/principles.md).
+> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](../.claude/rules/principles.md).
 
 ---
 
@@ -110,7 +110,7 @@ Routes displaying multiple destinations (like 品川・東京) use `&` as separa
 
 ### English Translation Convention (Hepburn Romanization)
 
-English translations use **modified Hepburn romanization with macrons** to indicate long vowels. Convention itself (preloaded mental model — Tōkyō, Chūō, why Etchūjima not Ecchūjima) → [CLAUDE.md](CLAUDE.md) "Mental Model → IRL display conventions". This section = JSON-encoding side.
+English translations use **modified Hepburn romanization with macrons** to indicate long vowels. Convention itself (preloaded mental model — Tōkyō, Chūō, why Etchūjima not Ecchūjima) → [CLAUDE.md](../CLAUDE.md) "Mental Model → IRL display conventions". This section = JSON-encoding side.
 
 | Long Vowel | Source | Example |
 |------------|--------|---------|
@@ -393,7 +393,7 @@ Only the **exception** is written down. All 14 shipped routes said `".."`, a val
 
 **Resolution lives in exactly one place: `route_loader.resolve_audio_root(work_dir, route_data)`.** Both consumers call it — `app.py._load_route_data` (→ `self.audio_root` → `AudioPlayer`) and `validate_data.check_route`. Nothing else may join an audio path by hand; two sites did, and the pooling migration silently broke both (the OOBE tutorial's asset pre-flight went False for every new user; the auto-driver's long-approach probe went inert on every route).
 
-**There is deliberately NO search order.** A diagram-then-pool fallback was designed and rejected: legacy PA slugs were diagram-local (`1654T/pa/1.mp3` and `916H/pa/1.mp3` were different announcements), so a missing file would silently resolve to the other root and play the *wrong announcement* with no error — [critical_lessons.md §2](.claude/rules/critical_lessons.md). One root means one resolved path and a loud failure. The resolved root depends only on the declared (or defaulted) value, never on what happens to be on disk; `_tests/t1_unit/test_startup.py` pins that property.
+**There is deliberately NO search order.** A diagram-then-pool fallback was designed and rejected: legacy PA slugs were diagram-local (`1654T/pa/1.mp3` and `916H/pa/1.mp3` were different announcements), so a missing file would silently resolve to the other root and play the *wrong announcement* with no error — [critical_lessons.md §2](../.claude/rules/critical_lessons.md). One root means one resolved path and a loud failure. The resolved root depends only on the declared (or defaulted) value, never on what happens to be on disk; `_tests/t1_unit/test_startup.py` pins that property.
 
 #### Pool filename grammar
 
@@ -410,7 +410,7 @@ One pool per line means filenames from every diagram share one namespace, so the
 
 One mp3 carries **one `sta_cut`**, wherever it is referenced — including twice within a single `route.json` (yamanote's loop lists 大崎 at both ends; keihin points 新子安 at 鶴見's melody). `validate_data.check_pool_sta_cut_sync` gates it.
 
-Per-line specifics, and what has been verified by ear → [audio/README.md](audio/README.md).
+Per-line specifics, and what has been verified by ear → [audio/README.md](../audio/README.md).
 
 #### `pre_stops` Array (Through-Service Pre-Route) — Optional
 
@@ -491,7 +491,7 @@ part of the name: the route-bar label renders the space-separated parts on two v
 exist nowhere in the JSON — so anything enumerating renderable text from the data has to apply the
 same split (`font_atlas.STATION_NAMES` declares `split=True` for exactly this).
 
-**Note:** `time` field = scheduled **incoming** travel time — minutes from previous PA station's departure to this stop's arrival. Display semantics (countdown formula, floor division, forced "1" on last PA, STOPPING blanking, `TIME_SCALE` constant) live at inline `# CONTRACT:` on `displays/train_models/e235_1000/lower_lcd.py` `draw_times` per [CLAUDE.md](CLAUDE.md). State-machine interaction → [DISPLAY.md § Unified State Machine](DISPLAY.md).
+**Note:** `time` field = scheduled **incoming** travel time — minutes from previous PA station's departure to this stop's arrival. Display semantics (countdown formula, floor division, forced "1" on last PA, STOPPING blanking, `TIME_SCALE` constant) live at inline `# CONTRACT:` on `displays/train_models/e235_1000/lower_lcd.py` `draw_times` per [CLAUDE.md](../CLAUDE.md). State-machine interaction → [DISPLAY.md § Unified State Machine](DISPLAY.md).
 
 **Convention rationale:** the field is anchored on the destination station, not the source — `stops[N].time` answers "how long does it take to reach N?" (= travel from N−1 → N), not "how long until I leave N?". Verified via Tokaido 1865E: 新橋.time=2 matches IRL 東京→新橋 (~2 min), 品川.time=5 matches 新橋→品川 (~5 min). 東京.time=0 because there's no previous station.
 
@@ -510,7 +510,7 @@ same split (`font_atlas.STATION_NAMES` declares `split=True` for exactly this).
 `pa` array contains filenames (without `.mp3` extension) mapping directly to audio files in `pa/` folder:
 
 - Track reference `"tokyo-dep"` → `resolve_audio_root(work_dir, route_data) / "pa" / "tokyo-dep.mp3"`, which on every shipped line is `audio/[line]/pa/tokyo-dep.mp3` (see § `audio_root` Field)
-- **The convention on every shipped line:** descriptive `{station}-{dep|arr}-{direction}`, plus a train-type tier where two diagrams' announcements differ (lowercase, hyphen-separated, no macrons). Reference: `audio/sobu/pa/`, `audio/takasaki/pa/`. Grammar and per-line specifics → [audio/README.md](audio/README.md). Pattern:
+- **The convention on every shipped line:** descriptive `{station}-{dep|arr}-{direction}`, plus a train-type tier where two diagrams' announcements differ (lowercase, hyphen-separated, no macrons). Reference: `audio/sobu/pa/`, `audio/takasaki/pa/`. Grammar and per-line specifics → [audio/README.md](../audio/README.md). Pattern:
   - `{prev-station}-dep` = Departure announcement (recorded after departing previous station, announcing next stop). Lives in *this* stop's `pa` array.
   - `{this-station}-arr` = Arrival announcement (recorded approaching this station)
   - Compound station names use additional hyphens: `shin-koiwa-dep`, `kita-ageo-arr`

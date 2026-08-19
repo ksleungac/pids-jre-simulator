@@ -1,22 +1,21 @@
 # SPDX-License-Identifier: MIT
 """Extract OCR runtime assets from local-only source screenshots.
 
-Five-pass extraction:
-    1. **Digit glyphs (dark, 1440p)** — for each KNOWN_VALUES screenshot, segment
-       the distance cell, label each glyph by position, save first-seen as a tight
-       binary PNG at `ocr_templates/digits/<N>.png`.
-    2. **Digit glyphs (red, 1440p)** — same for KNOWN_LIMIT_VALUES speed-limit
-       cells, saved at `ocr_templates/digits_red/<N>.png`.
-    3. **Badge anchors (1440p)** — crop BADGE_BBOX from each BADGE_ANCHOR_FILES
-       screenshot, save as `ocr_templates/badges/<stem>.png`.
-    4. **Badge anchors (1080p)** — crop 1080p-profile badge cell from each
-       BADGE_ANCHOR_FILES_1080P screenshot, save as
-       `ocr_templates/1080p/badges/<stem>.png`.
-    5. **Digit glyphs (red, 1080p)** — same as pass 2 but using 1080p profile
-       crop + 0.75× segmentation, saved at `ocr_templates/1080p/digits_red/<N>.png`.
+Three-pass extraction. Every read happens on the one 1080p model, so there is ONE set
+of each asset: red digits and badge anchors are cut at the model's scale, and the dark
+digits are scale-free because `compare()` resizes them onto the candidate glyph.
 
-1440p source screenshots: `_ocr_calibration/` (gitignored, ~33 MB full-desktop caps).
-1080p source screenshots: `_ocr_calibration_1080p/` (gitignored, native 1080p caps).
+    1. **Digit glyphs (dark)** — for each KNOWN_VALUES screenshot, segment the
+       distance cell, label each glyph by position, save first-seen as a tight
+       binary PNG at `ocr_templates/digits/<N>.png`. Cut from the 1440p sources
+       because that is where the crisp captures are, not because 1440p reads.
+    2. **Badge anchors** — crop the model's badge cell from each
+       BADGE_ANCHOR_FILES screenshot, save as `ocr_templates/badges/<stem>.png`.
+    3. **Digit glyphs (red)** — as pass 1 for KNOWN_LIMIT_VALUES speed-limit cells,
+       at the model's crop + segmentation, saved to `ocr_templates/digits_red/<N>.png`.
+
+Dark-digit source screenshots: `_ocr_calibration/` (gitignored, ~33 MB full-desktop caps).
+Model-scale source screenshots: `_ocr_calibration_1080p/` (gitignored, native 1080p caps).
 The committed runtime assets under `ocr_templates/` are a few KB total.
 
 Run after re-capturing reference screenshots (e.g. game HUD layout changed):
@@ -86,15 +85,6 @@ KNOWN_LIMIT_VALUES: dict[str, str] = {
 SOURCES_DIR = Path(__file__).parent.parent / "_ocr_calibration"
 SOURCES_DIR_1080P = Path(__file__).parent.parent / "_ocr_calibration_1080p"
 OUT_DIR = Path(__file__).parent.parent / "ocr_templates"
-
-# 1080p badge sources use different stems from the 1440p set:
-#   stopping_ja (vs stopping_next_station at 1440p)
-#   passing_ja  (vs passing_jp at 1440p)
-BADGE_ANCHOR_FILES_1080P: dict[str, list[str]] = {
-    "MOVING": ["running_en", "running_ja"],
-    "STOPPED": ["stopping_en", "stopping_ja"],
-    "PASSING": ["passing_en", "passing_ja"],
-}
 
 # 1080p speed-limit sources. Superset of KNOWN_LIMIT_VALUES (extra: 40, 50, 70, 95, 115).
 # limit_110_2 is a backup shot of 110 — only used if limit_110 fails to segment.
@@ -225,8 +215,9 @@ def extract_badges(
 ) -> None:
     """Crop badge cell from each anchor source; save as PNG.
 
-    `badge_anchor_files` defaults to the 1440p BADGE_ANCHOR_FILES dict.
-    `profile` selects per-resolution crop geometry; None uses the 1440p
+    `badge_anchor_files` defaults to the shared BADGE_ANCHOR_FILES dict — the
+    stems the classifier looks for, so an extraction that skips one is visible.
+    `profile` selects the crop geometry; None uses the 1440p
     ``badge_cell_from_surface`` helper (hardcoded HUD_BBOX + BADGE_BBOX).
     """
     if badge_anchor_files is None:
@@ -299,7 +290,15 @@ def generate_test_fixtures() -> None:
 
         n_frames = 0
         left, top, right, bottom = profile.capture_region
+        n_reused = 0
         for entry in manifest["frames"]:
+            # A frame holds EVERY cell, so an entry may carry `file` to re-read a
+            # different cell out of a frame another entry already writes. Writing it
+            # again under this entry's own name would produce a ~600 KB byte-duplicate
+            # that no test opens — which is the cost the key exists to avoid.
+            if entry.get("file"):
+                n_reused += 1
+                continue
             src = src_dir / f"{entry['stem']}.png"
             if not src.exists():
                 print(f"[skip] {res} frame {entry['stem']} — source missing")
@@ -310,7 +309,8 @@ def generate_test_fixtures() -> None:
             n_frames += 1
 
         rel = res_dir.relative_to(FIXTURES_DIR.parent.parent)
-        print(f"[fixtures {res}] {n_cells} cells + {n_frames} quadrant frames -> {rel}/")
+        reused = f" ({n_reused} entry/entries re-read a frame already written)" if n_reused else ""
+        print(f"[fixtures {res}] {n_cells} cells + {n_frames} quadrant frames{reused} -> {rel}/")
 
 
 def main() -> int:
@@ -324,32 +324,22 @@ def main() -> int:
     print(f"Extracting from {SOURCES_DIR.name}/ -> {OUT_DIR.name}/\n")
     print("--- digit glyphs (dark) ---")
     extract_digits(SOURCES_DIR, OUT_DIR / "digits")
-    print("\n--- digit glyphs (red, speed-limit) ---")
-    extract_red_digits(SOURCES_DIR, OUT_DIR / "digits_red")
-    print("\n--- badge anchors (1440p) ---")
-    extract_badges(SOURCES_DIR, OUT_DIR / "badges")
-    print("\n--- badge anchors (1080p) ---")
+    print("\n--- badge anchors ---")
     if SOURCES_DIR_1080P.exists():
-        extract_badges(
-            SOURCES_DIR_1080P,
-            OUT_DIR / "1080p" / "badges",
-            badge_anchor_files=BADGE_ANCHOR_FILES_1080P,
-            profile=PROFILE_1920_1080,
-        )
+        extract_badges(SOURCES_DIR_1080P, OUT_DIR / "badges", profile=PROFILE_1920_1080)
     else:
-        print(f"[skip] {SOURCES_DIR_1080P.name}/ not found — 1080p badges not extracted.")
-    print("\n--- digit glyphs (red, 1080p speed-limit) ---")
+        print(f"[skip] {SOURCES_DIR_1080P.name}/ not found — badge anchors not extracted.")
+    print("\n--- digit glyphs (red, speed-limit) ---")
     if SOURCES_DIR_1080P.exists():
-        seg_1080 = seg_for_scale(0.75)
         extract_red_digits(
             SOURCES_DIR_1080P,
-            OUT_DIR / "1080p" / "digits_red",
+            OUT_DIR / "digits_red",
             known_limit_values=KNOWN_LIMIT_VALUES_1080P,
             crop_fn=lambda surf: crop_cell(surf, PROFILE_1920_1080, PROFILE_1920_1080.speed_limit_value_bbox),
-            seg=seg_1080,
+            seg=seg_for_scale(0.75),
         )
     else:
-        print(f"[skip] {SOURCES_DIR_1080P.name}/ not found — 1080p red digits not extracted.")
+        print(f"[skip] {SOURCES_DIR_1080P.name}/ not found — red digits not extracted.")
     print("\n--- test fixtures (_tests/fixtures/ocr) ---")
     generate_test_fixtures()
     print(f"\nDone. Commit the diff under {OUT_DIR.name}/ and _tests/fixtures/ocr/.")

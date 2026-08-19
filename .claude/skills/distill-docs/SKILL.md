@@ -1,6 +1,6 @@
 ---
 name: distill-docs
-description: Periodic audit of domain docs (DISPLAY.md, DISPLAY_E235.md, DATA_FORMAT.md, auto_input/README.md, plus future per-series DISPLAY_*.md) — scan for accumulated bloat (history notes, code-snippet illustrations, speculative future sections, design-rationale prose, cross-doc duplication, cumulative staleness). Discussion-first, item-by-item; user approves each removal before any edit lands.
+description: Periodic audit of domain docs (docs/DISPLAY.md, docs/DISPLAY_E235.md, docs/DATA_FORMAT.md, auto_input/README.md, plus future per-series DISPLAY_*.md) — scan for accumulated bloat (history notes, code-snippet illustrations, speculative future sections, design-rationale prose, cross-doc duplication, cumulative staleness). Discussion-first, item-by-item; user approves each removal before any edit lands.
 triggers:
   - /distill-docs
   - distill docs
@@ -13,9 +13,9 @@ triggers:
 
 ## Purpose
 
-Domain docs (`DISPLAY.md`, `DISPLAY_E235.md`, `DATA_FORMAT.md`, `auto_input/README.md`, plus future per-series `DISPLAY_*.md` as new train models land) are written under feature-flow pressure. Even with each doc's `EDIT-CONTRACT` block at the top doing heavy lifting at write-time, three failure modes accumulate that the gate structurally can't catch:
+Domain docs (`docs/DISPLAY.md`, `docs/DISPLAY_E235.md`, `docs/DATA_FORMAT.md`, `auto_input/README.md`, plus future per-series `DISPLAY_*.md` as new train models land) are written under feature-flow pressure. Even with each doc's `EDIT-CONTRACT` block at the top doing heavy lifting at write-time, three failure modes accumulate that the gate structurally can't catch:
 
-1. **Cross-doc drift** — a fact gets stated in DISPLAY.md, then later (correctly) added to CLAUDE.md mental model, or a skill, or an inline `# CONTRACT:`. Each edit looks fine in isolation; the duplicate only shows up reading both.
+1. **Cross-doc drift** — a fact gets stated in docs/DISPLAY.md, then later (correctly) added to CLAUDE.md mental model, or a skill, or an inline `# CONTRACT:`. Each edit looks fine in isolation; the duplicate only shows up reading both.
 2. **Cumulative staleness** — a feature commit makes half of an old section obsolete, but the editor was focused on the new content. Old content remains as background noise.
 3. **Self-blindness at write-time** — the author rarely sees their own bloat. Distance helps.
 
@@ -26,8 +26,8 @@ NOT for one-off cleanup of a specific section — just edit in place. NOT for ge
 ## Scope
 
 In scope:
-- `DISPLAY.md`
-- `DATA_FORMAT.md`
+- `docs/DISPLAY.md`
+- `docs/DATA_FORMAT.md`
 - `auto_input/README.md`
 - `audio/README.md` (per-line IRL + sim quirks; growing surface as lines accumulate)
 
@@ -91,18 +91,18 @@ Skip flagging if verification fails or is ambiguous — leave it for the next pa
 ## Distill-docs summary — <date range since last run>
 
 Baseline (current → after-proposal):
-- DISPLAY.md: <N> lines → ~<N - X> lines
-- DATA_FORMAT.md: <N> → ~<N - Y>
+- docs/DISPLAY.md: <N> lines → ~<N - X> lines
+- docs/DATA_FORMAT.md: <N> → ~<N - Y>
 - auto_input/README.md: <N> → ~<N - Z>
 
-### DISPLAY.md
+### docs/DISPLAY.md
 | # | Shape | Section / lines | Verification |
 |---|---|---|---|
 | 1 | history-note | "### 2026-03-14" L750-760 | git log has 7e800f3 / equivalent |
 | 2 | code-illustration | L189-205 (JapaneseDisplay snippet) | upper_lcd.py:42-58 is canonical, illustration adds nothing |
 | ... |
 
-### DATA_FORMAT.md
+### docs/DATA_FORMAT.md
 | # | Shape | Section / lines | Verification |
 |---|---|---|---|
 | ... |
@@ -115,7 +115,7 @@ Baseline (current → after-proposal):
 ### Cross-doc duplication
 | # | Fact | Locations | Canonical home |
 |---|---|---|---|
-| 1 | "destination always kanji" | DISPLAY.md L725, CLAUDE.md L67 | CLAUDE.md (mental model — preloaded) |
+| 1 | "destination always kanji" | docs/DISPLAY.md L725, CLAUDE.md L67 | CLAUDE.md (mental model — preloaded) |
 | ... |
 
 ### Total proposed removal: ~<line-count> lines across <file-count> files
@@ -134,8 +134,8 @@ For each approved removal:
 After all approved removals, re-record the line counts so the next distill pass has a baseline:
 
 ```
-DISPLAY.md: <N> lines (-<delta>)
-DATA_FORMAT.md: <N> lines (-<delta>)
+docs/DISPLAY.md: <N> lines (-<delta>)
+docs/DATA_FORMAT.md: <N> lines (-<delta>)
 auto_input/README.md: <N> lines (-<delta>)
 ```
 
@@ -144,14 +144,14 @@ auto_input/README.md: <N> lines (-<delta>)
 ```
 ## Distill-docs applied
 
-- DISPLAY.md: -<X> lines, <N> sections removed/merged
-- DATA_FORMAT.md: -<Y> lines, <N> sections removed/merged
+- docs/DISPLAY.md: -<X> lines, <N> sections removed/merged
+- docs/DATA_FORMAT.md: -<Y> lines, <N> sections removed/merged
 - auto_input/README.md: -<Z> lines, <N> sections removed/merged
 - Cross-doc dedup: <N> facts unified to canonical home
 - Files touched: <list>
 
 Structural notes (deferred, not in this pass):
-- <e.g. "DISPLAY.md's Lower LCD section is mixing layout + state, candidate for splitting next time">
+- <e.g. "docs/DISPLAY.md's Lower LCD section is mixing layout + state, candidate for splitting next time">
 ```
 
 Suggest committing via `/commit`. Doc-distill commits should travel as their own commit (not bundled with feature work) so the audit trail is intact.
@@ -180,7 +180,7 @@ Recognize these patterns and don't flag them:
 
 ## Scope
 
-- **Does** scan DISPLAY.md, DATA_FORMAT.md, auto_input/README.md for the named bloat shapes.
+- **Does** scan docs/DISPLAY.md, docs/DATA_FORMAT.md, auto_input/README.md for the named bloat shapes.
 - **Does** verify each finding via cross-doc grep / git log / code read.
 - **Does** propose removals item-by-item, ask before non-trivial deletions, record before/after line counts.
 - **Does not** autofix without discussion.

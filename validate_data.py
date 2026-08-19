@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Validate the project's authored data against the DATA_FORMAT.md spec.
+"""Validate the project's authored data against the docs/DATA_FORMAT.md spec.
 
 Covers route.json files (per audio/<line>/<diagram>/) and the top-level
 data/{translations,train_types,stations,lines}.json catalogs, including
@@ -48,7 +48,7 @@ PASSING_FORBIDDEN = ("sta", "sta_cut", "time", "pa_at_station")
 PRE_STOP_FORBIDDEN = ("pa", "pa_at_station", "sta", "sta_cut", "time")
 VALID_LINE_CATEGORIES = {"jr_east", "shinkansen", "non_jr"}
 # Active-line badge codes (route-level `line_code`) — drives the transfer-info
-# active-line filter. See DATA_FORMAT.md § Route-Level Fields.
+# active-line filter. See docs/DATA_FORMAT.md § Route-Level Fields.
 VALID_LINE_CODES = {"JY", "JK", "JC", "JO", "JU", "JT", "JJ", "JE", "JN", "JA"}
 # UI-chrome locales every data/translations_app.json key must carry.
 APP_LOCALES = ("en", "zh_HK", "zh_CN")
@@ -417,7 +417,7 @@ def check_station_translations(translations: dict, issues: list) -> None:
     that renders kanji in the one mode that exists to remove it), 18 English names
     missing a macron, 3 carrying one the reading does not support, and 2 wrong kana.
 
-    DATA_FORMAT.md § "Things the validator can't catch" listed Hepburn correctness
+    docs/DATA_FORMAT.md § "Things the validator can't catch" listed Hepburn correctness
     as by-eye; this is that gap closed.
     """
     rel = "data/translations.json"
@@ -633,7 +633,7 @@ def check_route_frames(route_path: Path, issues: list) -> None:
     whole route — lives solely in ``route_loader._resolve_frames`` and
     surfaces via ``check_route_loads``. Not re-checked here, to keep one
     source of truth for the frame rules (per principles.md "Sync downstream
-    enforcers"). See DATA_FORMAT.md § frames.
+    enforcers"). See docs/DATA_FORMAT.md § frames.
     """
     rel = route_path.parent.relative_to(AUDIO_ROOT).as_posix()
     frames = load(route_path).get("frames")
@@ -716,7 +716,7 @@ def check_sta_last_is_melody(route_paths: list, issues: list) -> None:
     The list became positionally significant on 2026-08-11: the last entry is the
     departure melody and loops `[0, sta_cut)` until cut, while every earlier entry plays
     through once with `sta_cut` ignored. So one stop's single cut describes exactly one
-    file — the last. See DATA_FORMAT.md § `sta` Array.
+    file — the last. See docs/DATA_FORMAT.md § `sta` Array.
 
     WHAT THIS CANNOT CATCH: whether the last entry really IS the melody. Reversing Saikyo
     大宮's two entries leaves the cut inside the new last file too (both run 12–14 s), so

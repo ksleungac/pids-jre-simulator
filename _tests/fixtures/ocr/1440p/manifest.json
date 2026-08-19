@@ -1,145 +1,34 @@
 {
- "resolution": "1440p",
- "profile_key": [
-  2560,
-  1440
- ],
- "source_dir": "_ocr_calibration",
- "cells": [
-  {
-   "stem": "running_en",
-   "type": "badge",
-   "expected": "MOVING"
-  },
-  {
-   "stem": "running_ja",
-   "type": "badge",
-   "expected": "MOVING"
-  },
-  {
-   "stem": "stopping_en",
-   "type": "badge",
-   "expected": "STOPPED"
-  },
-  {
-   "stem": "stopping_next_station",
-   "type": "badge",
-   "expected": "STOPPED"
-  },
-  {
-   "stem": "passing_en",
-   "type": "badge",
-   "expected": "PASSING"
-  },
-  {
-   "stem": "passing_jp",
-   "type": "badge",
-   "expected": "PASSING"
-  },
-  {
-   "stem": "limit_30",
-   "type": "speed_limit",
-   "expected": 30
-  },
-  {
-   "stem": "limit_35",
-   "type": "speed_limit",
-   "expected": 35
-  },
-  {
-   "stem": "limit_45",
-   "type": "speed_limit",
-   "expected": 45
-  },
-  {
-   "stem": "limit_55",
-   "type": "speed_limit",
-   "expected": 55
-  },
-  {
-   "stem": "limit_65",
-   "type": "speed_limit",
-   "expected": 65
-  },
-  {
-   "stem": "limit_75",
-   "type": "speed_limit",
-   "expected": 75
-  },
-  {
-   "stem": "limit_80",
-   "type": "speed_limit",
-   "expected": 80
-  },
-  {
-   "stem": "limit_85",
-   "type": "speed_limit",
-   "expected": 85
-  },
-  {
-   "stem": "limit_90",
-   "type": "speed_limit",
-   "expected": 90
-  },
-  {
-   "stem": "limit_100",
-   "type": "speed_limit",
-   "expected": 100
-  },
-  {
-   "stem": "limit_110",
-   "type": "speed_limit",
-   "expected": 110
-  },
-  {
-   "stem": "limit_120",
-   "type": "speed_limit",
-   "expected": 120
-  },
-  {
-   "stem": "stopping_position",
-   "type": "stopping_offset",
-   "expected": 18
-  },
-  {
-   "stem": "stopping_pos_neg",
-   "type": "stopping_offset",
-   "expected": -14
-  },
-  {
-   "stem": "running_en",
-   "type": "speed",
-   "expected": 69,
-   "expected_tenths": 3
-  },
-  {
-   "stem": "running_ja",
-   "type": "speed",
-   "expected": 68,
-   "expected_tenths": 8
-  },
-  {
-   "stem": "running_my_usage",
-   "type": "speed",
-   "expected": 94,
-   "expected_tenths": 0
-  }
- ],
- "frames": [
-  {
-   "stem": "running_en",
-   "type": "badge",
-   "expected": "MOVING"
-  },
-  {
-   "stem": "limit_100",
-   "type": "speed_limit",
-   "expected": 100
-  },
-  {
-   "stem": "stopping_position",
-   "type": "stopping_offset",
-   "expected": 18
-  }
- ]
+  "resolution": "1440p",
+  "profile_key": [
+    2560,
+    1440
+  ],
+  "source_dir": "_ocr_calibration",
+  "cells": [],
+  "frames": [
+    {
+      "stem": "running_en",
+      "type": "badge",
+      "expected": "MOVING"
+    },
+    {
+      "stem": "limit_100",
+      "type": "speed_limit",
+      "expected": 100
+    },
+    {
+      "stem": "stopping_position",
+      "type": "stopping_offset",
+      "expected": 18
+    },
+    {
+      "type": "speed",
+      "stem": "running_en",
+      "file": "badge__running_en.png",
+      "expected": 69,
+      "note": "Pins speed_value_bbox — the only cell bbox no frame exercised. Re-reads the badge frame's speed cell; value carried from the verified speed cell of the same source capture."
+    }
+  ],
+  "_note": "No cell fixtures: a committed cell is cropped at its own resolution and can only be read with templates of that resolution. There is one template set now (the model's), so 1440p is covered through its FRAMES, which go grab -> downscale_hud -> _crop_cell -> read, the shipping path. Per-cell anchors live in the 1080p manifest, which is the model."
 }

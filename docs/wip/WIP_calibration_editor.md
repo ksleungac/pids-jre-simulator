@@ -74,7 +74,7 @@ CLOCK_RECT = pygame.Rect(_TUNEABLES_CLOCK_RECT["clock_x"], _TUNEABLES_CLOCK_RECT
 
 The draw method syncs `CLOCK_RECT` from the dict each frame via `CLOCK_RECT.update(tr["clock_x"], tr["clock_y"], tr["clock_w"], tr["clock_h"])` so editor nudges land immediately (pygame.Rect is mutable in place — editor's `getattr(mod, "CLOCK_RECT")` reads the live value). Register both dicts on the same element in `_REGISTRY` so a single click on the region surfaces region + internal tuneables together.
 
-**Convention compliance:** the region rect drives the clip wrap AND the bg fill AND the debug-grid tint (per DISPLAY_E235.md § "Element confinement"). Don't draw a sub-sized bg rect with hand-tuned magic numbers — fill the full region rect, let clip + font ascender handle visible glyph alignment.
+**Convention compliance:** the region rect drives the clip wrap AND the bg fill AND the debug-grid tint (per docs/DISPLAY_E235.md § "Element confinement"). Don't draw a sub-sized bg rect with hand-tuned magic numbers — fill the full region rect, let clip + font ascender handle visible glyph alignment.
 
 **Pioneers:** `CLOCK_RECT` + `PREFIX_RECT` (2026-05-14). Other region rects (`DEST_RECT`, `STATION_RECT`, `BADGE_RECT`, `PA_HINT_RECT`) convert lazily when each element next needs in-editor positioning.
 
@@ -224,7 +224,7 @@ Graduate BOTH (E235-0 + editor), E235-0 first. The git merge was a single clean 
 
 **Phase 1 — graduate E235-0 (DONE):**
 1. ~~Smoke-test E235-0 standalone~~ — done; Yamanote (circular) + horseshoe + transfer all render across modes.
-2. ~~Confirm `DISPLAY_E235.md` is self-contained~~.
+2. ~~Confirm `docs/DISPLAY_E235.md` is self-contained~~.
 3. ~~FF-merge `feat/calibration-editor` → master + push~~ — done. E235-0 shipped; editor *code* rode along (its *standard* is not canonical until Phase 2).
 
 **Phase 2 — graduate the editor standard (2026-06-23):**
@@ -232,7 +232,7 @@ Graduate BOTH (E235-0 + editor), E235-0 first. The git merge was a single clean 
 5. **P5 golden template** — **upper DONE, route bar DEFERRED.** Badge + PA-hint wired (`e235_0/upper_lcd.py` `_TUNEABLES_BADGE_RECT` / `_TUNEABLES_PA_HINT_RECT` + registered + smoke-verified). The **route bar (lower full-route track) is deferred to its own task** — it needs editor lower-view dispatch first (its `_TUNEABLES_FULL_ROUTE` element shares the lower-screen region with `five_station`/`transfer_panel` but lives in the *full-route* view, so the editor must disambiguate elements by active `--lower-view` before the route bar is focusable). Tracked in TODO.md.
 6. ~~**P3 editor on master**~~ **DONE (verified)** → `preview_display --edit` imports `calibration_editor` lazily inside `_run_edit_loop` via a `project_root()` path-hack (no static `_*/` import; lint-clean; release-safe — `--edit` is dev-only).
 7. ~~**P2 skill**~~ **DONE** → `.claude/skills/calibration-editor/SKILL.md` (launch + suffix table + add-an-element runbook with the badge/PA-hint worked example + new-model fork runbook + two-tier model + AST caveat). **This skill is now the canonical home for the editor mechanics** — the reference sections above (param-suffix convention, region-rect pattern, per-element dict shape, keybindings) are superseded by it; they remain here only until the route bar lands and this doc dissolves.
-8. **Dissolve this WIP doc** — **BLOCKED on the route bar.** Once the route bar + lower-view dispatch land, absorb any residual notes into the skill / `DISPLAY_E235.md` and delete this file.
+8. **Dissolve this WIP doc** — **BLOCKED on the route bar.** Once the route bar + lower-view dispatch land, absorb any residual notes into the skill / `docs/DISPLAY_E235.md` and delete this file.
 
 **Deferred:** P4 lint gate + the route bar / lower-view dispatch (both → GitHub Issues).
 

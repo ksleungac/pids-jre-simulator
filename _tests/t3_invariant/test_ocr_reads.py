@@ -6,11 +6,14 @@ Ground truth = committed real cells + hand labels (`_tests/fixtures/ocr/<res>/`)
 NOT a code-derived restatement — so it can't be "born wrong agreeing with the code."
 Two fixture kinds per resolution, both driven by the same `manifest.json`:
 
-  cells/   pre-cropped cell PNGs (full coverage) -> exercises the read logic
-           (segmentation + template match + grammar) at every catalogued value.
-  frames/  capture-region quadrant PNGs (what production actually grabs) -> exercises
-           the per-resolution crop geometry (quadrant -> HUD -> cell bbox) via the
-           real production `crop_cell`.
+  cells/   pre-cropped cell PNGs at the MODEL's scale -> exercises the read logic
+           (segmentation + template match + grammar) at every catalogued value. Being
+           pre-cropped, a cell never asks a profile where it is: it pins the READER.
+           1080p only — a 1440p cell would need 1440p templates, and there is one set.
+  frames/  capture-region quadrant PNGs (what production actually grabs) -> driven
+           through the whole shipping path, downscale_hud -> _crop_cell -> read. This
+           is the only kind that asks for a cell bbox, so it pins the GEOMETRY, and a
+           cell type with no frame entry has its bbox guarded by nothing.
 
 Runs with zero local calibration screenshots. `--deep` additionally re-crops every
 cell straight from the gitignored `_ocr_calibration*/` sources when present, catching
@@ -25,7 +28,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -54,17 +56,15 @@ FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "ocr"
 
 
 class _Assets:
-    """Per-resolution OCR assets (templates/anchors/seg), built once."""
+    """The model's OCR assets — ONE set. Every capture is downscaled into the 1080p
+    model before anything reads it, so there is no per-resolution set to choose."""
 
-    def __init__(self, profile: ResolutionProfile) -> None:
-        self.profile = profile
-        self.anchors = load_badge_anchors(DEFAULT_TEMPLATES_DIR / profile.badges_subdir)
-        red_dir = (
-            DEFAULT_TEMPLATES_DIR / profile.templates_subdir / "digits_red" if profile.templates_subdir else DEFAULT_TEMPLATES_DIR / "digits_red"
-        )
+    def __init__(self) -> None:
+        self.anchors = load_badge_anchors(DEFAULT_TEMPLATES_DIR / "badges")
+        red_dir = DEFAULT_TEMPLATES_DIR / "digits_red"
         self.red_templates = build_templates(red_dir) if red_dir.exists() else None
         self.dark_templates = build_templates()
-        self.seg = seg_for_scale(profile.scale)
+        self.seg = seg_for_scale(DOWNSCALE_PROFILE.scale)
 
 
 def _load_cell(path: Path) -> np.ndarray:
@@ -140,8 +140,8 @@ def main() -> int:
         return 1
 
     fails: list[str] = []
-    n_cells = n_frames = n_deep = n_model = 0
-    model_assets = _Assets(DOWNSCALE_PROFILE)
+    n_cells = n_deep = n_model = 0
+    assets = _Assets()
 
     # --- downscale invariants (resolution-independent) ---
     # Whatever the capture geometry, downscaling must land on the model's HUD exactly. A new
@@ -164,47 +164,39 @@ def main() -> int:
         res = manifest["resolution"]
         res_dir = manifest_p.parent
         profile = PROFILES[tuple(manifest["profile_key"])]
-        a = _Assets(profile)
 
-        # --- cells: committed pre-cropped cells -> read logic ---
+        # --- cells: committed model-sized cells -> read logic ---
         for e in manifest["cells"]:
             fx = res_dir / "cells" / f"{e['type']}__{e['stem']}.png"
             if not fx.exists():
                 fails.append(f"{res} cell {e['type']}/{e['stem']}: fixture missing ({fx.name})")
                 continue
             cell = _load_cell(fx)
-            got = _read_value(cell, e["type"], a)
+            got = _read_value(cell, e["type"], assets)
             _check(fails, f"{res} cell {e['type']}/{e['stem']}", got, e["expected"])
             # Speed cells may also lock the tenths digit (decimal-precision log read).
             if e["type"] == "speed" and "expected_tenths" in e:
-                got_t = read_speed_tenths(cell, a.dark_templates, seg=a.seg)
+                got_t = read_speed_tenths(cell, assets.dark_templates, seg=assets.seg)
                 _check(fails, f"{res} cell speed-tenths/{e['stem']}", got_t, e["expected_tenths"])
             n_cells += 1
 
-        # --- frames: capture-region quadrant -> production crop geometry ---
-        # Quadrant origin == capture_region origin, so the HUD sits at
-        # hud_bbox_in_capture within it; swap that in as the profile's hud origin
-        # and the real crop_cell reproduces the production quadrant->HUD->cell path.
-        quad_profile = replace(profile, hud_bbox=profile.hud_bbox_in_capture)
+        # --- frames: the SHIPPING path, grab -> downscale_hud -> _crop_cell -> read ---
+        # All production functions, and the only path there is: every desktop resolution
+        # is read by the one 1080p model. This is also the only place the downscaled crop
+        # geometry is pinned to real pixels.
         for e in manifest["frames"]:
-            fx = res_dir / "frames" / f"{e['type']}__{e['stem']}.png"
+            # A frame is the whole capture quadrant, so EVERY cell is in it — `type` says
+            # which one this entry asserts, not what the file contains. `file` lets a second
+            # entry re-read a different cell out of a frame already committed, which is how
+            # a cell type gets pinned without adding a ~600 KB duplicate of the same pixels.
+            fx = res_dir / "frames" / (e.get("file") or f"{e['type']}__{e['stem']}.png")
             if not fx.exists():
                 fails.append(f"{res} frame {e['type']}/{e['stem']}: fixture missing ({fx.name})")
                 continue
-            quad = pygame.image.load(str(fx))
-            cell = crop_cell(quad, quad_profile, _cell_bbox(profile, e["type"]))
-            got = _read_value(cell, e["type"], a)
-            _check(fails, f"{res} frame {e['type']}/{e['stem']}", got, e["expected"])
-            n_frames += 1
-
-            # --- the SHIPPING path: grab -> downscale_hud -> _crop_cell -> read ---
-            # All production functions. Every desktop resolution is read by the one 1080p
-            # model, so this is the check that matters most, and the only place the
-            # downscaled crop geometry is pinned to real pixels.
             bgra = _load_bgra(fx)
             shrunk = downscale_hud(bgra, profile)
             mcell = _crop_cell(shrunk, DOWNSCALE_PROFILE.hud_bbox_in_capture, _cell_bbox(DOWNSCALE_PROFILE, e["type"]))
-            _check(fails, f"{res} downscaled {e['type']}/{e['stem']}", _read_value(mcell, e["type"], model_assets), e["expected"])
+            _check(fails, f"{res} downscaled {e['type']}/{e['stem']}", _read_value(mcell, e["type"], assets), e["expected"])
             n_model += 1
 
             # A 1080p capture already IS the model, so downscaling must return it untouched.
@@ -229,7 +221,7 @@ def main() -> int:
                     if not src.exists():
                         continue
                     cell = crop_cell(pygame.image.load(str(src)), profile, _cell_bbox(profile, e["type"]))
-                    got = _read_value(cell, e["type"], a)
+                    got = _read_value(cell, e["type"], assets)
                     _check(fails, f"{res} deep {e['type']}/{e['stem']}", got, e["expected"])
                     n_deep += 1
 
@@ -240,7 +232,7 @@ def main() -> int:
         return 1
 
     deep_note = f" + {n_deep} deep" if args.deep and n_deep else ""
-    print(f"PASS: ocr-reads ({n_cells} cells + {n_frames} frames + {n_model} downscaled{deep_note} across {len(manifests)} resolutions)")
+    print(f"PASS: ocr-reads ({n_cells} model cells + {n_model} downscaled frames{deep_note} across {len(manifests)} resolutions)")
     return 0
 
 

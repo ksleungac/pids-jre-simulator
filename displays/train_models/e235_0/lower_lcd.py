@@ -93,7 +93,7 @@ TP_RECT = pygame.Rect(0, UPPER_HEIGHT, 224, S_HEIGHT - UPPER_HEIGHT)
 
 
 # =============================================================================
-# Five-station band — Tier-2 mask PNG (WIP_calibration_editor.md § "Two-tier
+# Five-station band — Tier-2 mask PNG (docs/wip/WIP_calibration_editor.md § "Two-tier
 # tuning model"). The band shape is hand-drawn white-on-transparent in
 # Photoshop (pixel-precise, not parametric) and shipped under data/. At
 # __init__ it is tinted with the route line color via an alpha-stencil bake:
@@ -176,7 +176,7 @@ def _extract_band_centerline() -> List[Tuple[float, float]]:
 # Five-station marker positions (Tier-1 — calibration-editor tuneable). Markers
 # sit ALONG the band: m0 = current stop (bottom), m1..m4 = next four stops going
 # up. `_x`/`_y` pairs follow the editor suffix convention so they drag in the
-# sidebar. Names sit left of each marker. See WIP_calibration_editor.md.
+# sidebar. Names sit left of each marker. See docs/wip/WIP_calibration_editor.md.
 # =============================================================================
 
 # Each station is its own object: a circle marker `m<k>_*` (x/y draggable, r =
@@ -248,7 +248,7 @@ _TUNEABLES_FIVE_STATION = {
 # the parent filter (apply_transfer_filter) so the entry ORDER matches the
 # slot. Fonts smaller than the slot; no list-level compression (knob reserved).
 # Shinkansen take one row but wrap their long name at `・` into two lines shrunk
-# to fit the row pitch. See DISPLAY_E235.md § "Transfer Info".
+# to fit the row pitch. See docs/DISPLAY_E235.md § "Transfer Info".
 # =============================================================================
 # fmt: off
 _TUNEABLES_TRANSFER_PANEL = {
@@ -1216,7 +1216,7 @@ class OpenRouteFullRouteDisplay(CircularFullRouteDisplay):
     direction arrow) to be **stop-index keyed** and linear. Adds passed-station
     dimming (gi < curr_stop → INACTIVE_COLOR), which the circular lacks.
 
-    Layout decisions (see WIP_calibration_editor.md / DISPLAY_E235.md):
+    Layout decisions (see docs/wip/WIP_calibration_editor.md / docs/DISPLAY_E235.md):
       - Split: bottom = stops[0 : ⌈N/2⌉], top = the rest.
       - No sweep — fit-to-rows by shrinking pitch (longest route in scope is
         Keihin-Tōhoku at 46 → 23/row; revisit if cramped).
@@ -1578,7 +1578,7 @@ class JapaneseFiveStationDisplay:
         # idiom as e235_1000.JapaneseDisplay / CircularFullRouteDisplay.
         self._circular = bool(stops) and stops[0].get("name") == stops[-1].get("name")
         # Bake the band mask once with the route line color (Yamanote green by
-        # default). See _bake_band / WIP_calibration_editor.md § "Two-tier".
+        # default). See _bake_band / docs/wip/WIP_calibration_editor.md § "Two-tier".
         self._band = _bake_band(self.color)
         # Gray base band — shown below the rising green during the fill animation.
         self._band_gray = _bake_band(_BAND_GRAY)
@@ -1650,7 +1650,7 @@ class JapaneseFiveStationDisplay:
         # font_atlas.lcd_font() directly — never a bare pygame.font.Font().
         # ShinGo is served from the baked atlas in a build shipping no font
         # files; a bare construct works in dev and raises there.
-        # See WIP_font_atlas.md.
+        # See docs/wip/WIP_font_atlas.md.
         """
         return font_atlas.lcd_font(name, size, draws=draws)
 
@@ -1916,7 +1916,7 @@ class JapaneseFiveStationDisplay:
         the station has no transfers. Shinkansen entries occupy one row but
         wrap their long name at ``・`` into two lines shrunk to the row pitch.
         Panel stays Japanese in every mode (mirrors the kanji-only 5-station
-        map). See DISPLAY_E235.md § "Transfer Info".
+        map). See docs/DISPLAY_E235.md § "Transfer Info".
         """
         if state is None:
             return
@@ -1978,7 +1978,7 @@ class JapaneseFiveStationDisplay:
         # piecewise-linear curve through the draggable handles tp1/tp2/tp3 (sorted
         # by y); _right_edge(row_y) interpolates between the bracketing pair and
         # extrapolates along the end segments past the outermost handles. Left
-        # edge stays vertical at px (tp0_x). See DISPLAY_E235.md § "Transfer Info".
+        # edge stays vertical at px (tp0_x). See docs/DISPLAY_E235.md § "Transfer Info".
         _curve_pts = sorted(
             (
                 (int(t["tp1_y"]), int(t["tp1_x"])),
@@ -2054,7 +2054,7 @@ class JapaneseFiveStationDisplay:
 
         # Grouping (col-1 left at px; col-2 shares one anchor so 2nd badges align)
         # + curved boundary + monotone repair. Algorithm + stability proof in
-        # DISPLAY_E235.md § "Transfer Info" → "Inline panel (5-station view)".
+        # docs/DISPLAY_E235.md § "Transfer Info" → "Inline panel (5-station view)".
         resolved = [resolve_entry(ref, self._tp_lines) for ref in refs]
         list_y0 = sy + sub_img.get_height() + int(t["tp_list_gap"])
         # Threshold T (overfit Yamanote): pairing engages only when the station
@@ -2062,7 +2062,7 @@ class JapaneseFiveStationDisplay:
         # regardless of free width (IRL: 秋葉原/神田/日暮里 etc. stay solo even
         # with room). Yamanote's effective transfer counts are 1,2,3,6,7,8,9 —
         # never 4 or 5 — so the gap makes the 6-cutoff unambiguous. See
-        # DISPLAY_E235.md § "Transfer Info".
+        # docs/DISPLAY_E235.md § "Transfer Info".
         pairing_on = len(resolved) >= int(t["tp_pair_min_n"])
 
         def _build(disabled):
@@ -2587,7 +2587,7 @@ class LowerDisplay(E235_1000_LowerDisplay):
     def _on_slot_entered(self, slot: int, now: float) -> None:
         """Restart the 5-station band fill when its slot (EIGHT) is entered.
 
-        The fill replays on each genuine slot-enter (DISPLAY_E235.md § "E235-0 —
+        The fill replays on each genuine slot-enter (docs/DISPLAY_E235.md § "E235-0 —
         5-station stopping view"). ``english_eight_display`` is the SAME instance,
         so one call covers both modes. Only a real slot change reaches here — a
         draw stall or a stopped→moving marker flip keeps EIGHT current (no

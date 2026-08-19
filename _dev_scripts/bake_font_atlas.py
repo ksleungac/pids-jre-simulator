@@ -70,7 +70,7 @@ def _modes() -> tuple:
 
 # The app-state machine's own arity: APPROACHING_EARLY / APPROACHING_FINAL /
 # STOPPING, which `preview_display.apply_state` maps to 次は / まもなく / ただいま.
-# Not derivable from an enum — see DISPLAY.md § "Unified State Machine".
+# Not derivable from an enum — see docs/DISPLAY.md § "Unified State Machine".
 PA_PHASES = (0, 1, 2)
 
 FROZEN = 1750000000.0

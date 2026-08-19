@@ -299,5 +299,5 @@ After split + route.json update lands: if this work surfaced anything line-speci
 ## Related
 
 - `audio/README.md` — per-line IRL + sim quirks catalog (write-gate target above)
-- `DATA_FORMAT.md` — route.json schema reference (field meanings, validation rules)
+- `docs/DATA_FORMAT.md` — route.json schema reference (field meanings, validation rules)
 - `validate_data.py` — checks audio files referenced by routes exist on disk

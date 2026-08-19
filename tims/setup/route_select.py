@@ -217,7 +217,7 @@ def load_routes():
         stops_raw = d.get("stops", [])
         stops = [s.get("name", "").replace("\n", "") for s in stops_raw]
         # Stopping-station indices into `stops` — the train can START only at a station it halts at.
-        # Passing stations omit pa/sta/time (DATA_FORMAT.md § Skipping Stations); a stop counts as a
+        # Passing stations omit pa/sta/time (docs/DATA_FORMAT.md § Skipping Stations); a stop counts as a
         # halt if it has a time field, a non-empty pa, or an sta. The start grid uses these (no passers).
         stop_idxs = [i for i, s in enumerate(stops_raw) if ("time" in s) or s.get("pa") or s.get("sta")]
         routes.append(

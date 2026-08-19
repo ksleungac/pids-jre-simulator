@@ -88,6 +88,8 @@ These are not local to any module, so each module asserts its own FACET and says
 
 **Coherence ≠ correctness.** A "code matches the documented table" test is insufficient when the doc itself carries internal drift — the re-entry incident's spec and code were born wrong together (`d7320b9`), so they agreed. Test against the deepest invariant (the truth-table `MOVING≡PASSING`), never a derived restatement.
 
+**Retiring a code path retires its test arm — and the assets that arm keeps alive.** A test that still exercises the old path looks like coverage and is verifying something production no longer does; worse, it is a *consumer*, so the assets the old path needed still have a reader and no dead-asset check fires. The pair hides each other. 2026-08-19: OCR had gone single-model months earlier, but T3 still read each fixture natively at its own resolution, which is the only reason a second full template set was still committed and shipping. Deleting the arm is what made the assets visibly dead. When a path goes, sweep for its test arm in the same change, and ask what the arm was the last reader of.
+
 ## Known gaps
 
 - `⬜ T3` **replay harness** (`replay_drive.py`) — reads a `_recordings/*.jsonl`, replays its `sample` stream through `_Detector`, asserts invariants (**exactly one FIRE_DEPARTURE per segment**, departure never eaten, arrival once per stop). Buildable now against a synthetic JSONL; every real recording then drops in as a case for free.
@@ -95,6 +97,8 @@ These are not local to any module, so each module asserts its own FACET and says
 - `⬜ T3` **event → fire-gate → app-advance** — `FIRE_DEPARTURE` actually reaches `pending_next_pa`/`_next_pa`, respecting the app-sub-state gate + manual-press precedence.
 - `⬜ T3` **consensus / commit** — `_maybe_reentry` two-probe latch + app-parked gate + bg→main `pending_silent_advance` signal (stateful/threaded; partly manual).
 - `⬜ T3` — `version tag == display_version()` · picker enumeration excludes every `_`-prefixed route · normal-launch full-wiring (screens-skipped) headless walk
+- `⬜ T3` **4K OCR fixtures** — 1080p has a committed cell + frame set under `fixtures/ocr/`, 1440p has frames; 4K has only the resolution-independent shape invariant. Its geometry was proven on a live drive (941 samples) and nothing locks it. One HUD grab into `fixtures/ocr/2160p/` with a manifest makes it a real gate — runbook in [`auto_input/README.md`](../auto_input/README.md) § "Adding a new resolution" step 3.
+- **Cell fixtures pin the READER; frame fixtures pin the GEOMETRY.** A committed cell is already cropped, so it never asks a profile where that cell is — only a frame entry does. Every cell type therefore needs a frame entry or its bbox is unguarded: `speed_value_bbox` had none until 2026-08-19, and a 70 px shift of it passed the whole suite. Adding a cell type is not enough; add the frame entry too.
 - **bg/main-thread atomicity** — not unit-testable; T5 / manual.
 
 See [`conventions.md § Tooling`](../.claude/rules/conventions.md) "canonical-source duplication" for the T0/T3 defense this suite backs.

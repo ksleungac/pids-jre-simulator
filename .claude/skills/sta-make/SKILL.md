@@ -586,7 +586,7 @@ PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/<line>       
 PYTHONUTF8=1 uv run python _dev_scripts/verify_sta_listen.py audio/_joban/tsuchiura    # per-diagram layout only
 ```
 
-**Pooled lines**: pass the LINE folder. The verifier finds `<line>/*/route.json`, merges the STA union across diagrams (ordered by the diagram referencing the most), and warns if two diagrams disagree on a shared file's `sta_cut`. Every write — interactive trim or cut nudge — lands in **all** route.json files referencing that mp3; patching one desyncs the pool. See `DATA_FORMAT.md § audio_root Field`.
+**Pooled lines**: pass the LINE folder. The verifier finds `<line>/*/route.json`, merges the STA union across diagrams (ordered by the diagram referencing the most), and warns if two diagrams disagree on a shared file's `sta_cut`. Every write — interactive trim or cut nudge — lands in **all** route.json files referencing that mp3; patching one desyncs the pool. See `docs/DATA_FORMAT.md § audio_root Field`.
 
 Per station, the script:
 1. Plays `[0, 3 s]` — confirms the music head is intact (no clipped attack).
@@ -858,7 +858,7 @@ After Phase A split / Phase B verification lands: if this work surfaced anything
 
 - **pa-make** skill — PA workflow (separate; PA has different conventions, no `sta_cut`)
 - `audio/README.md` — per-line IRL + sim quirks catalog (write-gate target above)
-- `DATA_FORMAT.md` — route.json schema reference (field meanings, validation rules)
+- `docs/DATA_FORMAT.md` — route.json schema reference (field meanings, validation rules)
 - `_dev_scripts/audio_id.py` — the named instruments (identity, structure, speech presence); `--selftest` calibrates them
 - `_dev_scripts/trim_sta_silence.py` — trim leading/trailing/mid-gap silence
 - `_dev_scripts/detect_sta_cut.py` — validate `sta_cut` placement

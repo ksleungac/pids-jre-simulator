@@ -5,7 +5,7 @@ Serves whatever is currently on the PC screen â€” setup flow, tutorial, drive â€
 as an MJPEG-style ``multipart/x-mixed-replace`` stream of PNG frames. The
 client is a plain ``<img>``; no JavaScript on the display path.
 
-Design decisions + rejected alternatives live in ``WIP_frame_streaming.md``.
+Design decisions + rejected alternatives live in ``docs/wip/WIP_frame_streaming.md``.
 Summary of the load-bearing ones:
 
 - **PNG, not JPEG.** Measured on this app's AA-off content: PNG is 4x smaller

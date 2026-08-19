@@ -38,7 +38,7 @@ TARGET_LOUDNESS = -15.0
 # through-service swap, restart screen — is authored as a whole number of beats
 # and lands on a beat boundary, so the written duration is the one observed.
 # One beat is also the language cadence (kanji → furigana → english).
-# See DISPLAY.md § "Change scheduler".
+# See docs/DISPLAY.md § "Change scheduler".
 BEAT_SECONDS = 4
 
 # Time scale for countdown: 1 second of real time = this many minutes of travel time

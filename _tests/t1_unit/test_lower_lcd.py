@@ -65,7 +65,7 @@ def check(cond, msg) -> None:
 # prematurely). The incident: Chūō departing 新宿 (idx 21, skip to 四ツ谷 idx 25) with 32
 # stops — visually 10 stations from the end, yet locked with no arrow.
 #
-# THE INVARIANT (DISPLAY.md § "Position-locked views always show the pointer"):
+# THE INVARIANT (docs/DISPLAY.md § "Position-locked views always show the pointer"):
 # for every valid cursor position, the returned window MUST contain cursor_pos — the
 # pointer is always visible.
 

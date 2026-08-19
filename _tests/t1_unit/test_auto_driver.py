@@ -47,8 +47,11 @@ from auto_input.driver import (  # noqa: E402
     _accept_stopping_offset,
     _apply_badge_reject_gate,
     _Detector,
+    badge_anchor_problems,
     guard_distance,
 )
+from auto_input.hud_layout import DOWNSCALE_PROFILE  # noqa: E402
+from auto_input.ocr import BADGE_ANCHOR_FILES, DEFAULT_TEMPLATES_DIR, load_badge_anchors  # noqa: E402
 
 FAILURES: list[str] = []
 
@@ -678,6 +681,51 @@ def check_fire_at_station() -> None:
     check(sim.pending_next_pa is False, "parked: fire must skip (already STOPPING)")
 
 
+def check_badge_anchor_set() -> None:
+    """The shipped anchor set must be complete and at the model's scale.
+
+    Behind `badge_anchor_problems` sit three silent-skip layers, so a partial or
+    wrong-scale set starts the driver, reads no badge for the whole drive and fires
+    nothing, printing no error. Measured 2026-08-19: three of the six stems could be
+    deleted with the entire suite still green — the badge assertions elsewhere are
+    self-comparisons (the cell fixtures ARE the anchors, diff 0.00), so only this
+    checks the set itself. Shapes are pinned literally, never imported.
+    """
+    import numpy as np
+
+    MODEL_H, MODEL_W = 30, 83  # the model badge cell; a literal, so it discriminates
+
+    badges = DEFAULT_TEMPLATES_DIR / "badges"
+    anchors = load_badge_anchors(badges)
+
+    # 1. The set that actually ships is usable.
+    check(
+        badge_anchor_problems(badges, anchors, DOWNSCALE_PROFILE) == [],
+        f"shipped anchors must be usable, got {badge_anchor_problems(badges, anchors, DOWNSCALE_PROFILE)}",
+    )
+    check(
+        DOWNSCALE_PROFILE.badge_bbox[2:] == (MODEL_W, MODEL_H),
+        f"model badge cell must be {MODEL_W}x{MODEL_H}, got {DOWNSCALE_PROFILE.badge_bbox[2:]}",
+    )
+    for state, stems in BADGE_ANCHOR_FILES.items():
+        for stem in stems:
+            check((badges / f"{stem}.png").exists(), f"declared anchor {state}/{stem}.png must exist on disk")
+    for state, group in anchors.items():
+        for a in group:
+            check(a.shape[:2] == (MODEL_H, MODEL_W), f"anchor in {state} must be {MODEL_W}x{MODEL_H}, got {a.shape[1]}x{a.shape[0]}")
+
+    # 2. A declared stem going missing must be caught — the case the suite was blind to.
+    check(badge_anchor_problems(Path("no_such_dir"), anchors, DOWNSCALE_PROFILE) != [], "an absent anchor dir must be reported")
+
+    # 3. Right count, wrong scale (the 1440p set restored by hand) must be caught. This
+    #    is the one that otherwise starts cleanly and classifies nothing, forever.
+    wrong_scale = {k: [np.zeros((40, 111, 3), np.uint8) for _ in v] for k, v in anchors.items()}
+    check(
+        any("wrong shape" in p for p in badge_anchor_problems(badges, wrong_scale, DOWNSCALE_PROFILE)),
+        "a 111x40 (1440p) anchor set must be reported as wrong shape",
+    )
+
+
 def main() -> int:
     check_read_gates()
     check_inferred_state()
@@ -685,6 +733,7 @@ def main() -> int:
     check_reentry_resolver()
     check_reentry_commit()
     check_fire_at_station()
+    check_badge_anchor_set()
 
     if FAILURES:
         print(f"FAIL: auto-driver ({len(FAILURES)} check(s))")
@@ -694,7 +743,7 @@ def main() -> int:
         f"PASS: auto-driver (read gates {len(BADGE_GATE_CASES)} badge-reject + {len(OFFSET_CASES)} stopping-offset + "
         f"{len(DISTANCE_CASES)} distance + double-spike; {len(INFER_CASES)} inferred-state cells + MOVING==PASSING; "
         f"detector stream A-N; {len(GRID)} re-entry grid cells + PASSING/provenance/pa=1 facets + regressions + guards; "
-        f"re-entry commit pa>=2 silent / pa=1 audible; at-station reachability drain + 1B + pa=1 + parked skip)"
+        f"re-entry commit pa>=2 silent / pa=1 audible; at-station reachability drain + 1B + pa=1 + parked skip; badge anchor set complete + model-scale)"
     )
     return 0
 

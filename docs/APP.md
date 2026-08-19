@@ -7,20 +7,20 @@ App-level runtime + the setup / chrome flow. Canonical home for app-level specs 
 > **Holds:** runtime orchestration (`main.py` entry → setup↔drive loop), the launch-config shape, the setup/chrome flow (screens + register codes, selection flow, status band, model/tutorial pickers), the `tims/` package map. The catch-all for an app-level spec with no narrower home.
 >
 > **Refuses:**
-> - LCD render internals → [DISPLAY.md](DISPLAY.md); JSON field defs → [DATA_FORMAT.md](DATA_FORMAT.md); OCR pipeline → [auto_input/README.md](auto_input/README.md)
-> - Chrome / font / interaction *rules* → [conventions.md § UI code style](.claude/rules/conventions.md) — cross-reference, don't restate
+> - LCD render internals → [DISPLAY.md](DISPLAY.md); JSON field defs → [DATA_FORMAT.md](DATA_FORMAT.md); OCR pipeline → [auto_input/README.md](../auto_input/README.md)
+> - Chrome / font / interaction *rules* → [conventions.md § UI code style](../.claude/rules/conventions.md) — cross-reference, don't restate
 > - History notes / change logs / iteration tuning numbers — `git log` + `memory/YYYY-MM-DD.md` have this
 > - Code-snippet illustrations of how a class looks — link `file:line` instead
 > - Speculative future designs ("when X is implemented …") — GitHub Issues is the home
-> - Facts already in [CLAUDE.md](CLAUDE.md) mental model — cross-reference, don't restate
+> - Facts already in [CLAUDE.md](../CLAUDE.md) mental model — cross-reference, don't restate
 >
-> **Voice:** reference-shaped entries (runtime map, screen table, flow contracts) stay compressed — tables, `=` for definitional equivalence, no narrative padding. Rationale-shaped passages (incident traces, "why" framings) run as ordinary prose. Both in complete sentences where they use prose at all, per [CLAUDE.md § Writing tone](CLAUDE.md).
+> **Voice:** reference-shaped entries (runtime map, screen table, flow contracts) stay compressed — tables, `=` for definitional equivalence, no narrative padding. Rationale-shaped passages (incident traces, "why" framings) run as ordinary prose. Both in complete sentences where they use prose at all, per [CLAUDE.md § Writing tone](../CLAUDE.md).
 >
 > **Before adding:** name the section your edit merges into OR the content it replaces. If neither — you're appending, which is the failure mode this contract fights.
 >
 > **Additions > ~10 lines:** present the diff to the user first. Heavy additions get gated, not auto-applied.
 >
-> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](.claude/rules/principles.md).
+> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](../.claude/rules/principles.md).
 
 ---
 

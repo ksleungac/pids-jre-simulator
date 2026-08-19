@@ -36,7 +36,7 @@ TRANSFER_VIEW = ROUTE["transfer_view"]
 
 # --- panel params: read LIVE from the shipping module's _TUNEABLES_TRANSFER_PANEL
 # (no hand-copied drift; this file is the ground-truth generator for the
-# DISPLAY_E235.md regression corpus). ---
+# docs/DISPLAY_E235.md regression corpus). ---
 from displays.train_models.e235_0.lower_lcd import _TUNEABLES_TRANSFER_PANEL as _TP  # noqa: E402
 
 PX = int(_TP["tp0_x"])

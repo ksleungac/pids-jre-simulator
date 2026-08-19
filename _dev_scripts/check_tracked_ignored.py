@@ -5,7 +5,7 @@ Adding an ignore rule does NOT untrack anything — `git rm --cached` does. The 
 steps look like one, so an ignore rule lands alone and the file keeps shipping in
 every clone while the commit message says it is gone. That is how three Morisawa
 faces stayed on master for eleven days after the commit that claimed to remove
-them (2026-08-08 -> 2026-08-19; WIP_font_atlas.md, WIP_licensing.md).
+them (2026-08-08 -> 2026-08-19; docs/wip/WIP_font_atlas.md, docs/wip/WIP_licensing.md).
 
 Repo ignores only (--exclude-per-directory), never the user's global excludes: a
 machine-local ~/.config/git/ignore shadowing a deliberately tracked file is a

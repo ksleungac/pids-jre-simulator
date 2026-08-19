@@ -16,7 +16,7 @@ _ROOT = str(Path(__file__).resolve().parent.parent).replace("\\", "/")
 _NUDGES: list[tuple[object, str]] = [
     (
         lambda p: "displays/train_models/" in p and p.endswith(".py"),
-        "Display renderer — check # CONTRACT: blocks in this file. Docs: DISPLAY.md, DISPLAY_E235.md.",
+        "Display renderer — check # CONTRACT: blocks in this file. Docs: docs/DISPLAY.md, docs/DISPLAY_E235.md.",
     ),
     (
         lambda p: p == "route_loader.py",

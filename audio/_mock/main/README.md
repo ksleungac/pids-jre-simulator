@@ -26,5 +26,5 @@ Compound destination at the route level: `dest: "品川・高輪ゲートウェ�
 
 ## Schema notes (gotchas vs the real data)
 
-- `code_3` (3-letter Roman badge like `TYO`, `AKB`) is **not** a `route.json` field — it lives in `data/stations.json` keyed by station name. The mock route just provides the station name; whether a 3-letter badge renders depends on whether `data/stations.json` has a `code_3` entry for that name. See [DATA_FORMAT.md § "code_3 field"](../../../DATA_FORMAT.md).
+- `code_3` (3-letter Roman badge like `TYO`, `AKB`) is **not** a `route.json` field — it lives in `data/stations.json` keyed by station name. The mock route just provides the station name; whether a 3-letter badge renders depends on whether `data/stations.json` has a `code_3` entry for that name. See [docs/DATA_FORMAT.md § "code_3 field"](../../../docs/DATA_FORMAT.md).
 - `sta_code` (per-stop, e.g. `JO19`) is route-local and lives in `route.json`. The mock uses real-looking `sta_code` values for visual realism but they don't match any real route layout.

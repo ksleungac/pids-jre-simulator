@@ -121,21 +121,15 @@ def main() -> int:
     # pipeline nobody runs.
     templates = build_templates()
     seg = seg_for_scale(DOWNSCALE_PROFILE.scale)
-    badges_dir = DEFAULT_TEMPLATES_DIR / DOWNSCALE_PROFILE.badges_subdir if DOWNSCALE_PROFILE.badges_subdir else None
+    badges_dir = DEFAULT_TEMPLATES_DIR / "badges"
     badge_anchors = load_badge_anchors(badges_dir)
-    # Red digits are per-resolution, so they follow the READ profile like everything else —
-    # the same expression driver.py evaluates. Taking the 1440p set here instead would read
-    # the speed limit against glyphs production never loads.
-    red_dir = (
-        DEFAULT_TEMPLATES_DIR / DOWNSCALE_PROFILE.templates_subdir / "digits_red"
-        if DOWNSCALE_PROFILE.templates_subdir
-        else DEFAULT_TEMPLATES_DIR / "digits_red"
-    )
+    red_dir = DEFAULT_TEMPLATES_DIR / "digits_red"
     red_templates = build_templates(red_dir) if red_dir.exists() else None
 
     # Split by capture resolution — cell geometry is resolution-specific and nothing IN the
-    # PNGs says which. `<height>p` to match every other per-resolution dir in the project
-    # (_tests/fixtures/ocr/1440p/, ocr_templates/1080p/, the --res choices above).
+    # PNGs says which. `<height>p` to match the other dirs that index CAPTURES
+    # (_tests/fixtures/ocr/1440p/, the --res choices above). Templates are not among
+    # them — there is one set, cut at the model's scale.
     out_dir = args.out or (DEFAULT_OUT / f"{profile.desktop_h}p" / time.strftime("%Y%m%d-%H%M%S"))
     if not args.no_dump:
         out_dir.mkdir(parents=True, exist_ok=True)

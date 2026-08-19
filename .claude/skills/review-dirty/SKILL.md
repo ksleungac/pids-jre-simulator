@@ -56,7 +56,7 @@ This project has codified rules and dormant-scaffolding patterns; surface findin
 3. Read `memory/MEMORY.md` — long-term curated index
 4. Read `.claude/rules/critical_lessons.md`, `conventions.md`, `principles.md` — codified rules to apply
 5. Read `.claude/skills/vibe-check/SKILL.md` Step 2 — the 10 smell categories you will apply as Lens 2
-6. For any domain doc in the diff (`DISPLAY.md`, `DATA_FORMAT.md`, `auto_input/README.md`), read its EDIT-CONTRACT block at the top
+6. For any domain doc in the diff (`docs/DISPLAY.md`, `docs/DATA_FORMAT.md`, `auto_input/README.md`), read its EDIT-CONTRACT block at the top
 
 ## Derivation-bypass scan — canonical-source duplication (run BEFORE the lenses)
 A hardcoded literal that re-states a value which owns a single canonical source drifts silently — it is correct-at-authoring, so neither an eyeball nor a dirty-diff review catches it (a hardcoded `\"0.5.4\"` shipped while the build was 0.6.0). Two halves:

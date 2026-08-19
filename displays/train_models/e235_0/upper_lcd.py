@@ -23,7 +23,7 @@ from displays.utils import clip, draw_text_given_width, draw_station_code_badge
 # CONTRACT: each region's draw method clips to its rect (see manifest below
 # this comment block: DEST_RECT, PREFIX_RECT, STATION_RECT, CLOCK_RECT,
 # BADGE_RECT, PA_HINT_RECT). The clip is a hard guarantee — pixels drawn
-# outside the rect are dropped by pygame. See DISPLAY_E235.md § "Element
+# outside the rect are dropped by pygame. See docs/DISPLAY_E235.md § "Element
 # confinement (clip-enforced)" for the rationale and gotchas.
 #
 # Coordinates are within the upper LCD area (y=0..UPPER_HEIGHT=130).
@@ -67,7 +67,7 @@ def _font(filename: str, size: int, draws=None):
     # font_atlas.lcd_font() — never a bare pygame.font.Font(). ShinGo is served
     # from the baked atlas in a build that ships no font files; a bare construct
     # keeps working in dev and raises FileNotFoundError in that build.
-    # See WIP_font_atlas.md.
+    # See docs/wip/WIP_font_atlas.md.
     """
     return font_atlas.lcd_font(filename, size, draws=draws)
 
@@ -87,7 +87,7 @@ def _font(filename: str, size: int, draws=None):
 
 DEST_RECT = pygame.Rect(0, 50, 180, UPPER_HEIGHT - 50)
 # Prefix rect derived from tuneable — see Region rect tuneability pattern in
-# WIP_calibration_editor.md. draw_prefix syncs PREFIX_RECT from this dict
+# docs/wip/WIP_calibration_editor.md. draw_prefix syncs PREFIX_RECT from this dict
 # each frame.
 _TUNEABLES_PREFIX_RECT = {
     "prefix_x": 220,
@@ -121,7 +121,7 @@ STATION_RECT = pygame.Rect(
 # position/size in-app. draw_clock syncs CLOCK_RECT from this dict each frame.
 # Pattern pioneer for region-level tuneability — broadcast to PREFIX_RECT /
 # STATION_RECT 2026-05-14; BADGE_RECT / PA_HINT_RECT 2026-06-23.
-# See WIP_calibration_editor.md § "Region-level tuneability pattern".
+# See docs/wip/WIP_calibration_editor.md § "Region-level tuneability pattern".
 _TUNEABLES_CLOCK_RECT = {
     "clock_x": 573,
     "clock_y": 0,
@@ -211,7 +211,7 @@ def _bg(region: str):
 
 # Tuneable params for KANJI destination rendering. Read by
 # JapaneseDisplay.draw_destination at render time; mutated by the calibration
-# editor (see WIP_calibration_editor.md). Inherited unchanged by FuriganaDisplay.
+# editor (see docs/wip/WIP_calibration_editor.md). Inherited unchanged by FuriganaDisplay.
 _TUNEABLES_DEST_KANJI = {
     "dest_box_x": 6,
     "dest_box_y": 62,
@@ -381,7 +381,7 @@ class FuriganaDisplay(JapaneseDisplay):
 
 # Tuneable params for ENGLISH destination rendering. Read by
 # EnglishDisplay.draw_destination at render time; mutated by the calibration
-# editor (see WIP_calibration_editor.md).
+# editor (see docs/wip/WIP_calibration_editor.md).
 _TUNEABLES_DEST_ENGLISH = {
     "for_x": 10,
     "for_y": 50,
@@ -786,7 +786,7 @@ class UpperDisplay:
     # owned by ChangeScheduler (displays/base.py), which ticks the shared
     # mode_cycler once per frame together with the lower LCD's slot. Ticking it
     # from the upper is what made the two clocks uncoordinated and produced
-    # sub-second view flashes. See DISPLAY.md § "Change scheduler".
+    # sub-second view flashes. See docs/DISPLAY.md § "Change scheduler".
 
     def draw(self, current_time_str: str = None) -> None:
         """Draw the upper display with current mode's renderer."""

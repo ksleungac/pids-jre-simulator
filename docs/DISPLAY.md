@@ -2,7 +2,7 @@
 
 Modular per-train-model architecture for both Upper and Lower LCDs. This doc covers **cross-model** layer: factory dispatch, mode system, unified state machine, lower-LCD interface contract, recipe for adding new train models. Per-sub-series renderer specifics live in per-series docs (see [Per-series displays](#per-series-displays) below).
 
-Train-family scope and in-spec/best-effort policy live in [CLAUDE.md](CLAUDE.md) "Mental Model" (preloaded — should already be in head). JSON shapes → [DATA_FORMAT.md](DATA_FORMAT.md). Cross-cutting code contracts live inline at code sites (font-loading at first font init in each model's `upper_lcd.py`; countdown formula at `lower_lcd.py` `draw_times`; PyInstaller path resolution at [`app_paths.py`](app_paths.py) `project_root`).
+Train-family scope and in-spec/best-effort policy live in [CLAUDE.md](../CLAUDE.md) "Mental Model" (preloaded — should already be in head). JSON shapes → [DATA_FORMAT.md](DATA_FORMAT.md). Cross-cutting code contracts live inline at code sites (font-loading at first font init in each model's `upper_lcd.py`; countdown formula at `lower_lcd.py` `draw_times`; PyInstaller path resolution at [`app_paths.py`](../app_paths.py) `project_root`).
 
 > **EDIT-CONTRACT** — what this doc holds, what it refuses.
 >
@@ -14,15 +14,15 @@ Train-family scope and in-spec/best-effort policy live in [CLAUDE.md](CLAUDE.md)
 > - Code-snippet illustrations of how a class looks — link `file:line` instead
 > - Speculative future sections ("When X is implemented, …") — defer until needed; GitHub Issues is the home for pending designs
 > - Design-discussion rationale (multi-paragraph framings of *why* a model exists) — the rule lives here; the rationale lives in `memory/YYYY-MM-DD.md`
-> - Facts already in [CLAUDE.md](CLAUDE.md) mental model / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
+> - Facts already in [CLAUDE.md](../CLAUDE.md) mental model / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
 >
-> **Voice:** new reference-shaped entries (cross-model invariants, contracts, recipes, mode-system rules, state-machine spec, edge-case tables) stay compressed — tables, `=` for definitional equivalence, no narrative padding. Rationale-shaped passages (incident warnings, "Mental model:" framings, narrative examples) run as ordinary prose. Both in complete sentences where they use prose at all, per [CLAUDE.md § Writing tone](CLAUDE.md).
+> **Voice:** new reference-shaped entries (cross-model invariants, contracts, recipes, mode-system rules, state-machine spec, edge-case tables) stay compressed — tables, `=` for definitional equivalence, no narrative padding. Rationale-shaped passages (incident warnings, "Mental model:" framings, narrative examples) run as ordinary prose. Both in complete sentences where they use prose at all, per [CLAUDE.md § Writing tone](../CLAUDE.md).
 >
 > **Before adding:** name the section your edit merges into OR the content it replaces. If neither — you're appending, which is the failure mode this contract fights.
 >
 > **Additions > ~10 lines:** present the diff to the user first. Heavy additions get gated, not auto-applied.
 >
-> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](.claude/rules/principles.md).
+> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](../.claude/rules/principles.md).
 
 ---
 
@@ -275,8 +275,8 @@ Skip animation lives in `_advance_to_next_stop`. Entering STOPPING and cycling p
 
 - **Position constants inlined** as local variables in each draw method (e.g. `box_x, box_y = 15, 8`). Different train models may need different layouts; per-method positions make that explicit.
 - **Fonts shared** as class members defined in `__init__` (e.g. `self.font_type_bold`). Fonts consistent within a model.
-- **ShinGo fonts resolve through `font_atlas.lcd_font(face, size, bold=, italic=, draws=…)`** — never a bare `pygame.font.Font` for a baked face (banned by `lint_primitives.py`), and `set_bold()`/`set_italic()` on the result now **raise**: style is part of the atlas key, so pass the kwargs. `draws=` declares where the text comes from — `at("audio/*/route.json:stops[].name")`, `lit("次は")`, plus `replace=`/`split=`/`wrap=`/`suffix=` for text the renderer derives. **Adding drawn text is a two-part edit**, the string and its declaration; the atlas is cooked from declarations, so coverage never depends on a state being reachable, and `lcd_font` validates every dev draw against the declaration so an undeclared string fails on the first frame that draws it. Text layout has exactly one implementation, `utils.compose_text_parts`; the atlas stores its output. A font SIZE is part of the key, so `/build` re-bakes every run. Design + gates: [WIP_font_atlas.md](WIP_font_atlas.md).
-- See [conventions.md § "Tuneable-params block"](.claude/rules/conventions.md) for project-wide rule on labeled-local-variables at top of every draw method.
+- **ShinGo fonts resolve through `font_atlas.lcd_font(face, size, bold=, italic=, draws=…)`** — never a bare `pygame.font.Font` for a baked face (banned by `lint_primitives.py`), and `set_bold()`/`set_italic()` on the result now **raise**: style is part of the atlas key, so pass the kwargs. `draws=` declares where the text comes from — `at("audio/*/route.json:stops[].name")`, `lit("次は")`, plus `replace=`/`split=`/`wrap=`/`suffix=` for text the renderer derives. **Adding drawn text is a two-part edit**, the string and its declaration; the atlas is cooked from declarations, so coverage never depends on a state being reachable, and `lcd_font` validates every dev draw against the declaration so an undeclared string fails on the first frame that draws it. Text layout has exactly one implementation, `utils.compose_text_parts`; the atlas stores its output. A font SIZE is part of the key, so `/build` re-bakes every run. Design + gates: [wip/WIP_font_atlas.md](wip/WIP_font_atlas.md).
+- See [conventions.md § "Tuneable-params block"](../.claude/rules/conventions.md) for project-wide rule on labeled-local-variables at top of every draw method.
 
 ### Mode Renderer Design
 
@@ -385,7 +385,7 @@ A non-final frame's right edge (the junction) is a continuation, NOT a terminus 
 ## Adding New Train Model
 
 1. Create `displays/train_models/{model_name}/` directory.
-2. Copy and modify `upper_lcd.py` for fonts/positions (often a fork from sibling sub-series — see [conventions.md § "Display module structure"](.claude/rules/conventions.md) for copy-don't-reinvent rule when forking).
+2. Copy and modify `upper_lcd.py` for fonts/positions (often a fork from sibling sub-series — see [conventions.md § "Display module structure"](../.claude/rules/conventions.md) for copy-don't-reinvent rule when forking).
 3. Implement `lower_lcd.py` with `LowerDisplay`. Subclass existing model's `LowerDisplay` and override only the slot renderer that differs (precedent: E235-0 subclasses E235-1000 and swaps only FULL slot's renderer when route is Yamanote).
 4. Create `__init__.py` exporting `UpperDisplay`, `LowerDisplay` + per-model dimensions/palette (`S_WIDTH`, `S_HEIGHT`, `UPPER_HEIGHT`, `DARK_BG`, `WHITE_BG`).
 5. Register in `displays/train_models/__init__.py` — import the package and add a `TRAIN_MODELS` entry (key = folder name = the route.json `model` value):
@@ -401,7 +401,7 @@ A non-final frame's right edge (the junction) is a continuation, NOT a terminus 
 
 6. Add per-series doc (`DISPLAY_{MODEL}.md`) for sub-series-specific renderer rules. Cross-reference from [Per-series displays](#per-series-displays) below.
 
-Per [CLAUDE.md](CLAUDE.md) "Mental Model → Per-model IRL line scope": new model's IRL line scope determines which routes need full-fidelity behavior; everything else best-effort.
+Per [CLAUDE.md](../CLAUDE.md) "Mental Model → Per-model IRL line scope": new model's IRL line scope determines which routes need full-fidelity behavior; everything else best-effort.
 
 ### Usage
 
@@ -456,7 +456,7 @@ uv run preview_display.py --lower-view {full,eight,cycle}
 - Long-route window flip (Keihin-Tōhoku, Chuo): cursor pos stays correct as window slides.
 - Centering: mock route (11 stops) renders with equal margins; multi-line routes unchanged.
 
-Preview-mode swap inventory documented at `PASimulator.__init__`'s ``preview`` parameter in `app.py`. `jump_to_stop` semantics live in its docstring at `app.py` `PASimulator.jump_to_stop`. Mock-route stop layout → [`audio/_mock/main/README.md`](audio/_mock/main/README.md).
+Preview-mode swap inventory documented at `PASimulator.__init__`'s ``preview`` parameter in `app.py`. `jump_to_stop` semantics live in its docstring at `app.py` `PASimulator.jump_to_stop`. Mock-route stop layout → [`audio/_mock/main/README.md`](../audio/_mock/main/README.md).
 
 ---
 
@@ -471,8 +471,8 @@ Sub-series-specific renderer details (per-class layout, continuity arrows, trans
 
 ## Related Documentation
 
-- [CLAUDE.md](CLAUDE.md) — project overview, module table, controls, "When Working On…" pointers
-- [CLAUDE.md](CLAUDE.md) "Mental Model" — train-family scope, IRL line scope per model, best-effort policy, Hepburn convention (preloaded)
+- [CLAUDE.md](../CLAUDE.md) — project overview, module table, controls, "When Working On…" pointers
+- [CLAUDE.md](../CLAUDE.md) "Mental Model" — train-family scope, IRL line scope per model, best-effort policy, Hepburn convention (preloaded)
 - [DATA_FORMAT.md](DATA_FORMAT.md) — `translations.json` / `train_types.json` / `stations.json` / `route.json` shapes, validation rules
 - `displays/base.py` — `DisplayMode` enum, `ModeCycler`
 - `app.py` `PASimulator.__init__` ``preview`` parameter — preview-mode swap inventory

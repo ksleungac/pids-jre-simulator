@@ -87,16 +87,9 @@ def main() -> int:
     # — a diagnostic returning confident garbage (`critical_lessons.md` §11).
     templates = build_templates()
     seg = seg_for_scale(DOWNSCALE_PROFILE.scale)
-    badges_dir = DEFAULT_TEMPLATES_DIR / DOWNSCALE_PROFILE.badges_subdir if DOWNSCALE_PROFILE.badges_subdir else None
+    badges_dir = DEFAULT_TEMPLATES_DIR / "badges"
     anchors = load_badge_anchors(badges_dir)
-    # Red digits are per-resolution, so they follow the READ profile like everything else —
-    # the same expression driver.py evaluates. Taking the 1440p set here instead would read
-    # the speed limit against glyphs production never loads.
-    red_dir = (
-        DEFAULT_TEMPLATES_DIR / DOWNSCALE_PROFILE.templates_subdir / "digits_red"
-        if DOWNSCALE_PROFILE.templates_subdir
-        else DEFAULT_TEMPLATES_DIR / "digits_red"
-    )
+    red_dir = DEFAULT_TEMPLATES_DIR / "digits_red"
     red_templates = build_templates(red_dir) if red_dir.exists() else None
 
     # The recording is the FULL desktop, not the capture quadrant, so the HUD sits at its

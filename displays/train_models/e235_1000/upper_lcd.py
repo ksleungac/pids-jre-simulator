@@ -26,7 +26,7 @@ from font_atlas import (
 # CONTRACT: each region's draw method clips to its rect (see manifest below
 # this comment block: TRAIN_TYPE_RECT, DEST_RECT, PREFIX_RECT, STATION_RECT,
 # CLOCK_RECT, BADGE_RECT, PA_HINT_RECT). The clip is a hard guarantee — pixels
-# drawn outside the rect are dropped by pygame. See DISPLAY_E235.md § "Element
+# drawn outside the rect are dropped by pygame. See docs/DISPLAY_E235.md § "Element
 # confinement (clip-enforced)" for the rationale and gotchas.
 #
 # Coordinates are within the upper LCD area (y=0..UPPER_HEIGHT=117).
@@ -671,7 +671,7 @@ class UpperDisplay:
     # owned by ChangeScheduler (displays/base.py), which ticks the shared
     # mode_cycler once per frame together with the lower LCD's slot. Ticking it
     # from the upper is what made the two clocks uncoordinated and produced
-    # sub-second view flashes. See DISPLAY.md § "Change scheduler".
+    # sub-second view flashes. See docs/DISPLAY.md § "Change scheduler".
 
     def draw(self, current_time_str: str = None) -> None:
         """Draw the upper display with current mode's renderer."""

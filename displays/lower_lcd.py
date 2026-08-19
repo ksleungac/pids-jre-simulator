@@ -19,7 +19,7 @@ CONTRACT: this class NEVER ticks itself. ``ChangeScheduler``
 ``preemptive_slot`` / ``scheduled_slot`` / ``apply_slot`` exactly once per
 frame, and the concrete's ``draw`` is a pure renderer that advances no timer.
 Ticking a timer inside ``draw`` re-creates the two-independent-clocks bug the
-scheduler exists to kill. See DISPLAY.md § "Change scheduler".
+scheduler exists to kill. See docs/DISPLAY.md § "Change scheduler".
 
 CONTRACT: concrete subclasses MUST provide
   - ``self.transfer_display`` — a ``TransferInfoDisplay``; the base forwards
@@ -343,7 +343,7 @@ class LowerDisplayBase:
         """Hook — a NEW slot just became current (not a same-slot re-anchor).
 
         Base no-op; a concrete whose renderer owns a slot-enter animation
-        overrides it. See DISPLAY_E235.md § "E235-0 — 5-station stopping view".
+        overrides it. See docs/DISPLAY_E235.md § "E235-0 — 5-station stopping view".
         """
         pass
 
@@ -384,7 +384,7 @@ class LowerDisplayBase:
 
     # CONTRACT: drives the through-service frame swap. Arm at STOPPING@junction,
     # hold a fixed _SWAP_HOLD_BEATS, then flip the frame. The lag is required
-    # — the LCD "restarts while stopping" per IRL. See DISPLAY.md § Through-
+    # — the LCD "restarts while stopping" per IRL. See docs/DISPLAY.md § Through-
     # Service Display Frames.
     def _update_active_frame(self, state, current_time: float) -> None:
         """Advance ``_active_frame_idx`` with the arm → wait → fire rule.

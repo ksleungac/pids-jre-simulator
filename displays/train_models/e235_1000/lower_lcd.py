@@ -242,7 +242,7 @@ class JapaneseDisplay(_FrameWindowMixin):
         return 1 if i < self.per_line else 2
 
     # CONTRACT: continuity[2] must be recomputed on every call — not just at the
-    # `remaining == STOPS_QUANTITY - 1` transition frame. See DISPLAY.md §
+    # `remaining == STOPS_QUANTITY - 1` transition frame. See docs/DISPLAY.md §
     # "Long-Route Window Refresh". Stale leak rendered slot-2 chevrons past Ōfuna.
     def _get_stops_list_disp(self, curr_stop: int) -> List[Tuple[int, Dict]]:
         """Get the list of (global_index, stop) pairs currently visible.
@@ -421,7 +421,7 @@ class JapaneseDisplay(_FrameWindowMixin):
             )
 
     # CONTRACT: inner red dot at `curr_stop` (PA target); pointer at `cursor_pos`
-    # (lags during skip — intentional). See DISPLAY.md § "Station Skip Logic (full spec)".
+    # (lags during skip — intentional). See docs/DISPLAY.md § "Station Skip Logic (full spec)".
     # DON'T "fix" the divergence to make them match.
     def draw_marks(self, f_stops: List[Tuple[int, Dict]], dest_idx: int, cursor_pos: int, curr_stop: int) -> None:
         """Draw station markers (circles and arrows).
@@ -642,7 +642,7 @@ class JapaneseDisplay(_FrameWindowMixin):
 
     # CONTRACT: row_head_extra / row_tail_extra magic numbers MUST stay in sync
     # with draw_ptr's pentagon `head_extra` and draw_times' 分-marker `cell_extra`.
-    # See DISPLAY_E235.md § "Row-end / row-head bar extension" — change one, change all.
+    # See docs/DISPLAY_E235.md § "Row-end / row-head bar extension" — change one, change all.
     def show_stops(self, state, current_time: float = 0.0) -> None:
         """Render the full lower LCD frame for this mode.
 
@@ -1002,7 +1002,7 @@ class JapaneseEightStationDisplay(_FrameWindowMixin):
     # ------------------------------------------------------------------
 
     # CONTRACT: window invariant — exactly 8 cells, three regimes (short / sliding / locked).
-    # See DISPLAY_E235.md § "Window invariant — always exactly 8 cells" for the
+    # See docs/DISPLAY_E235.md § "Window invariant — always exactly 8 cells" for the
     # cursor-local-index table. Past regressions came from editing without consulting it.
     def _get_window(self, cursor_pos: int) -> List[Tuple[int, Dict]]:
         """Return (global_index, stop) pairs for the visible 8-cell window.
@@ -1791,7 +1791,7 @@ class LowerDisplay(LowerDisplayBase):
         to english_display for full-route, english_eight_display for 8-station.
         """
         # CONTRACT: _pick_renderer is a pure function of _current_slot + mode.
-        # See DISPLAY_E235.md § "View cycler (LowerDisplay)".
+        # See docs/DISPLAY_E235.md § "View cycler (LowerDisplay)".
         if self._current_slot == self._SLOT_TRANSFER:
             return self.transfer_display
         if mode in (DisplayMode.KANJI, DisplayMode.FURIGANA):
@@ -1806,7 +1806,7 @@ class LowerDisplay(LowerDisplayBase):
     # swap, restart transition) is owned by ChangeScheduler and already applied
     # by the time this runs. Ticking anything here re-creates the two
     # uncoordinated clocks that produced sub-second view flashes.
-    # See DISPLAY.md § "Change scheduler".
+    # See docs/DISPLAY.md § "Change scheduler".
     def draw(self, current_time: float = 0.0) -> None:
         """Dispatch to the active slot's renderer."""
         if self._state is None:

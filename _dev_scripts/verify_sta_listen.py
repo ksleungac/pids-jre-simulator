@@ -494,7 +494,7 @@ def load_route_sources(work_dir: Path) -> tuple[list[Path], Path, list[dict]]:
     across several diagrams, so one mp3 is referenced by several route.json
     files — and sometimes by several STOPS within one — and a sta_cut edit has to
     land in every one of them. `validate_data.check_pool_sta_cut_sync` gates that;
-    see DATA_FORMAT.md § audio_root Field. The returned stop list is the union across diagrams,
+    see docs/DATA_FORMAT.md § audio_root Field. The returned stop list is the union across diagrams,
     ordered by the diagram that references the most STAs.
 
     Raises FileNotFoundError when neither layout is present.

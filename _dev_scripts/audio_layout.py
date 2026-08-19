@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Resolve the audio folder layout for the by-ear verifiers.
 
-Two layouts exist since per-line audio pooling (see DATA_FORMAT.md § audio_root Field):
+Two layouts exist since per-line audio pooling (see docs/DATA_FORMAT.md § audio_root Field):
 
     per-diagram   audio/<line>/<diagram>/route.json  +  <diagram>/{pa,sta}/
     pooled line   audio/<line>/<diagram>/route.json  +  <line>/{pa,sta}/

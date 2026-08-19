@@ -57,7 +57,7 @@ Then bake the font atlas and run its gates. **Always re-bake — never reuse an 
 tuning creates a combo that does not exist in a previously baked atlas. In dev that is invisible
 (`fonts/` is present, so `font_atlas.mode()` returns LIVE and any size renders), and in a build that
 ships no font files it is a `KeyError` at renderer construction on every route. Re-baking every build
-is what makes a size, position or text edit impossible to ship stale — see `WIP_font_atlas.md`.
+is what makes a size, position or text edit impossible to ship stale — see `docs/wip/WIP_font_atlas.md`.
 
 ```powershell
 $env:PYTHONIOENCODING = "utf-8"

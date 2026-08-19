@@ -17,8 +17,10 @@ Digit OCR pipeline:
 Badge classifier: pixel-diff against 6 anchor templates (Moving-EN/JA, Stopped-EN/JA,
 Passing-EN/JA); lowest diff wins. Language-agnostic.
 
-Runtime assets live under `ocr_templates/` — pre-extracted small PNGs (digit
-glyphs ~20×30 binary, badge anchors 111×40 RGB). The ~33 MB of full desktop
+Runtime assets live under `ocr_templates/` — pre-extracted small PNGs (dark digit
+glyphs ~20×30 binary, red digits and badge anchors at the model's scale). There is
+ONE set of each: every capture is downscaled into the 1080p model before anything
+reads it, so nothing is per-resolution. The ~33 MB of full desktop
 source screenshots that were used to extract them live under `_ocr_calibration/`
 (gitignored, local-only). Re-extract via `_dev_scripts/extract_ocr_assets.py`
 after re-capturing source screenshots (only needed if the game HUD layout
@@ -39,20 +41,17 @@ from pathlib import Path
 import numpy as np
 import pygame
 
-from .hud_layout import BADGE_BBOX, DISTANCE_VALUE_BBOX, HUD_BBOX, SPEED_LIMIT_VALUE_BBOX, SPEED_VALUE_BBOX, ResolutionProfile
+from .hud_layout import BADGE_BBOX, DISTANCE_VALUE_BBOX, HUD_BBOX, SPEED_LIMIT_VALUE_BBOX, ResolutionProfile
 
 BADGE_ANCHOR_FILES: dict[str, list[str]] = {
     "MOVING": ["running_en", "running_ja"],
-    # stopping_next_station = 1440p anchor stem; stopping_ja = 1080p anchor stem.
-    # load_badge_anchors skips missing files, so both coexist without branching.
-    "STOPPED": ["stopping_en", "stopping_next_station", "stopping_ja"],
+    "STOPPED": ["stopping_en", "stopping_ja"],
     # PASSING is a transient sub-state of MOVING: badge displays the next *stopping*
     # station while the train crosses an intermediate passing-through station. While
     # PASSING, the HUD distance is to the passing station (NOT the next stopping
     # target), so arrival-PA logic must skip it. Blue pentagon vs MOVING/STOPPED's
     # green — cross-anchor diff ~43 vs within-state ~6, well-separated.
-    # passing_jp = 1440p anchor stem; passing_ja = 1080p anchor stem.
-    "PASSING": ["passing_en", "passing_jp", "passing_ja"],
+    "PASSING": ["passing_en", "passing_ja"],
 }
 
 # Reject threshold — diff > this means no anchor is a credible match. Real reads
@@ -233,11 +232,6 @@ def value_cell_from_surface(surf: pygame.Surface) -> np.ndarray:
     return crop_cell_from_surface(surf, DISTANCE_VALUE_BBOX)
 
 
-def speed_cell_from_surface(surf: pygame.Surface) -> np.ndarray:
-    """Crop speed value cell."""
-    return crop_cell_from_surface(surf, SPEED_VALUE_BBOX)
-
-
 def speed_limit_cell_from_surface(surf: pygame.Surface) -> np.ndarray:
     """Crop speed-limit value cell."""
     return crop_cell_from_surface(surf, SPEED_LIMIT_VALUE_BBOX)
@@ -256,8 +250,14 @@ DEFAULT_TEMPLATES_DIR = project_root() / "ocr_templates"
 def load_badge_anchors(assets_dir: Path | None = None) -> dict[str, list[np.ndarray]]:
     """Load pre-extracted badge anchor crops from ocr_templates/badges/<stem>.png.
 
-    Each PNG is a 111×40 RGB crop of the badge cell — pixel-diff against live
-    capture matches the format directly, no further extraction at runtime.
+    Each PNG is an RGB crop of the badge cell at the MODEL's scale (83×30 today) —
+    pixel-diff against a live downscaled capture matches the format directly, with no
+    further extraction at runtime.
+
+    Silently skips a missing stem, which is deliberate but load-bearing: a caller that
+    needs the set to be complete must say so. `driver.badge_anchor_problems` is that
+    check, and it also catches a set at the wrong scale — `classify_badge_state` skips
+    a shape-mismatched anchor, so a 1440p-era set here classifies nothing at all.
     """
     if assets_dir is None:
         assets_dir = DEFAULT_TEMPLATES_DIR / "badges"
@@ -298,11 +298,6 @@ def classify_badge_state(cell: np.ndarray, anchors: dict[str, list[np.ndarray]])
 def load_value_cell(screenshot_path: Path) -> np.ndarray:
     """Load a screenshot from disk, crop HUD, then crop distance value cell."""
     return value_cell_from_surface(pygame.image.load(str(screenshot_path)))
-
-
-def load_speed_cell(screenshot_path: Path) -> np.ndarray:
-    """Load a screenshot from disk, crop HUD, then crop speed value cell."""
-    return speed_cell_from_surface(pygame.image.load(str(screenshot_path)))
 
 
 def _cell_dark_threshold(cell: np.ndarray, seg: "SegConfig | None" = None) -> float:
@@ -1001,7 +996,19 @@ def _try_read_speed_limit(
                 for right_start_d in range(left_end_d, 4):
                     le = base_split + left_end_d
                     rs = base_split + right_start_d
-                    if le <= x0L + DIGIT_MIN_W or rs >= x1R - DIGIT_MIN_W:
+                    # A half narrower than a digit is not a digit. Reads `_seg`, not the
+                    # module global: the bound is in the CELL's pixel space, and the cell
+                    # is at the model's scale (5 px), not 1440p's (7). Was the global
+                    # until 2026-08-19 — a canonical-source bypass, correct only at a
+                    # scale nothing reads at.
+                    # NO COMMITTED FIXTURE DISCRIMINATES THIS. Measured that day: the
+                    # relaxation IS exercised (limit_100's glued pair goes 6 -> 15
+                    # admitted candidates) but 0 of 19 speed-limit reads change, because
+                    # the argmin score stays under ARGMIN_TRUST_SCORE either way and the
+                    # equal-width repair decides it. Reverting to the global leaves the
+                    # suite green. Closing that needs a cell whose glued pair genuinely
+                    # needs a 6-7 px left half — a `1`-leading limit segmented as one blob.
+                    if le <= x0L + _seg.digit_min_w or rs >= x1R - _seg.digit_min_w:
                         continue
                     gL = extract_glyph_at(x0L, le)
                     gR = extract_glyph_at(rs, x1R)

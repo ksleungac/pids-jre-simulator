@@ -9,7 +9,7 @@ active route is 山手線; out-of-spec routes get the same racetrack opened
 into a horseshoe (an E235-0 look, not the E235-1000 linear fallback). The
 8-station-zoom slot is replaced by the E235-0-specific 5-station stopping
 view universally; only the transfer-info slot still inherits from
-E235-1000. See DISPLAY_E235.md for the canonical doc.
+E235-1000. See docs/DISPLAY_E235.md for the canonical doc.
 
 Per-model dimensions + palette mirror E235-1000's. The constants are
 defined BEFORE the class imports below so the LCD modules can

@@ -170,7 +170,7 @@ When the user asks for a design decision that's claude's to drive, recommend ONE
 - Answer reachable from loaded context → commit. Recommendation + one-line reason.
 - Two genuinely equivalent options → pick one, name the tradeoff, let user override.
 - **Implementation / engineering-practice questions the user can't usefully arbitrate → decide, don't ask.** Bring the user ONLY real-world / mental-model / user-facing questions ("what's different on your end", in-game behavior); make the practice call yourself and show the result for a yes/no. A "idk, your call" reply is the signal you should have decided it. (2026-07-19; also brainstorming-skill override #1.)
-- **Harvesting the author's knowledge: ask only what ONLY they can know, and read the docs first.** A fact-gathering session drifts toward design questions one turn at a time, because each next question follows naturally from the last answer. Two failure shapes, both 2026-08-18 in one session: asking whether a data shape was right — *"I have no way of confirming whether a data shape looks good now and to the sims"* — and asking whether the display marks a passing station, which `DISPLAY.md` answers: *"you should be more specific now, apparently you didn't read current docs."* The answerable questions are about the WORLD (what the game does, what a real train does, how people actually use it); everything else is yours to decide or to look up. Read the domain docs BEFORE the session, not after being told.
+- **Harvesting the author's knowledge: ask only what ONLY they can know, and read the docs first.** A fact-gathering session drifts toward design questions one turn at a time, because each next question follows naturally from the last answer. Two failure shapes, both 2026-08-18 in one session: asking whether a data shape was right — *"I have no way of confirming whether a data shape looks good now and to the sims"* — and asking whether the display marks a passing station, which `docs/DISPLAY.md` answers: *"you should be more specific now, apparently you didn't read current docs."* The answerable questions are about the WORLD (what the game does, what a real train does, how people actually use it); everything else is yours to decide or to look up. Read the domain docs BEFORE the session, not after being told.
 - **Reporting a finding: lead with what it MEANS, then the mechanism.** The user needs the consequence and the decision it forces; the trace is supporting material, not the answer. Burying the implication under a correct technical account reads as not having one. (2026-08-01) Reported two deployment-frame bugs mechanism-first across several turns; user: *"idk, i don't care actual thing, what's the implication here?"*, and earlier *"what do you mean?"* on a paragraph about an adjacent artifact. The one-line version — *"`/build` today ships an exe that crashes for every user on the first station name"* — was available from the start.
 - **A finding your own analysis already resolves is not a question — resolve it and report.** Escalating it reads as a real open risk and spends the user's attention re-deriving what you had. (2026-07-21) Flagged the departure level test's deceleration path for the user to rule on, having *already written* "double-fire protection = the `departure_observed` flag" two paragraphs earlier in the same doc; user: *"how do you think, it is gated behind our departure fired?"*
 
@@ -443,13 +443,18 @@ A tool's output is not the fact it was meant to establish. Before a comparison /
 - Feed it a known-same and a known-different case first. A method that can't return "same" on a known-same is measuring something else.
 - **Mutation-prove a new gate at birth** — not only regression fixtures (§ "Test real logic"), but every
   linter rule, assertion, coverage count and staleness guard. Break the thing it guards, confirm it
-  fires, restore. A gate that reports clean on its first run has told you nothing until it has also
+  fires, restore. **Say you are about to, in one line, before the first edit.** Breaking a production
+  constant looks exactly like breaking a production constant: the user is watching the tool stream, sees
+  a calibrated value change mid-task, and has to interrupt to ask. (2026-08-19) Mid-flow I shifted
+  `speed_value_bbox` by 70 px to prove a restructured T3 still discriminated; user — *"why are we changing
+  this? i thought it is all fixed?"*, then *"oh, you changed for fun and testing, nevermind go."* The
+  proof was right and cost a round-trip for want of a sentence. Name the value, why, and that it goes back. A gate that reports clean on its first run has told you nothing until it has also
   reported dirty on demand. **And when the mutation shows the gate CANNOT fail on the case that
   motivated it, say so where the gate lives — do not quietly keep it and let the surrounding doc
   imply coverage.** (2026-08-11) A validator check written to catch a mis-ordered `sta` list passed
   with the list reversed, because both files were similar lengths so the cut stayed in range. It
   still catches two real errors, so it stayed — with the gap named in its own docstring and in
-  `DATA_FORMAT.md`, and the ordering rule marked as by-ear. A check kept for what it does catch is
+  `docs/DATA_FORMAT.md`, and the ordering rule marked as by-ear. A check kept for what it does catch is
   fine; a check believed to cover more than it does is how a whole class goes unwatched.
 - **Snapshot a metric BEFORE anything that writes what it measures.** If the measuring pass shares
   state with the measured system, order decides the answer.
@@ -518,8 +523,12 @@ A test case that encodes a domain fact is evidence only if it was SAMPLED from r
 **Why:** a green fixture reads as ground truth whichever way it was born. Examples:
 - (2026-08-11) The distance guard's T1 case `("STOPPED","MOVING",1800,3)` asserted a departure carries a large distance jump. I read it as observed behaviour, concluded my change would break a normal departure, and rebuilt the rule around it. Its own comment said *"accepted unconditionally"* — the original design's intent, not a drive. The author then stated the physical fact (the dwell refresh completes while the badge still reads STOPPED), and the fixture was simply wrong. A full design flip and back, off a file that was never a measurement.
 
+**Why:** a green fixture reads as ground truth whichever way it was born. Second shape, worse because nothing in the file admits it — the fixture IS its own subject:
+- (2026-08-19) Six committed badge-cell fixtures were byte-identical to the six badge anchors they were matched against, so `classify_badge_state` scored `diff=0.00` and 7 of 8 badge assertions were the artifact compared to itself. Three of the six anchors could be deleted with the whole suite green, and a wrong-SCALE set passed too, which starts the driver, classifies nothing for a whole drive and prints no error. A self-comparison is not a weak test, it is not a test.
+
 **How to apply:**
 - Ask of any fixture you are about to reason FROM: sampled, or authored? A round illustrative number (`3 → 1800`) and a comment describing intent rather than a capture are the tells.
+- **Then ask where its bytes came from.** If the fixture and the thing under test were cut from the same source in the same step, the comparison is an identity and its score is structurally 0 — check for a suspiciously perfect number before believing the coverage. The fix is a fixture from a DIFFERENT capture, not a second assertion on the same one.
 - When a fixture and a domain owner disagree, the owner wins — then fix the fixture and say in-comment which it now is.
 - Cross-ref § "A measurement is a claim until the instrument is calibrated": a fixture is an instrument too.
 

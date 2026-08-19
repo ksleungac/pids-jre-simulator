@@ -1,6 +1,6 @@
 # E235 Series — Display Doc
 
-Per-series renderers for the E235 train family. Two sub-series ship today: **E235-1000** (Yokosuka Line, Sōbu Rapid + through-service) and **E235-0** (Yamanote Line). Cross-model infrastructure (DisplayMode, ModeCycler, Unified State Machine, Adding-New-Train-Model recipe, Lower-LCD interface contract) lives in [DISPLAY.md](DISPLAY.md). Train-family scope and per-model IRL line scope live in [CLAUDE.md](CLAUDE.md) "Mental Model" (preloaded — should already be in head).
+Per-series renderers for the E235 train family. Two sub-series ship today: **E235-1000** (Yokosuka Line, Sōbu Rapid + through-service) and **E235-0** (Yamanote Line). Cross-model infrastructure (DisplayMode, ModeCycler, Unified State Machine, Adding-New-Train-Model recipe, Lower-LCD interface contract) lives in [DISPLAY.md](DISPLAY.md). Train-family scope and per-model IRL line scope live in [CLAUDE.md](../CLAUDE.md) "Mental Model" (preloaded — should already be in head).
 
 > **EDIT-CONTRACT** — what this doc holds, what it refuses.
 >
@@ -11,13 +11,13 @@ Per-series renderers for the E235 train family. Two sub-series ship today: **E23
 > - Code-snippet illustrations of how a class looks — link `file:line` instead
 > - Speculative future sections ("When X is implemented, …") — defer until needed; GitHub Issues is the home for pending designs
 > - Design-discussion rationale (multi-paragraph framings of *why* a model exists) — the rule lives here; the rationale lives in `memory/YYYY-MM-DD.md`
-> - Facts already in [CLAUDE.md](CLAUDE.md) mental model / [DISPLAY.md](DISPLAY.md) cross-model infra / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
+> - Facts already in [CLAUDE.md](../CLAUDE.md) mental model / [DISPLAY.md](DISPLAY.md) cross-model infra / a skill / an inline `# CONTRACT:` — cross-reference, don't restate
 >
 > **Before adding:** name the section your edit merges into OR the content it replaces. If neither — you're appending, which is the failure mode this contract fights.
 >
 > **Additions > ~10 lines:** present the diff to the user first. Heavy additions get gated, not auto-applied.
 >
-> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](.claude/rules/principles.md).
+> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](../.claude/rules/principles.md).
 
 ---
 
@@ -28,7 +28,7 @@ Per-series renderers for the E235 train family. Two sub-series ship today: **E23
 | **E235-1000** | Yokosuka Line, Sōbu Rapid (incl. through-service to Sōtobō / Narita) | Shipped | Shipped (linear full-route + 8-station + transfer-info) | Stable |
 | **E235-0** | Yamanote Line | Shipped — same as E235-1000 minus train-type cell | Circular full-route (Yamanote) / open-horseshoe full-route (other routes) + 5-station stopping view (owns the EIGHT slot, all routes) with inline transfer panel; horizontal transfer slot inherited from E235-1000 | Shipped |
 
-Per [CLAUDE.md](CLAUDE.md) "Mental Model → Per-model IRL line scope": each sub-series is in-spec only for its IRL lines. Out-of-spec routes loaded into either sub-series get best-effort rendering (no crashes, no broken layouts, but no IRL-fidelity obligation).
+Per [CLAUDE.md](../CLAUDE.md) "Mental Model → Per-model IRL line scope": each sub-series is in-spec only for its IRL lines. Out-of-spec routes loaded into either sub-series get best-effort rendering (no crashes, no broken layouts, but no IRL-fidelity obligation).
 
 ---
 
@@ -36,7 +36,7 @@ Per [CLAUDE.md](CLAUDE.md) "Mental Model → Per-model IRL line scope": each sub
 
 ### Destination Behavior
 
-Convention (always-kanji / "Bound for" English / `&` compound separator) lives in [CLAUDE.md](CLAUDE.md) "Mental Model → IRL display conventions"; JSON encoding + sticky-override closure in [DATA_FORMAT.md § Stop-Level Destination Override](DATA_FORMAT.md). The renderer reads `stops[curr_stop]["dest"]` directly — the loader (`route_loader.finalize_route`) has already filled it on every stop at load time.
+Convention (always-kanji / "Bound for" English / `&` compound separator) lives in [CLAUDE.md](../CLAUDE.md) "Mental Model → IRL display conventions"; JSON encoding + sticky-override closure in [DATA_FORMAT.md § Stop-Level Destination Override](DATA_FORMAT.md). The renderer reads `stops[curr_stop]["dest"]` directly — the loader (`route_loader.finalize_route`) has already filled it on every stop at load time.
 
 ### English Station Name
 
@@ -57,7 +57,7 @@ All layout knobs live in the params block at the top of the method: `code_3_band
 
 **Draw order:** badge draws **last** in `UpperDisplay.draw()` (after prefix/station) so the extended top band is not clipped. The prefix `DARK_BG` rect and the badge share `x=222` — earlier ordering painted over the top of the extension.
 
-JSON-side details (`stations.json` keying, the 22-station catalog rule) are in [DATA_FORMAT.md](DATA_FORMAT.md). Real-world rationale is in [CLAUDE.md](CLAUDE.md) "Mental Model → IRL display conventions".
+JSON-side details (`stations.json` keying, the 22-station catalog rule) are in [DATA_FORMAT.md](DATA_FORMAT.md). Real-world rationale is in [CLAUDE.md](../CLAUDE.md) "Mental Model → IRL display conventions".
 
 ### Element confinement (clip-enforced)
 
@@ -82,7 +82,7 @@ Every upper-LCD region has a declared rect — manifest at the top of `displays/
 
 **Removed in E235-0:** train-type cell (`TRAIN_TYPE_RECT = pygame.Rect(15, 8, 150, 31)`). Yamanote runs a single service type IRL, so the PIDS doesn't render one. Other elements do not reflow — the 150×31 top-left area becomes plain `DARK_BG`.
 
-Concrete code-level deltas in [`displays/train_models/e235_0/upper_lcd.py`](displays/train_models/e235_0/upper_lcd.py) vs the E235-1000 sibling:
+Concrete code-level deltas in [`displays/train_models/e235_0/upper_lcd.py`](../displays/train_models/e235_0/upper_lcd.py) vs the E235-1000 sibling:
 
 - `TRAIN_TYPE_RECT` constant absent
 - `JapaneseDisplay.draw_train_type` + `EnglishDisplay.draw_train_type` methods absent
@@ -167,7 +167,7 @@ Frame-swap mechanics (arm / hold / fire, windowing, continuity) are cross-model 
 | 15 to 28 | `⌈n/2⌉` | 2 | Keiyo (17→9+8), Sōbu/Jōban (19→10+9), Tōkaidō (21→11+10), Saikyō/Takasaki (24→12+12), Nambu (26→13+13) |
 | > 28 | 14 | 2 + window flip | Yamanote (30), Chūō (32), Keihin-Tōhoku (46) |
 
-**E235-1000 IRL is 14-per-line.** Out-of-spec routes (e.g. Keiyō with 17 stops, not an E235-1000 line) wrap to 2 rows under the best-effort policy. See [CLAUDE.md](CLAUDE.md) "Mental Model → Per-model IRL line scope".
+**E235-1000 IRL is 14-per-line.** Out-of-spec routes (e.g. Keiyō with 17 stops, not an E235-1000 line) wrap to 2 rows under the best-effort policy. See [CLAUDE.md](../CLAUDE.md) "Mental Model → Per-model IRL line scope".
 
 **Centering:** the row x-offset uses `min(per_line, num_stops)`, not `per_line` alone. Under the current rule `per_line ≤ num_stops` always, so the `min()` is defensive — kept for code safety.
 
@@ -251,7 +251,7 @@ Two things in `JapaneseDisplay.draw_times` that look wrong but aren't:
 
 ### E235-0 — circular full-route (Yamanote)
 
-Live in [`displays/train_models/e235_0/lower_lcd.py`](displays/train_models/e235_0/lower_lcd.py). Manager subclasses `e235_1000.LowerDisplay`: the FULL-slot renderer is `CircularFullRouteDisplay` when `route_data["route"] == "山手線"`, else `OpenRouteFullRouteDisplay` (the open horseshoe — see below). The EIGHT-slot renderer is `JapaneseFiveStationDisplay` universally (all routes). The horizontal TRANSFER slot inherits unchanged from E235-1000.
+Live in [`displays/train_models/e235_0/lower_lcd.py`](../displays/train_models/e235_0/lower_lcd.py). Manager subclasses `e235_1000.LowerDisplay`: the FULL-slot renderer is `CircularFullRouteDisplay` when `route_data["route"] == "山手線"`, else `OpenRouteFullRouteDisplay` (the open horseshoe — see below). The EIGHT-slot renderer is `JapaneseFiveStationDisplay` universally (all routes). The horizontal TRANSFER slot inherits unchanged from E235-1000.
 
 **Track shape — rounded-corner rectangle (NOT a full stadium / ellipse):** each cap = top quarter-arc + vertical straight middle segment + bottom quarter-arc. Pygame's `pygame.draw.rect(border_radius=...)` draws this natively. Border-radius derives as `v − vert_seg_h/2` per outer + inner rect; outer + inner are independently parameterized (`vert_seg_h_outer = 20`, `vert_seg_h_inner = 15` → smaller inner vert_seg = larger inner border_radius = inner corner more rounded). Stroke at the apex vertical segment stays = `track_stroke_w` since the inner rect is inset by stroke_w on all sides; the corner arcs are NOT concentric (asymmetric flatness) so stroke gradient varies slightly along the arc — by design.
 
@@ -287,7 +287,7 @@ The "15 ahead" walk dedupes by sta_code, handling the route.json shape where Yam
 
 ### E235-0 — open-horseshoe full-route (non-Yamanote)
 
-Live in [`displays/train_models/e235_0/lower_lcd.py`](displays/train_models/e235_0/lower_lcd.py) `OpenRouteFullRouteDisplay`. Subclasses `CircularFullRouteDisplay`, reusing its marker primitives (dot / numbered circle / pentagon / approaching-arrow / `_chevron_frames` timeline / name) verbatim and overriding only the JY-keyed pieces to be **stop-index keyed** and linear. Drives the FULL slot for every non-Yamanote route (the circular is Yamanote-only). A best-effort *invented* look — E235-0 is Yamanote-only IRL, so there's no reference photo; floor per the per-model IRL-line-scope policy.
+Live in [`displays/train_models/e235_0/lower_lcd.py`](../displays/train_models/e235_0/lower_lcd.py) `OpenRouteFullRouteDisplay`. Subclasses `CircularFullRouteDisplay`, reusing its marker primitives (dot / numbered circle / pentagon / approaching-arrow / `_chevron_frames` timeline / name) verbatim and overriding only the JY-keyed pieces to be **stop-index keyed** and linear. Drives the FULL slot for every non-Yamanote route (the circular is Yamanote-only). A best-effort *invented* look — E235-0 is Yamanote-only IRL, so there's no reference photo; floor per the per-model IRL-line-scope policy.
 
 **Shape** — the racetrack with **one end cap dropped** = a horseshoe, not a loop. Bottom row runs L→R from the origin; folds up the right cap; top row runs R→L to the terminus. The left side is open — the two rows terminate at independent flat edges (origin + destination). `_draw_track(band_color=…)` draws the parent's closed racetrack, then whitens the left cap (two rects split at the centerline) plus the band left of each row's leftmost station.
 
@@ -313,7 +313,7 @@ Live in [`displays/train_models/e235_0/lower_lcd.py`](displays/train_models/e235
 
 ### E235-0 — 5-station stopping view (Yamanote)
 
-Live in [`displays/train_models/e235_0/lower_lcd.py`](displays/train_models/e235_0/lower_lcd.py) `JapaneseFiveStationDisplay`. Owns the **EIGHT slot** universally on E235-0 (the manager swaps it in for every route — E235-0 has no 8-station view). The view: the green band, five station markers along it, and an inline transfer panel down the left column.
+Live in [`displays/train_models/e235_0/lower_lcd.py`](../displays/train_models/e235_0/lower_lcd.py) `JapaneseFiveStationDisplay`. Owns the **EIGHT slot** universally on E235-0 (the manager swaps it in for every route — E235-0 has no 8-station view). The view: the green band, five station markers along it, and an inline transfer panel down the left column.
 
 **Band — Tier-2 mask PNG.** Shape is hand-drawn white-on-transparent (`data/e235_0/five_station_band.png`, pixel-precise, not parametric), baked once with the route line color at `__init__` (`_bake_band` — alpha-stencil tint: near-white fill → line color, the grey edge outline left as-drawn, alpha untouched). A green fill animation (`_BAND_FILL_DURATION`) replays on each slot-enter (restarted by the manager's `on_slot_enter` hook — fired from `LowerDisplay._on_slot_entered` off `apply_slot`, the scheduler's single slot-commit funnel; the renderer never self-detects re-entry, so a draw stall or a stopped→moving marker flip does NOT refill), sweeping bottom → top **along the band's curved centerline** with the leading front cut perpendicular to the local tangent (so it stays diagonal to the curve) and feathered smooth (`_BAND_FILL_FEATHER`) rather than a hard cut. The centerline is derived DIRECTLY from the mask's own geometry — the per-row horizontal centroid of the fill, ordered bottom → top (`_extract_band_centerline`, precomputed in `_build_fill_centerline`); the mask is a single contiguous band per row, so the centroid is a faithful medial line. No parametric waypoints, no Catmull-Rom — the earlier arc-spline path (p0..p6 + `_build_catmull_rom_centerline`) was retired together with the shape when the mask replaced it.
 
@@ -532,7 +532,7 @@ E235-1000 only: a badge with `icon: "_universal"` AND a `color: [r, g, b]` field
 
 ### Out-of-spec note
 
-武蔵小杉 JN runs E233-8000, not E235-0/1000 — out of E235 in-spec. Per [CLAUDE.md "Per-model IRL line scope"](CLAUDE.md), out-of-spec routes get best-effort fidelity floors (no crashes, sane layout) rather than IRL match. Per-N scaling ladder + algorithm thresholds are calibrated against E235 IRL refs only. MKG-on-JN render uses MKG's E235-ordered transfers list (tokyu before sotetsu) — IRL E233-8000 has the opposite order; per-view ordering deferred. The algorithm picks `(2,2,1)` for the 5 entries vs IRL `(3,2)` — accepted as out-of-spec drift.
+武蔵小杉 JN runs E233-8000, not E235-0/1000 — out of E235 in-spec. Per [CLAUDE.md "Per-model IRL line scope"](../CLAUDE.md), out-of-spec routes get best-effort fidelity floors (no crashes, sane layout) rather than IRL match. Per-N scaling ladder + algorithm thresholds are calibrated against E235 IRL refs only. MKG-on-JN render uses MKG's E235-ordered transfers list (tokyu before sotetsu) — IRL E233-8000 has the opposite order; per-view ordering deferred. The algorithm picks `(2,2,1)` for the 5 entries vs IRL `(3,2)` — accepted as out-of-spec drift.
 
 ### Worked examples — Case A vs Case B
 
@@ -594,7 +594,7 @@ Every render referenced as an IRL comparison point MUST correspond to a real-wor
 ## Related Documentation
 
 - [DISPLAY.md](DISPLAY.md) — cross-model infrastructure: DisplayMode, ModeCycler, Unified State Machine, Adding New Train Model, Lower-LCD interface contract
-- [CLAUDE.md](CLAUDE.md) — project overview, "Mental Model" framing, "When Working On…" pointers
+- [CLAUDE.md](../CLAUDE.md) — project overview, "Mental Model" framing, "When Working On…" pointers
 - [DATA_FORMAT.md](DATA_FORMAT.md) — `translations.json` / `train_types.json` / `stations.json` / `route.json` shapes
 - `displays/train_models/e235_1000/` — code home for E235-1000 renderers
 - `displays/train_models/e235_0/` — code home for E235-0 renderers
