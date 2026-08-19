@@ -12,6 +12,8 @@
 #   - no-ttf-fonts       — ban .ttf files in fonts/ (conventions.md § Tooling)
 #   - spdx-header        — every .py carries `# SPDX-License-Identifier: MIT`
 #                          (WIP_licensing.md; LICENSE grants only authored code/docs)
+#   - no-tracked-ignored — a tracked file matched by .gitignore (an ignore rule added
+#                          without `git rm --cached`)
 
 repos:
   - repo: https://github.com/psf/black-pre-commit-mirror
@@ -68,3 +70,15 @@ repos:
         # much authored code as the app, and old_version.py is retained authored
         # history. The other local hooks exclude `_` because they police
         # PRODUCTION primitives; this one has no production scope to narrow to.
+
+  - repo: local
+    hooks:
+      - id: no-tracked-ignored
+        name: No tracked file matched by .gitignore (WIP_licensing.md)
+        entry: python _dev_scripts/check_tracked_ignored.py
+        language: python
+        # Repo-state check, not a file check: an ignore rule added WITHOUT
+        # `git rm --cached` leaves the file tracked and shipping in every clone,
+        # and the commit that added the rule reads as if it removed the file.
+        always_run: true
+        pass_filenames: false

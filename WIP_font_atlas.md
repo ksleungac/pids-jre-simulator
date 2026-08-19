@@ -256,7 +256,7 @@ gates, fixed the deployment-frame bugs below, and a real `/build` at `0.6.3` pro
 ShinGo `.otf` staged that the author smoke-tested.
 
 `font_atlas/` is a **gitignored build artifact** — `/build` re-bakes it every run, so it can never be
-stale. Consequence: a build requires the licensed fonts present on the machine. **Since 2026-08-08
+stale. Consequence: a build requires the licensed fonts present on the machine. **Since 2026-08-19
 ShinGo is untracked**, so that is now real rather than prospective — a fresh clone has neither the
 faces nor an atlas and cannot render LCD text until one or the other is supplied by hand. Helvetica
 and Frutiger are still tracked, so only the ShinGo half of the constraint bites today.
@@ -578,9 +578,13 @@ Remaining, deliberately:
   family to `font_atlas.ATLAS_FACES`, extend the `lint_primitives` alternation, declare the sites);
   no swap to an open face is needed or wanted, so the earlier Nimbus Sans / BIZ UDGothic track is
   retired. Until then `fonts/` ships and the folder cannot be dropped wholesale.
-- **ShinGo is out of the tracked tree (2026-08-08).** `git rm --cached fonts/ShinGoPr6N-*.otf` on
+- **ShinGo is out of the tracked tree (2026-08-19).** `git rm --cached fonts/ShinGoPr6N-*.otf` on
   the author's instruction, with `/fonts/ShinGoPr6N-*.otf` added to `.gitignore` so it cannot return
-  by accident. The files stay on the author's machines; only tracking changed. History keeps the
+  by accident. The files stay on the author's machines; only tracking changed.
+  **The 2026-08-08 commit added the ignore rule and never ran `git rm --cached`,** so all three faces
+  stayed tracked on `master` for eleven days while that commit, this doc and `THIRD-PARTY.md` all
+  said they were gone. An ignore rule does not untrack anything. Now gated: the `no-tracked-ignored`
+  pre-commit hook fails on any tracked file its own `.gitignore` matches. History keeps the
   blobs by the no-rewrite decision (2026-07-27), so this closes the *forward* exposure — a clone of
   HEAD no longer carries Morisawa font software — not the historical one.
   **Consequence, stated because nothing enforces it:** `font_atlas/` is a gitignored build artifact,

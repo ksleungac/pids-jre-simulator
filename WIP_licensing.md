@@ -50,6 +50,15 @@ all-rights-reserved) and that `fonts/` redistributes commercial font software.
   so every tag carried it; there was no old-versus-new split to draw. Each tag's SHA was recorded
   before deletion, since every one is still reachable from `master`. Verified after: `v0.5.4`'s
   source archive returns 404, `v0.6.2`'s still 200.
+- **ShinGo untracked** (2026-08-19) — `git rm --cached fonts/ShinGoPr6N-*.otf`; the files stay on
+  the author's machines, history keeps the blobs by the no-rewrite decision. This is what closes the
+  forward exposure a clone of `master` carried. **The 2026-08-08 commit that claimed this added the
+  `.gitignore` rule and stopped there** — an ignore rule has no effect on a tracked file, so all
+  three faces kept shipping in every clone for eleven days while the commit message, `WIP_font_atlas.md`
+  and `THIRD-PARTY.md § Fonts` all stated they were gone. A compliance claim that nothing checks is
+  a claim about intent. Gated now by the `no-tracked-ignored` pre-commit hook
+  (`_dev_scripts/check_tracked_ignored.py`), which fails on any tracked file the repo's own
+  `.gitignore` matches; mutation-tested at birth by re-adding a face to the index.
 - **`font_atlas/` in `THIRD-PARTY.md`** (2026-08-08) — the release carries pre-rendered raster
   output of the LCD typefaces, a shipped class that appeared in no inventory path. Cross-
   referenced from § Assets derived from third-party software to § Fonts rather than restated.
