@@ -2,7 +2,7 @@
 
 Japanese Train PA (Public Address) Simulator — JR East style train announcements with visual LCD display.
 
-**[繁體中文](README.zh-HK.md)** · **[简体中文](README.zh-CN.md)** · **[Supported Routes](ROUTES.md)**
+**[繁體中文](docs/README.zh-HK.md)** · **[简体中文](docs/README.zh-CN.md)** · **[Supported Routes](docs/ROUTES.md)**
 
 ---
 
@@ -10,15 +10,15 @@ Japanese Train PA (Public Address) Simulator — JR East style train announcemen
 
 | Compact view | Skip animation | Full-route view |
 |---|---|---|
-| ![](assets/01-keihin-tohoku-compact.png) | ![](assets/02-sobu-skip-animation.png) | ![](assets/03-sobu-full-route.png) |
+| ![](docs/assets/01-keihin-tohoku-compact.png) | ![](docs/assets/02-sobu-skip-animation.png) | ![](docs/assets/03-sobu-full-route.png) |
 
 | Transfer info (Tokyo) | Transfer info (Shinjuku) | Yamanote 5-station (E235-0) |
 |---|---|---|
-| ![](assets/04-tokyo-transfer-info.png) | ![](assets/05-shinjuku-transfer-info.png) | ![](assets/07-yamanote-5station-tokyo.png) |
+| ![](docs/assets/04-tokyo-transfer-info.png) | ![](docs/assets/05-shinjuku-transfer-info.png) | ![](docs/assets/07-yamanote-5station-tokyo.png) |
 
 | Setup: PA settings | Setup: diagram select |
 |---|---|
-| ![](assets/08-tims-pa-setting.png) | ![](assets/09-tims-diagram-select.png) |
+| ![](docs/assets/08-tims-pa-setting.png) | ![](docs/assets/09-tims-diagram-select.png) |
 
 ---
 

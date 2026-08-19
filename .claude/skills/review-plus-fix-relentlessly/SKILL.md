@@ -31,7 +31,7 @@ When you scope each cycle's review:
 - **Exclude** even if dirty:
   - Untracked files you didn't create — they belong to someone else's workstream.
   - Modified files where the changes pre-date this session and weren't yours.
-  - Anything in known artifact directories (`lcd_references/`, `_recordings/`, build outputs).
+  - Anything in known artifact directories (`_references/lcd/`, `_recordings/`, build outputs).
   - Testing harnesses (`preview_*.py`) per project preferences.
   - Anything the user has explicitly carved out earlier in the conversation.
 

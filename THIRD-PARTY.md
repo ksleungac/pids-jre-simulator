@@ -16,12 +16,12 @@ Read this before redistributing any part of this repository.
 - Documentation (`*.md`) and `.claude/`
 - Route and translation data: `data/*.json`, `audio/**/route.json`
 - Project-authored artwork: `data/e235_0/five_station_band.png`,
-  `data/train_icons/`, `assets/roadmap.*`
+  `data/train_icons/`, `docs/assets/roadmap.*`
 - Packaging (`pyproject.toml`, `uv.lock`)
 
 ## Transit operator marks and logos
 
-`data/line_icons/`, `lcd_references/line_badges/`
+`data/line_icons/`, `_references/lcd/line_badges/`
 
 Line symbols and operator logos for JR East, Tokyo Metro, Toei Subway, Rinkai Line,
 Tokyo Monorail, Nippori-Toneri Liner and Tokyo Sakura Tram, sourced from
@@ -84,7 +84,7 @@ typefaces. It is generated at build time and is not in this repository. See § F
 
 ## Reference material
 
-`lcd_references/`, `tims_references/`, `assets/*.png`
+`_references/lcd/`, `_references/tims/`, `docs/assets/*.png`
 
 Photographs of in-service train displays and cab consoles, collected to calibrate the
 renderer, and screenshots of this application in operation. The displays and interface

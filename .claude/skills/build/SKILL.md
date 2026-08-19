@@ -155,6 +155,8 @@ The shipped zip ships the audio folder populated with all real route data (exclu
 
 **Inclusion model — default-ship, not hand-picked.** Stage every top-level project-root directory by default; maintain only an exclusion list. This solves the recurring "we forgot to add the new asset folder" class (2026-05-05 line_icons + ocr_templates) — new folders ship automatically; if a folder shouldn't ship, you add it to `$shipExclude` in a single visible action. The cost asymmetry is heavy in favor of over-shipping: missing-required-asset = release crash; extra-shipped-folder = a few MB in the zip.
 
+**Creating a new top-level DIRECTORY is a shipping decision, and nothing asks you to make it.** Default-ship means the dir joins the zip the moment it is committed — the feature above, working as designed for an *asset* folder, and silent for everything else. The tracked-only guard below does NOT catch it: that guard is for *untracked* cruft, and a deliberately-committed dir sails past. 2026-08-19: a doc-tidy moved the domain docs off the repo root into a new `docs/`, and every release from that commit would have shipped 292 KB of domain docs plus the in-flight design notes in `docs/wip/` to users. Caught hours later, by accident, while moving `assets/` into it. When a change adds a root dir, decide `$shipExclude` in the same commit.
+
 **Tracked-only invariant.** Default-ship is bounded by "shipped sources are committed sources" (`critical_lessons.md §1/§2`): the staging filter drops any candidate dir git does not track. This closes the gap the exclusion list can't — a dead **untracked** dir at root (not `_`/`.`-prefixed, not on the exclude list) that would otherwise ship as-is. It also means a not-yet-committed new asset dir is *skipped and loudly listed* rather than silently zipped, forcing the §2 "commit runtime materials first" discipline at build time.
 
 ```powershell
@@ -168,8 +170,8 @@ Copy-Item "dist\JRE-PA-Simulator.exe" "dist-release\JRE-PA-Simulator\"
 $shipExclude = @(
     'dist', 'dist-release', 'build',               # build outputs (would self-recurse)
     'displays', 'auto_input', 'tims',              # Python source — bundled INTO exe by PyInstaller, not alongside
-    'memory', 'lcd_references', 'tims_references',  # repo-only / dev refs
-    'audio_src', 'assets'                          # dev tooling / repo-only
+    'memory',                                      # repo-only / dev refs
+    'audio_src', 'docs'                            # dev tooling / repo-only
 )
 
 # Hard guard: ship only dirs git actually TRACKS. An untracked top-level dir is

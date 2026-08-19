@@ -150,7 +150,7 @@ Lower-LCD fonts load in `JapaneseDisplay.__init__` via `font_atlas.lcd_font` (se
 Frame-swap mechanics (arm / hold / fire, windowing, continuity) are cross-model — [DISPLAY.md § Through-Service Display Frames](DISPLAY.md). E235-1000 specifics:
 
 - **Restart screen** (`LowerDisplay._draw_restart_transition`): on swap fire, the WHOLE screen blanks to `WHITE_BG` with the JR East logo centered, held `_TRANSITION_BEATS` (1 beat = 4 s), then the new frame renders. Full-screen (upper + lower) — relies on the app drawing lower AFTER upper (`app.py` main loop + boot draw), so the lower's fill overdraws the upper. Cancels on any position change.
-- **JR logo** = `displays.utils.draw_jr_logo` — the single path in `lcd_references/JR_logo_(east).svg` (committed source) flattened to a bezier filled polygon at import (`_JR_LOGO_PATH`). No rasterized asset ships; nothing read at runtime, no `app_paths` / `/build` bundling needed. Tuneable `logo_height` + `bg_color` in the method's `# fmt: off` block; logo color = `draw_jr_logo`'s `_JR_LOGO_GREEN` default; hold = `_TRANSITION_BEATS`. The scheduler applies no discrete change while the logo is up and fires one Preemptive reveal (default slot + dwell restart) when it clears — [DISPLAY.md § Change scheduler](DISPLAY.md).
+- **JR logo** = `displays.utils.draw_jr_logo` — the single path in `_references/lcd/JR_logo_(east).svg` (committed source) flattened to a bezier filled polygon at import (`_JR_LOGO_PATH`). No rasterized asset ships; nothing read at runtime, no `app_paths` / `/build` bundling needed. Tuneable `logo_height` + `bg_color` in the method's `# fmt: off` block; logo color = `draw_jr_logo`'s `_JR_LOGO_GREEN` default; hold = `_TRANSITION_BEATS`. The scheduler applies no discrete change while the logo is up and fires one Preemptive reveal (default slot + dwell restart) when it clears — [DISPLAY.md § Change scheduler](DISPLAY.md).
 - **Frame background** = `WHITE_BG` — an LCD-model constant, NOT route-derived. The frame `line` identity is metadata only; not surfaced on this model's chrome (same physical JO service across the swap, so accent stays the route color).
 
 ---
@@ -195,7 +195,7 @@ Continuity is a **property of certain cells** (last-on-row-1, first-on-row-2, la
 | 1 | `local_i == per_line and continuity[1]` (first cell of row 2) | "from" — route continues from row 1 | chev1 → chev2 → bar with WHITE_BG inverse-triangle notch carved INTO bar's left edge (apex right) |
 | 2 | `gi == last_gi and continuity[2]` (last visible cell when window has slid) | "to" — route continues past visible window | same as slot 0 |
 
-**Slot 0/2 vs slot 1 are visually asymmetric:** slot 0/2 has an *outward* triangle (bar tapers to a point); slot 1 has an *inward* notch (bar's left edge has a white V-shape carved in). Per IRL `lcd_references/chev.png` and `chev2.png` references.
+**Slot 0/2 vs slot 1 are visually asymmetric:** slot 0/2 has an *outward* triangle (bar tapers to a point); slot 1 has an *inward* notch (bar's left edge has a white V-shape carved in). Per IRL `_references/lcd/chev.png` and `chev2.png` references.
 
 ##### Color inheritance
 

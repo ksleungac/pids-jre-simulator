@@ -140,7 +140,7 @@ Each bullet starts with a bolded headline noun followed by `.` then the descript
 
 **Voice — professional and factual, never editorial (standing user preference).** Complete, plain sentences that state what a feature is and does. No marketing register, hype, flourishes, or commit-message fragments. Explain a feature the way you would to a person — contrast old→new only where it clarifies a capability ("you used to press a key for each announcement; now the app plays them automatically"). See user-level `~/.claude/CLAUDE.md § Language and tone`.
 
-**Image-first.** If a feature can be shown, embed a screenshot (committed under `assets/`, referenced by a tag-pinned raw URL `https://raw.githubusercontent.com/<owner>/<repo>/<tag>/assets/<file>`) and CUT the prose that narrates what the image shows. Reserve prose for what an image cannot convey: logic/behavioural changes, opt-in requirements, localization.
+**Image-first.** If a feature can be shown, embed a screenshot (committed under `docs/assets/`, referenced by a tag-pinned raw URL `https://raw.githubusercontent.com/<owner>/<repo>/<tag>/docs/assets/<file>`) and CUT the prose that narrates what the image shows. Reserve prose for what an image cannot convey: logic/behavioural changes, opt-in requirements, localization.
 
 **A first release of a component has no baseline.** When a feature ships for the FIRST time (e.g. the TIMS setup interface in v0.6.0), describe it at a high level — do NOT itemize its internal behaviours or polish (button-press feedback, a pre-selected sole option, a toggle label, the default language) as "changes" or "fixes". There is no prior version to compare against, so those read as noise. Report detail only as a change relative to what users already had.
 

@@ -190,7 +190,7 @@ _TUNEABLES_FIVE_STATION = {
     # marker is drawn at one fixed slot + fixed orientation (only ever at
     # k==0; the 5-station view re-centres on the current stop), so there is NO
     # parametric shape model — the five vertices v0..v4 ARE the shape,
-    # hand-placed against lcd_references/E2350.png via the editor's drag
+    # hand-placed against _references/lcd/E2350.png via the editor's drag
     # handles. Order = polygon winding: v0=apex, v1=shoulder R, v2=back R,
     # v3=back L, v4=shoulder L. m0_x/m0_y = the white dot centre (its own drag
     # handle) AND the index-0 anchor the m-prefix handle scan needs to reach
@@ -2387,7 +2387,7 @@ class JapaneseFiveStationDisplay:
         No parametric shape model: this marker is only ever drawn at one fixed
         slot and one fixed orientation (k==0 in the 5-station view, which
         re-centres on the current stop), so the `vertices` ARE the shape —
-        hand-placed against lcd_references/E2350.png via the calibration
+        hand-placed against _references/lcd/E2350.png via the calibration
         editor's drag handles (keys v0..v4). `dot` is the white dot centre
         (handle d0) and `dot_r` its radius (m0_dr). The earlier home-plate +
         knobs (heading / side-length / right-tilt / cap) model was dropped: it

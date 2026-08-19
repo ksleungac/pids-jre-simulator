@@ -23,15 +23,17 @@ The project ships with three READMEs — English, Traditional Chinese (zh-HK), S
 | File | Language | Scope |
 |------|----------|-------|
 | `README.md` | English | Primary. Author here first, translations follow. |
-| `README.zh-HK.md` | Traditional Chinese (HK) | Mirror of English structure. |
-| `README.zh-CN.md` | Simplified Chinese (Mainland) | Mirror of English structure. |
-| `ROUTES.md` | Shared | Language-agnostic (Japanese line names + diagram codes work for all three reader audiences). Linked from each README's top bar. |
+| `docs/README.zh-HK.md` | Traditional Chinese (HK) | Mirror of English structure. |
+| `docs/README.zh-CN.md` | Simplified Chinese (Mainland) | Mirror of English structure. |
+| `docs/ROUTES.md` | Shared | Language-agnostic (Japanese line names + diagram codes work for all three reader audiences). Linked from each README's top bar. |
 
 **Top link bar** on every README lists the *other two* languages + the shared doc:
 ```
-**[English](README.md)** · **[繁體中文](README.zh-HK.md)** · **[對應路線](ROUTES.md)**
+root README.md:  **[繁體中文](docs/README.zh-HK.md)** · **[简体中文](docs/README.zh-CN.md)** · **[Supported Routes](docs/ROUTES.md)**
+docs/README.zh-*: **[English](../README.md)** · **[简体中文](README.zh-CN.md)** · **[對應路線](ROUTES.md)**
 ```
 - The current language is NOT linked from its own bar (avoid self-link).
+- Only `README.md` sits at the repo root; the translations and `ROUTES.md` live in `docs/`, so the root bar prefixes `docs/` and the translated bars reach back with `../`.
 - The `ROUTES.md` label is translated (`Supported Routes` / `對應路線` / `支持的路线`) — the label is localized, the target file is shared.
 
 ## Workflow

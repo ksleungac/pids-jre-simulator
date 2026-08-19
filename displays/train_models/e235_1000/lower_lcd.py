@@ -1074,7 +1074,7 @@ class JapaneseEightStationDisplay(_FrameWindowMixin):
         bottom_y = self.label_top_y + self.label_box_h
 
         # Case 1: compound name (two columns, right-then-left reading order).
-        # IRL convention (see lcd_references/zoom_keihin_saitama.png):
+        # IRL convention (see _references/lcd/zoom_keihin_saitama.png):
         #   - Both columns share a 3-character standard height. A 3-char
         #     part renders uncompressed; a 4-char part (e.g. さいたま vs
         #     the 3-char 新都心) auto-compresses to fit via `draw_1col_text`.

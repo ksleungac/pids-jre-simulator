@@ -21,10 +21,10 @@ import pygame
 pygame.init()
 
 STATIONS = {
-    "tsudanuma": ("lcd_references/Tsudanuma.png", "tsudanuma"),
-    "kinshicho": ("lcd_references/Kinshicho.png", "kinshicho"),
-    "funabashi": ("lcd_references/funabashi.png", "funabashi"),
-    "shin_nihombashi": ("lcd_references/Shin-Nihombashi.png", "shinNihombashi"),
+    "tsudanuma": ("_references/lcd/Tsudanuma.png", "tsudanuma"),
+    "kinshicho": ("_references/lcd/Kinshicho.png", "kinshicho"),
+    "funabashi": ("_references/lcd/funabashi.png", "funabashi"),
+    "shin_nihombashi": ("_references/lcd/Shin-Nihombashi.png", "shinNihombashi"),
 }
 
 # (screenshot_label_prefix, human_readable_label) — fill in for each

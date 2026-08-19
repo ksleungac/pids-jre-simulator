@@ -29,7 +29,6 @@ _EXCLUDE_DIRS = {
     "dist-release",
     "build",
     "memory",
-    "lcd_references",
     "audio_src",
     "docs",
     "audio",

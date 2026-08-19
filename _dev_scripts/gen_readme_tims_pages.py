@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: MIT
 """Regenerate the two TIMS README screenshots that the standard preview harness
 can't reach in a single CLI call:
-  - assets/08-tims-pa-setting.png   — PA-setting page in the READY state (a route
+  - docs/assets/08-tims-pa-setting.png   — PA-setting page in the READY state (a route
     must be committed so the launch cluster unlocks; save_screenshot renders the
     locked state).
-  - assets/09-tims-diagram-select.png — the C07AF diagram-choice page ALONE
+  - docs/assets/09-tims-diagram-select.png — the C07AF diagram-choice page ALONE
     (route_select.save_screenshot stacks all three picker screens into one PNG).
 
     uv run _dev_scripts/gen_readme_tims_pages.py
 
-Dev-only; does not ship. Writes straight into assets/ (tracked README images)."""
+Dev-only; does not ship. Writes straight into docs/assets/ (tracked README images)."""
 
 import os
 import sys

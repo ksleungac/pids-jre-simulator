@@ -19,7 +19,7 @@ Editor code: `_dev_scripts/calibration_editor.py` (dev-only, never imported by p
 
 ```bash
 uv run preview_display.py --edit --route yamanote --model e235_0
-uv run preview_display.py --edit --overlay lcd_references/<ref>.png   # IRL overlay (O toggles; Alt+drag pan; =/- zoom)
+uv run preview_display.py --edit --overlay _references/lcd/<ref>.png   # IRL overlay (O toggles; Alt+drag pan; =/- zoom)
 ```
 
 The window doubles: left half = the tuning target, right half = the param panel. Click an element → its `_TUNEABLES_*` rows appear (α-first). Edit mode freezes the sim + stops audio.

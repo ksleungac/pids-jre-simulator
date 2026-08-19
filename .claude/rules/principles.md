@@ -152,6 +152,7 @@ When the user states the positive shape of a rule but leaves edge cases / failur
 - (2026-04-30 evening) Spec said MEMORY.md entries are "one-line pointers" → I wrote multi-paragraph entries.
 - (2026-05-01) User stated "Rule 1 = use upper anchors", didn't specify collision behavior → I filled "all-or-nothing forfeit" into WIP doc → next-day session read it as user spec.
 - (2026-06-10) User specified full-screen restart in design; the WIP doc I authored recorded only "blank LCD → JR logo" → I rebuilt the transition lower-LCD-only. User: *"I said long before… restart is a full screen thing."*
+- (2026-08-19) The user asked for root-file cleanup. The restart prompt *I* wrote for the next session added "the deliverable is not just a tidy — propose a RULE for what is allowed at root" — my inference about why they wanted it, never their words. The next session read it as spec and designed an allowlist pre-commit gate. Their actual reason surfaced only when I offered to build it: *"no need to enforce … root problem is too many files and dirs so the readme is pushed to low on github view"* — a rendered-page problem, which a drift gate does nothing for. **A restart / handoff prompt is the same trap as a WIP doc**: it crosses a context boundary stripped of its provenance, so an inference in it arrives indistinguishable from an instruction.
 
 **How to apply:**
 - The moment a gap surfaces — ask. No "minimal placeholder", no "I'll just pick something reasonable."
@@ -213,6 +214,8 @@ When the user states a rule with a scope phrase ("also applies to all", "everywh
 
 **Why:** "Everywhere" inherits the prior sentence's axis. Examples:
 - (2026-05-03) User's "also applies to all steps" was scoped to active-prompt timing; I reverted history-key timing under one "consistency" frame.
+
+**The mirror case — a constraint on the MESSAGE is not a constraint on the WORK.** "Keep it simple", "treat me as 5 yrs old", "I'm tired" bound the presentation; they do not shrink the investigation, and reading them as a stop costs the user a turn to restart you. (2026-08-19) Mid-research the user said *"don't complicate things, am tired, treat me as 5 yrs old"*; I cut the research and wrapped up. They came back with *"didn't tell you to stop, you can aggregate the ideas, but when present to me keep them simple."* Do the full work, hand over the short version.
 
 ### Pre-stated scope fences are absolute
 When the user explicitly partitions a discussion ("DO NOT mix X and Y"), don't re-use a construct derived for one side as a tool for the other — even when mathematically applicable.

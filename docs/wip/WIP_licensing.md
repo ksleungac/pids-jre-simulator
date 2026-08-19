@@ -43,7 +43,7 @@ all-rights-reserved) and that `fonts/` redistributes commercial font software.
   **It found a latent defect on contact:** `_tests/t1_unit/test_start_station_labels.py` (now merged into `test_startup.py`) carried
   a UTF-8 BOM (the § Tooling PowerShell round-trip trap). Python accepts a BOM at byte 0, so the
   test had always passed; pushed to line 2 by the header it became a `SyntaxError`. BOM removed.
-  A sweep of every tracked file found one other, `assets/README.md`, harmless in Markdown and
+  A sweep of every tracked file found one other, `docs/assets/README.md`, harmless in Markdown and
   left alone.
 - **8 of 9 releases deleted, tags included** (2026-08-08) — v0.6.0, v0.5.4, v0.5.3a, v0.5.3,
   v0.5.2, v0.5.1, v0.5.0b, v0.5.0. `fonts/ShinGoPr6N-Medium.otf` entered in the initial commit,

@@ -16,7 +16,7 @@ screenshot_*.png
 
 # Transfer-display visual iteration outputs — render PNGs + side-by-side
 # compare composites. Throwaway artifacts; preview_transfers.py regenerates
-# them on demand. IRL reference photos under lcd_references/ are committed
+# them on demand. IRL reference photos under _references/lcd/ are committed
 # (those drive iteration); generated outputs under _visual_iter/ are not.
 /_visual_iter/
 

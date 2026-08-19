@@ -16,7 +16,7 @@ Outputs compare_<label>_<station>.png — reference photo on top, cropped
 upper-LCD strip from your render below, both scaled to the same width so
 letterforms align for direct visual comparison.
 
-Reference photos live in lcd_references/. The mock route (audio/_mock/main)
+Reference photos live in _references/lcd/. The mock route (audio/_mock/main)
 contains the four named stations at the indicated --stop indices.
 """
 
@@ -29,11 +29,11 @@ pygame.init()
 
 # (display_name, reference_image, screenshot_suffix, --stop, --pa)
 STATIONS = [
-    ("tokyo", "lcd_references/Tokyo.png", "tokyo", 0, 2),
-    ("shin_nihombashi", "lcd_references/Shin-Nihombashi.png", "shinNihombashi", 1, 2),
-    ("kinshicho", "lcd_references/Kinshicho.png", "kinshicho", 3, 2),
-    ("funabashi", "lcd_references/funabashi.png", "funabashi", 7, 0),
-    ("tsudanuma", "lcd_references/Tsudanuma.png", "tsudanuma", 8, 2),
+    ("tokyo", "_references/lcd/Tokyo.png", "tokyo", 0, 2),
+    ("shin_nihombashi", "_references/lcd/Shin-Nihombashi.png", "shinNihombashi", 1, 2),
+    ("kinshicho", "_references/lcd/Kinshicho.png", "kinshicho", 3, 2),
+    ("funabashi", "_references/lcd/funabashi.png", "funabashi", 7, 0),
+    ("tsudanuma", "_references/lcd/Tsudanuma.png", "tsudanuma", 8, 2),
 ]
 
 

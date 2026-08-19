@@ -2,7 +2,7 @@
 
 JR 东日本风格列车广播与车内 LCD 显示模拟器。
 
-**[English](README.md)** · **[繁體中文](README.zh-HK.md)** · **[支持的路线](ROUTES.md)**
+**[English](../README.md)** · **[繁體中文](README.zh-HK.md)** · **[支持的路线](ROUTES.md)**
 
 ---
 
@@ -65,4 +65,4 @@ JR 东日本风格列车广播与车内 LCD 显示模拟器。
 
 线路及运营商标志均取自 [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:Rapid_transit_icons_of_Japan)，感谢绘制及维护这些图标的贡献者，其中新干线与东京樱花电车标志来自 Carnby、Perhelion、KANAO22 及东京都交通局。
 
-完整鸣谢及素材资料：[THIRD-PARTY.md](THIRD-PARTY.md)。
+完整鸣谢及素材资料：[THIRD-PARTY.md](../THIRD-PARTY.md)。
