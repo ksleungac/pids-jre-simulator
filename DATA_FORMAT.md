@@ -393,7 +393,7 @@ Only the **exception** is written down. All 14 shipped routes said `".."`, a val
 
 **Resolution lives in exactly one place: `route_loader.resolve_audio_root(work_dir, route_data)`.** Both consumers call it — `app.py._load_route_data` (→ `self.audio_root` → `AudioPlayer`) and `validate_data.check_route`. Nothing else may join an audio path by hand; two sites did, and the pooling migration silently broke both (the OOBE tutorial's asset pre-flight went False for every new user; the auto-driver's long-approach probe went inert on every route).
 
-**There is deliberately NO search order.** A diagram-then-pool fallback was designed and rejected: legacy PA slugs were diagram-local (`1654T/pa/1.mp3` and `916H/pa/1.mp3` were different announcements), so a missing file would silently resolve to the other root and play the *wrong announcement* with no error — [critical_lessons.md §2](.claude/rules/critical_lessons.md). One root means one resolved path and a loud failure. The resolved root depends only on the declared (or defaulted) value, never on what happens to be on disk; `_tests/t1_unit/test_resolve_audio_root.py` pins that property.
+**There is deliberately NO search order.** A diagram-then-pool fallback was designed and rejected: legacy PA slugs were diagram-local (`1654T/pa/1.mp3` and `916H/pa/1.mp3` were different announcements), so a missing file would silently resolve to the other root and play the *wrong announcement* with no error — [critical_lessons.md §2](.claude/rules/critical_lessons.md). One root means one resolved path and a loud failure. The resolved root depends only on the declared (or defaulted) value, never on what happens to be on disk; `_tests/t1_unit/test_startup.py` pins that property.
 
 #### Pool filename grammar
 

@@ -22,7 +22,7 @@ Today the app mirrors its window to a browser (`--stream` / `--stream-lan`), whi
 
 ### The mirrored window becomes a real second screen
 
-Stage 1 ships: the whole app window mirrors over HTTP, so the display can sit on a tablet instead of covering the game — which is the actual point, screen real estate, not fidelity. What is left is the rest of that idea: touch input from the remote device, an in-app toggle instead of launch flags, and making the stream faster (the author's own next-release wish). Touch has a prerequisite nobody has built — a shared window↔LCD coordinate transform, because `_handle_lcd_click` and `_update_hover_cursor` both subtract a fixed panel height today and silently misfire the moment a scaled surface is involved. Locked design decisions and the stage-2 spec: `WIP_frame_streaming.md`. *(was #71, #73, #76)*
+Stage 1 ships: the whole app window mirrors over HTTP, so the display can sit on a tablet instead of covering the game — which is the actual point, screen real estate, not fidelity. Touch landed 2026-08-19 (#127 "Touch input from the mirrored window"), so the tablet is interactive for everything a mouse can click. What is left is an in-app toggle instead of launch flags — which is also `WIP_frame_streaming.md`'s graduation trigger — and making the stream faster (the author's own next-release wish); the concrete lever there is capturing the app's canvas rather than the zoomed window, which ships k² pixels at zoom k for no added information. Locked design decisions and what has moved under them: `WIP_frame_streaming.md`. *(was #71, #73, #76)*
 
 ### OCR that does not misread, rather than OCR that guards its misreads
 
@@ -36,9 +36,9 @@ Three wants against the same surface. **Multi-PA stops** — `_next_pa()` plays 
 
 The pipeline is built and verified against ~48 stations. Filling it out is blocked deliberately: adding stations only pays once the models that render them exist, so it waits on E233. Three parked threads — populating `stations.json` beyond the current corpus, prioritising stations served by at least one LCD-equipped line, with `transfers_by_view` entered as raw observations and never derived; declaring E233's own badge policy when that model lands, since its sub-series render some entries as colour squares rather than icons and that belongs in its own `transfer_info.py` rather than a parameterised DSL; and the English size trade-off, with the shinkansen row parked at 12 pt. *(was #20, #21, #23)*
 
-### The 585 MB corpus gets smaller
+### The 423 MB corpus gets smaller
 
-Two levers, neither taken. Encoding runs 75–321 kbps at 48 kHz stereo and much of it is mono content in a stereo container; normalising to ~96–128 kbps mono would take the corpus to roughly 250–350 MB, a bigger lever than pooling was — and it is lossy and irreversible, so it wants a deliberate decision rather than a sweep. Separately, different stations often play the same melody (高尾 / 荻窪 / 西八王子 share one; ~57 MB of such duplication corpus-wide), which the per-line pool cannot collapse because each file is the melody *plus* that station's own closing announcement, so no two files are actually identical. Collapsing them means splitting the two apart and changing how STA plays. *(was #119, #120)*
+Two levers, neither taken. Encoding runs 75–321 kbps at 48 kHz stereo and much of it is mono content in a stereo container; normalising to ~96–128 kbps mono would take the corpus down substantially again, a bigger lever than pooling was — and it is lossy and irreversible, so it wants a deliberate decision rather than a sweep. Separately, different stations often play the same melody (高尾 / 荻窪 / 西八王子 share one; ~57 MB of such duplication corpus-wide), which the per-line pool cannot collapse because each file is the melody *plus* that station's own closing announcement, so no two files are actually identical. Collapsing them means splitting the two apart and changing how STA plays. *(was #119, #120)*
 
 ### Display fidelity threads waiting on evidence
 

@@ -9,6 +9,13 @@ pinned literally — never derived from the module under test, so the 150-char c
 is typed here rather than imported and mutating the constant fails the test.
 """
 
+# Mutation-proven x3: daily-block dedup dropped · MEMORY.md entry dedup dropped ·
+# the edited-published-block refusal removed. Covers block/entry dedup, the
+# divergence union, and the refusal to rewrite already-published content; the
+# journal-ref transport half (bootstrap orphan commit, chained publish,
+# master-untouched, two-folder race union, idempotent re-run) is T3
+# `test_publish_memory_transport.py`.
+
 import sys
 from pathlib import Path
 

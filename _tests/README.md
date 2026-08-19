@@ -11,7 +11,7 @@ Bottom = broad / cheap / frequent. **Rendering is EXCLUDED** (by-eye by design).
 | Tier | Type | Tests WHAT | Status | Home |
 |---|---|---|---|---|
 | **T0 Static** | lint / format | code *shape* — banned primitives, derivable literals, `.otf`, Black | ✅ EXISTS | pre-commit: `_dev_scripts/lint_primitives.py`, `check_fonts.py` |
-| **T1 Unit** | unit, pure | one pure function's input→output; **no pygame, no I/O** | ◐ PARTIAL | `_tests/t1_unit/` |
+| **T1 Unit** | unit, pure | the pure decisions of one feature; **no pygame, no I/O** | ◐ PARTIAL | `_tests/t1_unit/` |
 | **T2 Contract** | schema / parity | authored *data* conforms + cross-file parity | ✅ EXISTS | `validate_data.py` (root) |
 | **T3 Invariant** | integration, headless | cross-module *behavior* over real files, **no display** | ◐ PARTIAL | `_tests/t3_invariant/` |
 | **T4 Clean-frame** | integration, state-absent | first-run / OOBE from a **deleted `settings.json`** | ◐ PARTIAL | `_tests/t4_clean_frame/` |
@@ -20,11 +20,24 @@ Bottom = broad / cheap / frequent. **Rendering is EXCLUDED** (by-eye by design).
 
 **Fixture ≠ tier.** T4 is *not* a separate scope from T3 — it's the **integration tier run with the state-absent fixture** (deleted `settings.json`). The fixture axis (settings absent / present-valid / present-corrupt) is orthogonal to the scope ladder; the absent row gets its own label only because it's the one no dev machine ever exercises (`critical_lessons §6`). A startup integration test parametrizes over fixtures in one module — the absent row earns the T4 checkmark, the present rows are its T3 companions.
 
-Gaps are intentional **for now** — the value is knowing the hierarchy *and* what's missing. Fill incrementally; **regression-test-per-incident** is the highest-ROI first fill.
+Gaps are intentional **for now** — the value is knowing the hierarchy *and* what's missing. Fill incrementally; a regression case is the highest-ROI first fill — but it joins a feature's module, it does not become one (next section).
+
+## Module scope — a FEATURE, not a function and not an incident
+
+**The tier picks the directory; the feature picks the file.** One module per feature seam, named for the behaviour it protects. A regression case joins the module that already owns that behaviour. **A new file means a new seam exists — not that a new bug was found.**
+
+Naming a test file after the bug that prompted it is `conventions.md § Naming`'s discovery-instance trap, one artifact over: there it corrupts a pattern's name, here it decides the shape of the whole suite. Two costs, and the second is the expensive one:
+
+- The suite reads as **a list of past bugs** rather than a statement of what the system must do. `_tests/t1_unit/` should answer "what does auto-drive guarantee?" — twelve incident-named files answer "which twelve things went wrong."
+- **Coverage gaps go invisible.** A per-incident file answers *is this bug back?*; nothing answers *does the decision layer decide correctly?* The enumeration the suite is built from becomes "the incidents that happened", and a gate built from an enumeration cannot see a gap in that enumeration (`critical_lessons §9`).
+
+A feature legitimately spans tiers — its pure decisions in T1, its stateful behaviour in T3 — and that is two modules of the same name in two directories, not two features. `test_stream.py` exists in both: T1 holds who may bind and where a tap maps to, T3 holds frames keeping up and taps reaching the event queue.
+
+The incident still earns its keep, in the CASE and its comment — the case says what broke, dated, so nobody deletes it as redundant. It just does not get a file.
 
 ## How to add a test
 1. **Pick the tier by what it tests** — a pure function → T1; a cross-module behavior asserted headlessly → T3; a path reached only when persisted state is absent → T4.
-2. Add `_tests/t<N>_<tier>/test_<subject>.py`. First line: `# TIER: T<N> — <subject>`.
+2. **Find the module that owns the behaviour and add a case to it.** Only when no module owns it does a new `_tests/t<N>_<tier>/test_<feature>.py` get created — named for the feature, never for the bug. See § "Module scope" above. A new module's first line is `# TIER: T<N> — <feature>`, above the docstring.
 3. **Plain script, no framework:** exercise the behavior, `assert`, print a one-line `PASS: <subject>` on success, and `sys.exit(1)` (after printing what failed) on failure. **No pytest** — deferred, not rejected: adopt it only when a tier fills enough that `parametrize`/fixtures would *cut* code ("add structure when pain forces it").
 4. `run_all.py` auto-discovers it (`test_*.py` glob) — it joins the map automatically.
 
@@ -34,43 +47,54 @@ uv run _tests/run_all.py
 ```
 Runs every physical test, prints one status line per tier; an empty tier prints a loud `NO TESTS (gap)`. **Exit 1 iff a test FAILS** — a gap is *visible*, not blocking. Called by `/build` pre-flight alongside `check_deps`.
 
-## Build plan & known gaps
+## Coverage map — what each module guarantees
 
-Status: `✅` done · `⬜` buildable now · `🔒` blocked on an artifact we don't have yet.
+Status: `✅` done · `◐` partial · `⬜` buildable now · `🔒` blocked on an artifact we don't have yet.
 
-### Auto-driver decision logic (2026-07-16 — re-entry PASSING incident)
-Order = buildable first, blocked last. **Guiding principle: test the raw-reading→decision path** (where the bug lived), not just the tidy lookup downstream. T1 catches this bug at its **root** (the resolver's return value); the **symptom** — a cross-function flag interaction eats the departure PA — is a T3 that needs a real drive.
+One row per module, because one module is one feature (§ "Module scope"). A regression case lands in the row that owns the behaviour.
 
-**Value ranking:** T3 is the highest-value tier — *conditioned on realistic, varied inputs.* Real recorded drives hold the edge cases nobody would think to script (this bug is the proof: a hand-written T3 would likely have missed it too, because the failing sequence wasn't in anyone's imagination). T1 is cheaper and **pinpoints which unit broke**; T3 proves the composed system works on real data, and its worth scales with the size of the recorded corpus. The replay **harness is buildable now** (validate against a synthetic JSONL); only the real corpus is blocked.
+| module | tier | guarantees |
+|---|---|---|
+| `test_auto_driver.py` | T1 | the whole decision pipeline: read gates (badge-reject score gate · stopping-offset badge gate · distance plausibility guard + hold-last-good) · `inferred_state()` 16-cell truth table · `update()` direct-read stream A–N · re-entry resolve grid + commit shape · `_fire_at_station` reachability drain |
+| `test_ocr_read.py` | T1 | the read itself: `profile_for` capture geometry (16:9, 16:10 letterbox, every refusal) · glyph matching under 8 measured degradations · decimal-stop vs digit-fragment · speed value domain |
+| `test_lower_lcd.py` | T1 | 8-station window + FULL-slot lock (pointer-always-visible) · 5-station content incl. passing stations · band-fill slot-enter trigger |
+| `test_window.py` | T1 | zoom pick / ceiling / drag-snap · the single window→LCD transform |
+| `test_playback.py` | T1 | one Page Up press fires once · STA loop/cut dispatch |
+| `test_startup.py` | T1 | language resolution · audio-root resolution · the start-station grid |
+| `test_stream.py` | T1 + T3 | who may bind + where a tap maps (T1); frames keeping up + taps reaching the event queue (T3) |
+| `test_publish_memory.py` | T1 | narrative merge logic — block/entry dedup, divergence union, edited-content refusal |
+| `test_publish_memory_transport.py` | T3 | the journal-ref transport: bootstrap orphan commit, chained publish, master-untouched, two-folder race union, idempotent re-run. Keeps a distinct name because it is a different subject (the git transport), not the same feature one tier up |
+| `test_ocr_reads.py` | T3 | the production OCR pipeline over committed real-HUD fixtures, both resolutions |
+| `test_change_scheduler.py` | T3 | lower-LCD change scheduling (the flash fix, #78) |
+| `test_e0_fill_centerline.py` | T3 | e235_0 band-fill centerline derived from the mask, not restated |
+| `test_clean_frame_startup.py` | T4 | first-run from a deleted `settings.json` — language done; OOBE + OCR-consent walk still `⬜` |
+| `test_wrap_cache.py` | T1 | the consent-body wrap cache keys on font + width (#60) |
 
-**Cross-cutting invariant — `PASSING ≡ MOVING`:** not local to any one function; **every badge-consumer must honor it**, each in its own form. Sites: `inferred_state()` (identical state) · `update()` (segment-reset on `STOPPED→(MOVING|PASSING)` + arrival gated MOVING-only) · `_resolve_reentry_target()` (PASSING = MOVING with no usable distance). Each T1 above tags its PASSING check as a *facet* of this one invariant. **A new badge-consuming function must be added to this list and its facet asserted** — the incident was one uncovered site while the others were fine, which is how per-function testing of a cross-cutting rule gives false comfort.
+`test_ocr_reads.py` was migrated from the former `_dev_scripts/validate_ocr.py`, which read gitignored 186 MB screenshots and never ran at build pre-flight. Its ground truth is committed real pixels plus hand labels, so it cannot be born wrong agreeing with the code; `--deep` re-sweeps the local calibration set when present, and `_dev_scripts/extract_ocr_assets.py` regenerates it.
 
-**Coherence ≠ correctness:** a "code matches the documented table" test is **insufficient** when the doc itself carries internal drift — the re-entry incident's spec (the re-entry table) and code were born wrong *together* (`d7320b9`), so they agreed. Test against the **deepest invariant** (the truth-table `MOVING≡PASSING`), never a derived restatement. And a cost note: nailing a truth-table spec by discussion is expensive — the **recorded-drive corpus (T3) is the primary regression asset** once it exists; the T1 grids are the logic-clarifying, lower-value half.
+## Cross-cutting invariants
 
-1. `✅ T1` **`test_inferred_state.py`** — `_Detector.inferred_state()`, exhaustive 16-cell truth table + `MOVING≡PASSING`. *Done 2026-07-16.* Foundation only — the display lookup, **not** the bug site.
-2. `✅ T1` **`test_detector_update_seq.py`** — `_Detector.update()`, the DIRECT read (raw sample → events/flags). Cases A–N: departure level-test + no-refire debounce · arrival level-test · **PASSING skips arrival** · `STOPPED→MOVING` segment reset · black-screen cross-reject · departure-through-PASSING · band edges · **L** at-station fires on any STOPPED in transit (reachability rule) · **M** post-click-jump arrival still fires at-station · **N** witnessed-edge departure fires with no speed ceiling (the 2026-07-24 dropout-through-band incident). **Highest-value T1;** stateful (call sequence). *2026-07-16; extended 2026-07-24.*
-3. `✅ T1` **`test_reentry_target.py`** — `AutoDriver._resolve_reentry_target()`, the re-entry gate. Grid + facets: `PASSING ≡ MOVING-no-dist` · never `1B` on PASSING · **provenance** (a witnessed edge → every cell None) · **pa=1** (no `1B` target, falls through to `1A`) + the 2026-07-23 short-segment regression anchor + `#82` strictness + guards. SimpleNamespace sim stub. *2026-07-16; extended 2026-07-23/24.*
-3a. `✅ T1` **`test_fire_at_station.py`** — `AutoDriver._fire_at_station()`, the reachability drain. A missed arrival (`cnt_pa` not at the last approach PA) is silently drained so the press still lands STOPPING; normal 1B, pa=1 collapse, and the app-parked skip. *Done 2026-07-24.*
-3b. `✅ T1` **`test_reentry_commit.py`** — `AutoDriver._maybe_reentry()` commit shape: a pa≥2 `1A` commit is silent; a pa=1 `1A` commit is AUDIBLE (the single announcement is never stale). *Done 2026-07-24.*
-4a. `⬜ T3` **replay harness** (`replay_drive.py`) — reads a `_recordings/*.jsonl`, replays its `sample` stream through `_Detector`, asserts invariants (**exactly one FIRE_DEPARTURE per segment**, departure never eaten, arrival once per stop). **Buildable now** against a synthetic JSONL; every real recording then drops in as a case for free.
-4b. `🔒 T3` **real-drive corpus** — the recorded JSONL(s) the harness replays. First target: Saikyo ex-Shibuya (parked → PASSING@low speed → depart) — the incident sequence, the eaten-PA symptom on real input. **BLOCKED** on the recording.
-5. `⬜ T3` **event → fire-gate → app-advance** — `FIRE_DEPARTURE` actually reaches `pending_next_pa`/`_next_pa`, respecting the app-sub-state gate + manual-press precedence. GAP (detector + AutoDriver + sim).
-6. `⬜ T3` **consensus / commit** — `_maybe_reentry` two-probe latch + app-parked gate + bg→main `pending_silent_advance` signal. GAP (stateful/threaded; partly manual).
+These are not local to any module, so each module asserts its own FACET and says so at the assertion.
 
-**Known gaps with no owner yet** (documented so they stay visible):
-- OCR pixel→symbol reads — owned by T3 `test_ocr_reads.py` (exists; full badge/limit/offset coverage incl. PASSING, both resolutions, over committed fixtures).
-- bg/main-thread atomicity — not unit-testable; T5 / manual.
+**`PASSING ≡ MOVING`.** Every badge-consumer must honor it, each in its own form. Sites: `inferred_state()` (identical state) · `update()` (segment-reset on `STOPPED→(MOVING|PASSING)`, arrival gated MOVING-only) · `_resolve_reentry_target()` (PASSING = MOVING with no usable distance). **A new badge-consuming function must be added to this list and its facet asserted** — the 2026-07-16 incident was one uncovered site while the others were fine, which is how per-function testing of a cross-cutting rule gives false comfort.
 
-**Codify after green:** the *"decision fn = build the spec table, don't read it for plausibility"* review lens → `review-dirty`; wire `run_all.py` into `/build` pre-flight.
+**`badge > distance, speed`.** The badge is the gate the noisier reads are judged against, never the thing being second-guessed. Asserted across all three read gates in `test_auto_driver.py` §1.
 
-### Other incidents' first fills
-- `✅ T3` — `test_ocr_reads.py` — production OCR pipeline reads correct values from committed real-HUD fixtures (`_tests/fixtures/ocr/<res>/`): full-coverage cropped cells (read logic) + capture-region quadrant frames (crop geometry), both resolutions. Migrated from the former `_dev_scripts/validate_ocr.py` (which read gitignored 186 MB screenshots and never ran at build pre-flight). Ground truth = committed real pixels + hand labels, so it can't be born-wrong-agreeing-with-code. `--deep` re-sweeps the local calibration set when present. Regenerated by `_dev_scripts/extract_ocr_assets.py`.
-- `✅ T1` — `resolve_language()` saved-or-detect, screen-free (`test_resolve_language.py`) — the language-picker incident's unit-level lock
-- `✅ T1` — STA loop/cut dispatch (`test_sta_loop_cut.py`): the last sta track loops `[0, sta_cut)`, a press while it loops is the conductor's cut, every other track plays through once with `sta_cut` not applying at all. Gated on `is_sta_looping()`, never on `is_last and is_sta_playing()` — the test caught that conflation during the build, because playing a non-last track advances `cnt_sta` to the last index while it is still sounding
-- `✅ T1` — Page Up press-edge (`test_pageup_edge.py`): one physical press fires `_next_sta` once, however long it is held. The level-triggered poll turned a single press into play-from-head *then* restart-at-`sta_cut`, so the melody jumped to the closing-door announcement on roughly half of presses. Scripts the frame sequence against a stubbed sim and asserts which branch ran, not merely that the handler was entered
-- `✅ T1` — `profile_for()` OCR capture geometry (`test_profile_for.py`): the 16:9 zero-bar case, the 16:10 letterbox derivation (1920×1200 measured; 2560×1600 / 3840×2400 same-fit), and every refusal — wider-than-16:9, sub-1080p viewport, non-multiple-of-16 width. Expectations pinned literally, never recomputed from the module. Mutation-proven ×5 (bar dropped, floor on desktop instead of viewport, aspect `>=`, doubled bar, integrality guard removed); the author's box cannot produce most of these resolutions, so the derivation is the only thing testable at all
-- `✅ T1+T3` — `publish_memory` narrative pipe: T1 merge logic (block/entry dedup, divergence union, edited-content refusal — mutation-proven ×3) + T3 sandboxed journal-ref transport (bootstrap orphan commit, chained publish, **master-untouched assertion**, two-folder race union, idempotent re-run) — `test_publish_memory.py` / `test_publish_memory_transport.py`
-- `◐ T4` — clean-frame startup (`test_clean_frame_startup.py`): language **done** (absent/valid/corrupt fixtures + picker-removed guard); OOBE + OCR-consent full-wiring walk still `⬜` (needs the startup path made display-free)
+## Method notes
+
+**Test the raw-reading→decision path**, not just the tidy lookup downstream. T1 catches a decision bug at its root (a function's return value); the symptom — a cross-function flag interaction eats the departure PA — is a T3 that needs a real drive.
+
+**T3 is the highest-value tier, conditioned on realistic varied inputs.** Real recorded drives hold the edge cases nobody would think to script; the re-entry incident is the proof, since a hand-written T3 would likely have missed it too. T1 is cheaper and pinpoints which unit broke.
+
+**Coherence ≠ correctness.** A "code matches the documented table" test is insufficient when the doc itself carries internal drift — the re-entry incident's spec and code were born wrong together (`d7320b9`), so they agreed. Test against the deepest invariant (the truth-table `MOVING≡PASSING`), never a derived restatement.
+
+## Known gaps
+
+- `⬜ T3` **replay harness** (`replay_drive.py`) — reads a `_recordings/*.jsonl`, replays its `sample` stream through `_Detector`, asserts invariants (**exactly one FIRE_DEPARTURE per segment**, departure never eaten, arrival once per stop). Buildable now against a synthetic JSONL; every real recording then drops in as a case for free.
+- `🔒 T3` **real-drive corpus** — the recorded JSONL(s) the harness replays. First target: Saikyo ex-Shibuya (parked → PASSING@low speed → depart) — the incident sequence on real input. BLOCKED on the recording.
+- `⬜ T3` **event → fire-gate → app-advance** — `FIRE_DEPARTURE` actually reaches `pending_next_pa`/`_next_pa`, respecting the app-sub-state gate + manual-press precedence.
+- `⬜ T3` **consensus / commit** — `_maybe_reentry` two-probe latch + app-parked gate + bg→main `pending_silent_advance` signal (stateful/threaded; partly manual).
 - `⬜ T3` — `version tag == display_version()` · picker enumeration excludes every `_`-prefixed route · normal-launch full-wiring (screens-skipped) headless walk
+- **bg/main-thread atomicity** — not unit-testable; T5 / manual.
 
 See [`conventions.md § Tooling`](../.claude/rules/conventions.md) "canonical-source duplication" for the T0/T3 defense this suite backs.

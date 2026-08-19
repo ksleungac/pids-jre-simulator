@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Mirror the app's window to a browser over HTTP (stage 1: display-only).
+"""Mirror the app's window to a browser over HTTP, and take taps back.
 
 Serves whatever is currently on the PC screen — setup flow, tutorial, drive —
 as an MJPEG-style ``multipart/x-mixed-replace`` stream of PNG frames. The
@@ -14,30 +14,41 @@ Summary of the load-bearing ones:
 - **Zero new dependencies.** stdlib ``http.server`` + pygame's own PNG writer.
   If this design ever needs a dep, re-examine the design (critical_lessons 3).
 - **Off by default.** Enabled per-launch via ``--stream`` / ``--stream-lan``.
+- **A tap is a synthetic left MOUSEBUTTONDOWN, nothing more** (stage 2). Every
+  click consumer in this app — the whole TIMS setup flow, the tutorial, and the
+  drive's click-to-jump — reads ``event.pos`` off a ``MOUSEBUTTONDOWN`` with
+  ``button == 1``, and production contains no ``MOUSEBUTTONUP``, ``MOUSEMOTION``
+  or ``mouse.get_pressed`` at all. So posting that one event reaches every
+  existing target with no changes to any of them, and the remote can do exactly
+  what a mouse can do here — no more (there is no other event to forge) and no
+  less. ``app.py`` and ``tims/`` stay untouched.
 
-# CONTRACT: never cache the display Surface across frames.
+# CONTRACT: never cache the display Surface; capture on the MAIN thread.
 # ``main.py`` calls ``pygame.display.quit()`` between setup and drive, which
-# frees the surface — a cached reference would be read-after-free. Always
-# re-fetch via ``pygame.display.get_surface()`` inside ``_snapshot()``, under
-# the pause lock.
+# frees the surface — a cached reference would be read-after-free. ``_publish``
+# re-fetches via ``pygame.display.get_surface()`` on every present, from the
+# flip/update hook, and stores a COPY. ``_snapshot`` (server thread) only
+# encodes that copy, which is why a frame is still served across a teardown.
 """
 
 from __future__ import annotations
 
 import io
+import json
 import socket
 import threading
+from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Optional
 
 import pygame
 
-DEFAULT_PORT = 8420
+DEFAULT_PORT = 8541
 FPS = 15  # stream pacing; the LCD is mostly static so this is ample
 MAX_CLIENTS = 3  # browsers routinely open a speculative 2nd connection, so >1
 BOUNDARY = "pidsframe"
 
-_lock = threading.Lock()  # held across display teardown (see paused())
+_lock = threading.Lock()  # held across display teardown (install_display_quit_guard)
 _clients = 0
 _clients_lock = threading.Lock()
 _server: Optional[ThreadingHTTPServer] = None
@@ -48,6 +59,24 @@ _frame: Optional[pygame.Surface] = None
 _seq = 0
 _png: Optional[bytes] = None  # cache of _frame at _png_seq
 _png_seq = -1
+
+# Taps arrive on server threads and are replayed on the MAIN thread by the
+# present hook. Same shape as the OCR driver's `pending_next_pa`: the background
+# side only records, the main side acts. A deque rather than a single slot so a
+# quick second tap is not swallowed by the one before it; bounded so a wedged
+# main loop cannot grow it without limit.
+_taps: "deque[tuple[float, float]]" = deque(maxlen=8)
+_taps_lock = threading.Lock()
+
+
+def _allowed_hosts() -> set:
+    """Host-header values this server answers to.
+
+    Loopback names plus whatever `lan_candidates()` found, so a tablet reaching
+    the printed LAN URL is accepted while an attacker-controlled DNS name
+    resolving to 127.0.0.1 (DNS rebinding) is not.
+    """
+    return {"localhost", "127.0.0.1", "0.0.0.0", "::1", *lan_candidates()}
 
 
 def resolve_bind_host(stream: bool, lan: bool) -> Optional[str]:
@@ -113,19 +142,6 @@ def lan_candidates() -> list[str]:
     return found or ["127.0.0.1"]
 
 
-class paused:
-    """Context manager: suspend frame grabbing across a display teardown, so a
-    streaming thread can never snapshot a surface that is being freed."""
-
-    def __enter__(self):
-        _lock.acquire()
-        return self
-
-    def __exit__(self, *exc):
-        _lock.release()
-        return False
-
-
 def install_display_quit_guard() -> None:
     """Wrap ``pygame.display.quit`` so every teardown holds the frame lock.
 
@@ -185,6 +201,68 @@ def _snapshot() -> Optional[bytes]:
     return _png
 
 
+def frame_point(fx: float, fy: float, w: int, h: int) -> Optional[tuple[int, int]]:
+    """Map a NORMALISED tap (0..1 across the frame) to a pixel in a ``w`` x ``h`` frame.
+
+    Returns None when the tap is outside the frame, which the caller drops.
+
+    # CONTRACT: the client sends fractions, never pixels.
+    # The client cannot know the frame's true size -- it knows what its <img>
+    # last decoded, and the frame changes size under it (setup 730x610 -> drive
+    # 730x420+band -> tutorial 1100x500). Fractions are resolved here against
+    # the frame actually published, so a tap in flight across a screen change
+    # lands proportionally instead of at a stale absolute pixel. It also keeps
+    # the arithmetic on this side of the wire, where a test can reach it.
+    """
+    if not (0.0 <= fx <= 1.0 and 0.0 <= fy <= 1.0):
+        return None
+    if w <= 0 or h <= 0:
+        return None  # a frame with no pixels has none to land on
+    # Clamp: fx == 1.0 would index one past the edge.
+    x = min(int(fx * w), w - 1)
+    y = min(int(fy * h), h - 1)
+    return x, y
+
+
+def queue_tap(fx: float, fy: float) -> None:
+    """Record a normalised tap. Runs on a SERVER thread -- records only, never acts."""
+    with _taps_lock:
+        _taps.append((fx, fy))
+
+
+def _drain_taps() -> None:
+    """Replay recorded taps as synthetic left-clicks. Runs on the MAIN thread.
+
+    # CONTRACT: post from the main thread, never from the server thread.
+    # Mirrors how the auto-driver hands work across the boundary (it sets a
+    # flag; `_handle_input_main` acts). Keeping every pygame call on the main
+    # thread is what makes this feature unable to introduce a threading bug
+    # into a render path it otherwise does not touch.
+    """
+    with _taps_lock:
+        if not _taps:
+            return
+        pending = list(_taps)
+        _taps.clear()
+    # Drained BEFORE this frame is published, deliberately: `_frame` is the frame
+    # BEFORE the one about to go out, so a tap arriving on the same present as a
+    # screen change resolves against the size the client last saw rather than the
+    # one it has not received yet. That is one present of slack (~33 ms), not a
+    # guarantee about the frame the remote was actually looking at, which is
+    # older by the stream pacing plus the network plus human reaction. Correctness
+    # does not rest on it: a stale tap misses, exactly as a real mouse click does
+    # during a screen transition.
+    frame = _frame
+    if frame is None:
+        return  # nothing published yet; a tap has no frame to be relative to
+    w, h = frame.get_size()
+    for fx, fy in pending:
+        pt = frame_point(fx, fy, w, h)
+        if pt is None:
+            continue
+        pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=pt, button=1))
+
+
 def install_present_hook() -> None:
     """Wrap ``pygame.display.flip`` / ``update`` so each completed frame is
     captured. One seam — flip/update are called from 18 files and a new screen
@@ -197,6 +275,14 @@ def install_present_hook() -> None:
 
         def _wrapped(*args, _orig=orig, **kwargs):
             r = _orig(*args, **kwargs)
+            # Separate guards: the tap half is the newer, optional one, and a fault
+            # in it must not stop the display half from publishing. Sharing a
+            # try/except would freeze the browser on a cached frame with nothing
+            # logged anywhere (`principles.md` § "A bonus feature ... is not a bonus").
+            try:
+                _drain_taps()
+            except Exception:
+                pass
             try:
                 _publish()
             except Exception:
@@ -222,44 +308,90 @@ _PAGE = """<!doctype html>
      smooth (the browser default) is the lesser evil: `pixelated` on a
      DOWNSCALE (the phone case, 730px into ~390 CSS px) drops thin 1px strokes
      outright and stair-steps every edge. */
-  img{display:block}
-  img.fit{max-width:100vw;max-height:100vh}
+  /* Neither mode may overflow the viewport: the body is `overflow:hidden`, so an
+     oversized image is CLIPPED rather than scrolled -- the edges of the display
+     just disappear. So `fit` is the default, and 1:1 keeps the same clamp, which
+     makes it "1:1 unless that would overflow" rather than "1:1 or nothing".
+     Author 2026-08-19: "as long as it's reactive of some sorts, meaning it does
+     not overflow on a 'normal' resolution. resolution even smaller than my app's
+     1x drawing resolution i don't care." */
+  img{display:block;max-width:100vw;max-height:100vh}
   #tag{position:fixed;left:0;right:0;bottom:0;padding:6px;
        font:12px system-ui,sans-serif;color:#96a2b0;text-align:center;
        background:#0a0d12cc;opacity:0;transition:opacity .25s}
   #tag.show{opacity:1}
+  /* The zoom control is its OWN button, not a gesture on the image: a tap on
+     the image now means "click the thing under my finger", so a whole-page
+     gesture would fight every button in the app. Deliberately browser chrome
+     rather than a pygame-drawn control -- a control drawn into the frame would
+     either appear on the PC window too, or make the stream a composited view
+     that no longer matches what the PC shows. */
+  #zoom{position:fixed;right:10px;bottom:10px;z-index:2;
+        -webkit-appearance:none;appearance:none;border:1px solid #2a3340;
+        border-radius:6px;background:#141a22cc;color:#96a2b0;
+        font:600 12px system-ui,sans-serif;letter-spacing:.05em;
+        padding:8px 12px;min-width:52px;cursor:pointer}
+  #zoom:active{background:#1e2733}
 </style>
-<img id="v" class="fit" src="/stream" alt="PA Simulator"
+<img id="v" src="/stream" alt="PA Simulator"
      onerror="setTimeout(()=>this.src='/stream?'+Date.now(),1000)">
+<button id="zoom" type="button">1:1</button>
 <div id="tag"></div>
 <script>
 // Display path works without this -- the <img> above renders on its own.
 // JS only adds the 1:1 mode and the reconnect nudge.
-const img = document.getElementById('v'), tag = document.getElementById('tag');
-// 1:1 is the DEFAULT. Mapping one source pixel to one PHYSICAL device pixel
-// means no resampling at all, so AA-on LCD text and AA-off TIMS chrome both
-// land exactly as rendered -- sharper than the app's own window, which
-// Windows softens under display scaling (125% on the dev machine).
-let native = true, lastW = 0;
+const img = document.getElementById('v'), tag = document.getElementById('tag'),
+      zoom = document.getElementById('zoom');
+// FIT is the default; tap switches to 1:1. 1:1 maps one source pixel to one
+// PHYSICAL device pixel, so AA-on LCD text and AA-off TIMS chrome both land
+// with no resampling -- but it is an opt-in now rather than the default,
+// because a frame wider than the viewport is clipped, not scrolled.
+// (Until 2026-08-14 the 1:1 default also bought sharpness the app window did
+// not have, which is why it was chosen: the process was DPI-unaware and
+// Windows resampled the window at 125%. window_utils.declare_dpi_awareness
+// plus whole-multiple zoom fixed that at the source, so 1:1 now only avoids
+// the CLIENT's resample. See #72.)
+let native = false, lastW = 0;
 function apply() {
   lastW = img.naturalWidth;
   if (native) {
-    img.classList.remove('fit');
     img.style.width = (img.naturalWidth / window.devicePixelRatio) + 'px';
     say('1:1 pixel-exact');
   } else {
-    img.classList.add('fit');
     img.style.width = '';
     say('fit to screen');
   }
 }
 function say(t) {
-  tag.textContent = t + ' -- tap to switch';
+  tag.textContent = t;
   tag.classList.add('show');
   clearTimeout(say.t);
   say.t = setTimeout(() => tag.classList.remove('show'), 1800);
 }
-addEventListener('click', () => { native = !native; apply(); });
+zoom.addEventListener('click', () => {
+  native = !native;
+  zoom.textContent = native ? 'FIT' : '1:1';
+  apply();
+});
+
+// --- taps ------------------------------------------------------------------
+// Sent as FRACTIONS of the image, not pixels: the displayed size is whatever
+// CSS settled on (fit mode resamples, 1:1 divides by devicePixelRatio), and the
+// frame itself changes size across screens. getBoundingClientRect is the only
+// thing that knows the on-screen box, and a fraction of it survives both.
+// The server resolves the fraction against the frame it actually published.
+img.addEventListener('click', e => {
+  const r = img.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  fetch('/tap', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      x: (e.clientX - r.left) / r.width,
+      y: (e.clientY - r.top) / r.height
+    })
+  }).catch(() => {});   // a dropped tap is a missed press, not a broken page
+});
 // A multipart stream fires `load` on EVERY frame, so only re-apply when the
 // frame size actually changed (setup 730x610 -> drive 730x420+band ->
 // tutorial 1100x500). Without the guard the label would flash 15x/second.
@@ -285,6 +417,38 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_stream()
         else:
             self.send_error(404)
+
+    def do_POST(self):
+        if self.path.split("?", 1)[0] != "/tap":
+            self.send_error(404)
+            return
+        # CONTRACT: /tap is the only WRITE endpoint — check the caller, not just the body.
+        # Stage 1 was read-only, so D9's "loopback = zero network exposure" held on its own.
+        # A tap drives the app, and any page in the user's browser can reach loopback: a
+        # CORS-*simple* POST (text/plain) is sent with no preflight. Requiring
+        # application/json forces a preflight, which this server answers with 501 (no
+        # do_OPTIONS), and checking Host closes DNS rebinding. Both are what the client
+        # already sends, so nothing on the page changes.
+        if not self.headers.get("Content-Type", "").split(";")[0].strip() == "application/json":
+            self.send_error(415, "expected Content-Type: application/json")
+            return
+        host = self.headers.get("Host", "").rsplit(":", 1)[0].strip("[]")
+        if host and host not in _allowed_hosts():
+            self.send_error(421, "unrecognised Host")
+            return
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+            if n <= 0 or n > 256:  # a tap is ~40 bytes; anything else is not one
+                raise ValueError("bad length")
+            body = json.loads(self.rfile.read(n).decode("utf-8"))
+            queue_tap(float(body["x"]), float(body["y"]))
+        except Exception:
+            self.send_error(400, 'expected {"x": <0..1>, "y": <0..1>}')
+            return
+        # 204: the tap's effect arrives on the video stream, not in this reply.
+        self.send_response(204)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _send_page(self):
         body = _PAGE.encode("utf-8")

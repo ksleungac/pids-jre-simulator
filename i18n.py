@@ -86,7 +86,7 @@ def resolve_language(settings: dict) -> str:
     grey `LanguagePicker` was removed (redundant beside the TIMS home's language
     knobs) — critical_lessons §6. This function's total-over-a-dict contract is the
     regression guard: reintroducing an interactive language step in the first-run
-    path would have to bypass it (locked by `_tests/t1_unit/test_resolve_language.py`
+    path would have to bypass it (locked by `_tests/t1_unit/test_startup.py`
     + `_tests/t4_clean_frame/test_clean_frame_startup.py`)."""
     lang = settings.get("language")
     return lang if lang in SUPPORTED_LANGS else detect_default_lang()

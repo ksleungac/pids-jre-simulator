@@ -40,7 +40,7 @@ all-rights-reserved) and that `fonts/` redistributes commercial font software.
   Coverage is held by a `spdx-header` pre-commit hook (`_dev_scripts/check_spdx.py`), which
   reads only the first 3 lines so a module that merely *mentions* SPDX cannot pass; mutation-
   tested at birth against a missing header and against a tag sitting below the header.
-  **It found a latent defect on contact:** `_tests/t1_unit/test_start_station_labels.py` carried
+  **It found a latent defect on contact:** `_tests/t1_unit/test_start_station_labels.py` (now merged into `test_startup.py`) carried
   a UTF-8 BOM (the § Tooling PowerShell round-trip trap). Python accepts a BOM at byte 0, so the
   test had always passed; pushed to line 2 by the header it became a `SyntaxError`. BOM removed.
   A sweep of every tracked file found one other, `assets/README.md`, harmless in Markdown and

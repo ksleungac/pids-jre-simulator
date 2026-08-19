@@ -71,11 +71,15 @@ def main():
     """Main entry point for the PA Simulator."""
     import argparse
 
+    # The port is frame_stream's to own; the help text derives it rather than
+    # restating it, so the two cannot drift (conventions.md § Tooling).
+    import frame_stream
+
     parser = argparse.ArgumentParser(description="Japanese Train PA Simulator")
     parser.add_argument(
         "--stream",
         action="store_true",
-        help="Mirror the app window to http://127.0.0.1:8420/ (same-PC browser only)",
+        help=f"Mirror the app window to http://127.0.0.1:{frame_stream.DEFAULT_PORT}/ (same-PC browser only)",
     )
     parser.add_argument(
         "--stream-lan",
@@ -103,8 +107,6 @@ def main():
     # Window mirroring (opt-in, off by default). Owned HERE rather than by PASimulator: the setup<->drive
     # loop below rebuilds a sim per drive, so a sim-owned server would hit a bind failure on drive #2.
     # Living above the loop also means the stream spans setup, tutorial and drive without dropping.
-    import frame_stream
-
     stream_host = frame_stream.resolve_bind_host(args.stream, args.stream_lan)
     if stream_host is not None:
         urls = frame_stream.start(stream_host)

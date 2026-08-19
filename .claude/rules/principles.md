@@ -471,6 +471,17 @@ Exhaustive search over combinations is the right instrument for "can this happen
 - Prune for COST, never for correctness. A negative result ("no case exists") survives pruning, because the space only shrank. A positive result must then be checked for REACHABILITY — otherwise you have found a case the system cannot produce and will chase a phantom.
 - Never prune by what feels unlikely, only by what the domain forbids. Unlikely-but-possible is exactly the degraded case that ships broken (`critical_lessons §7`), and a hand-narrowed axis list is how a gate goes blind (`critical_lessons §9`).
 
+### Merging N things into one needs two proofs, not one
+Collapsing several modules/files/tables into one has two independent failure modes, and a check for either is blind to the other. **Coverage** — did anything get dropped in transcription? Diff the *content* mechanically (an AST sweep of every string and numeric literal in each original against the merged file is cheap and exact; what legitimately goes missing is only the per-file summary lines). **Execution** — does every merged section still RUN? A section whose dispatch call was forgotten keeps all its literals, so the coverage check passes while the assertions never fire. Only a mutation per section proves that one.
+
+**Why:** the merged artifact is green either way, and green after a merge reads as proof. Examples:
+- (2026-08-19) 26 T1 test modules collapsed to 9. The literal diff came back clean across all 21 sources — every case, boundary, invariant sweep and regression anchor present. It could not have detected an uncalled `check_*` function, and the 8-into-1 module had six of them.
+
+**How to apply:**
+- Snapshot the originals before deleting, and run both proofs against the snapshot, not against memory of what they contained.
+- **Mutate the CONDITION, never the assertion's message.** Editing the message string is a no-op that leaves the test green — and reads exactly like "this section never runs", which is the thing you were testing for. Four of six section-proofs came back as false negatives that way in the same session before the anchors were re-checked.
+- Applies past tests: merged config, a consolidated dispatch table, several scripts folded into one.
+
 ### Test the change, not just the bug
 Exercise the change's full blast radius before saying done. Smoke test on the bug-fix target is necessary but not sufficient.
 
