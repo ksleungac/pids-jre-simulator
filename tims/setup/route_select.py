@@ -227,7 +227,7 @@ def load_routes():
                 "diagram": diagram,
                 "type": d.get("type", ""),
                 "model": resolve_model_key(d.get("model")),  # default train model for this route (route.json optional)
-                "remarks": d.get("remarks") or {},  # 備考 kv: {direction, through, note} — composed for display by _compose_remark
+                "remarks": d.get("remarks") or "",  # 備考 cell text, verbatim from route.json
                 "dest": d.get("dest", "").replace("\n", ""),
                 "start": stops[0] if stops else "",
                 "end": stops[-1] if stops else "",
@@ -502,22 +502,6 @@ def _run_grid(screen, screen_key, labels, *, preselect=None):
     return None
 
 
-def _compose_remark(route_name, rem):
-    """Compose the 備考 cell text from the kv block {direction, through, note}: line + direction FIRST
-    (always shown — direction rests visible at the cell start), then the through-service tail and any
-    note appended. When the whole string overflows the cell it ping-pong-slides (see _marquee_cell), so
-    the appended tail is the part that scrolls into view. direction is nominal for circular lines."""
-    if not isinstance(rem, dict):
-        return ""
-    direction, through, note = rem.get("direction", ""), rem.get("through", ""), rem.get("note", "")
-    parts = [f"{route_name}{direction}"]
-    if through:
-        parts.append(f"{through}直通")
-    if note:
-        parts.append(note)
-    return "　".join(parts)
-
-
 def _cell_text(surf, text, font, color, cell, *, align="center"):
     """Blit one pixel-text string inside ``cell`` (a Rect), vertically centered. align: left / center /
     distribute (chars spread evenly across the cell with equal gaps incl. ends — the JR column-header look)."""
@@ -689,7 +673,7 @@ def _render_diagram(surf, route_name, start_name, end_name, variants, *, selecte
             )
             _marquee_cell(
                 surf,
-                _compose_remark(route_name, v.get("remarks")),
+                v.get("remarks") or "",
                 cell_font,
                 TBL_CELL_TXT_COLOR,
                 pygame.Rect(cx2, ry, col_remark_w, TBL_ROW_H),
@@ -894,7 +878,7 @@ def save_screenshot(path):
 
     s1 = one("route", route_labels, nambu)
     s2 = one("station", station_labels, 0)
-    # run-pattern panel — real 備考 from route.json (remarks kv composed by _compose_remark)
+    # run-pattern panel — real 備考 from route.json
     s3 = pygame.Surface((SCREEN_W, SCREEN_H))
     _render_diagram(s3, name, station_labels[0], v0["end"], variants, selected_idx=0, flash_on=True, btn_font=btn_font)
 

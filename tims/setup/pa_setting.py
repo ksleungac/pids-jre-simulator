@@ -131,14 +131,12 @@ def _apply_selection(result):
     / through-service from the run-pattern page); platform (月台) has no model, stays blank. Stashes the
     raw result in `_committed` so 確認/起動 can build the launch config from it."""
     global ROW_VALUES, PATTERN_NO, _committed
-    from . import route_select  # lazy (sibling) — reuse its remark composer
-
     route = result["route"]
     # Use the start NAME the picker resolved — the start grid is built from variants[0], but the
     # committed route is the chosen variant, so re-indexing here against a different stop list could
     # mis-resolve (see route_select.run_on). Name is variant-agnostic.
     start_name = result.get("start_name") or route.get("start", "")
-    remark = route_select._compose_remark(route["name"], route.get("remarks"))
+    remark = route.get("remarks") or ""
     ROW_VALUES = [route["name"], route["type"], f"{start_name} → {route['end']}", "", remark]
     PATTERN_NO = result.get("pattern_no")
     _committed = result

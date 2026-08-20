@@ -8,11 +8,8 @@
         87
     ],
     "type": "快速",
-    "remarks": {
-        "direction": "下り",
-        "through": "川越線",
-        "note": ""
-    },
+    "direction": "下り",
+    "remarks": "埼京線下り　川越線直通",
     "dest": "川越",
     "stops": [
         {

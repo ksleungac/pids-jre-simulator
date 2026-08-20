@@ -12,11 +12,8 @@
         44
     ],
     "type": "快速アクティー",
-    "remarks": {
-        "direction": "下り",
-        "through": "",
-        "note": ""
-    },
+    "direction": "下り",
+    "remarks": "東海道線下り",
     "dest": "熱海",
     "stops": [
         {

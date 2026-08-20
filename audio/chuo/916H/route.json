@@ -12,11 +12,8 @@
         0
     ],
     "type": "中央特快",
-    "remarks": {
-        "direction": "上り",
-        "through": "",
-        "note": ""
-    },
+    "direction": "上り",
+    "remarks": "中央線快速上り",
     "type_color": [
         45,
         0,

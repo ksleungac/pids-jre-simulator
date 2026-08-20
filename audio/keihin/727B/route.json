@@ -8,11 +8,8 @@
         209
     ],
     "type": "各駅停車",
-    "remarks": {
-        "direction": "南行",
-        "through": "根岸線",
-        "note": ""
-    },
+    "direction": "南行",
+    "remarks": "京浜東北線南行　根岸線直通",
     "dest": "磯子",
     "stops": [
         {

@@ -337,7 +337,7 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 |-------|-------------|
 | `code_3` | JR East 3-letter station code. Only 22 stations total have one — rule = "3+ JR East systems converge" (with 浜松町 and 高輪ゲートウェイ as explicit exceptions). Absent on all other stations. |
 | `transfers` | Optional. Ordered array of slug references into `data/lines.json`. Each entry = either plain slug `"yamanote"` or dotted variant reference `"slug.variant"` (see `lines.json` § Variant resolution). Order matches IRL PIDS reading order (top-to-bottom, left-to-right). Include all lines reaching the station, including user's active line — runtime active-line filter drops slugs whose effective `badges[].code` matches active route. |
-| `transfers_by_view` | Optional. Per-station map keyed by `"<line>_<direction>"` (e.g. `"JY_inner"`, `"JT_south"`). Value = object with optional ops: `{"drop": [base-slug names...], "edit": {base-slug: replacement-slug-ref, ...}, "rows": [int, ...]}`. `drop` and `edit` match by base slug name — `drop: ["keihin_tohoku"]` drops both plain and any `keihin_tohoku.<variant>` references; `edit: {"keihin_tohoku": "keihin_tohoku.oimachi_kamata"}` replaces whatever `keihin_tohoku`-base entry the flat list has with the variant ref. Drop applied first, then edit. `rows` = explicit row-partition override — list of ints summing to post-drop/edit entry count, e.g. `[2, 1]` forces first 2 entries onto row 0, 3rd onto row 1. Bypasses both shinkansen-prefix detection and small-N structural rules; real-render positioning (Rules 1-4 + track-back) still runs within each forced row. Use only when algorithm row-grouping doesn't match IRL — last-resort data hint, expected empty for most stations. Mismatched sum → warning + algorithm fallback (no crash). `add` op reserved for future. |
+| `transfers_by_view` | Optional. Per-station map keyed by `"<line>_<qualifier>"`, where the qualifier is whatever distinguishes one PIDS reading from another on that line code — usually direction (`"JY_inner"`, `"JT_south"`), but SERVICE where two services share a code (`"JU_utsunomiya"` / `"JU_takasaki"`, which announce each other at 大宮 and so cannot share a view). Value = object with optional ops: `{"drop": [base-slug names...], "add": [exact refs...], "edit": {base-slug: replacement-slug-ref, ...}, "rows": [int, ...]}`. `drop` and `edit` match by base slug name — `drop: ["keihin_tohoku"]` drops both plain and any `keihin_tohoku.<variant>` references; `edit: {"keihin_tohoku": "keihin_tohoku.oimachi_kamata"}` replaces whatever `keihin_tohoku`-base entry the flat list has with the variant ref. Drop applied first, then edit. `rows` = explicit row-partition override — list of ints summing to post-drop/edit entry count, e.g. `[2, 1]` forces first 2 entries onto row 0, 3rd onto row 1. Bypasses both shinkansen-prefix detection and small-N structural rules; real-render positioning (Rules 1-4 + track-back) still runs within each forced row. Use only when algorithm row-grouping doesn't match IRL — last-resort data hint, expected empty for most stations. Mismatched sum → warning + algorithm fallback (no crash). **`add` exempts an exact ref from the active-line filter, and is the only op that runs BEFORE it** — that filter is the only thing `add` can undo. It exists for a SIBLING service sharing the active line's code: 宇都宮線 and 高崎線 are both `JU`, so riding either drops both, yet 大宮's PA (where they diverge) announces the other one — `"JU_utsunomiya": {"add": ["utsunomiya_takasaki.takasaki"]}`. Matching is by **exact ref**, unlike `drop`/`edit`, because the route's own variant must still go while the sibling survives; a base slug would re-admit both. Re-admitted entries keep their position in `transfers[]`, so IRL order needs no index. A `drop` of the same base still wins — drop runs after. Ordering is add → active-line filter → drop → edit. |
 
 ### Notes
 
@@ -361,13 +361,14 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
     "audio_root": ".",             // Optional. Only the EXCEPTION is authored: absent = the per-line pool (every shipped line); "." = audio beside route.json. See § audio_root Field.
     "model": "e235_0",             // Optional. Default train-display model for this route (registry key in displays/train_models/__init__.py, e.g. e235_1000 / e235_0). Seeds the setup-screen per-route model dropdown; the user can override per session. Absent / unknown → e235_1000 (DEFAULT_MODEL_KEY).
     "line_code": "JY",             // Optional. Active-line badge code (JY/JK/JC/JO/JU/JT/JJ/JE/JN/JA). Drives transfer-info active-line filter — entries whose badges include this code are dropped. Absent → no filter (renders raw transfers).
-    "transfer_view": "JY_inner",   // Optional. Key into each station's `transfers_by_view` map (e.g. JY_inner, JK_south, JO_east). Selects per-station drop/edit ops for this train direction. Absent → no view ops applied.
+    "transfer_view": "JY_inner",   // Optional. Key into each station's `transfers_by_view` map (e.g. JY_inner, JK_south, JU_utsunomiya). Selects per-station drop/edit ops for this train direction. Absent → no view ops applied.
     "color": [R, G, B],            // Main route color for UI elements
     "contrast_color": [R, G, B],   // Contrast color for pointers/highlights (optional, default: [224, 54, 37] JR red)
     "type_color": [R, G, B],       // Color for train type text (optional, default: black)
     "type": "列車種別",             // Train type (e.g., 快速，普通，各駅停車)
     "dest": "終点",                 // Final destination (kanji) - furigana loaded from data/translations.json
-    "remarks": {...},              // Optional. {direction, through, note} — feeds the TIMS route-select 備考 column via tims/setup/route_select._compose_remark.
+    "direction": "上り",            // Optional. 上り/下り/南行/北行/内回り/外回り — see § remarks below.
+    "remarks": "…",                // Optional. 備考 cell text, verbatim — see § remarks below.
     "pre_stops": [...],            // Optional. Through-service pre-route stations rendered as dim/passed
     "frames": [...]                // Optional. Through-service display frames — partitions the route, LCD swaps at junctions
 }
@@ -403,7 +404,7 @@ One pool per line means filenames from every diagram share one namespace, so the
 |---|---|
 | **PA** | `{prev-station}-{dep\|arr}-{direction}[-{type}]` |
 | `{prev}` on a `-dep` | the previous **stopping** station — differs from the previous array element on any diagram that skips |
-| `{direction}` | from that route's own `remarks.direction`: 上り→`up`, 下り→`down`, 南行/北行→`south`/`north`, 内回り/外回り→`inner`/`outer`. Mandatory, even on a one-direction line — a reverse diagram would otherwise collide. |
+| `{direction}` | from that route's own top-level `direction`: 上り→`up`, 下り→`down`, 南行/北行→`south`/`north`, 内回り/外回り→`inner`/`outer`. Mandatory, even on a one-direction line — a reverse diagram would otherwise collide. |
 | `{type}` | only where a **measured** difference exists between two diagrams' takes (`audio_id.same_recording`). Bare = one file serves the line. Tokens in use: `kaisoku`, `kakueki`, `futsu`, `acty`; chūō uses a `-{diagram}` tier instead. |
 | **`pa_at_station`** | `{station}-stopping[-N]-{direction}[-{type}]`, indexed when a stop has more than one (array order = play order) |
 | **STA** | **verbatim — no direction token.** A melody belongs to a platform, and direction is only ever a proxy for it. Keihin (`-south`) and saikyo (`-down`) carry one because they were pooled before this rule; kept, not copied. |
@@ -483,6 +484,33 @@ Each stop in `stops` array:
     "time": 3                            // Travel time INCOMING from the previous PA station (minutes; 0 for first station)
 }
 ```
+
+#### `remarks` and `direction`
+
+`remarks` is the TIMS 備考 cell text **verbatim**. Nothing composes it, nothing parses it, and no
+code reads its content — `route_select` and `pa_setting` blit the string as authored. What goes in
+it is convention plus whatever the author wants to say: a service route and its through-running
+(`上野東京ライン上り　東海道線直通`), or a note about a stopping pattern that only applies on
+certain days.
+
+It used to be a kv block `{direction, via, through, note}` that a composer assembled, prefixing the
+route name and appending 直通. That bought one string and cost two bugs — a 直通直通 double-suffix
+that needed its own validator gate, and a cell repeating the line name that both screens already
+display in their own field. Replaced 2026-08-20; the author's framing is the reason it will not come
+back: *"it's not about frame type so nothing requires it to be structural"*.
+
+**One line, ≤ 18 characters.** The character count is a **sanity bound, not the cell's capacity** —
+a count cannot be that, because the cell is ~184 px of usable width at 18 px per glyph, so roughly
+10 full-width Japanese characters fit where ~18 Latin ones do, and several shipped routes already
+sit past the Japanese figure. Overflow is a designed case: `_marquee_cell` ping-pong-slides it. The
+newline ban is the hard half — the AA-off lowres renderer has no glyph for one and draws a tofu box
+(`conventions.md` § "AA-off lowres text renderers"). Both are gated in `validate_data.py`. A note that genuinely needs two lines needs the cell to learn stacking
+first; `TBL_ROW_H` is 44 px, so there is room for it when that day comes.
+
+**`direction` is separate because it is not a caption.** It is the diagram's actual direction, and
+it is where the PA filename's `{direction}` token comes from (§ Pool filename grammar below) — a
+fact that has to stay machine-addressable rather than dissolve into prose. Validated against
+`上り / 下り / 南行 / 北行 / 内回り / 外回り`.
 
 **`name` — a space means "break here".** A space inside a station name is a layout instruction, not
 part of the name: the route-bar label renders the space-separated parts on two vertical lines
@@ -685,6 +713,7 @@ Exits 0 if clean, 1 if issues found (suitable for pre-commit / CI). Checks perfo
 - `stations.json` `transfers[]` entries: base slug exists in `lines.json`; `slug.variant` matches a declared variant; dot-notation depth ≤ 1 (e.g. `slug.variant` OK; `slug.variant.subvariant` rejected)
 - `stations.json` `transfers_by_view[VIEW]` ops:
   - `drop` entries match a base slug already in `transfers[]` (typo + stale-data guard)
+  - `add` entries match an **exact** ref in `transfers[]` (a base slug is rejected — it would re-admit the route's own variant too), and are not cancelled by a `drop` of the same base in the same view (drop runs last, so that combination is dead config)
   - `edit` keys match a base slug in `transfers[]`; edit values resolve in `lines.json` (base + variant if dotted)
   - `rows` array sums to `len(transfers) - len(drop)` — promotes runtime-fallback warning to authoring-time error
 - `route.json` `transfer_view`: at least one stop on route has `stations.json` `transfers_by_view` entry for it. Direction = route → stop → station (NOT station → route). Reverse direction would false-positive on station configs that are forward-looking or test-only (e.g. `大船`/`武蔵小杉`'s `JO_north`).

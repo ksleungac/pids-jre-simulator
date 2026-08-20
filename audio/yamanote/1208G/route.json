@@ -14,11 +14,8 @@
         5
     ],
     "type": "各駅停車",
-    "remarks": {
-        "direction": "内回り",
-        "through": "",
-        "note": ""
-    },
+    "direction": "内回り",
+    "remarks": "山手線内回り",
     "dest": "品川･東京",
     "stops": [
         {

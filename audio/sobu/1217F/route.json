@@ -18,11 +18,8 @@
         152
     ],
     "type": "快速",
-    "remarks": {
-        "direction": "下り",
-        "through": "成田線",
-        "note": ""
-    },
+    "direction": "下り",
+    "remarks": "総武快速線下り　成田線直通",
     "dest": "成田空港",
     "frames": [
         {

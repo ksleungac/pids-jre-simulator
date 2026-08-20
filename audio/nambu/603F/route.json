@@ -7,11 +7,8 @@
         0
     ],
     "type": "各駅停車",
-    "remarks": {
-        "direction": "下り",
-        "through": "",
-        "note": ""
-    },
+    "direction": "下り",
+    "remarks": "南武線下り",
     "type_color": [
         0,
         0,

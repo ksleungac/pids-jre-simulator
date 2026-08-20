@@ -1,17 +1,15 @@
 {
     "route": "高崎線",
     "line_code": "JU",
+    "transfer_view": "JU_takasaki",
     "color": [
         244,
         132,
         44
     ],
     "type": "快速アーバン",
-    "remarks": {
-        "direction": "下り",
-        "through": "",
-        "note": ""
-    },
+    "direction": "下り",
+    "remarks": "高崎線下り",
     "dest": "高崎",
     "stops": [
         {

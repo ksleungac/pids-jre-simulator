@@ -8,11 +8,8 @@
         87
     ],
     "type": "各駅停車",
-    "remarks": {
-        "direction": "下り",
-        "through": "",
-        "note": ""
-    },
+    "direction": "下り",
+    "remarks": "埼京線下り",
     "dest": "大宮",
     "stops": [
         {

@@ -46,6 +46,17 @@ LINE_ICONS_DIR = DATA_ROOT / "line_icons"
 
 PASSING_FORBIDDEN = ("sta", "sta_cut", "time", "pa_at_station")
 PRE_STOP_FORBIDDEN = ("pa", "pa_at_station", "sta", "sta_cut", "time")
+
+# `remarks` is the 備考 cell text VERBATIM — no composer, no kv block. A newline has no glyph in
+# the lowres renderer and draws tofu, so newlines are rejected outright.
+#
+# The length cap is a SANITY BOUND, not the cell's capacity. A character count cannot be that:
+# the 備考 cell is 184px of usable width at 18px per glyph, so ~10 full-width Japanese characters
+# fit but ~18 Latin ones do, and several shipped routes already exceed the Japanese figure.
+# Overflow is a designed case — `tims/setup/route_select._marquee_cell` slides it — so the cap
+# exists to catch a runaway string, not to guarantee a static fit.
+REMARK_MAX_CHARS = 18
+VALID_DIRECTIONS = {"上り", "下り", "南行", "北行", "内回り", "外回り"}
 VALID_LINE_CATEGORIES = {"jr_east", "shinkansen", "non_jr"}
 # Active-line badge codes (route-level `line_code`) — drives the transfer-info
 # active-line filter. See docs/DATA_FORMAT.md § Route-Level Fields.
@@ -136,6 +147,8 @@ def check_stations_transfers(stations_data: dict, lines_data: dict, issues: list
 def check_transfers_by_view(stations_data: dict, lines_data: dict, issues: list) -> None:
     """Per-view ops on a station's transfers:
     - drop entries must match a base slug already in transfers[]
+    - add entries must match an EXACT ref in transfers[], and must not be
+      cancelled by a drop of the same base in the same view (drop runs last)
     - edit keys must match a base slug in transfers[]; edit values must resolve in lines.json
     - rows array must sum to len(transfers) - len(drop)  (edit doesn't change count)
     """
@@ -149,6 +162,15 @@ def check_transfers_by_view(stations_data: dict, lines_data: dict, issues: list)
             for d in ops.get("drop", []):
                 if d not in base_slugs_in_transfers:
                     issues.append(("data/stations.json", f"'{sname}' view '{view_key}': drop '{d}' — not a base slug in transfers[]"))
+            # add validity. Exact ref, because add exempts one variant from the
+            # active-line filter while the route's own variant still goes; a base
+            # slug would re-admit both. A drop of the same base makes it dead code.
+            dropped_bases = set(ops.get("drop", []))
+            for a in ops.get("add", []):
+                if a not in transfers:
+                    issues.append(("data/stations.json", f"'{sname}' view '{view_key}': add '{a}' — not an exact ref in transfers[]"))
+                elif SCALE_SUFFIX_RE.sub("", a).split(".")[0] in dropped_bases:
+                    issues.append(("data/stations.json", f"'{sname}' view '{view_key}': add '{a}' is cancelled by drop of the same base"))
             # edit validity
             for ek, ev in ops.get("edit", {}).items():
                 if ek not in base_slugs_in_transfers:
@@ -325,8 +347,9 @@ _KANJI = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
 # Keys whose `english` is a deliberate TRANSLATION rather than a romanization, so
 # no reading can derive it. Kept as an explicit list because each one is an
 # editorial decision, not a spelling: 葛西臨海公園 was Kasairinkaikōen and JR East
-# now writes Park (author, 2026-08-01).
-_TRANSLATED_NAMES = {"葛西臨海公園", "成田空港", "空港第2ビル"}
+# now writes Park (author, 2026-08-01); 自治医大 abbreviates 自治医科大学 and takes
+# the university's own English name over Jichi-idai (author, 2026-08-20).
+_TRANSLATED_NAMES = {"葛西臨海公園", "成田空港", "空港第2ビル", "自治医大"}
 
 
 class _Unromanizable(Exception):
@@ -498,6 +521,21 @@ def check_route(route_path: Path, translations: dict, train_types: dict, issues:
     if not fixture:
         for cfield in ("color", "contrast_color", "type_color"):
             _check_color(rel, cfield, data.get(cfield), issues)
+
+    # Route-level: remarks is free text, but one line has a width — and `direction` is the
+    # machine-readable fact the PA filename's {direction} token comes from (§ Pool filename grammar).
+    rem = data.get("remarks")
+    if not fixture and rem is not None:
+        if not isinstance(rem, str):
+            issues.append((rel, f"remarks: must be a string, got {type(rem).__name__}"))
+        else:
+            if "\n" in rem:
+                issues.append((rel, "remarks: no newlines — the 備考 cell is single-line and the lowres renderer draws tofu for one"))
+            if len(rem) > REMARK_MAX_CHARS:
+                issues.append((rel, f'remarks "{rem}": {len(rem)} chars, over the {REMARK_MAX_CHARS}-char sanity bound'))
+    direction = data.get("direction")
+    if not fixture and direction is not None and direction not in VALID_DIRECTIONS:
+        issues.append((rel, f'direction "{direction}": not one of {sorted(VALID_DIRECTIONS)}'))
 
     # pre_stops shape (shape rule, applies to fixtures too)
     for i, ps in enumerate(data.get("pre_stops", [])):
