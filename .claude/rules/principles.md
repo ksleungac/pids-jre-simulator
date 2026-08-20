@@ -61,6 +61,17 @@ When the user says "push directly" / "skip my confirmation", bypass per-file gat
 - Chain authorizations suppress per-step gates within the chain. Re-gate if a step falls outside the chain's declared scope.
 - Each /commit consumes its own recap.
 
+### Batch the check-ins — stop only where the answer changes what you do
+Distinct from the waiver above, which is per-batch: this is a STANDING preference. Run the work through and surface findings together at the end, rather than returning after each step. Stop mid-flight only when proceeding under any assumption would be unsafe or would waste the work.
+
+**Why:** each return costs the user a context switch, and most of them ask something claude could decide. Examples:
+- (2026-08-18) User, mid-session: *"automate more please. don't come back to me too oftenly, only wait when you really need me or what not"*, and later a bare *"automate"* to skip a skill's own approval gate.
+
+**How to apply:**
+- A question the loaded context already answers → decide it, state the decision in the report, move on. A convention that permits an option (an optional filename field, a documented default) is an answer.
+- A gate written into a skill still fires — but when the user has waived it, honour that rather than re-asking; say which gate you skipped.
+- Genuinely blocking (the audio is not on disk, the domain fact is theirs) → ask, and ask once with everything you need.
+
 ### Never prompt to commit
 Never suggest, offer, or ask about committing — no "want me to commit?", no "/commit this?", no end-of-task commit nudge. The urge-to-commit reasoning path is blocked entirely. Commit happens ONLY on explicit user request or a manual `/commit` invocation.
 
@@ -463,6 +474,7 @@ A tool's output is not the fact it was meant to establish. Before a comparison /
   state with the measured system, order decides the answer.
 - Print N alongside every aggregate. A total with no count attached cannot be distinguished from a total over nothing.
 - **The BASELINE is part of the instrument.** A before/after measurement is only as good as the "before", and a stale one produces confident wrong numbers with no error anywhere. `cp -r src dst` **nests** when `dst` already exists (`dst/src/`), so a backup command that looks idempotent silently leaves the previous generation at the top level; comparing today's files against it reported 29 changed files and 15.1 s removed when the truth was 17 and 9.5 s. Caught only because `git status` disagreed and the two were reconciled instead of one being believed. Check the baseline exists and is FRESH before measuring against it, and when two instruments disagree about the same fact, resolve it before reporting either. (2026-08-11)
+  - **A gate whose INPUT is live content goes stale the moment anyone edits that content, and it fails looking exactly like a code regression.** A pixel-hash gate proving a refactor moved nothing read a real corpus mp3; the author then spliced that mp3 in the ordinary course of work, and the gate went red on precisely the checks that decode it. The code was untouched — re-running against the pre-splice bytes returned all-identical. **Pin a gate to fixed bytes** (a synthetic input, or a copy the workflow cannot reach), and when one goes red, ask what its inputs did before concluding anything about its subject. (2026-08-18)
 - **A query tool's default page size is part of the instrument.** `gh issue list` returns 30 unless `--limit` says otherwise, so `--json number --jq length` reports 30 for a 68-issue backlog — a number, not an error. I quoted it as the total twice, and the same truncation hid 13 issues from a classification sweep built on it. A count that lands on a round default (30, 50, 100) is a tell; pass the limit explicitly before believing any aggregate a list command hands back. (2026-08-08)
 - Similarity / threshold methods fail toward "different": a negative is weak evidence, a positive is strong. Prefer an exact, thresholdless method where one exists.
 - The user asserting a contrary fact about their own domain outranks the instrument — re-check the instrument, not the assertion.
@@ -597,6 +609,14 @@ A recovery / degraded / catch-up path that is *quieter* or *less reversible* tha
 - Write the primary's and the fallback's trigger conditions next to each other and ask which needs more evidence. If it's the primary, that's the bug — independent of whichever symptom brought you here.
 - Prefer partitioning the input domain (disjoint bands) over ordering the checks; ordering relies on the earlier check firing, partitioning cannot invert.
 - Frequency of fallback engagement is a *metric*, not noise — instrument it, since it counts the primary's misses.
+
+### A corrective adjustment must be monotone — clamp it against its own input
+A mechanism that exists to REDUCE a value (a trim, a cap, a shrink, a back-off) must be unable to increase it. Writing the floor as `max(floor, value - correction)` alone does exactly that: where the natural value already sits below the floor, the `max` RAISES it, and the mechanism does the opposite of its name on precisely the inputs it was least needed for. Clamp with the floor, then re-clamp against the original — `min(value, max(value - correction, floor))` — so the result can only ever be smaller.
+
+**Why:** the inflation fires only in the regime nobody pictures while writing it (the value was already small, so no correction seemed necessary), and downstream it reads as a *different* subsystem failing. Examples:
+- (2026-08-21) A transfer-panel overhang trim floored at `min_inter_gap = 19` met a natural column gap of 8.7px and pushed it to 19 — widening what it was added to narrow. The anchor row then ran 31px past the canvas edge, the row below could no longer place its tail on the last column, and it dropped out of Rule 1 into Rule 4 equal-spacing, losing column alignment entirely. The visible symptom was "the alignment is strange", three mechanisms away from the `max`.
+
+**How to apply:** name the direction the mechanism is allowed to move the value, then check every clamp against it. A floor and a reduction in one expression is the smell — the floor is a bound on the RESULT, not a licence to move the value the other way.
 
 ### A "bonus" feature that writes the sovereign state is not a bonus
 When a secondary / recovery / catch-up feature shares the SAME state and gates as the primary path — not just reads them, WRITES them — it cannot be reasoned about as an isolated add-on. Every rule added to make the secondary smarter becomes a new way to corrupt the primary, because they mutate one thing. The frustration signal is a run of regressions where fixing the secondary keeps breaking the base.

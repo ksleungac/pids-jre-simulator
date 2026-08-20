@@ -137,12 +137,17 @@ def render_transfer(
     lines: dict,
     debug: bool = False,
     rows_override: Optional[list] = None,
+    size_step: int = 0,
 ):
     """Render the transfer-info frame onto ``surf`` (W × H).
 
     Pure procedural renderer — no class state. Same signature as the
     standalone preview, so ``preview_transfers.py`` can call it directly
     against a freshly-allocated surface.
+
+    ``size_step`` is internal to shrink-to-fit: it steps the per-N text-size
+    ladder down by that many rungs and is set only by this function's own
+    retry. Callers leave it at 0.
     """
 
     # CONTRACT: Pipeline = scaling → row-grouping → blueprint → Rules 1-4 + track-back.
@@ -158,6 +163,7 @@ def render_transfer(
     inter_element_margin_ratio = 0.7  # Greedy walk comfort TARGET: predecessor inter-spacing = ratio × margin_x. < 1.0 → "cramped-centered" look.
     min_inter_gap_ratio = 0.5      # Cascade Rule 2/3 absolute FLOOR: distribute_middles rejects gap < ratio × margin_x. Lower than inter_element_margin_ratio because cascade has anchor structure (column-aligned tighter spacing is visually OK).
     single_row_side_pad_divisor = 14  # Single-row equal-spacing: side_pad = (W − Σ) / divisor. Sparse rows get more side_pad; crowded rows → true equal-spacing.
+    anchor_overhang_trim = True    # Anchor row that has a row ABOVE it (only under a lone shinkansen): pull its columns in toward that row's right edge instead of justifying to the margin, floored at min_inter_gap. False = always justify.
 
     banner_size_ja = 16            # JA size (user spec: 16+ px)
     banner_size_en = 18            # EN size (user spec 2026-05-04)
@@ -178,18 +184,33 @@ def render_transfer(
     resolved_pairs = [(ref, resolve_entry(ref, lines)) for ref in transfers]
     _shinkansen_count = sum(1 for _, e in resolved_pairs if e.get("category") == "shinkansen")
     _N = len(transfers)
+    # The ladder as one list so shrink-to-fit can step DOWN it (see `size_step`).
+    # Order matters: index 0 is the largest (Sparse), last is the smallest (Dense).
+    name_size_ladder = (32, 29, 26, 22)
     if _N >= 10 or _shinkansen_count >= 2:
-        name_size_ja = 22  # 1.375× banner JA
+        _size_tier = 3  # Dense — 1.375× banner JA
     elif _N >= 6:
-        name_size_ja = 26  # 1.6× banner JA
+        _size_tier = 2  # Mid — 1.6× banner JA
     elif _N == 5:
-        name_size_ja = 29  # 1.8× banner JA
+        _size_tier = 1  # N=5 — 1.8× banner JA
     else:
-        name_size_ja = 32  # 2.0× banner JA
+        _size_tier = 0  # Sparse — 2.0× banner JA
+    _size_tier = min(_size_tier + size_step, len(name_size_ladder) - 1)
+    name_size_ja = name_size_ladder[_size_tier]
     # EN scales proportionally with JA (baseline ratio 12/23 from pre-scaling settings).
-    name_size_en = round(name_size_ja * 12 / 23)
-    # name_line_gap scales with EN size: larger EN → more negative (closer to JA visually).
-    name_line_gap = -4 - (name_size_en - 12)
+    # EN size and the JA↔EN line gap are PER-TIER, parallel to name_size_ladder,
+    # not derived from name_size_ja. The old derived forms were
+    #   name_size_en  = round(JA × 12/23)
+    #   name_line_gap = −4 − (EN − 12)
+    # which locked the EN to a fixed 0.52 of the JA at every tier and made the gap
+    # progressively MORE negative as the type grew — so the biggest tier, which has
+    # the most room, got the tightest JA↔EN spacing. Per-tier lists let the top of
+    # the ladder be tuned without touching the crowded tiers. Values below
+    # reproduce the derived ones exactly; index 0 is the largest tier.
+    name_size_en_ladder = (20, 15, 14, 11)
+    name_line_gap_ladder = (-7, -7, -6, -3)
+    name_size_en = name_size_en_ladder[_size_tier]
+    name_line_gap = name_line_gap_ladder[_size_tier]
     badge_text_gap = 3             # Gap between badge group and JA/EN text (user spec: 3 px IRL)
     inter_badge_gap = 2
 
@@ -678,6 +699,7 @@ def render_transfer(
     blueprint_widened = effective_margin_x > margin_x
 
     row_anchors_list: list = []
+    used_last_ditch = False
 
     anchor_row_idx = 0
     if rows and rows[0] and all(e.get("category") == "shinkansen" for e in rows[0]):
@@ -689,6 +711,7 @@ def render_transfer(
     column_aware_xs = None
     column_aware_M = 0
     column_aware_col_max_widths: list = []
+    column_aware_col_spacing_widths: list = []
     col_slack = 0
     if anchor_row_idx >= 0 and anchor_row_idx < len(rows) and len(rows) - anchor_row_idx >= 2:
         non_shink_rows_widths = rows_widths_pre[anchor_row_idx:]
@@ -702,11 +725,96 @@ def render_transfer(
             col_x_packed.append(col_x_packed[k - 1] + column_aware_col_max_widths[k - 1])
         last_right_packed = col_x_packed[column_aware_M - 1] + column_aware_col_max_widths[column_aware_M - 1]
         col_slack = (W - effective_margin_x) - last_right_packed
+        # GATE vs SPACING are deliberately different widths.
+        #
+        # `col_slack` above decides WHETHER a column-aligned layout is viable at
+        # all, and stays on the widest entry per column — that conservative test
+        # is what drops 品川 / 横浜 to the geometric head/tail/distribute path,
+        # calibrated against IRL and locked by the verification corpus. Do not
+        # relax it: widening the gate pulls those stations onto this path and
+        # their rows come out markedly less even (JO 横浜 row 0 gaps 38·39·38 →
+        # 16·83·16 when tried 2026-08-21).
+        #
+        # Where the layout IS viable, the columns are then spaced on successor-
+        # aware widths. Only an entry with a SUCCESSOR in its own row constrains
+        # where the next column may start — Rule 1's intrusion check is
+        # asymmetric, so a row's trailing entry may overhang the column after it,
+        # nothing in that row sitting there to be intruded on. Padding a column to
+        # fit a trailing entry therefore buys nothing and punches a hole into
+        # every row that DOES continue past it: at 大宮 JU, row 2's tail
+        # ニューシャトル (214) widened column 1 against 高崎線 (122), leaving the
+        # anchor row's gaps at 7 · 98 · 7. The last column has no successor in any
+        # row, so it keeps the plain max and the two lists agree there.
+        #
+        # Spacing widths are never wider than gate widths, so a layout that
+        # cleared the gate still fits: `col_slack_spaced >= col_slack >= 0`.
+        column_aware_col_spacing_widths = [
+            (column_aware_col_max_widths[k] if k == column_aware_M - 1 else max(rw[k] for rw in non_shink_rows_widths if k + 1 < len(rw)))
+            for k in range(column_aware_M)
+        ]
         if col_slack >= 0:
-            col_x_final = [col_x_packed[0]]
+            col_x_spaced = [effective_margin_x]
+            for k in range(1, column_aware_M):
+                col_x_spaced.append(col_x_spaced[k - 1] + column_aware_col_spacing_widths[k - 1])
+            col_slack_spaced = (W - effective_margin_x) - col_x_spaced[column_aware_M - 1] - column_aware_col_spacing_widths[column_aware_M - 1]
+            col_x_final = [col_x_spaced[0]]
             if column_aware_M >= 2:
+                # Slack is shared equally by the M−1 column boundaries. Spending
+                # ALL of it puts the last column flush on the right margin, which
+                # is what strands a lone trailing entry.
+                per_gap = col_slack_spaced / (column_aware_M - 1)
+                # OVERHANG TRIM. Justifying is right whenever the anchor row is
+                # the TOP row: it is then the widest row by construction, so it
+                # defines the page width and nothing can stick out past it. The
+                # defect appears only when the anchor has a row ABOVE it — which
+                # happens solely under a lone shinkansen, since that is the one
+                # layout whose top row cannot seed the columns. That top row is a
+                # single wide item that cannot stretch, so a justified anchor row
+                # juts past it (大宮 JU_takasaki: shinkansen ends 575, anchor row
+                # ran to 668 with nothing above or below it out there).
+                #
+                # `anchor_right` below is the COLUMN SYSTEM's right edge, not the
+                # anchor row's own — they differ when the anchor row occupies
+                # fewer columns than M. Pulling the whole system in is what is
+                # wanted (the rows below anchor on these columns too), and no
+                # panel in the route corpus currently renders with n_anchor < M.
+                #
+                # Trim toward that row's right edge rather than to a flat ratio,
+                # so the correction is sized by the actual overhang and vanishes
+                # when there isn't one. Floored at min_inter_gap: the columns
+                # never crowd tighter than the cascade's own spacing floor, so a
+                # deep overhang is reduced rather than erased. Left margin is
+                # untouched, and the rows below still take their x from these
+                # columns, so alignment follows them in.
+                # Rows are not placed yet, so the row above is read from its
+                # known placement rather than from `row_anchors_list`: an anchor
+                # row below the top implies a single-entry shinkansen row 0, and
+                # that row is laid at `effective_margin_x` ("row 0 multi-row n=1").
+                # Guarded on that shape so the trim is skipped, not mis-measured,
+                # if the anchor-row override ever admits another layout.
+                above = rows_widths_pre[anchor_row_idx - 1] if anchor_row_idx > 0 else []
+                if anchor_overhang_trim and len(above) == 1:
+                    above_right = effective_margin_x + above[0]
+                    anchor_right = (
+                        col_x_spaced[column_aware_M - 1] + column_aware_col_spacing_widths[column_aware_M - 1] + per_gap * (column_aware_M - 1)
+                    )
+                    overhang = anchor_right - above_right
+                    if overhang > 0:
+                        # MONOTONE: the trim may only pull columns IN. Writing this
+                        # as max(min_inter_gap, ...) alone is wrong — where the
+                        # natural gap is already below the floor, the max RAISES it
+                        # and pushes the columns right, which is the opposite of a
+                        # trim. 上野 JK_south at 22pt has a natural gap of 8.7px
+                        # against a floor of 19: that inflation ran the anchor row
+                        # to 717 past a 686 right edge, so the row below could no
+                        # longer place its tail on the last column, dropped out of
+                        # Rule 1 into Rule 4 equal-spacing, and lost column
+                        # alignment altogether. Clamp with the floor, then re-clamp
+                        # to the original so the result can only ever be smaller.
+                        trimmed = max(per_gap - overhang / (column_aware_M - 1), min_inter_gap)
+                        per_gap = min(per_gap, trimmed)
                 for k in range(1, column_aware_M):
-                    col_x_final.append(int(round(col_x_packed[k] + col_slack * k / (column_aware_M - 1))))
+                    col_x_final.append(int(round(col_x_spaced[k] + per_gap * k)))
             n_anchor = len(rows[anchor_row_idx])
             column_aware_xs = col_x_final[:n_anchor]
 
@@ -718,6 +826,7 @@ def render_transfer(
         _dprint(f"effective_margin_x = max({margin_x}, {int(round(h_narrowest))}) = {effective_margin_x}  widened={blueprint_widened}")
         _dprint(f"\n--- column-aware anchor placement ---")
         _dprint(f"anchor_row_idx={anchor_row_idx}  M={column_aware_M}  col_max_widths={column_aware_col_max_widths}")
+        _dprint(f"col_spacing_widths={column_aware_col_spacing_widths}  (gate uses col_max_widths)")
         if column_aware_xs is not None:
             _dprint(f"col_slack={col_slack}  → anchor row xs={column_aware_xs}")
         else:
@@ -889,6 +998,7 @@ def render_transfer(
             for kk in range(1, n):
                 chosen_xs.append(chosen_xs[-1] + widths[kk - 1])
             rule_taken = "Last-ditch (pack from margin)"
+            used_last_ditch = True
 
         if debug:
             left_gap = chosen_xs[0]
@@ -903,11 +1013,51 @@ def render_transfer(
         for k in range(n):
             positions.append((row[k], chosen_xs[k], row_y))
 
+    # SHRINK-TO-FIT. "Last-ditch" is the placement pipeline reporting that it ran
+    # out of rules: every gap collapses to 0 and the row is packed hard from the
+    # margin, which can also run off the canvas. It means the text does not fit at
+    # this size, and the per-N ladder cannot see that — it keys on the ENTRY COUNT,
+    # which under-predicts width when a name is long (秋葉原 JY: N=3 lands in the
+    # Sparse 32pt bucket, but 総武線各駅停車 + つくばエクスプレス線 measure 620px
+    # against 618px of usable row, so the two entries render touching).
+    #
+    # So step one rung DOWN the ladder and lay the whole thing out again. The
+    # background fill and the banner HAVE already been drawn by this point, but
+    # the retry's own `surf.fill` wipes the surface and redraws them identically
+    # (the banner sizes do not depend on `size_step`), so nothing partial
+    # survives. The retry re-derives every measurement from the new size, so this
+    # is a genuine re-run and not a patch-up. Bounded by the ladder's length —
+    # `_size_tier` rises by exactly 1 per call, so depth is at most
+    # `len(name_size_ladder) - 1`. It fires only
+    # where the layout already failed, so a panel that places cleanly can never
+    # reach it. Scope on the route corpus: 2 of 100 panels (秋葉原 JY_inner and
+    # 上野 JK_south, the latter having overflowed the canvas by 38px).
+    if used_last_ditch and _size_tier < len(name_size_ladder) - 1:
+        _dprint(f"\nshrink-to-fit: last-ditch at {name_size_ja}pt → retry at {name_size_ladder[_size_tier + 1]}pt")
+        return render_transfer(surf, transfers, lines, debug=debug, rows_override=rows_override, size_step=size_step + 1)
+
+    # Horizontal centring — the sibling of the vertical `top_gap` below. Every row
+    # starts at effective_margin_x, and a row that justifies also ends on the right
+    # margin, so the block is already centred and this is a no-op: 90 of the 100
+    # station panels the route corpus reaches shift by 0. It bites only where a row
+    # was deliberately NOT justified — the overhang trim above — which otherwise
+    # leaves the block sitting left with all the reclaimed space pooled on the
+    # right (大宮 JU_takasaki: 62 left, 139 right). The shift is uniform, so every
+    # relative position is preserved and column alignment is untouched.
+    if positions:
+        block_left = min(x for _, x, _ in positions)
+        block_right = max(x + width_of(e) for e, x, _ in positions)
+        centring_shift = int(round(((W - block_right) - block_left) / 2))
+        if centring_shift:
+            positions = [(e, x + centring_shift, y) for e, x, y in positions]
+        _dprint(f"\ncentring: block {block_left}..{block_right} → shift {centring_shift:+d}")
+
     content_h = (max(p[2] for p in positions) + entry_h) if positions else 0
 
     avail = surf.get_height() - banner_h
     top_gap = max(banner_to_body_gap, (avail - content_h - bottom_extra) // 2)
     body_y_start = banner_h + top_gap
+    _dprint(f"vertical: content_h={content_h}  avail={avail}  top_gap={top_gap}  overflow={max(0, content_h + bottom_extra - avail)}")
 
     for entry, x, y_rel in positions:
         draw_entry(entry, x, body_y_start + y_rel)

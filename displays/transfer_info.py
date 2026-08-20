@@ -69,17 +69,30 @@ def apply_transfer_filter(
     station_data: dict,
     lines: dict,
 ) -> List[str]:
-    """Apply active-line filter, then view drops, then view edits.
+    """Apply view adds, then the active-line filter, then view drops, then edits.
 
     Single source of truth for the transfer filtering pipeline shared by
     the production class (``TransferInfoDisplay._resolve_transfers``) and
     the preview CLI. Pure function — no class state.
-    """
-    if line_code:
-        transfers = [ref for ref in transfers if not any(b.get("code") == line_code for b in resolve_entry(ref, lines).get("badges", []))]
 
-    if transfer_view:
-        view_ops = station_data.get("transfers_by_view", {}).get(transfer_view, {})
+    ``add`` exempts an exact ref from the active-line filter, which is the
+    only thing it can undo — so it is read BEFORE that filter runs, not
+    after. It exists for a SIBLING service sharing the active line's code:
+    宇都宮線 and 高崎線 are both ``JU``, so riding either drops both, yet at
+    大宮 (where they physically diverge) the PA announces the other one.
+    Matching is by exact ref, not base slug, because the route's own variant
+    must still be dropped while the sibling survives. A later ``drop`` of the
+    same base still wins — drop is applied after.
+    """
+    view_ops = station_data.get("transfers_by_view", {}).get(transfer_view, {}) if transfer_view else {}
+    keep = set(view_ops.get("add", []))
+
+    if line_code:
+        transfers = [
+            ref for ref in transfers if ref in keep or not any(b.get("code") == line_code for b in resolve_entry(ref, lines).get("badges", []))
+        ]
+
+    if view_ops:
         dropset = set(view_ops.get("drop", []))
         if dropset:
             transfers = [r for r in transfers if r.split(".", 1)[0] not in dropset]

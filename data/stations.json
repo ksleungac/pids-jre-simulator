@@ -50,7 +50,9 @@
         ],
         "transfers_by_view": {
             "JK_south": {"drop": ["shonan_shinjuku", "ueno_tokyo"]},
-            "JA_north": {"drop": ["ueno_tokyo"]}
+            "JA_north": {"drop": ["ueno_tokyo"]},
+            "JU_utsunomiya": {"drop": ["shonan_shinjuku"], "add": ["utsunomiya_takasaki.takasaki"]},
+            "JU_takasaki": {"drop": ["shonan_shinjuku", "keihin_tohoku"], "add": ["utsunomiya_takasaki.utsunomiya"]}
         }
     },
     "大崎": {
@@ -430,7 +432,9 @@
             "ueno_tokyo.tohoku"
         ],
         "transfers_by_view": {
-            "JK_south": {"drop": ["shonan_shinjuku", "ueno_tokyo"]}
+            "JK_south": {"drop": ["shonan_shinjuku", "ueno_tokyo"]},
+            "JU_utsunomiya": {"drop": ["shonan_shinjuku"]},
+            "JU_takasaki": {"drop": ["shonan_shinjuku"]}
         }
     },
     "渋谷": {
@@ -487,5 +491,61 @@
             "JA_north": {"drop": ["ueno_tokyo"]}
         }
     },
-    "高輪ゲートウェイ": {"code_3": "TGW"}
+    "高輪ゲートウェイ": {"code_3": "TGW"},
+    "宇都宮": {
+        "transfers": [
+            "tohoku_shinkansen.north_of_omiya",
+            "utsunomiya_takasaki.utsunomiya",
+            "nikko",
+            "ueno_tokyo.tohoku"
+        ]
+    },
+    "小山": {
+        "transfers": [
+            "tohoku_shinkansen.north_of_omiya",
+            "utsunomiya_takasaki.utsunomiya",
+            "mito_line",
+            "ryomo",
+            "ueno_tokyo.tohoku"
+        ]
+    },
+    "栗橋": {
+        "transfers": [
+            "utsunomiya_takasaki.utsunomiya",
+            "ueno_tokyo.tohoku",
+            "tobu_nikko"
+        ]
+    },
+    "久喜": {
+        "transfers": [
+            "utsunomiya_takasaki.utsunomiya",
+            "ueno_tokyo.tohoku",
+            "tobu_isesaki"
+        ]
+    },
+    "さいたま 新都心": {
+        "transfers": [
+            "keihin_tohoku",
+            "utsunomiya_takasaki.utsunomiya",
+            "utsunomiya_takasaki.takasaki",
+            "ueno_tokyo.tohoku"
+        ],
+        "transfers_by_view": {
+            "JK_south": {"drop": ["ueno_tokyo"]}
+        }
+    },
+    "那須塩原": {
+        "transfers": [
+            "tohoku_shinkansen.north_of_omiya",
+            "utsunomiya_takasaki.utsunomiya",
+            "ueno_tokyo.tohoku"
+        ]
+    },
+    "宝積寺": {
+        "transfers": [
+            "utsunomiya_takasaki.utsunomiya",
+            "karasuyama",
+            "ueno_tokyo.tohoku"
+        ]
+    }
 }

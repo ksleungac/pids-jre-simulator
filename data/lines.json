@@ -92,7 +92,19 @@
             "sawara": {"name_ja": "成田線(佐原方面)",   "name_en": "Narita Line (for Sawara)"}
         }
     },
-    "tohoku_shinkansen":  {"badges": [{"icon": "shinkansen_jr_east"}],    "name_ja": "東北･山形･秋田･北海道･上越･北陸新幹線", "name_en": "Tōhoku・Yamagata・Akita・Hokkaido・Jōetsu・Hokuriku Shinkansen",                           "category": "shinkansen"},
+    "nikko":              {"badges": [{"icon": "_universal"}],            "name_ja": "日光線",     "name_en": "Nikkō Line",                                                     "category": "jr_east"},
+    "karasuyama":         {"badges": [{"icon": "_universal"}],            "name_ja": "烏山線",     "name_en": "Karasuyama Line",                                                "category": "jr_east"},
+    "mito_line":          {"badges": [{"icon": "_universal"}],            "name_ja": "水戸線",     "name_en": "Mito Line",                                                      "category": "jr_east"},
+    "ryomo":              {"badges": [{"icon": "_universal"}],            "name_ja": "両毛線",     "name_en": "Ryōmō Line",                                                     "category": "jr_east"},
+    "tohoku_shinkansen": {
+        "badges": [{"icon": "shinkansen_jr_east"}],
+        "name_ja": "東北･山形･秋田･北海道･上越･北陸新幹線",
+        "name_en": "Tōhoku・Yamagata・Akita・Hokkaido・Jōetsu・Hokuriku Shinkansen",
+        "category": "shinkansen",
+        "variants": {
+            "north_of_omiya": {"name_ja": "東北･山形･秋田･北海道新幹線", "name_en": "Tōhoku・Yamagata・Akita・Hokkaido Shinkansen"}
+        }
+    },
     "tokaido_shinkansen": {"badges": [{"icon": "shinkansen_jr_central"}], "name_ja": "東海道･山陽新幹線", "name_en": "Tōkaidō・Sanyō Shinkansen",                                                          "category": "shinkansen"},
     "marunouchi":         {"badges": [{"icon": "metro_marunouchi"}],      "name_ja": "丸ノ内線",   "name_en": "Marunouchi Line",                                            "category": "non_jr"},
     "ginza":              {"badges": [{"icon": "metro_ginza"}],           "name_ja": "銀座線",     "name_en": "Ginza Line",                                                 "category": "non_jr"},
@@ -107,8 +119,10 @@
     "oedo":               {"badges": [{"icon": "toei_oedo"}],             "name_ja": "都営大江戸線", "name_en": "Toei Ōedo Line",                                           "category": "non_jr"},
     "tokyo_monorail":     {"badges": [{"icon": "tokyo_monorail"}],        "name_ja": "東京モノレール羽田空港線", "name_en": "Tokyo Monorail Haneda Airport Line",                  "category": "non_jr"},
     "yurikamome":         {"badges": [{"icon": "_universal"}],            "name_ja": "ゆりかもめ", "name_en": "Yurikamome",                                                 "category": "non_jr"},
-    "tsukuba_express":    {"badges": [{"icon": "_universal"}],            "name_ja": "つくばエクスプレス線", "name_en": "Tsukuba Express",                                       "category": "non_jr"},
+    "tsukuba_express":    {"badges": [{"icon": "_universal"}],            "name_ja": "つくばエクスプレス線", "name_en": "Tsukuba Express Line",                                  "category": "non_jr"},
     "tobu_noda":          {"badges": [{"icon": "_universal"}],            "name_ja": "東武野田線", "name_en": "Tōbu Noda Line",                                             "category": "non_jr"},
+    "tobu_nikko":         {"badges": [{"icon": "_universal"}],            "name_ja": "東武日光線", "name_en": "Tōbu Nikkō Line",                                            "category": "non_jr"},
+    "tobu_isesaki":       {"badges": [{"icon": "_universal"}],            "name_ja": "東武伊勢崎線", "name_en": "Tōbu Isesaki Line",                                        "category": "non_jr"},
     "new_shuttle":        {"badges": [{"icon": "_universal"}],            "name_ja": "ニューシャトル", "name_en": "New Shuttle",                                            "category": "non_jr"},
     "shonan_monorail":    {"badges": [{"icon": "_universal"}],            "name_ja": "湘南モノレール", "name_en": "Shōnan Monorail",                                       "category": "non_jr"},
     "keisei":             {"badges": [{"icon": "_universal"}],            "name_ja": "京成線",     "name_en": "Keisei Line",                                                "category": "non_jr"},
