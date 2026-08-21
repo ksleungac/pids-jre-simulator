@@ -1,0 +1,361 @@
+{
+    "route": "宇都宮線",
+    "line_code": "JU",
+    "transfer_view": "JU_utsunomiya",
+    "color": [
+        244,
+        132,
+        44
+    ],
+    "type": "快速ラビット",
+    "direction": "上り",
+    "remarks": "宇都宮線上り　黒磯始発",
+    "dest": "上野",
+    "stops": [
+        {
+            "name": "黒磯",
+            "pa": [],
+            "time": 0,
+            "sta": [
+                "kuroiso_1"
+            ],
+            "sta_cut": 20.99,
+            "sta_code": null,
+            "pa_at_station": [
+                "kuroiso-stopping-up"
+            ]
+        },
+        {
+            "name": "那須塩原",
+            "pa": [
+                "kuroiso-dep-up",
+                "nasushiobara-arr-up"
+            ],
+            "time": 6,
+            "sta": [
+                "nasushiobara"
+            ],
+            "sta_cut": 12.87,
+            "sta_code": null
+        },
+        {
+            "name": "西那須野",
+            "pa": [
+                "nasushiobara-dep-up",
+                "nishi-nasuno-arr-up"
+            ],
+            "time": 5,
+            "sta": [
+                "nishinasuno_3"
+            ],
+            "sta_cut": 30.93,
+            "sta_code": null
+        },
+        {
+            "name": "野崎",
+            "pa": [
+                "nishi-nasuno-dep-up",
+                "nozaki-arr-up"
+            ],
+            "time": 4,
+            "sta": [
+                "nishinasuno_3"
+            ],
+            "sta_cut": 30.93,
+            "sta_code": null
+        },
+        {
+            "name": "矢板",
+            "pa": [
+                "nozaki-dep-up",
+                "yaita-arr-up"
+            ],
+            "time": 4,
+            "sta": [
+                "yaita"
+            ],
+            "sta_cut": 11.53,
+            "sta_code": null
+        },
+        {
+            "name": "片岡",
+            "pa": [
+                "yaita-dep-up",
+                "kataoka-arr-up"
+            ],
+            "time": 6,
+            "sta": [
+                "nishinasuno_3"
+            ],
+            "sta_cut": 30.93,
+            "sta_code": null
+        },
+        {
+            "name": "蒲須坂",
+            "pa": [
+                "kataoka-dep-up",
+                "kamasusaka-arr-up"
+            ],
+            "time": 4,
+            "sta": [
+                "kamasusaka_1"
+            ],
+            "sta_cut": 10.34,
+            "sta_code": null
+        },
+        {
+            "name": "氏家",
+            "pa": [
+                "kamasusaka-dep-up",
+                "ujiie-arr-up"
+            ],
+            "time": 4,
+            "sta": [
+                "ujiie_1"
+            ],
+            "sta_cut": 9.36,
+            "sta_code": null
+        },
+        {
+            "name": "宝積寺",
+            "pa": [
+                "ujiie-dep-up",
+                "hoshakuji-arr-up"
+            ],
+            "time": 5,
+            "sta": [
+                "hoshakuji_1"
+            ],
+            "sta_cut": 10.54,
+            "sta_code": null
+        },
+        {
+            "name": "岡本",
+            "pa": [
+                "hoshakuji-dep-up",
+                "okamoto-arr-up"
+            ],
+            "time": 5,
+            "sta": [
+                "okamoto_2"
+            ],
+            "sta_cut": 10.0,
+            "sta_code": null
+        },
+        {
+            "name": "宇都宮",
+            "pa": [
+                "okamoto-dep-up",
+                "utsunomiya-arr-up"
+            ],
+            "time": 6,
+            "sta": [
+                "utsunomiya_9"
+            ],
+            "sta_cut": 15.81,
+            "sta_code": null
+        },
+        {
+            "name": "雀宮",
+            "pa": [
+                "utsunomiya-dep-up-kaisoku",
+                "suzumenomiya-arr-up-kaisoku"
+            ],
+            "time": 6,
+            "sta": [
+                "nishinasuno_3"
+            ],
+            "sta_cut": 30.93,
+            "sta_code": null
+        },
+        {
+            "name": "石橋",
+            "pa": [
+                "suzumenomiya-dep-up-kaisoku",
+                "ishibashi-arr-up-kaisoku"
+            ],
+            "time": 5,
+            "sta": [
+                "ishibashi_2"
+            ],
+            "sta_cut": 18.6,
+            "sta_code": null
+        },
+        {
+            "name": "自治医大",
+            "pa": [
+                "ishibashi-dep-up-kaisoku",
+                "jichi-idai-arr-up-kaisoku"
+            ],
+            "time": 4,
+            "sta": [
+                "jichiidai_1"
+            ],
+            "sta_cut": 10.82,
+            "sta_code": null
+        },
+        {
+            "name": "小金井",
+            "pa": [
+                "jichi-idai-dep-up-kaisoku",
+                "koganei-arr-up-kaisoku"
+            ],
+            "time": 3,
+            "sta": [
+                "nishinasuno_3"
+            ],
+            "sta_cut": 30.93,
+            "sta_code": null
+        },
+        {
+            "name": "小山",
+            "pa": [
+                "koganei-dep-up-kaisoku",
+                "oyama-arr-up-kaisoku"
+            ],
+            "time": 6,
+            "sta": [
+                "oyama_12"
+            ],
+            "sta_cut": 10.81,
+            "sta_code": null
+        },
+        {
+            "name": "間々田",
+            "pa": [],
+            "sta_code": null
+        },
+        {
+            "name": "野木",
+            "pa": [],
+            "sta_code": null
+        },
+        {
+            "name": "古河",
+            "pa": [
+                "oyama-dep-up-kaisoku",
+                "koga-arr-up-kaisoku"
+            ],
+            "time": 11,
+            "sta": [
+                "koga_3"
+            ],
+            "sta_cut": 9.26,
+            "sta_code": null
+        },
+        {
+            "name": "栗橋",
+            "pa": [],
+            "sta_code": null
+        },
+        {
+            "name": "東鷲宮",
+            "pa": [],
+            "sta_code": null
+        },
+        {
+            "name": "久喜",
+            "pa": [
+                "koga-dep-up-kaisoku",
+                "kuki-arr-up-kaisoku"
+            ],
+            "time": 11,
+            "sta": [
+                "kuki_3"
+            ],
+            "sta_cut": 19.42,
+            "sta_code": null
+        },
+        {
+            "name": "新白岡",
+            "pa": [],
+            "sta_code": null
+        },
+        {
+            "name": "白岡",
+            "pa": [],
+            "sta_code": null
+        },
+        {
+            "name": "蓮田",
+            "pa": [
+                "kuki-dep-up-kaisoku",
+                "hasuda-arr-up-kaisoku"
+            ],
+            "time": 8,
+            "sta": [
+                "hasuda_3"
+            ],
+            "sta_cut": 22.84,
+            "sta_code": null
+        },
+        {
+            "name": "東大宮",
+            "pa": [],
+            "sta_code": null
+        },
+        {
+            "name": "土呂",
+            "pa": [],
+            "sta_code": null
+        },
+        {
+            "name": "大宮",
+            "pa": [
+                "hasuda-dep-up-kaisoku",
+                "omiya-arr-up-kaisoku"
+            ],
+            "time": 9,
+            "sta": [
+                "omiya_4"
+            ],
+            "sta_cut": 22.16,
+            "sta_code": "JU07"
+        },
+        {
+            "name": "さいたま 新都心",
+            "pa": [],
+            "sta_code": "JU06"
+        },
+        {
+            "name": "浦和",
+            "pa": [
+                "omiya-dep-up-kaisoku",
+                "urawa-arr-up-kaisoku"
+            ],
+            "time": 8,
+            "sta": [
+                "urawa_3"
+            ],
+            "sta_cut": 23.88,
+            "sta_code": "JU05"
+        },
+        {
+            "name": "赤羽",
+            "pa": [
+                "urawa-dep-up-kaisoku",
+                "akabane-arr-up-kaisoku"
+            ],
+            "time": 8,
+            "sta": [
+                "akabane_3"
+            ],
+            "sta_cut": 20.58,
+            "sta_code": "JU04"
+        },
+        {
+            "name": "尾久",
+            "pa": [],
+            "sta_code": "JU03"
+        },
+        {
+            "name": "上野",
+            "pa": [
+                "akabane-dep-up-kaisoku",
+                "ueno-arr-up-kaisoku"
+            ],
+            "time": 10,
+            "sta_code": "JU02"
+        }
+    ]
+}

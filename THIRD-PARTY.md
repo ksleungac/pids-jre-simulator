@@ -57,6 +57,36 @@ in these recordings and in the melodies they contain is held by East Japan Railw
 Company and the respective melody rights holders. They are included for use with this
 simulator and are not licensed for redistribution by this project.
 
+**Recordists.** The audio was captured at the platform and published by individual
+railway enthusiasts, and this project cut its files from those publications. Crediting
+them below does not make them rights holders and does not grant this project any
+licence — the copyright position above is unchanged. It records who did the work.
+
+The Utsunomiya Line (`audio/utsunomiya/`) is the one line whose sources were recorded
+as the work happened; the per-file mapping from source video to audio file is in
+[audio/README.md § "JU — Utsunomiya sources"](audio/README.md). Its 29 source
+recordings come from:
+
+| Recordist | Recordings |
+|---|---|
+| 全国駅メロチャンネル | 9 |
+| ちいぼす | 7 |
+| East Railway Redwing | 1 — the single run all 46 of `1545E`'s announcement files were cut from |
+| µ'wing | 1 — the single run all 45 of `3520M`'s announcement files were cut from |
+| 70-000 SHINANO · Kent_K · SAGAMI-LINE さがみせん · Ueno-Tokyo Line · ケヨポコ チャンネル short · ハマ音鉄 · 下今市 · 京葉ラビット · 武蔵野快速 · 関石ライン / Kamishi Line · 音鉄DK | 1 each |
+
+Sources for the other lines were not recorded at the time and cannot now be recovered
+reliably. Their recordists are uncredited here for that reason, not because no one is
+owed the credit.
+
+**If you are one of these recordists** and would prefer your work not be used here, or
+would prefer to be credited differently, open an issue and it will be removed or
+corrected.
+
+µ'wing asks that non-personal use of their recordings be registered through a form linked
+from the video description, personal-scope use being exempt. This repository was submitted
+to them on 2026-08-21; the material comes out if they would rather it did not stand.
+
 ## Fonts
 
 `fonts/`

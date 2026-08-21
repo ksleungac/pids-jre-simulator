@@ -772,18 +772,71 @@ def _run_diagram(screen, route_name, start_name, end_name, variants, *, preselec
                         break
 
 
-def _start_station_labels(variant):
-    """Stopping-station names offered as a drive START — the variant's stopping stations
-    with the TERMINUS excluded.
+def _departable_stops(variant):
+    """The stops a drive may START from on this variant — its stopping stations with its
+    own TERMINUS dropped (picking the terminus leaves zero stops to drive).
+
+    Its own, not the line's: a station that terminates one diagram is an ordinary
+    mid-route stop on another, so this is per-variant and every consumer must apply it.
+    Both do — ``_start_station_labels`` to build the grid and ``run_on``'s diagram filter
+    to decide which diagrams may serve a picked start. They forked once: the filter tested
+    the UNTRIMMED list, so picking 上野 on 宇都宮線 offered 快速ラビット, whose 上野 is its last
+    stop — the drive opened on the terminus with nothing ahead of it. 京浜東北線/磯子 and
+    埼京線/大宮 carried the same shape. 2026-08-22.
+    """
+    return [variant["stops"][i] for i in variant["stop_idxs"]][:-1]
+
+
+def _diagrams_for_start(variants, start_name):
+    """The diagrams that can DEPART ``start_name`` — the C07AF run-pattern list.
+
+    A variant is hidden when it does not serve the station, or when it TERMINATES there:
+    starting a drive on the last stop leaves nothing ahead of it. Extracted from
+    ``run_on`` so this is exercisable without a display — inline, the terminus half went
+    unguarded and no headless test could reach it.
+    """
+    return [v for v in variants if start_name in _departable_stops(v)]
+
+
+def _start_station_labels(variants):
+    """Stopping-station names offered as a drive START — the ORDERED UNION over every
+    variant of that variant's stopping stations with its own TERMINUS excluded.
 
     The terminus is never a valid start (picking it leaves zero stops to drive), and
     excluding it also drops the second occurrence a LOOP route carries at both ends —
     yamanote lists 大崎 at index 0 and 29. That duplicate is what made the grid unsafe:
     ``pa_setting._build_config`` resolves the picked name with ``stops.index()``, which
     takes the FIRST match, so choosing the end-of-loop 大崎 silently started the drive a
-    full loop early (#59). Offering the name once keeps that resolution unambiguous.
+    full loop early (#59). Offering the name once keeps that resolution unambiguous —
+    which is why the union below inserts each name at most once.
+
+    UNION, not ``variants[0]``: the station screen runs BEFORE the diagram screen, so it
+    has to offer every start any diagram on the line can serve. Reading one variant made
+    each line's other diagrams partly unreachable, and the loss was silent because the
+    grid still looked complete. 2026-08-22, found when utsunomiya gained 3520M (黒磯 start)
+    alongside 1545E (宇都宮 start): 4 of the 6 multi-diagram lines were already affected —
+    南武線 14 stations, 宇都宮線 10, 京浜東北線 6, 埼京線 4. The express diagram sorts first on
+    those lines, so it was the all-stations stops that vanished.
+
+    Order comes from splicing each variant's sequence onto the accumulated one at its
+    shared stops. The cursor STARTS at the variant's first shared stop rather than at 0,
+    so a leading run of unshared names lands just before the stop it precedes on the real
+    line — seeding at 0 instead would prepend it to the whole list, which is right only
+    when the variant extends the line at the HEAD and wrong for one that begins mid-line
+    at a station no earlier variant serves. With no shared stop at all the order between
+    two diagrams is genuinely undetermined, and the cursor falls to the end.
     """
-    return [variant["stops"][i] for i in variant["stop_idxs"]][:-1]
+    out = []
+    for v in variants:
+        seq = _departable_stops(v)
+        pos = next((out.index(n) for n in seq if n in out), len(out))
+        for name in seq:
+            if name in out:
+                pos = out.index(name) + 1  # anchor on the shared stop, keep walking from there
+            else:
+                out.insert(pos, name)
+                pos += 1
+    return out
 
 
 def run_on(screen):
@@ -803,9 +856,7 @@ def run_on(screen):
             return None  # backed out to 案内設定
         sel_route_idx = res
         name, variants = groups[res]
-        v0 = variants[0]  # station list comes from the first variant (draft: stations precede pattern)
-        station_labels = _start_station_labels(v0)  # stopping stations, terminus excluded
-        end_name = v0["end"]
+        station_labels = _start_station_labels(variants)  # every diagram's starts, terminus excluded
         sel_start = None  # filtered-space index into station_labels
         sel_var = None
         back_to_route = False
@@ -820,10 +871,14 @@ def run_on(screen):
                 sel_var = None  # different start station → the diagram list changes; drop the stale pattern pick
             sel_start = res2
             start_name = station_labels[sel_start] if 0 <= sel_start < len(station_labels) else ""
-            # C07AF shows ONLY diagrams (variants) that STOP at the chosen start station — a variant that
-            # passes through / doesn't serve it is hidden. v0 always stops here (the station grid is built
-            # from v0's stopping list), so ≥1 variant always remains.
-            shown = [v for v in variants if start_name in (v["stops"][i] for i in v["stop_idxs"])]
+            # C07AF shows ONLY diagrams (variants) that can DEPART the chosen start station — one that
+            # passes through, doesn't serve it, or TERMINATES there is hidden. Every offered name came
+            # from some variant's own departable list (the grid is their union), so ≥1 always remains.
+            shown = _diagrams_for_start(variants, start_name)
+            # The 始發・終着站 row belongs to the diagrams actually on screen, not to variants[0]:
+            # 宇都宮線 is the first line whose diagrams end at different stations (1545E→東京, 3520M→上野),
+            # so reading variants[0] showed 黒磯 → 東京 for a run that terminates at 上野.
+            end_name = shown[0]["end"]
             while True:
                 pre = sel_var if (sel_var is not None and sel_var < len(shown)) else None
                 res3 = _run_diagram(screen, name, start_name, end_name, shown, preselect=pre)
@@ -865,7 +920,7 @@ def save_screenshot(path):
     nambu = next((i for i, name in enumerate(route_labels) if name == "南武線"), 0)
     name, variants = groups[nambu]
     v0 = variants[0]
-    station_labels = _start_station_labels(v0)  # match run_on (stopping stations, terminus excluded)
+    station_labels = _start_station_labels(variants)  # match run_on (union over the line's diagrams)
     box_font = i18n.pixel_font_for_lang("en", BOX_NATIVE)
     btn_font = i18n.pixel_font_for_lang(ACTIVE_LANG, BTN_NATIVE)
 

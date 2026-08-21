@@ -60,6 +60,21 @@ audio_src/
 
 Cross-PC: gitignored; manual cloud sync if you switch machines mid-route.
 
+### Record the source when you take it — not later
+
+A recording arrives with facts that exist nowhere else once the tab is closed: the URL, the uploader,
+the date, the licence or usage terms, and the timestamp range taken. Capture them in the splitter's
+docstring **and** in that line's `audio/README.md` entry, because `audio_src/` is gitignored — a
+splitter docstring alone does not reach the second machine, a fresh clone, or anyone reading the repo.
+
+This feeds `THIRD-PARTY.md`, where audio is a carved-out asset class (`conventions.md` § Tooling, "A
+new asset class must update THIRD-PARTY.md"), and the README's thanks list. Doing it at collection
+time is the whole point: tracing a line's sources back afterwards means re-finding videos from
+filenames. Utsunomiya was built before this step existed, and its 29 sources across 15 recordists had to
+be recovered afterwards from a chat log and confirmed against the durations each splitter recorded — which is
+why this step exists. That pass is DONE (`audio/README.md` § "JU — Utsunomiya sources"); don't redo it. The
+other lines' sources were never written down and cannot be recovered reliably.
+
 ## Process
 
 ### Step 0 — Generate PA timestamps with Whisper (optional)
@@ -149,8 +164,18 @@ Whisper's large-v3 still mistranscribes some rare station names. NOT bugs to fix
 | 四水 | 酒々井 | Sobu |
 | 暴露町 / バクロ町 | 馬喰町 | Sobu |
 | 禁止帳 | 錦糸町 | Sobu (intermittent — mostly correct, sometimes wrong) |
+| 大山 | 小山 | Utsunomiya |
+| 小賀 | 古河 | Utsunomiya |
+| 空気 | 久喜 | Utsunomiya |
+| 羽須田 | 蓮田 | Utsunomiya |
+| 鈴目宮 / すずめの宮 | 雀宮 | Utsunomiya |
+| 八重田 / 八板 / 焼いた | 矢板 | Utsunomiya (three spellings in one transcript) |
+| 鎌洲坂 | 蒲須坂 | Utsunomiya |
+| 宇治家 | 氏家 | Utsunomiya |
+| 宝石寺 / 放射区時 | 宝積寺 | Utsunomiya |
+| からす山 / 唐津山 | 烏山（線） | Utsunomiya — a transfer LINE, not a station |
 
-Add new entries when other routes surface their own quirks.
+Add new entries when other routes surface their own quirks. A station whose name Whisper renders several different ways in ONE transcript (矢板 got three) is not three problems — it is one name the model has no confident reading for, and the English line or the block position settles it.
 
 **0.3.b — Special case: pre-mamonaku approach passes**
 

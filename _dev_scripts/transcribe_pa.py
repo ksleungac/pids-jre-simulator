@@ -95,6 +95,10 @@ def main() -> int:
             "start": round(seg.start, 2),
             "end": round(seg.end, 2),
             "text": seg.text.strip(),
+            # Word-level times are alignment-anchored and do NOT drift, unlike
+            # seg.start. Cluster boundaries must be taken from here (or from an
+            # audio_id.structure block onset) — see pa-make skill 0.3.0.b.
+            "words": [{"s": round(w.start, 2), "e": round(w.end, 2), "w": w.word} for w in (seg.words or ())],
         }
         out_data["segments"].append(seg_data)
         print(f"[{seg.start:7.2f}s -> {seg.end:7.2f}s] {seg.text.strip()}")

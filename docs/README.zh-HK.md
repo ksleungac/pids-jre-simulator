@@ -65,4 +65,6 @@ JR 東日本風格列車廣播與車內 LCD 顯示模擬器。
 
 路線及營運商標誌均取自 [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:Rapid_transit_icons_of_Japan)，感謝繪製及維護這些圖示的貢獻者，其中新幹線與東京櫻花電車標誌來自 Carnby、Perhelion、KANAO22 及東京都交通局。
 
+廣播及發車音樂由鐵道愛好者在月台錄製並公開發佈。宇都宮線是唯一在製作當時已記錄來源的路線，感謝 全国駅メロチャンネル、ちいぼす、East Railway Redwing 及 µ'wing，當中大部分素材出自四位之手，亦感謝 70-000 SHINANO、Kent_K、SAGAMI-LINE さがみせん、Ueno-Tokyo Line、ケヨポコ チャンネル short、ハマ音鉄、下今市、京葉ラビット、武蔵野快速、関石ライン / Kamishi Line 及 音鉄DK。其餘路線的錄音者同樣值得道謝，只是當時未有記錄來源。
+
 完整鳴謝及素材資料：[THIRD-PARTY.md](../THIRD-PARTY.md)。

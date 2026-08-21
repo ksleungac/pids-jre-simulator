@@ -131,7 +131,7 @@ English translations use **modified Hepburn romanization with macrons** to indic
 
 **JR East signage form, not textbook Hepburn.** `ん` assimilates to `m` before `b` / `m` / `p`: 新橋 → Shi**m**bashi, 新町 → Shi**mm**achi, 与野本町 → Yono-Ho**mm**achi, 海浜幕張 → Kaihi**mm**akuhari, 神保原 → Ji**m**bohara.
 
-**A hyphen marks a prefix, not a word break.** A directional / qualifier prefix takes one (Kita-Akabane, Shin-Ōkubo, Nishi-Ōi, Shim-Misato); a single place name does not (Sashiōgi, Fuchūhommachi, Hongōdai, Kemigawahama). No reading encodes this, so it is the one facet left to the eye.
+**A hyphen marks a prefix, not a word break.** A directional / qualifier prefix takes one (Kita-Akabane, Shin-Ōkubo, Nishi-Ōi, Shim-Misato); a single place name does not (Sashiōgi, Fuchūhommachi, Hongōdai, Kemigawahama). No reading encodes this, so it is the one facet left to the eye — and the eye is not enough: **西那須野 is `Nishi-Nasuno` on JR East's own English timetable**, though 那須野 is not a station and the place-name test above would put it in the unhyphenated column beside Nishifu and Minamitama. The heuristic loses to the authority order below whenever the two disagree; check the JR East page before trusting it. (2026-08-22 — authored one-word, corrected.)
 
 **A few `english` values are translations rather than romanizations** — 葛西臨海公園 = `Kasai-Rinkai Park` (JR East's current form; it was Kasairinkaikōen), 成田空港 = `Narita Airport\nTerminal 1`. Each is an editorial decision, so they are listed explicitly in `validate_data.py::_TRANSLATED_NAMES` rather than pattern-matched.
 
@@ -586,6 +586,22 @@ This is a sanity rule, not a timetable — where the game's 運転時分 table i
 - **Copying the next hop.** Chūō `916H` 三鷹→中野 skips five stations summing to 13 minutes and was authored `2` — exactly `1654T`'s 三鷹→吉祥寺 hop. The countdown clamps at `max(1, …)`, so this shows a stuck `1分` for four minutes across five stations, not a visibly wrong number.
 - **Summing with no credit for the skip.** Tōkaidō `3535E` 藤沢→茅ヶ崎 was authored `6`, the local sum untouched — the rapid taking exactly as long as the train that stops at 辻堂.
 
+**Reading a real 運転時分表: `time` = previous stop's 発 → this stop's 着, and round PER HOP.** The
+table's own 運転時分 column is the run from a row to the NEXT one, and it lists 停車場 — operating points
+(宇都宮タ, 川口, 井堀) carry times and are not stops, so their segments fold into the following stop. A
+station passed with no timing point leaves the column blank and its run is carried on the next timed
+leg. **The ↓ marks in 着/発 are the stopping pattern itself** — a ↓ in 着 with a time in 発 is a timed
+pass, not a stop.
+
+Rounding has two candidate rules and they are not interchangeable. Utsunomiya `1545E` was authored as
+the **difference of rounded CUMULATIVE times**, which reproduces 22 of its 23 committed values against
+21 for per-hop — the better rule in isolation, and the reason its total reads 101 min against a true
+100:45. But cumulative rounding makes a hop depend on everything upstream, so two diagrams sharing a
+stretch legitimately disagree on it, which `check_hop_agreement` forbids: `3520M` reaches 宇都宮 46.5 min
+into its run where `1545E` starts there, and cumulative yields 雀宮 = 5 against `1545E`'s 6. **Per-hop,
+half-up, is the rule whenever the line has more than one diagram** — it reproduced the shared 宇都宮→小山
+stretch hop-for-hop from a different table, which is what confirmed it. (2026-08-22.)
+
 **Two diagrams covering the same stations must agree.** Within a line this is automatic (the hops are authored once and reused). Across lines it is not: Yamanote `1208G` and Keihin-Tōhoku `727B` run an identical stop sequence 田端↔品川, and three hops there had drifted apart by 2026-08-21. Where such a corridor exists, the disagreeing hop is the defect — reconcile before trusting either as the baseline for a skip run.
 
 #### `pa_at_station` Array (At-Station Announcements) — Optional
@@ -656,7 +672,7 @@ When a station has no STA melody, **omit field entirely** rather than setting `[
 | `null` | Station has no official code (e.g., Kawagoe Line stations) |
 
 **Format:** `[Line Prefix][Number]` (e.g., `JC01`, `JK47`, `JA08`)
-- Line prefixes: JC (Chuo), JK (Keihin-Tohoku), JA (Saikyo), JE (Keiyo), JY (Yamanote), JT (Tokaido), JN (Nambu), JJ (Joban), JU (Takasaki), JO (Sōbu Rapid / Yokosuka)
+- Line prefixes: JC (Chuo), JK (Keihin-Tohoku), JA (Saikyo), JE (Keiyo), JY (Yamanote), JT (Tokaido), JN (Nambu), JJ (Joban), JU (Takasaki *and* Utsunomiya — one prefix, two shipped lines, separate folders and separate pools), JO (Sōbu Rapid / Yokosuka)
 - No 3-letter suffixes in `sta_code` (those go in `sta` field only)
 - **Note:** `sta_code` = route-local — used by `upper_lcd.py` to render station code badge. Line-independent station metadata lives in `data/stations.json`.
 
@@ -683,6 +699,7 @@ All lines share central `data/translations.json` (display text) and `data/statio
 | Saikyo (埼京線) | JA | `audio/saikyo/` |
 | Sōbu Rapid / Yokosuka (総武快速・横須賀) | JO | `audio/sobu/` |
 | Takasaki (高崎線) | JU | `audio/takasaki/` |
+| Utsunomiya (宇都宮線) | JU | `audio/utsunomiya/` |
 | Tokaido (東海道線) | JT | `audio/tokaido/` |
 | Yamanote (山手線) | JY | `audio/yamanote/` |
 

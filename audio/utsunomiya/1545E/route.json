@@ -1,0 +1,321 @@
+{
+    "route": "宇都宮線",
+    "line_code": "JU",
+    "transfer_view": "JU_utsunomiya",
+    "color": [
+        244,
+        132,
+        44
+    ],
+    "type": "普通",
+    "direction": "上り",
+    "remarks": "上野東京ライン上り　東海道線直通",
+    "dest": "熱海",
+    "stops": [
+        {
+            "name": "宇都宮",
+            "pa": [],
+            "time": 0,
+            "sta": [
+                "utsunomiya_9"
+            ],
+            "sta_cut": 15.81,
+            "sta_code": null
+        },
+        {
+            "name": "雀宮",
+            "pa": [
+                "utsunomiya-dep-up",
+                "suzumenomiya-arr-up"
+            ],
+            "time": 6,
+            "sta": [
+                "nishinasuno_3"
+            ],
+            "sta_cut": 30.93,
+            "sta_code": null
+        },
+        {
+            "name": "石橋",
+            "pa": [
+                "suzumenomiya-dep-up",
+                "ishibashi-arr-up"
+            ],
+            "time": 5,
+            "sta": [
+                "ishibashi_2"
+            ],
+            "sta_cut": 18.6,
+            "sta_code": null
+        },
+        {
+            "name": "自治医大",
+            "pa": [
+                "ishibashi-dep-up",
+                "jichi-idai-arr-up"
+            ],
+            "time": 4,
+            "sta": [
+                "jichiidai_1"
+            ],
+            "sta_cut": 10.82,
+            "sta_code": null
+        },
+        {
+            "name": "小金井",
+            "pa": [
+                "jichi-idai-dep-up",
+                "koganei-arr-up"
+            ],
+            "time": 3,
+            "sta": [
+                "nishinasuno_3"
+            ],
+            "sta_cut": 30.93,
+            "sta_code": null
+        },
+        {
+            "name": "小山",
+            "pa": [
+                "koganei-dep-up",
+                "oyama-arr-up"
+            ],
+            "time": 6,
+            "sta": [
+                "oyama_12"
+            ],
+            "sta_cut": 10.81,
+            "sta_code": null
+        },
+        {
+            "name": "間々田",
+            "pa": [
+                "oyama-dep-up",
+                "mamada-arr-up"
+            ],
+            "time": 6,
+            "sta": [
+                "nishinasuno_3"
+            ],
+            "sta_cut": 30.93,
+            "sta_code": null
+        },
+        {
+            "name": "野木",
+            "pa": [
+                "mamada-dep-up",
+                "nogi-arr-up"
+            ],
+            "time": 3,
+            "sta": [
+                "nogi_2"
+            ],
+            "sta_cut": 11.59,
+            "sta_code": null
+        },
+        {
+            "name": "古河",
+            "pa": [
+                "nogi-dep-up",
+                "koga-arr-up"
+            ],
+            "time": 4,
+            "sta": [
+                "koga_3"
+            ],
+            "sta_cut": 9.26,
+            "sta_code": null
+        },
+        {
+            "name": "栗橋",
+            "pa": [
+                "koga-dep-up",
+                "kurihashi-arr-up"
+            ],
+            "time": 6,
+            "sta": [
+                "kurihashi_1"
+            ],
+            "sta_cut": 10.93,
+            "sta_code": null
+        },
+        {
+            "name": "東鷲宮",
+            "pa": [
+                "kurihashi-dep-up",
+                "higashi-washinomiya-arr-up"
+            ],
+            "time": 5,
+            "sta": [
+                "higashiwashinomiya_2"
+            ],
+            "sta_cut": 10.81,
+            "sta_code": null
+        },
+        {
+            "name": "久喜",
+            "pa": [
+                "higashi-washinomiya-dep-up",
+                "kuki-arr-up"
+            ],
+            "time": 3,
+            "sta": [
+                "kuki_3"
+            ],
+            "sta_cut": 19.42,
+            "sta_code": null
+        },
+        {
+            "name": "新白岡",
+            "pa": [
+                "kuki-dep-up",
+                "shin-shiraoka-arr-up"
+            ],
+            "time": 3,
+            "sta": [
+                "shinshiraoka_1"
+            ],
+            "sta_cut": 16.44,
+            "sta_code": null
+        },
+        {
+            "name": "白岡",
+            "pa": [
+                "shin-shiraoka-dep-up",
+                "shiraoka-arr-up"
+            ],
+            "time": 2,
+            "sta": [
+                "shiraoka_3"
+            ],
+            "sta_cut": 14.5,
+            "sta_code": null
+        },
+        {
+            "name": "蓮田",
+            "pa": [
+                "shiraoka-dep-up",
+                "hasuda-arr-up"
+            ],
+            "time": 4,
+            "sta": [
+                "hasuda_3"
+            ],
+            "sta_cut": 22.84,
+            "sta_code": null
+        },
+        {
+            "name": "東大宮",
+            "pa": [
+                "hasuda-dep-up",
+                "higashi-omiya-arr-up"
+            ],
+            "time": 4,
+            "sta": [
+                "higashiomiya_2"
+            ],
+            "sta_cut": 10.27,
+            "sta_code": null
+        },
+        {
+            "name": "土呂",
+            "pa": [
+                "higashi-omiya-dep-up",
+                "toro-arr-up"
+            ],
+            "time": 3,
+            "sta": [
+                "toro_2"
+            ],
+            "sta_cut": 10.4,
+            "sta_code": null
+        },
+        {
+            "name": "大宮",
+            "pa": [
+                "toro-dep-up",
+                "omiya-arr-up"
+            ],
+            "time": 4,
+            "sta": [
+                "omiya_4"
+            ],
+            "sta_cut": 22.16,
+            "sta_code": "JU07"
+        },
+        {
+            "name": "さいたま 新都心",
+            "pa": [
+                "omiya-dep-up",
+                "saitama-shintoshin-arr-up"
+            ],
+            "time": 2,
+            "sta": [
+                "saitamashintoshin_3"
+            ],
+            "sta_cut": 19.61,
+            "sta_code": "JU06"
+        },
+        {
+            "name": "浦和",
+            "pa": [
+                "saitama-shintoshin-dep-up",
+                "urawa-arr-up"
+            ],
+            "time": 4,
+            "sta": [
+                "urawa_3"
+            ],
+            "sta_cut": 23.88,
+            "sta_code": "JU05"
+        },
+        {
+            "name": "赤羽",
+            "pa": [
+                "urawa-dep-up",
+                "akabane-arr-up"
+            ],
+            "time": 8,
+            "sta": [
+                "akabane_3"
+            ],
+            "sta_cut": 20.58,
+            "sta_code": "JU04"
+        },
+        {
+            "name": "尾久",
+            "pa": [
+                "akabane-dep-up",
+                "oku-arr-up"
+            ],
+            "time": 4,
+            "sta": [
+                "oku_1"
+            ],
+            "sta_cut": 11.03,
+            "sta_code": "JU03"
+        },
+        {
+            "name": "上野",
+            "pa": [
+                "oku-dep-up",
+                "ueno-arr-up"
+            ],
+            "time": 6,
+            "sta": [
+                "ueno_7"
+            ],
+            "sta_cut": 17.12,
+            "sta_code": "JU02"
+        },
+        {
+            "name": "東京",
+            "pa": [
+                "ueno-dep-up",
+                "tokyo-arr-up"
+            ],
+            "time": 6,
+            "sta_code": "JU01"
+        }
+    ]
+}

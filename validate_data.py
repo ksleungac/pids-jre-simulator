@@ -810,6 +810,14 @@ def check_sta_last_is_melody(route_paths: list, issues: list) -> None:
 # Calibrated against the corpus as it stood 2026-08-21: at 2 it fires on exactly the
 # two segments that wanted a human look and on nothing else.
 TIME_SKIP_SLACK = 2
+# How far a skip may EXCEED its all-stations reference before that counts as a defect.
+# Not zero, because the reference is a different diagram at a different time of day: an
+# express in the morning peak can genuinely be slower than a midday local over the same
+# rails. Utsunomiya 3520M runs 大宮→浦和 non-stop in 7:30 where 1545E needs 6:15 of
+# running plus a stand at さいたま新都心 — the author's own 運転時分表, with a 60 km/h
+# restriction through 新都心 to explain it. 2026-08-22, author: "gate flags obvious
+# errors, small tolerance is ok".
+TIME_SKIP_OVER_SLACK = 2
 
 
 def _skip_segments(stops: list):
@@ -850,9 +858,9 @@ def _reference_sum(ref_stops: list, a: str, b: str, run: list):
 def check_time_across_skips(route_paths: list, issues: list) -> None:
     """A stop after passing stations carries the WHOLE run, bounded both ways.
 
-    Upper bound is physical and needs no constant: a train that skips cannot take as
-    long as one that stops. Lower bound is the -1/passing convention with
-    TIME_SKIP_SLACK of room. Both need a sibling diagram on the same line that stops
+    Upper bound is a train that skips should not take materially longer than one that
+    stops, with TIME_SKIP_OVER_SLACK of room. Lower bound is the -1/passing convention
+    with TIME_SKIP_SLACK of room. Both need a sibling diagram on the same line that stops
     everywhere the express passes; segments without one are simply not checked.
 
     Motivating defects, both 2026-08-21, both of which the shape rules passed clean:
@@ -861,6 +869,13 @@ def check_time_across_skips(route_paths: list, issues: list) -> None:
     6 min while passing 辻堂.
 
     WHAT THIS CANNOT CATCH:
+    - Its own second motivating defect, since 2026-08-22. Tōkaidō 3535E's error was to
+      give the skip the reference's EXACT value, so any non-zero upper tolerance admits
+      it; only `t >= lsum` caught it and that is what the tolerance replaced. Verified by
+      re-running the gate with 3535E's 茅ヶ崎 set back to 6: silent. The Chūō 916H defect
+      is caught by the LOWER bound and is unaffected. A copied-from-the-local value is
+      now unguarded here — check_hop_agreement sees it only where a cross-diagram twin
+      exists, and authoring from a 運転時分表 is the real defence.
     - Segments with no all-stations sibling. 13 of the corpus's 31 as of 2026-08-21
       (takasaki 6, chuo 6, sobu 1) — no reference exists, so nothing is computed and
       nothing is reported. Silence here is absence of a baseline, not a pass.
@@ -898,11 +913,11 @@ def check_time_across_skips(route_paths: list, issues: list) -> None:
                 name, lsum = ref
                 where = f"{rp.parent.name}:{b}"
                 n = len(run)
-                if t >= lsum:
+                if t > lsum + TIME_SKIP_OVER_SLACK:
                     issues.append(
                         (
                             where,
-                            f"time={t} for {a}->{b} passing {n} station(s), but {name} takes {lsum} min STOPPING at all of them — a skip has to save time",
+                            f"time={t} for {a}->{b} passing {n} station(s), but {name} takes {lsum} min STOPPING at all of them (+{TIME_SKIP_OVER_SLACK} min tolerance) — a skip should not take materially longer",
                         )
                     )
                 floor = lsum - TIME_SKIP_SLACK * n

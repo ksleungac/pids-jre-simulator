@@ -860,5 +860,109 @@
     "西大井": {
         "furigana": "にしおおい",
         "english": "Nishi-Ōi"
+    },
+    "宇都宮": {
+        "furigana": "うつのみや",
+        "english": "Utsunomiya"
+    },
+    "雀宮": {
+        "furigana": "すずめのみや",
+        "english": "Suzumenomiya"
+    },
+    "石橋": {
+        "furigana": "いしばし",
+        "english": "Ishibashi"
+    },
+    "自治医大": {
+        "furigana": "じちいだい",
+        "english": "Jichi Medical\nUniversity"
+    },
+    "小金井": {
+        "furigana": "こがねい",
+        "english": "Koganei"
+    },
+    "小山": {
+        "furigana": "おやま",
+        "english": "Oyama"
+    },
+    "間々田": {
+        "furigana": "ままだ",
+        "english": "Mamada"
+    },
+    "野木": {
+        "furigana": "のぎ",
+        "english": "Nogi"
+    },
+    "古河": {
+        "furigana": "こが",
+        "english": "Koga"
+    },
+    "東鷲宮": {
+        "furigana": "ひがしわしのみや",
+        "english": "Higashi-Washinomiya"
+    },
+    "久喜": {
+        "furigana": "くき",
+        "english": "Kuki"
+    },
+    "新白岡": {
+        "furigana": "しんしらおか",
+        "english": "Shin-Shiraoka"
+    },
+    "白岡": {
+        "furigana": "しらおか",
+        "english": "Shiraoka"
+    },
+    "蓮田": {
+        "furigana": "はすだ",
+        "english": "Hasuda"
+    },
+    "東大宮": {
+        "furigana": "ひがしおおみや",
+        "english": "Higashi-Ōmiya"
+    },
+    "土呂": {
+        "furigana": "とろ",
+        "english": "Toro"
+    },
+    "黒磯": {
+        "furigana": "くろいそ",
+        "english": "Kuroiso"
+    },
+    "那須塩原": {
+        "furigana": "なすしおばら",
+        "english": "Nasushiobara"
+    },
+    "西那須野": {
+        "furigana": "にしなすの",
+        "english": "Nishi-Nasuno"
+    },
+    "野崎": {
+        "furigana": "のざき",
+        "english": "Nozaki"
+    },
+    "矢板": {
+        "furigana": "やいた",
+        "english": "Yaita"
+    },
+    "片岡": {
+        "furigana": "かたおか",
+        "english": "Kataoka"
+    },
+    "蒲須坂": {
+        "furigana": "かますさか",
+        "english": "Kamasusaka"
+    },
+    "氏家": {
+        "furigana": "うじいえ",
+        "english": "Ujiie"
+    },
+    "宝積寺": {
+        "furigana": "ほうしゃくじ",
+        "english": "Hōshakuji"
+    },
+    "岡本": {
+        "furigana": "おかもと",
+        "english": "Okamoto"
     }
 }

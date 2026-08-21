@@ -287,7 +287,14 @@ ever wrong. The user: *"you, using your own scope, tell me something is broken."
 Derived measurement can raise a question for the ear; it cannot return a verdict that the content
 is wrong. And before auditing anything that already shipped, look for the prior verdict —
 `audio_src/<line>/*_verify_results.json`. That tree is gitignored, so its absence proves nothing
-and does not travel between machines; ask rather than assume a set is unverified.
+and does not travel between machines; ask rather than assume a set is unverified. **The copy that DOES
+travel is the line's `audio/README.md` section — read it before deriving any value it might already
+hold.** 2026-08-22: seven `sta_cut` values were re-derived from `audio_id.structure` block boundaries for
+a new Utsunomiya diagram; six landed within 80 ms of the by-ear figures and `nasushiobara` came out
+**16.00 against the ear's 12.87**, because its cut sits inside a merged block — continuous ambience never
+reaches the silence floor, so the instrument cannot see that boundary at all. The README said so, in the
+section that also says those values "live here or nowhere". Self-caught, and only because the README was
+opened later for an unrelated edit.
 
 **Pattern:**
 - A user-named file is ground truth. The detector's job becomes reproducing it; one that reports

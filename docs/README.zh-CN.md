@@ -65,4 +65,6 @@ JR 东日本风格列车广播与车内 LCD 显示模拟器。
 
 线路及运营商标志均取自 [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:Rapid_transit_icons_of_Japan)，感谢绘制及维护这些图标的贡献者，其中新干线与东京樱花电车标志来自 Carnby、Perhelion、KANAO22 及东京都交通局。
 
+广播及发车音乐由铁道爱好者在站台录制并公开发布。宇都宫线是唯一在制作当时已记录来源的线路，感谢 全国駅メロチャンネル、ちいぼす、East Railway Redwing 及 µ'wing，其中大部分素材出自四位之手，也感谢 70-000 SHINANO、Kent_K、SAGAMI-LINE さがみせん、Ueno-Tokyo Line、ケヨポコ チャンネル short、ハマ音鉄、下今市、京葉ラビット、武蔵野快速、関石ライン / Kamishi Line 及 音鉄DK。其余线路的录音者同样值得道谢，只是当时未有记录来源。
+
 完整鸣谢及素材资料：[THIRD-PARTY.md](../THIRD-PARTY.md)。
