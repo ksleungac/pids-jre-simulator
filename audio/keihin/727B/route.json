@@ -251,7 +251,7 @@
                 "JK28_AKB-south"
             ],
             "sta_cut": 8.25,
-            "time": 3,
+            "time": 2,
             "sta_code": "JK28"
         },
         {
@@ -311,7 +311,7 @@
                 "JK23_HMC-south"
             ],
             "sta_cut": 9.0,
-            "time": 4,
+            "time": 2,
             "sta_code": "JK23"
         },
         {

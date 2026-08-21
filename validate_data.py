@@ -804,6 +804,193 @@ def check_sta_last_is_melody(route_paths: list, issues: list) -> None:
                 )
 
 
+# Minutes of slack per passing station BELOW the "-1 min per passing station"
+# authoring convention (docs/DATA_FORMAT.md § Skipping Stations). Wide enough that a
+# real 運転時分 figure stays legal, tight enough that a copied next-hop cannot be.
+# Calibrated against the corpus as it stood 2026-08-21: at 2 it fires on exactly the
+# two segments that wanted a human look and on nothing else.
+TIME_SKIP_SLACK = 2
+
+
+def _skip_segments(stops: list):
+    """Yield (from_name, to_name, [passed names], time) for each run of passing stations."""
+    prev, run = None, []
+    for i, stop in enumerate(stops):
+        stopping = bool(stop.get("pa")) or i == 0
+        if not stopping and "time" not in stop:
+            run.append(stop.get("name"))
+            continue
+        if prev is not None and run:
+            yield prev, stop.get("name"), list(run), stop.get("time")
+        prev, run = stop.get("name"), []
+
+
+def _reference_sum(ref_stops: list, a: str, b: str, run: list):
+    """Minutes ref takes from a to b STOPPING everywhere, or None if it can't say.
+
+    None whenever ref skips any station in the run, lacks a `time` on one of them, or
+    covers a different station set between a and b — a partial sum would be a smaller
+    number that reads exactly like a real one.
+    """
+    names = [s.get("name") for s in ref_stops]
+    if a not in names or b not in names:
+        return None
+    i, j = names.index(a), names.index(b)
+    if j <= i or names[i + 1 : j + 1] != run + [b]:
+        return None
+    total = 0
+    for k in range(i + 1, j + 1):
+        s = ref_stops[k]
+        if not (bool(s.get("pa")) or k == 0) or s.get("time") is None:
+            return None
+        total += s["time"]
+    return total
+
+
+def check_time_across_skips(route_paths: list, issues: list) -> None:
+    """A stop after passing stations carries the WHOLE run, bounded both ways.
+
+    Upper bound is physical and needs no constant: a train that skips cannot take as
+    long as one that stops. Lower bound is the -1/passing convention with
+    TIME_SKIP_SLACK of room. Both need a sibling diagram on the same line that stops
+    everywhere the express passes; segments without one are simply not checked.
+
+    Motivating defects, both 2026-08-21, both of which the shape rules passed clean:
+    Chūō 916H claimed 三鷹→中野 in 2 min across five stations summing to 13 (it had been
+    copied from 1654T's 三鷹→吉祥寺 hop), and Tōkaidō 3535E gave 藤沢→茅ヶ崎 the full local
+    6 min while passing 辻堂.
+
+    WHAT THIS CANNOT CATCH:
+    - Segments with no all-stations sibling. 13 of the corpus's 31 as of 2026-08-21
+      (takasaki 6, chuo 6, sobu 1) — no reference exists, so nothing is computed and
+      nothing is reported. Silence here is absence of a baseline, not a pass.
+    - A wrong hop in the REFERENCE. Every bound is measured against it, so a skewed
+      baseline moves both bounds and the express stays legal in lockstep. That is
+      exactly how the keihin/yamanote corridor drift survived; check_hop_agreement
+      covers the part of it that has a cross-line twin, and nothing covers the rest.
+    - A diagram scaled uniformly wrong (every hop +1). All of this is relative.
+    - Reality. These compare the corpus against itself; only the game's 運転時分 table
+      knows the real number.
+    """
+    by_line = {}
+    for rp in route_paths:
+        try:
+            data = load(rp)
+        except Exception:
+            continue  # malformed route.json is already reported by check_route
+        by_line.setdefault(rp.parent.parent.name, []).append((rp, data))
+
+    for entries in by_line.values():
+        for rp, data in entries:
+            for a, b, run, t in _skip_segments(data.get("stops") or []):
+                if t is None:
+                    continue  # missing `time` is already reported by check_route
+                ref = None
+                for rp2, d2 in entries:
+                    if rp2 == rp:
+                        continue
+                    total = _reference_sum(d2.get("stops") or [], a, b, run)
+                    if total is not None:
+                        ref = (rp2.parent.name, total)
+                        break
+                if ref is None:
+                    continue
+                name, lsum = ref
+                where = f"{rp.parent.name}:{b}"
+                n = len(run)
+                if t >= lsum:
+                    issues.append(
+                        (
+                            where,
+                            f"time={t} for {a}->{b} passing {n} station(s), but {name} takes {lsum} min STOPPING at all of them — a skip has to save time",
+                        )
+                    )
+                floor = lsum - TIME_SKIP_SLACK * n
+                if t < floor:
+                    issues.append(
+                        (
+                            where,
+                            f"time={t} for {a}->{b} passing {n} station(s) is below the floor {floor} ({name} sums {lsum}, convention -1/passing + {TIME_SKIP_SLACK} min slack) — usual cause is copying the next hop instead of summing the run",
+                        )
+                    )
+
+
+# Consecutive shared hops two diagrams must run before their timings are held to each
+# other. One hop in common proves nothing — Chūō and Yamanote both run 東京↔神田 on
+# separate track pairs and legitimately differ (1 vs 2 min). A long identical stretch is
+# what makes them the same journey: Yamanote 1208G and Keihin-Tōhoku 727B share 13.
+MIN_SHARED_HOPS = 4
+
+
+def _hop_sequence(stops: list):
+    """Ordered [(unordered-pair key, time)] for consecutive STOPPING pairs."""
+    out, prev = [], None
+    for i, stop in enumerate(stops):
+        if not (bool(stop.get("pa")) or i == 0):
+            prev = None  # a skip breaks the consecutive-pair chain
+            continue
+        if prev is not None and stop.get("time") is not None:
+            out.append((tuple(sorted((prev, stop["name"]))), stop["time"]))
+        prev = stop.get("name")
+    return out
+
+
+def check_hop_agreement(route_paths: list, issues: list) -> None:
+    """Two diagrams running an identical STRETCH must agree on every hop in it.
+
+    Within a line this holds for free (hops are authored once and reused). Across lines
+    it does not, and nothing else looks: Yamanote 1208G and Keihin-Tōhoku 727B cover an
+    identical stop sequence 田端↔品川, where three hops had drifted apart by 2026-08-21 —
+    including 新橋→浜松町 at 4 min against Yamanote's 2. That inflated baseline then made
+    Keihin-Tōhoku's rapid look like it saved an implausible 2 min per skip, so the drift
+    was reading as a defect in a diagram that was in fact correct.
+
+    Keyed on the UNORDERED station pair, because two lines can run a corridor in
+    opposite directions. Gated on MIN_SHARED_HOPS so that lines merely crossing at one
+    station are not held to each other.
+
+    WHAT THIS CANNOT CATCH:
+    - Any hop outside a long shared stretch, which is most of the corpus. It proves
+      agreement where a witness exists and is silent everywhere else.
+    - A stretch where BOTH diagrams are wrong the same way. Agreement is not truth.
+    - An up/down pair of one line whose timings legitimately differ by direction — that
+      would report here. The corpus has no such pair today; if one lands, this gate is
+      the thing to revisit, not the data.
+    """
+    seqs = {}
+    for rp in route_paths:
+        try:
+            data = load(rp)
+        except Exception:
+            continue  # malformed route.json is already reported by check_route
+        seqs[rp.parent.name] = _hop_sequence(data.get("stops") or [])
+
+    reported = set()
+    names = sorted(seqs)
+    for x in range(len(names)):
+        for y in range(x + 1, len(names)):
+            a, b = names[x], names[y]
+            sa, sb = seqs[a], seqs[b]
+            shared = {k for k, _ in sa} & {k for k, _ in sb}
+            tb = dict(sb)
+            run = []
+            for key, val in sa + [(None, None)]:
+                if key in shared:
+                    run.append((key, val))
+                    continue
+                if len(run) >= MIN_SHARED_HOPS:
+                    for k, v in run:
+                        if v != tb[k] and (k, a, b) not in reported:
+                            reported.add((k, a, b))
+                            issues.append(
+                                (
+                                    f"{k[0]}<->{k[1]}",
+                                    f"{a}={v} but {b}={tb[k]} — the two run {len(run)} identical hops here, so one of them is wrong",
+                                )
+                            )
+                run = []
+
+
 def main():
     quiet = "--quiet" in sys.argv
     route_arg = None
@@ -859,6 +1046,14 @@ def main():
     scan = [route_arg] if route_arg else [p for p in route_paths if not is_fixture(p.parent.relative_to(AUDIO_ROOT).as_posix())]
     check_pool_sta_cut_sync(scan, issues)
     check_sta_last_is_melody(scan, issues)
+
+    # Cross-DIAGRAM checks: they compare a route against its siblings, so a single
+    # --route scan has no witness and would pass silently. Say so instead.
+    if route_arg is None:
+        check_time_across_skips(scan, issues)
+        check_hop_agreement(scan, issues)
+    elif not quiet:
+        print("skipped (needs a full scan, no sibling diagram to compare): time-across-skips, hop-agreement")
 
     if not issues:
         if not quiet and route_arg is None:

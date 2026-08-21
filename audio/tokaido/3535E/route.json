@@ -131,7 +131,7 @@
                 "JT10"
             ],
             "sta_cut": 15.5,
-            "time": 6,
+            "time": 5,
             "sta_code": "JT10"
         },
         {
@@ -167,7 +167,7 @@
                 "JT14"
             ],
             "sta_cut": 17.78,
-            "time": 10,
+            "time": 13,
             "sta_code": "JT14"
         },
         {
@@ -185,7 +185,7 @@
                 "JT16"
             ],
             "sta_cut": 14.88,
-            "time": 6,
+            "time": 7,
             "sta_code": "JT16"
         },
         {

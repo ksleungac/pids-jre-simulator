@@ -269,6 +269,7 @@ For non-Japanese names: lowercase, spaces → hyphens, strip apostrophes/most pu
 - `sta_cut`: integer, seconds from start.
 - **Terminus**: omit `sta` and `sta_cut` (no departure from end-of-line). Keep `time`.
 - **Passing stations** (`pa: []`): omit `sta`, `sta_cut`, AND `time` — train doesn't stop, countdown comes from the next PA station's `time`.
+- **`time` after a skip run**: the stop FOLLOWING passing stations carries the whole run — it is never the all-stations diagram's next hop, which is how Chūō `916H` came to claim 三鷹→中野 in 2 minutes across five stations. `time = Σ(all-stations hops over the same stations) − 1 per passing station`; the game's 運転時分 table wins where you have it. Full rule → [DATA_FORMAT § Skipping Stations](../../../docs/DATA_FORMAT.md).
 
 ## Gotchas
 

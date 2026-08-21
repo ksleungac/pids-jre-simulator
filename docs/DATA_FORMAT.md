@@ -573,6 +573,21 @@ Stations with empty `pa: []` skipped automatically (train passes through without
 }
 ```
 
+**Authoring `time` across a skip run.** The stop after passing stations carries the WHOLE run, so it is never the all-stations diagram's next hop. Take that diagram's summed hops over the same stations and subtract **1 minute per passing station** — a skip saves the dwell plus the braking and acceleration around it:
+
+```
+time = Σ(all-stations hops, previous stop → this one) − 1 × (passing stations)
+```
+
+Tōkaidō `3535E` 藤沢→茅ヶ崎 skips 辻堂: `1865E` sums 3 + 3 = 6 over one passing station, so `time: 5`.
+
+This is a sanity rule, not a timetable — where the game's 運転時分 table is to hand it wins. It exists to bar two silent failures, both found in the corpus 2026-08-21, and silent because `validate_data.py` checks `time`'s shape and never its value:
+
+- **Copying the next hop.** Chūō `916H` 三鷹→中野 skips five stations summing to 13 minutes and was authored `2` — exactly `1654T`'s 三鷹→吉祥寺 hop. The countdown clamps at `max(1, …)`, so this shows a stuck `1分` for four minutes across five stations, not a visibly wrong number.
+- **Summing with no credit for the skip.** Tōkaidō `3535E` 藤沢→茅ヶ崎 was authored `6`, the local sum untouched — the rapid taking exactly as long as the train that stops at 辻堂.
+
+**Two diagrams covering the same stations must agree.** Within a line this is automatic (the hops are authored once and reused). Across lines it is not: Yamanote `1208G` and Keihin-Tōhoku `727B` run an identical stop sequence 田端↔品川, and three hops there had drifted apart by 2026-08-21. Where such a corridor exists, the disagreeing hop is the defect — reconcile before trusting either as the baseline for a skip run.
+
 #### `pa_at_station` Array (At-Station Announcements) — Optional
 
 Optional list of PA tracks that play **while train stopped at platform**, after pre-arrival announcements have finished. Defaults to absent / empty (typical stops have none).
@@ -695,6 +710,8 @@ Exits 0 if clean, 1 if issues found (suitable for pre-commit / CI). Checks perfo
 - Every stop has `sta_code` (value or `null`); value has no `_XX` suffix
 - Passing stations (`pa: []`, non-first) have NO `sta`, NO `sta_cut`, NO `time`, NO `pa_at_station`
 - First station has `time: 0`; all other non-passing stops have `time` set
+- A stop after passing stations takes less time than the sibling diagram that stops at them, and not less than `Σ(sibling hops) − 2 × passing` (full scan only — needs a sibling; 13 of 31 skip segments have none and are simply not checked)
+- Two diagrams sharing ≥4 consecutive hops agree on every one of them (full scan only)
 - `pre_stops[]` entries have required `name` + `sta_code`; forbidden `pa` / `pa_at_station` / `sta` / `sta_cut` / `time`
 - `frames[]` (if present): each entry has string `from` / `to` / `line` (shape). Semantic checks — `from`/`to` resolve in `pre_stops+stops`, `line` resolves in `lines.json`, frames abut + tile start→end — surface via the loader smoke-check (`route_loader._resolve_frames`)
 - Compound translations (key contains `・`) encode `english` as `"A&\nB"` form (no space before `&`, newline immediately after)
