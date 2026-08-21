@@ -84,11 +84,12 @@ typefaces. It is generated at build time and is not in this repository. See § F
 
 ## Reference material
 
-`_references/lcd/`, `_references/tims/`, `docs/assets/*.png`
+`_references/lcd/`, `_references/tims/`, `_references/bell/`, `docs/assets/*.png`
 
-Photographs of in-service train displays and cab consoles, collected to calibrate the
-renderer, and screenshots of this application in operation. The displays and interface
-designs depicted are the property of East Japan Railway Company.
+Photographs of in-service train displays, cab consoles and station platform equipment,
+collected to calibrate the renderer, and screenshots of this application in operation.
+The displays, equipment and interface designs depicted are the property of East Japan
+Railway Company.
 
 ---
 
