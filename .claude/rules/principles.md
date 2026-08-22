@@ -114,6 +114,14 @@ Before claiming "X is a bug" or "X works like Y", read the call sites and trace 
 - (2026-07-16) Reasoned about the auto-driver layer model from a stale preloaded `conventions.md` binding that mislabelled badge reads as "Layer 2"; the canonical `auto_input/README.md` has them as Layer 3 inputs. Trusted the preloaded summary over the doc for several rounds. A preloaded rules-file summary of a domain model may have drifted — read the canonical doc before reasoning about the model, not after being told.
 - (2026-07-25) Discarded a correct measurement of Chūō's STA because `sta-make` says closing announcements run 5–20 s and the probe reported 1–2 s voice blocks. The announcements really are short chunks; the doc describes the common case, not an invariant. User: *"voice-len being short is possible."* A doc's descriptive generalization never outranks a measurement of the file in front of you — when they disagree, re-check the instrument, then believe the data.
 - (2026-07-27) Cited `critical_lessons §9` twice as an existing rule. The file has §1–§8; §9 appeared only in a memory entry's "Codifications this session" list, and that work was uncommitted on the other machine. A codification list records what the writer INTENDED at write time — memory is append-only and outlives the commit that never landed, so it is never evidence the file contains the rule.
+- (2026-08-22) Searched every session transcript for the 運転時分表 column a committed `audio/README.md`
+  note cited, found none, and concluded the note had been my own invention — then edited the doc to strip
+  it. The author: *"i saw the platform 6 indeed on the timetable"*. Their table has the column; the paste
+  into chat did not. **An exhaustive search of MY sources establishes a fact about my sources, never about
+  a document I cannot see** — and "I can't find where I got this" is a reason to ask, not a licence to
+  retract. Corrected, the next reflex was worse: I filled the gap with a confident track-numbering story
+  lifted from a web-search *summary* of a page that had returned 403, and had to retract that too. When a
+  question stays unresolved, leave it unresolved rather than sourcing a replacement claim from a proxy.
 
 **How to apply:**
 - When the user references their own existing setup ("if you read my X you'll know") — read it BEFORE theorizing, especially before raising a risk/blocker. The answer is often already in-repo.
