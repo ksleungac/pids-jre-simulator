@@ -23,6 +23,11 @@ Interaction:
                                    the pinned `<ELEMENT>.value` row).
     Shift+←/→                    → nudge ±10.
     Ctrl+S                       → write back to source.
+    V                            → cycle the active lower-LCD view. Lower
+                                   elements are only clickable in their own
+                                   view (the route bar and the 5-station
+                                   markers share the same rect), so this is
+                                   how you reach one that isn't showing.
     ESC                          → quit edit mode.
 """
 
@@ -53,9 +58,26 @@ from app_paths import project_root
 #                                   # preview_display: upper = active-mode
 #                                   # stack; lower = full LCD A. Panel is
 #                                   # always on the right half.)
+#     "view": "full" | "eight" | "transfer",   # target="lower" ONLY
 # }
+#
+# ── `view` — why lower elements need it ────────────────────────────────
+# The lower LCD shows one of several VIEWS in the same screen region, so two
+# elements in different views have overlapping hit-test rects: the route bar
+# (full-route view) and the 5-station markers both own the whole lower area.
+# A static rect therefore cannot disambiguate them — whichever is registered
+# first swallows every click, which is why no full-route element could be
+# registered at all before this dispatch existed.
+#
+# Resolution: each lower element declares the view it lives in, the editor
+# tracks one active lower view (`_active_lower_view`, cycled with V and seeded
+# from `--lower-view`), and hit-testing + handle drawing only consider elements
+# whose view matches. Upper elements carry no `view` and are always live.
+# `preview_display._run_edit_loop` syncs the sim's lower slot from the active
+# view each frame, so pressing V actually re-renders the lower LCD.
 _REGISTRY = {
     "dest": {
+        "model": "e235_0",
         "rect_module": "displays.train_models.e235_0.upper_lcd",
         "rect_attr": "DEST_RECT",
         "target": "upper",
@@ -65,6 +87,7 @@ _REGISTRY = {
         ],
     },
     "clock": {
+        "model": "e235_0",
         "rect_module": "displays.train_models.e235_0.upper_lcd",
         "rect_attr": "CLOCK_RECT",
         "target": "upper",
@@ -78,6 +101,7 @@ _REGISTRY = {
         ],
     },
     "prefix": {
+        "model": "e235_0",
         "rect_module": "displays.train_models.e235_0.upper_lcd",
         "rect_attr": "PREFIX_RECT",
         "target": "upper",
@@ -88,6 +112,7 @@ _REGISTRY = {
         ],
     },
     "station": {
+        "model": "e235_0",
         "rect_module": "displays.train_models.e235_0.upper_lcd",
         "rect_attr": "STATION_RECT",
         "target": "upper",
@@ -98,6 +123,7 @@ _REGISTRY = {
         ],
     },
     "badge": {
+        "model": "e235_0",
         "rect_module": "displays.train_models.e235_0.upper_lcd",
         "rect_attr": "BADGE_RECT",
         "target": "upper",
@@ -111,6 +137,7 @@ _REGISTRY = {
         ],
     },
     "pa_hint": {
+        "model": "e235_0",
         "rect_module": "displays.train_models.e235_0.upper_lcd",
         "rect_attr": "PA_HINT_RECT",
         "target": "upper",
@@ -119,9 +146,13 @@ _REGISTRY = {
         ],
     },
     "transfer_panel": {
+        "model": "e235_0",
         "rect_module": "displays.train_models.e235_0.lower_lcd",
         "rect_attr": "TP_RECT",
         "target": "lower",
+        # The INLINE left column of the 5-station view — not the standalone
+        # TRANSFER slot. Lives in the "eight" view accordingly.
+        "view": "eight",
         "dicts": [
             ("displays.train_models.e235_0.lower_lcd", "_TUNEABLES_TRANSFER_PANEL"),
         ],
@@ -141,9 +172,11 @@ _REGISTRY = {
         },
     },
     "five_station": {
+        "model": "e235_0",
         "rect_module": "displays.train_models.e235_0.lower_lcd",
         "rect_attr": "ARC_RECT",
         "target": "lower",
+        "view": "eight",
         "dicts": [
             ("displays.train_models.e235_0.lower_lcd", "_TUNEABLES_FIVE_STATION"),
         ],
@@ -174,12 +207,51 @@ _REGISTRY = {
             "m0_ts": "approaching",
         },
     },
+    "full_route": {
+        "model": "e235_0",
+        "rect_module": "displays.train_models.e235_0.lower_lcd",
+        "rect_attr": "FULL_ROUTE_RECT",
+        "target": "lower",
+        "view": "full",
+        "dicts": [
+            ("displays.train_models.e235_0.lower_lcd", "_TUNEABLES_FULL_ROUTE"),
+        ],
+        # The route bar's track geometry, shared by the circular racetrack
+        # (Yamanote) and the open horseshoe that subclasses it — so which one
+        # you are looking at is decided by the loaded route, not by the editor.
+        # No draggable handles: every key is a scalar the whole band derives
+        # from, and there is no per-station position to grab (stops are placed
+        # BY this geometry, not alongside it).
+        #
+        # Nudging here re-runs _build_positions via the renderer's
+        # _resync_tuneables — see its CONTRACT block in e235_0/lower_lcd.py.
+    },
+    # ---- E233-0 (中央線快速) — build in progress, one element at a time ----
+    "train_type": {
+        "model": "e233_0",
+        "rect_module": "displays.train_models.e233_0.upper_lcd",
+        "rect_attr": "TRAIN_TYPE_RECT",
+        "target": "upper",
+        "dicts": [
+            ("displays.train_models.e233_0.upper_lcd", "_TUNEABLES_TRAIN_TYPE"),
+        ],
+        # No draggable handles: the block is four fixed slots and every key is a
+        # scalar the grid derives from — there is no per-character position to
+        # grab. `font_size` is picked up by the renderer's _sync_type_font,
+        # which rebuilds the font when it changes (a size is part of the atlas
+        # key, so it cannot just be read per frame).
+    },
 }
 
 
 # ── State ──────────────────────────────────────────────────────────────
 
 _focused_element: Optional[str] = None  # e.g. "dest"
+# Which lower-LCD view is live. Gates hit-testing + handles for every element
+# carrying a `view` field, and preview_display syncs the sim's lower slot from
+# it each frame. Seeded from --lower-view, cycled with V. See the `view` note
+# in the _REGISTRY header for why lower elements need this at all.
+_active_lower_view: str = "eight"
 # For per-station elements (five_station): which station the panel shows.
 # Set on focus (0) and when a station's handle is grabbed. None = no filter.
 _selected_station: Optional[int] = None
@@ -286,6 +358,15 @@ def enter_edit_mode(sim) -> None:
         "[calibration] M=cycle mode (kanji/furigana/english)  L=sync mode to focused dict"
         "  [=prev stop  ]=next stop  H=toggle drag handles  K=lock/unlock focused element"
     )
+    # ASCII only, like the banner lines above it — a dev console on this
+    # project is cp1252 and turns an em-dash into a replacement char.
+    views = _lower_views()
+    if views:
+        print(f"[calibration] V=cycle lower view ({' / '.join(views)})  now: {_active_lower_view}")
+    else:
+        # Naming a view the loaded model has no element in would read as a
+        # supported view that simply refuses to focus anything.
+        print("[calibration] V=cycle lower view: this model has no registered lower elements yet")
 
 
 def _snapshot_originals() -> None:
@@ -390,6 +471,122 @@ def get_focused_target() -> Optional[str]:
     return cfg.get("target", "upper") if cfg else None
 
 
+def get_active_lower_view() -> str:
+    """The lower-LCD view the editor is currently working in.
+
+    `preview_display._run_edit_loop` reads this every frame and pins the sim's
+    lower slot to it, so V-cycling re-renders the lower LCD immediately.
+    """
+    return _active_lower_view
+
+
+def set_active_lower_view(view: str) -> None:
+    """Seed the active lower view (from `--lower-view`) before the loop starts.
+
+    Ignores a view no registered element lives in — the CLI accepts views the
+    editor has nothing to tune in, and silently landing there would look like
+    the editor was broken (click anything, nothing focuses).
+    """
+    global _active_lower_view
+    if view in _lower_views():
+        _active_lower_view = view
+
+
+def _lower_views() -> list:
+    """Views that registered lower elements actually live in, in registry order.
+
+    Derived from _REGISTRY rather than listed, so registering an element in a
+    new view makes that view reachable with no second edit — a hand-kept list
+    is how a view ends up unreachable while looking supported
+    (principles.md § "A second implementation of a production decision drifts").
+    """
+    views = []
+    for cfg in _REGISTRY.values():
+        v = cfg.get("view")
+        if v is not None and v not in views and _element_for_active_model(cfg):
+            views.append(v)
+    return views
+
+
+_active_model: str = None
+
+
+def set_active_model(key: str) -> None:
+    """Bind the editor to the loaded train model.
+
+    Registry entries are per-model — an entry's rect is in ITS model's canvas
+    coordinates, so offering an e233_0 element while an e235_0 route is loaded
+    would hit-test a rectangle that means nothing on screen. Called once by the
+    preview harness before the edit loop.
+    """
+    global _active_model
+    _active_model = key
+
+
+def editable_models() -> list:
+    """Models the registry has at least one element for, in registry order.
+
+    Derived rather than listed, for the same reason as `_lower_views`: a
+    hardcoded set is how registering an element in a new model leaves it
+    unreachable while looking supported.
+    """
+    out = []
+    for cfg in _REGISTRY.values():
+        m = cfg.get("model")
+        if m is not None and m not in out:
+            out.append(m)
+    return out
+
+
+def _element_for_active_model(cfg) -> bool:
+    """True when cfg's element belongs to the loaded model.
+
+    An entry with no `model` key is model-agnostic and always passes, so the
+    filter is opt-in and an un-migrated entry cannot silently disappear.
+    """
+    m = cfg.get("model")
+    return _active_model is None or m is None or m == _active_model
+
+
+def _element_reachable(cfg) -> bool:
+    """True when cfg's element is drawn on screen right now — model AND view."""
+    return _element_for_active_model(cfg) and _element_in_active_view(cfg)
+
+
+def _element_in_active_view(cfg) -> bool:
+    """True when cfg's element is reachable right now.
+
+    Upper elements carry no `view` and are always reachable; a lower element is
+    reachable only while its view is the active one.
+    """
+    view = cfg.get("view")
+    return view is None or view == _active_lower_view
+
+
+def _cycle_lower_view(sim) -> None:
+    """Advance to the next lower view, dropping focus if it leaves the screen.
+
+    Dropping focus matters: the sidebar would otherwise keep showing (and
+    nudging) an element that is no longer drawn, so edits would land invisibly.
+    """
+    global _active_lower_view, _focused_element, _param_rows, _focused_row, _scroll_offset
+    views = _lower_views()
+    if not views:
+        return
+    try:
+        idx = views.index(_active_lower_view)
+    except ValueError:
+        idx = -1
+    _active_lower_view = views[(idx + 1) % len(views)]
+    if _focused_element is not None and not _element_reachable(_REGISTRY[_focused_element]):
+        _focused_element = None
+        _param_rows = []
+        _focused_row = 0
+        _scroll_offset = 0
+    focusable = [e for e, c in _REGISTRY.items() if _element_reachable(c)]
+    print(f"[calibration] Lower view: {_active_lower_view}  (elements: {', '.join(focusable) or 'none'})")
+
+
 def handle_event(event, sim) -> bool:
     """Dispatch a pygame event. Returns True if absorbed."""
     global _should_quit, _dragging_waypoint, _drag_grab_offset, _handles_visible, _overlay_dragging
@@ -492,6 +689,9 @@ def handle_event(event, sim) -> bool:
             return True
         if event.key == pygame.K_m:
             _cycle_mode(sim)
+            return True
+        if event.key == pygame.K_v:
+            _cycle_lower_view(sim)
             return True
         if event.key == pygame.K_LEFTBRACKET:
             _cycle_stop(sim, -1)
@@ -625,8 +825,12 @@ def _rebuild_param_rows() -> None:
 
 def _on_click(pos, sim) -> bool:
     global _focused_element, _focused_row, _param_rows, _scroll_offset, _selected_station
-    # Hit-test each registered element.
+    # Hit-test each registered element that is reachable in the active lower
+    # view — without that filter the route bar and the 5-station markers, which
+    # share the whole lower LCD as their rect, would shadow each other.
     for element_id, cfg in _REGISTRY.items():
+        if not _element_reachable(cfg):
+            continue
         rect = _resolve_rect(cfg)
         if rect is None:
             continue
@@ -980,10 +1184,8 @@ def _draw_reference_overlay(screen) -> None:
     """
     if _overlay_surf is None or not _overlay_visible:
         return
-    try:
-        mod = importlib.import_module("displays.train_models.e235_0.lower_lcd")
-        arc_rect = getattr(mod, "ARC_RECT")
-    except (ImportError, AttributeError):
+    arc_rect = _overlay_fit_rect()
+    if arc_rect is None:
         return
     src_w, src_h = _overlay_surf.get_size()
     if src_w == 0 or src_h == 0:
@@ -1000,6 +1202,33 @@ def _draw_reference_overlay(screen) -> None:
     dst_x = arc_rect.x + (arc_rect.width - dst_w) // 2 + _overlay_offset_x
     dst_y = arc_rect.y + (arc_rect.height - dst_h) // 2 + _overlay_offset_y
     screen.blit(scaled, (dst_x, dst_y))
+
+
+def _overlay_fit_rect():
+    """Where a reference overlay is letterboxed, for the ACTIVE model.
+
+    e235_0 keeps fitting into its 5-station `ARC_RECT`: that is what its
+    references are cropped to, and changing it would move every existing tuning
+    workflow. Any model without that rect fits the whole LCD instead — which is
+    what a model being built element by element needs, since its references are
+    whole-screen captures and its first elements are in the UPPER band, which
+    `ARC_RECT` does not even cover.
+
+    Returns None when no model is bound, so the overlay is skipped rather than
+    drawn somewhere arbitrary.
+    """
+    if _active_model is None:
+        return None
+    try:
+        lower = importlib.import_module(f"displays.train_models.{_active_model}.lower_lcd")
+        return getattr(lower, "ARC_RECT")
+    except (ImportError, AttributeError):
+        pass
+    try:
+        pkg = importlib.import_module(f"displays.train_models.{_active_model}")
+        return pygame.Rect(0, 0, pkg.S_WIDTH, pkg.S_HEIGHT)
+    except (ImportError, AttributeError):
+        return None
 
 
 def _draw_focused_indicator(screen) -> None:

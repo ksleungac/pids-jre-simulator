@@ -225,16 +225,23 @@ def main():
         return
 
     if args.edit:
-        # Calibration editor v1 is e235_0-only: hit-test rects + _TUNEABLES_*
-        # dicts in _dev_scripts/calibration_editor.py's _REGISTRY all reference
-        # `displays.train_models.e235_0.upper_lcd`. Running with a different
-        # model would size the window via e235_0 dims while the sim renders
-        # the chosen model — silent mismatch + nonsensical layout. Fail loud.
-        if args.model != "e235_0":
-            print(f"[error] --edit requires --model e235_0 (got --model {args.model}).")
-            print("        Editor v1 scope is e235_0 only - see docs/wip/WIP_calibration_editor.md.")
+        # Which models the editor can drive is DERIVED from its registry, not
+        # named here — a hardcoded list is how registering an element in a new
+        # model leaves it unreachable while looking supported. The window is
+        # now sized from the loaded model's registry record (see
+        # _run_edit_loop), so the old e235_0-only refusal no longer applies.
+        from app_paths import project_root
+
+        sys.path.insert(0, str(project_root() / "_dev_scripts"))
+        import calibration_editor  # noqa: E402
+
+        editable = calibration_editor.editable_models()
+        if args.model not in editable:
+            print(f"[error] --edit has no registered elements for --model {args.model}.")
+            print(f"        Models with elements: {', '.join(editable) or 'none'}.")
+            print("        Register one in _dev_scripts/calibration_editor.py's _REGISTRY.")
             sys.exit(1)
-        _run_edit_loop(sim, overlay_path=args.overlay)
+        _run_edit_loop(sim, overlay_path=args.overlay, lower_view=args.lower_view)
         sim.cleanup()
         sys.exit()
 
@@ -242,7 +249,7 @@ def main():
     sys.exit()
 
 
-def _run_edit_loop(sim, overlay_path: Optional[str] = None) -> None:
+def _run_edit_loop(sim, overlay_path: Optional[str] = None, lower_view: str = "cycle") -> None:
     """Frozen-frame main loop for `--edit` mode. Sim state does NOT advance.
 
     Loads `_dev_scripts/calibration_editor.py` via sys.path hack (it's a
@@ -271,13 +278,21 @@ def _run_edit_loop(sim, overlay_path: Optional[str] = None) -> None:
         |                |                |
         +----------------+----------------+
 
-    Window stays 2×S_WIDTH wide in both layouts. Lower LCD slot pinned to
-    EIGHT (the new 5-station view) and cycler locked so the arc is visible
-    regardless of curr_stop / cycle phase.
+    Window stays 2×S_WIDTH wide in both layouts. The cycler is locked so the
+    lower view never rotates under the tuning; which view is pinned comes from
+    the editor (`get_active_lower_view`, seeded by `--lower-view`, cycled with
+    V), because lower elements are only reachable in the view they live in.
     """
     from app_paths import project_root
     from displays.base import DisplayMode
-    from displays.train_models.e235_0 import S_WIDTH, S_HEIGHT, UPPER_HEIGHT
+
+    # Dimensions come from the LOADED model's registry record, never from a
+    # fixed import. A hardcoded one sizes the window for e235_0 while the sim
+    # renders something else — the layout is then silently wrong rather than
+    # broken, which is the whole reason --edit used to refuse other models.
+    S_WIDTH = sim._train_model.s_width
+    S_HEIGHT = sim._train_model.s_height
+    UPPER_HEIGHT = sim._train_model.upper_height
 
     sys.path.insert(0, str(project_root() / "_dev_scripts"))
     import calibration_editor  # noqa: E402
@@ -325,10 +340,20 @@ def _run_edit_loop(sim, overlay_path: Optional[str] = None) -> None:
     _set_lower_screens(lcd_a)
     sim.screen = lcd_a
 
-    # Pin lower-LCD to EIGHT slot so the arc renders unconditionally when
-    # the user focuses a lower-LCD element. Same lock pattern as --lower-view
-    # eight CLI flag.
-    sim.lower._current_slot = sim.lower._SLOT_EIGHT
+    # Lower-LCD slot is pinned (scheduler off) and driven by the editor's
+    # active view rather than fixed here — the route bar lives in the FULL
+    # view, so a hardcoded EIGHT pin made it unreachable no matter what the
+    # registry said. `--lower-view` seeds the starting view; V cycles it.
+    _SLOT_FOR_VIEW = {
+        "full": sim.lower._SLOT_FULL,
+        "eight": sim.lower._SLOT_EIGHT,
+        "transfer": sim.lower._SLOT_TRANSFER,
+    }
+    # Registry entries are per-model; bind BEFORE seeding the view, because
+    # which lower views exist is itself filtered by the active model.
+    calibration_editor.set_active_model(sim._train_model.key)
+    if lower_view != "cycle":
+        calibration_editor.set_active_lower_view(lower_view)
     sim.scheduler.enabled = False
 
     calibration_editor.enter_edit_mode(sim)
@@ -339,6 +364,10 @@ def _run_edit_loop(sim, overlay_path: Optional[str] = None) -> None:
         clock.tick(FRAME_RATE)
         timestamp = time.time()
         time_text = time.strftime("%H:%M", time.localtime(timestamp))
+
+        # Re-pin every frame: V changes the editor's active view, and the slot
+        # has to follow or the newly-reachable element still isn't drawn.
+        sim.lower._current_slot = _SLOT_FOR_VIEW[calibration_editor.get_active_lower_view()]
 
         target = calibration_editor.get_focused_target()
         if target == "lower":

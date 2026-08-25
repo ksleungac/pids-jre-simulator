@@ -91,6 +91,14 @@ ARC_RECT = pygame.Rect(0, UPPER_HEIGHT, S_WIDTH, S_HEIGHT - UPPER_HEIGHT)
 # extend right of it, but those handles are grabbable once the panel is focused.
 TP_RECT = pygame.Rect(0, UPPER_HEIGHT, 224, S_HEIGHT - UPPER_HEIGHT)
 
+# Hit-test rect for the full-route track (the route bar). Same extent as
+# ARC_RECT — both elements own the whole lower LCD — but they never collide,
+# because they live in DIFFERENT lower-LCD views and the calibration editor
+# filters hit-testing by the active view (`view` field in its _REGISTRY; press
+# V to cycle). Before that dispatch existed, a full-route element could not be
+# registered at all: a static rect would have swallowed every 5-station click.
+FULL_ROUTE_RECT = pygame.Rect(0, UPPER_HEIGHT, S_WIDTH, S_HEIGHT - UPPER_HEIGHT)
+
 
 # =============================================================================
 # Five-station band — Tier-2 mask PNG (docs/wip/WIP_calibration_editor.md § "Two-tier
@@ -320,6 +328,52 @@ def _parse_jy_code(sta_code: str) -> Optional[int]:
 # =============================================================================
 
 
+# =============================================================================
+# Full-route track geometry — the route bar's cross-method layout params.
+# Read by BOTH _build_positions (where the stops sit) and _draw_track (where
+# the band is drawn), so a shape edit lands once for the circular racetrack AND
+# the open horseshoe that subclasses it.
+#
+# Editor-tunable: focus with the lower view on `full` (press V to cycle views).
+# Because positions are PRECOMPUTED at __init__ rather than read per frame,
+# show_stops re-applies + rebuilds when the dict changes — see
+# _resync_tuneables. Production never edits the dict, so the signature compare
+# is the whole per-frame cost.
+#
+# `curve_v_radius` is deliberately NOT a key: it is derived from the two row
+# centerlines, and a key would let the two disagree (conventions.md § Tooling,
+# "Canonical-source duplication").
+# =============================================================================
+# fmt: off
+_TUNEABLES_FULL_ROUTE = {
+    # Vertical — track row centerlines, relative to y_top (= UPPER_HEIGHT).
+    "track_top_y":         120,  # y of top-row track centerline
+    "track_bottom_y":      187,  # y of bottom-row track centerline
+
+    # Horizontal — straight section runs track_left_pad → S_WIDTH - track_right_pad
+    "track_left_pad":       15,  # x of left curve apex (leftmost track edge)
+    "track_right_pad":      15,  # mirrored from the right edge
+
+    # Band geometry — consumed by _draw_track AND _build_positions.
+    "track_stroke_w":       28,  # thickness of the green band
+    # Cap shape: rounded-corner rectangle (NOT a full ellipse). Each cap has
+    # quarter-arc top + bottom corners plus a vertical straight segment at the
+    # apex. OUTER and INNER rects take independent vert_seg lengths — a smaller
+    # inner vert_seg means a larger inner border_radius, so the inner edge
+    # bulges further toward the apex. Stroke at the apex vertical segment stays
+    # = stroke_w (the rect inset is uniform horizontally); the corner arcs are
+    # not concentric, so stroke width varies slightly along the arc.
+    "vert_seg_h_outer":     20,  # outer-rect vertical straight at apex
+    "vert_seg_h_inner":     15,  # inner-rect vertical straight at apex (smaller = curvier)
+
+    # Numbered-circle outer radius — shared by _draw_numbered_circle (its own
+    # size) and _draw_approaching_arrow (chevron tip anchors at the circle's
+    # left edge + tip_into_circle).
+    "circle_outer_radius":  12,
+}
+# fmt: on
+
+
 class CircularFullRouteDisplay:
     """E235-0 racetrack-style full-route display (Yamanote-only).
 
@@ -349,37 +403,10 @@ class CircularFullRouteDisplay:
         self.y_top = UPPER_HEIGHT  # absolute y where lower LCD area starts
         self.lower_h = S_HEIGHT - self.y_top
 
-        # fmt: off
-        # Vertical layout — track row centerlines (relative to y_top).
-        # _build_positions derives row centerline y from cy ± curve_v_radius
-        # (matching _draw_track) so a 1-pixel asymmetry from odd sums doesn't
-        # bite the bottom row's stroke alignment.
-        self.track_top_y          = 120    # y of top-row track centerline
-        self.track_bottom_y       = 187    # y of bottom-row track centerline
-
-        # Horizontal layout — straight section runs from track_left_pad to S_WIDTH - track_right_pad
-        self.track_left_pad       = 15     # x of left curve apex (leftmost track edge)
-        self.track_right_pad      = 15     # mirrored from right edge
-
-        # Track band geometry — used by _draw_track AND _build_positions
-        self.track_stroke_w       = 28     # thickness of green band
-        # Cap shape: rounded-corner rectangle (NOT a full ellipse). Each cap has
-        # quarter-arc top + bottom corners + a vertical straight segment in the
-        # middle of the apex. The OUTER and INNER rounded rects use independent
-        # vert_seg lengths — smaller inner vert_seg = larger inner border_radius
-        # = inner corner more rounded (bulges toward apex). Stroke at the apex
-        # vertical segment stays = stroke_w (rect inset is uniform horizontally);
-        # the corner arcs themselves are not concentric so the stroke gradient
-        # varies slightly along the arc.
-        self.curve_v_radius       = (self.track_bottom_y - self.track_top_y) // 2
-        self.vert_seg_h_outer     = 20     # outer-rect vertical straight at apex
-        self.vert_seg_h_inner     = 15     # inner-rect vertical straight at apex (smaller = more curvy inner)
-
-        # Numbered-circle outer radius — shared between _draw_numbered_circle
-        # (its own size) and _draw_approaching_arrow (chevron tip anchors at
-        # circle's left edge + tip_into_circle).
-        self.circle_outer_radius  = 12
-        # fmt: on
+        # Track geometry comes from _TUNEABLES_FULL_ROUTE (module top) so the
+        # calibration editor can drive it. See that dict's header for what each
+        # key means and why curve_v_radius is derived rather than stored.
+        self._apply_full_route_tuneables()
 
         # =====================================================================
         # Fonts (shared across multiple draw methods)
@@ -402,6 +429,46 @@ class CircularFullRouteDisplay:
     # -------------------------------------------------------------------------
     # Layout — sta_code → (x, y) precomputation
     # -------------------------------------------------------------------------
+
+    def _apply_full_route_tuneables(self) -> None:
+        """Copy `_TUNEABLES_FULL_ROUTE` onto self, deriving what is derivable.
+
+        Every draw method and both `_build_positions` implementations read these
+        off `self`, so this is the single place the dict crosses into the
+        renderer. `curve_v_radius` is DERIVED here rather than stored, so the
+        two row centerlines and the cap radius cannot disagree.
+
+        Also stamps `_tuneables_sig` — the signature `_resync_tuneables`
+        compares against.
+        """
+        t = _TUNEABLES_FULL_ROUTE
+        self.track_top_y = t["track_top_y"]
+        self.track_bottom_y = t["track_bottom_y"]
+        self.track_left_pad = t["track_left_pad"]
+        self.track_right_pad = t["track_right_pad"]
+        self.track_stroke_w = t["track_stroke_w"]
+        self.vert_seg_h_outer = t["vert_seg_h_outer"]
+        self.vert_seg_h_inner = t["vert_seg_h_inner"]
+        self.circle_outer_radius = t["circle_outer_radius"]
+        # Derived — see the docstring. _build_positions takes row centerlines
+        # from cy ± curve_v_radius (matching _draw_track) so a 1-pixel asymmetry
+        # from an odd sum doesn't bite the bottom row's stroke alignment.
+        self.curve_v_radius = (self.track_bottom_y - self.track_top_y) // 2
+        self._tuneables_sig = tuple(sorted(t.items()))
+
+    def _resync_tuneables(self) -> None:
+        """Re-apply the tuneables + rebuild positions when the dict changed.
+
+        # CONTRACT: station positions are PRECOMPUTED at __init__, not read per
+        # frame — so a calibration-editor nudge to track geometry would move the
+        # drawn band and leave the stops behind it. Both `show_stops`
+        # implementations call this first. Production never mutates the dict, so
+        # the cost there is one tuple compare per frame and nothing else.
+        """
+        sig = tuple(sorted(_TUNEABLES_FULL_ROUTE.items()))
+        if sig != self._tuneables_sig:
+            self._apply_full_route_tuneables()
+            self._build_positions()
 
     _BandGeom = namedtuple("_BandGeom", "cy v_outer border_outer")
 
@@ -1074,6 +1141,7 @@ class CircularFullRouteDisplay:
           6. Station names (vertical text, top + bottom rows)
           7. Disclaimer at bottom
         """
+        self._resync_tuneables()
         # 1. Background
         pygame.draw.rect(
             self.screen,
@@ -1472,6 +1540,7 @@ class OpenRouteFullRouteDisplay(CircularFullRouteDisplay):
         (empty ``pa``) render as chevrons not numbered circles, and passing-
         station names always dim. The pointer cascade is unchanged (anchored on
         curr_stop)."""
+        self._resync_tuneables()
         n = len(self.stops)
         n_bottom = (n + 1) // 2
         curr = state.curr_stop
