@@ -29,11 +29,12 @@ Geometry lives in the ``_TUNEABLES_BELL_*`` dicts so the calibration editor can
 drag it. Everything downstream derives from those, so changing a cap size moves
 the text, the socket, the shadow and the hit-rect together.
 
-Reference anchors — measured in ``_references/bell/sta-bell.jpg`` (387x516) and
-expressed as fractions of the enclosure so they survive the canvas being
-resized. The photo is shot from below-left, so every ratio below is the
-undistorted reading of a distorted source; it cannot settle these to the pixel,
-which is why the numbers get finished by eye against the state strip.
+Reference anchors, as fractions of the enclosure so they survive the canvas
+being resized. Three photographs, and they are NOT one box: the in-situ pair
+(``sta-bell.jpg`` 387x516 below-left, and a later high-resolution near-straight-on
+shot of the same casting) carry the chamfered corners this file draws, while a
+third — a straight-on product shot of a grey casting — has rounded corners and
+is used only where it can settle a proportion the other two cannot.
 
     enclosure   x 82..302, y 82..458   220 x 376  ->  1 : 1.71
     label plate                        0.630 w  x 0.112 h, top at 0.153
@@ -41,6 +42,17 @@ which is why the numbers get finished by eye against the state strip.
     ON  cap     y 218..296             0.324 w (square), top at 0.380
     OFF cap     x 148..224, y 326..401 same size  ->  the caps are equal
     cap gap                            0.33 of a cap
+
+Anything measured off a below-left shot is compressed along the VERTICAL, which
+is why the cap gap reads 0.19 of a cap there against 0.31 straight on. Sizes
+transfer from it; placements down the box do not. Read from the straight-on
+shots instead:
+
+    well floor            0.72 of the lit body face, SAME hue — one casting
+    socket ring           0.50, and only because a proud cap shadows it
+    legend cap-height     0.377 of the cap (0.378 ON / 0.375 OFF)
+    legend stroke         0.12 of that height (0.115 ON / 0.122 OFF)
+    legend word width     0.680 of the cap for ON, 0.795 for OFF
 
 The casting is three levels, not two, and the corners are where that shows: an
 outer body carrying the four screws on a low shelf, a raised central plateau
@@ -64,15 +76,49 @@ from font_atlas import lcd_font, lit
 # The box is a fixed-resolution pixel artifact like every other surface in this
 # app, so the window scales it by whole multiples rather than resampling — see
 # window_utils § window zoom. This is the 1x size.
-BELL_CANVAS = (192, 316)
+BELL_CANVAS = (192, 290)
 
 # fmt: off
 _TUNEABLES_BELL_BOX = {
     "box_x":              8,   # canvas margin — leaves room for the cast shadow
     "box_y":              8,
     "box_w":            176,
-    "box_h":            300,   # 176 x 300 keeps the measured 1 : 1.71
-    "box_radius":        12,   # the outer body is ROUNDED; the plateau is cut
+    "box_h":            274,   # 1 : 1.56, against 1 : 1.65 measured straight-on
+                               # and 1 : 1.71 from below (a shot from under the
+                               # box stretches it, so the taller figure is the
+                               # distorted one). Both references still read
+                               # taller than this; the author's eye is what set
+                               # it, and the height was reduced twice.
+                               #
+                               # The height is a BUDGET, and it only balances
+                               # because these seven add up to it:
+                               #
+                               #   plate_top                 30   margin
+                               #   plate_h                   34
+                               #   plate -> collar gap        9   (see below)
+                               #   collar_w                  16
+                               #   cavity_h                 155
+                               #   collar_w                  16
+                               #   bottom margin             14
+                               #
+                               # Narrowing the well does NOT change this total:
+                               # collar_w is pinned by collar+well == plate_w,
+                               # so it grows by exactly what cavity_w loses, and
+                               # cavity_h moves with cavity_w to keep the floor
+                               # around the caps square. The two cancel.
+                               #
+                               # cavity_h has a floor: the cap group is
+                               # 2*cap_size + the gap = 133, and it needs pad
+                               # either side. Shortening the box past about 255
+                               # means shrinking the caps, which are pinned to
+                               # box_w by measurement — so that is where this
+                               # stops being a free parameter.
+    "box_chamfer":       15,   # the outer body is CUT at all four corners, like
+                               # the plateau — both in-situ references show a
+                               # 45 degree facet there, not a radius. Drawing it
+                               # round makes the silhouette disagree with the
+                               # plateau it encloses, which is the one place the
+                               # three-level casting is legible at all.
     "box_edge":           2,   # lit/dark rim that makes the body read as raised
     "box_contour":        1,   # dark outline so the sprite reads off any window
     "box_shadow_off":     4,   # how far the cast shadow falls, down-right
@@ -80,47 +126,95 @@ _TUNEABLES_BELL_BOX = {
 
 _TUNEABLES_BELL_FACE = {
     "face_inset":         7,   # plateau, in from the body edge — the screw shelf
-    "face_chamfer":      26,   # corner cut; must clear the screw bosses
+    "face_chamfer":      33,   # corner cut; must clear the screw bosses. The
+                               # binding constraint is the RAMP, one step
+                               # further out than the plateau: with the screw
+                               # centre at inset s and a boss of r, the cut
+                               # needs 2*face_inset + chamfer - 2*face_ramp
+                               # - 2*s comfortably over r*sqrt(2).
     "face_ramp":          2,   # lit step from shelf up to plateau
     "face_edge":          2,
 }
 
 _TUNEABLES_BELL_SCREW = {
-    "screw_inset_x":     12,   # centre, in from the body edge — on the shelf
-    "screw_inset_y":     12,
-    "screw_r":            4,   # head radius (0.045 of box w across)
-    "screw_boss_r":       6,   # recess the head sits in
-    "screw_slot_w":       2,   # cross-slot stroke
-    "screw_slot_len":     6,   # cross-slot arm span
+    "screw_inset_x":     15,   # centre, in from the body edge — on the shelf.
+    "screw_inset_y":     15,   # Moving these inboard costs plateau: the corner
+                               # cut has to grow with them or the plateau lands
+                               # on the boss. face_chamfer is that number.
+    "screw_r":            6,   # head radius (0.068 of box w across)
+    "screw_boss_r":       9,   # recess the head sits in
+    "screw_slot_w":       3,   # cross-slot stroke
+    "screw_slot_len":     9,   # cross-slot arm span
     "screw_tilt":        18,   # degrees — a driven screw never lands square
 }
 
 _TUNEABLES_BELL_PLATE = {
     "plate_w":          111,   # 0.630 of box w
     "plate_h":           34,   # 0.112 of box h
-    "plate_top":         46,   # below the box top (0.153) — clears the screws
+    "plate_top":         30,   # below the box top (0.109) — clears the screws
     "plate_radius":       2,
     "plate_edge":         1,   # recessed border the paper sits in
-    "plate_text_size":   16,
+    "plate_frame":        3,   # casting margin visible around the paper card
+    "plate_seam":         1,   # dark line where the card meets that margin
+    "plate_text_size":   20,   # sized for the label's WIDTH, then squashed back
+    "plate_text_squash":0.90,  # to height. Squashing the render is the lever
+                               # that widens the letterforms WITHOUT thickening
+                               # the stroke, which a heavier weight would have
+                               # done. The reference measures 0.87 of the card
+                               # wide; that came out too wide by eye and this
+                               # sits at 0.76, so the photo is the ceiling here
+                               # rather than the target.
     "plate_text_dy":      0,   # nudge the label off optical centre
 }
 
 _TUNEABLES_BELL_CAVITY = {
-    "cavity_w":          85,   # the WELL opening; the collar adds collar_w each side
-    "cavity_h":         158,
-    "cavity_top":        90,   # below the box top — collar spans 0.277..0.850
-    "cavity_radius":     18,
-    "collar_w":           7,   # raised lip: 85 + 2*7 = 99 = 0.563 of box w
-    "collar_radius":     25,
-    "collar_edge":        2,
-    "well_edge":          3,   # sunken rim — dark at top-left, lit at bottom-right
+    # The well is sized so the floor showing around the cap group is the SAME on
+    # all four sides — 9px. That is not four independent numbers; measure to the
+    # SOCKET (the hole in the casing), because the cap is only a part sitting in
+    # it, and the socket is the cap rect shifted down by cap_rise and grown by
+    # cap_bezel. So:
+    #
+    #   cavity_w = cap_size + 2*cap_bezel              + 2*pad = 61 + 18 =  79
+    #   cavity_h = cap group + cap_rise + 2*cap_bezel  + 2*pad = 137 + 18 = 155
+    #
+    # where the cap group is 2*cap_size + the gap = 133. Left as literals so the
+    # calibration editor can drag them; re-derive both if any cap number moves.
+    #
+    # Note the shift means the visible floor ABOVE the cap face reads cap_rise -
+    # cap_bezel px tighter than the figure below it, because the face stands
+    # proud of its own hole. Equal holes, not equal-looking gaps.
+    "cavity_w":          79,   # the WELL opening; the collar adds collar_w each side
+    "cavity_h":         155,
+    "cavity_top":        89,   # below the box top. What this really sets is the
+                               # gap to the PLATE, and the gap is to the collar
+                               # crest, not to the well: the lip stands collar_w
+                               # proud of cavity_top, so at cavity_top 88 with a
+                               # 13px lip the plate's bottom edge and the bezel
+                               # were 1px apart and read as touching. The clear
+                               # air is cavity_top - collar_w - (plate_top +
+                               # plate_h) = 9. Move either one and re-derive it.
+    "cavity_radius":     20,
+    "collar_w":          16,   # raised lip: 79 + 2*16 = 111, which is EXACTLY
+                               # plate_w. On the reference the label paper spans
+                               # 230px and the bezel 232 with their edges in
+                               # line, so the two recesses read as one column
+                               # down the casting rather than two unrelated
+                               # windows. Keep them equal if either moves.
+                               # The lip is also a WIDE soft roll, so it needs
+                               # face to gradient across; a narrow lip with a
+                               # hard rim reads as an engraved ring instead.
+    "collar_radius":     28,
+    "collar_edge":        4,   # a WIDE rim, not a line. At 1-2 px the lit side
+                               # thins to a hairline around the corner arc and
+                               # reads as a scratch floating on the plateau
+    "well_edge":          4,   # sunken rim — dark at top-left, lit at bottom-right
 }
 
 _TUNEABLES_BELL_CAP = {
     "cap_size":          57,   # square (0.324 of box w)
     "cap_radius":         5,
-    "on_top":            98,   # below the box top — cap group centred in the well
-    "off_top":          174,   # gap of 19 = 0.33 of a cap
+    "on_top":            95,   # below the box top — cap group centred in the well
+    "off_top":          171,   # gap of 19 = 0.33 of a cap
     "cap_bezel":          2,   # clearance ring around the cap in the casing
     "cap_rise":           5,   # how far the cap stands proud — and therefore
                                # exactly how far it travels, since pressed is
@@ -133,6 +227,12 @@ _TUNEABLES_BELL_CAP = {
     "cap_press_darken": 0.06,  # flush, it only loses its lit top edge. Nothing
                                # overhangs a coplanar face, so this is a hint,
                                # NOT the deep shade of a recess.
+    "cap_gloss_inset":    3,   # moulded caps are slightly domed: one lit line
+    "cap_gloss_mix":   0.28,   # inside the top edge, toward the cap's own hi.
+                               # Same top-left light as everything else — this
+                               # is the dome catching it, not a new source.
+    "cap_text_relief":    1,   # the lettering stands proud of the cap face, so
+                               # it carries an under-edge down-right of the ink
     "cap_wall_mix":    0.30,   # side wall, toward the face: a bottom-facing wall
                                # is darker than its face, but on a near-black cap
                                # "darker" has nowhere to go — pure black merges
@@ -141,22 +241,34 @@ _TUNEABLES_BELL_CAP = {
 }
 
 _TUNEABLES_BELL_GLYPH = {
-    "glyph_h":           19,   # cap height of ON / OFF, in px. Sized against the
+    "glyph_h":           21,   # cap height of ON / OFF, in px. Sized against the
                                # CAP, not for legibility: the word runs wide and
                                # sits short, so the left/right margin is about
                                # half the top/bottom one. That relation is what
                                # the reference has, and what these numbers encode
-                               # — check it survives before nudging glyph_w.
-    "glyph_stroke":    0.13,   # stroke weight, as a fraction of cap height. At
-                               # glyph_h 19 this rounds to a 2px stroke — thin is
-                               # correct here; the earlier 0.19 read as a bold
-                               # face rather than engraved signage.
-    "glyph_gap":       0.20,   # tracking, same units
-    "glyph_w":         0.64,   # ONE width for EVERY letter — the cap lettering
-                               # is monospaced, and each glyph is DRAWN to fill
-                               # its width rather than centred in a cell, so a
-                               # narrow letter never floats inside a wide slot.
-                               # A fraction of glyph_h, like the two below.
+                               # — check it survives before nudging the widths.
+                               # 0.377 of the cap, measured on both legends of
+                               # the straight-on reference (0.378 / 0.375).
+    "glyph_stroke":    0.12,   # stroke weight, as a fraction of cap height —
+                               # measured 0.115 (ON) and 0.122 (OFF). At
+                               # glyph_h 21 this rounds to a 3px stroke. The
+                               # earlier 0.19 read as a bold face rather than
+                               # engraved signage; 0.12 is the reference.
+                               #
+                               # Widths and tracking are PER WORD, not one pair
+                               # for the box. The real legends are each set to
+                               # fill the cap, so the two-letter ON is drawn
+                               # wider and looser than the three-letter OFF —
+                               # measured 0.680 vs 0.795 of the cap width. Within
+                               # a word the cell IS uniform (34/34 px for ON,
+                               # 29/26/28 for OFF) and each glyph is DRAWN to
+                               # fill its width rather than centred in a cell, so
+                               # a narrow letter never floats inside a wide slot.
+                               # Fractions of glyph_h, like the rest.
+    "glyph_w_on":      0.76,
+    "glyph_gap_on":    0.33,
+    "glyph_w_off":     0.62,
+    "glyph_gap_off":   0.16,
     "glyph_o_round":   0.50,   # 0.5 = radius is half the WIDTH, so the top and
                                # bottom close into full semicircles and the
                                # sides stay straight: a capsule, which is what
@@ -179,7 +291,12 @@ _TUNEABLES_BELL_PALETTE = {
     "body_lo_color":      (138, 136, 126),
     "body_top_color":     (194, 193, 181),
     "body_bot_color":     (170, 169, 156),
-    "ramp_color":         (240, 239, 230),   # the lit step up to the plateau
+    "ramp_color":         (224, 223, 213),   # the lit step up to the plateau.
+                                             # Kept close to the body: a bright
+                                             # ramp beside the plateau's own lit
+                                             # rim draws the step as two hard
+                                             # lines, and the casting has one
+                                             # soft roll there.
     "face_hi_color":      (233, 232, 223),
     "face_lo_color":      (148, 146, 136),
     "face_top_color":     (211, 210, 198),
@@ -193,21 +310,41 @@ _TUNEABLES_BELL_PALETTE = {
     "plate_top_color":    (241, 242, 244),
     "plate_bot_color":    (217, 219, 223),
     "plate_ink_color":    ( 26,  27,  31),
-    "collar_hi_color":    (231, 230, 221),
-    "collar_lo_color":    (150, 148, 138),
-    "collar_top_color":   (209, 208, 196),
-    "collar_bot_color":   (185, 184, 171),
-    "well_hi_color":      (124, 119, 110),
-    "well_lo_color":      ( 58,  55,  50),
-    "well_top_color":     ( 76,  72,  66),
-    "well_bot_color":     ( 94,  90,  83),
-    "socket_hi_color":    ( 92,  88,  81),
-    "socket_lo_color":    ( 38,  36,  33),
-    "socket_top_color":   ( 58,  55,  50),
-    "socket_bot_color":   ( 78,  74,  68),
-    "cap_shadow_color":   ( 24,  22,  20),
-    "cap_seam_color":     ( 28,  26,  24),   # clearance gap around a flush cap
-    "cap_ink_color":      (238, 238, 236),
+    # The label is a paper card DROPPED INTO a shallow casting recess, so a
+    # margin of casting shows all round it and a seam separates the two. One
+    # panel whose face was the paper had the card meeting the body with no edge.
+    "plate_frame_top_color": (152, 151, 141),
+    "plate_frame_bot_color": (172, 171, 159),
+    "plate_seam_color":   ( 84,  83,  77),
+    "collar_hi_color":    (240, 239, 231),   # the lip is a rolled edge: it takes
+    "collar_lo_color":    (150, 148, 138),   # a brighter catch than a flat face
+    # The lip must sit clear of the PLATEAU it stands on. At (209,208,196) it
+    # was within 2 of face_top_color, so its face vanished into the background
+    # and all that survived was its rim — a light line with nothing attached to
+    # it. A raised object needs its own face tone, not just a lit edge.
+    "collar_top_color":   (222, 221, 209),
+    "collar_bot_color":   (198, 197, 184),
+    # The well is the SAME CASTING as the body, in shadow — not a dark liner.
+    # Measured on the straight-on reference: the floor between the caps reads
+    # (121,114,109) against a lit body face of (163,163,152), so 0.72 of it, at
+    # the same hue. The socket ring sits lower again (0.5) only because a proud
+    # cap shadows it. Drawing the well near-black is what made the middle of the
+    # box read as a different material — the author's first note on the photo.
+    "well_hi_color":      (206, 205, 193),
+    "well_lo_color":      (104, 103,  95),
+    "well_top_color":     (133, 132, 123),
+    "well_bot_color":     (151, 150, 140),
+    "socket_hi_color":    (150, 149, 139),
+    "socket_lo_color":    ( 66,  65,  60),
+    "socket_top_color":   ( 92,  91,  84),
+    "socket_bot_color":   (116, 115, 106),
+    "cap_shadow_color":   ( 74,  73,  67),
+    "cap_seam_color":     ( 56,  55,  51),   # clearance gap around a flush cap
+    # The legends are moulded SILVER-GREY, not white — sampled (137,137,142)
+    # against an ON face of (62,62,64). Lifted here like every other tone, but
+    # the ink must stay short of white or the relief under it cannot show.
+    "cap_ink_color":      (206, 206, 208),
+    "cap_ink_relief_color": ( 18,  18,  18),  # under-edge of the raised lettering
     "on_hi_color":        (104, 104, 104),
     "on_lo_color":        ( 24,  24,  24),
     "on_top_color":       ( 60,  60,  60),
@@ -422,8 +559,12 @@ def _render_word(word, color):
     g = _TUNEABLES_BELL_GLYPH
     cap_h = g["glyph_h"]
     stroke = max(2, round(cap_h * g["glyph_stroke"]))
-    gap = max(1, round(cap_h * g["glyph_gap"]))
-    cw = max(2 * stroke + 1, round(cap_h * g["glyph_w"]))
+    # Per-word metrics; the box carries exactly these two legends. An unknown
+    # word falls back to OFF's tighter setting, which is the safe direction —
+    # it can only come out narrower than the cap, never overflow it.
+    key = word.lower() if word.lower() in ("on", "off") else "off"
+    gap = max(1, round(cap_h * g[f"glyph_gap_{key}"]))
+    cw = max(2 * stroke + 1, round(cap_h * g[f"glyph_w_{key}"]))
     widths = [cw] * len(word)
     surf = pygame.Surface((sum(widths) + gap * (len(word) - 1), cap_h), pygame.SRCALPHA)
     x = 0
@@ -444,14 +585,14 @@ def _box_rect():
 def _draw_body(surf):
     """Cast shadow, contour, and the outer body — the level the screws sit on."""
     b, p = _TUNEABLES_BELL_BOX, _TUNEABLES_BELL_PALETTE
-    box, r = _box_rect(), b["box_radius"]
+    box, ch = _box_rect(), b["box_chamfer"]
     off, c = b["box_shadow_off"], b["box_contour"]
-    _flat(surf, box.move(off, off), _mask_rrect(r), p["shadow_color"])
-    _flat(surf, box.inflate(2 * c, 2 * c), _mask_rrect(r + c), p["contour_color"])
+    _flat(surf, box.move(off, off), _mask_octagon(ch), p["shadow_color"])
+    _flat(surf, box.inflate(2 * c, 2 * c), _mask_octagon(ch + c), p["contour_color"])
     _panel(
         surf,
         box,
-        _mask_rrect(r),
+        _mask_octagon(ch),
         p["body_top_color"],
         p["body_bot_color"],
         p["body_hi_color"],
@@ -496,17 +637,23 @@ def _draw_screws(surf):
             edge=1,
         )
         # Each head at its own angle — four identical screws read as printed.
+        # Supersampled like every other shape here: pygame's line width is not
+        # antialiased, so a stroke this thick drawn off-axis lands as a blob of
+        # stair-steps rather than a cross recess.
         a = math.radians(s["screw_tilt"] * (1 + i * 0.9))
-        half = s["screw_slot_len"] / 2
+        d = 2 * r
+        big = pygame.Surface((d * _SS, d * _SS), pygame.SRCALPHA)
+        mid, half = d * _SS / 2, s["screw_slot_len"] * _SS / 2
         for da in (0.0, math.pi / 2):
             dx, dy = math.cos(a + da) * half, math.sin(a + da) * half
             pygame.draw.line(
-                surf,
-                p["screw_slot_color"],
-                (cx - dx, cy - dy),
-                (cx + dx, cy + dy),
-                s["screw_slot_w"],
+                big,
+                tuple(p["screw_slot_color"]) + (255,),
+                (mid - dx, mid - dy),
+                (mid + dx, mid + dy),
+                s["screw_slot_w"] * _SS,
             )
+        surf.blit(pygame.transform.smoothscale(big, (d, d)), (cx - r, cy - r))
 
 
 def _draw_plateau(surf):
@@ -549,20 +696,37 @@ def _draw_plate(surf):
     box = _box_rect()
     x = box.x + (box.w - t["plate_w"]) // 2
     frame = pygame.Rect(x, box.y + t["plate_top"], t["plate_w"], t["plate_h"])
+    # Three levels, outside in: the casting recess, the seam, the paper card.
     _panel(
         surf,
         frame,
-        _mask_rrect(t["plate_radius"] + 1),
-        p["plate_top_color"],
-        p["plate_bot_color"],
+        _mask_rrect(t["plate_radius"] + t["plate_frame"]),
+        p["plate_frame_top_color"],
+        p["plate_frame_bot_color"],
         p["plate_hi_color"],
         p["plate_lo_color"],
         edge=t["plate_edge"],
         raised=False,
     )
+    seam = frame.inflate(-2 * (t["plate_frame"] - t["plate_seam"]), -2 * (t["plate_frame"] - t["plate_seam"]))
+    _flat(surf, seam, _mask_rrect(t["plate_radius"] + t["plate_seam"]), p["plate_seam_color"])
+    card = frame.inflate(-2 * t["plate_frame"], -2 * t["plate_frame"])
+    _panel(
+        surf,
+        card,
+        _mask_rrect(t["plate_radius"]),
+        p["plate_top_color"],
+        p["plate_bot_color"],
+        p["plate_hi_color"],
+        p["plate_lo_color"],
+        edge=t["plate_edge"],
+    )
     font = lcd_font("ShinGoPr6N-Medium.otf", t["plate_text_size"], draws=lit(_FACE_LABEL))
     ink = font.render(_FACE_LABEL, True, p["plate_ink_color"])
-    surf.blit(ink, ink.get_rect(center=(frame.centerx, frame.centery + t["plate_text_dy"])))
+    squash = t["plate_text_squash"]
+    if squash != 1.0:
+        ink = pygame.transform.smoothscale(ink, (ink.get_width(), max(1, round(ink.get_height() * squash))))
+    surf.blit(ink, ink.get_rect(center=(card.centerx, card.centery + t["plate_text_dy"])))
 
 
 def _well_rect():
@@ -676,8 +840,29 @@ def _draw_cap(surf, rect, label, tones, pressed):
         edge=c["cap_seam"] if pressed else c["cap_edge"],
     )
 
+    # The dome: one lit line inside the top edge, following the cap's corners.
+    # Drawn as the top slice of a rounded rect so it curves in at the corners
+    # rather than running square across them.
+    gi = c["cap_gloss_inset"]
+    gloss = face.inflate(-2 * gi, -2 * gi)
+    if gloss.w > 0 and gloss.h > 0:
+        band = pygame.Surface((gloss.w, gloss.h), pygame.SRCALPHA)
+        _flat(
+            band,
+            pygame.Rect(0, 0, gloss.w, gloss.h),
+            _mask_rrect(max(0, c["cap_radius"] - gi)),
+            _mix(top, hi, c["cap_gloss_mix"]),
+        )
+        keep = max(1, c["cap_edge"] - 1)
+        surf.blit(band, gloss.topleft, pygame.Rect(0, 0, gloss.w, keep))
+
+    centre = (face.centerx, face.centery + c["cap_text_dy"])
+    relief = c["cap_text_relief"]
+    if relief and not pressed:
+        under = _render_word(label, p["cap_ink_relief_color"])
+        surf.blit(under, under.get_rect(center=(centre[0] + relief, centre[1] + relief)))
     ink = _render_word(label, p["cap_ink_color"])
-    surf.blit(ink, ink.get_rect(center=(face.centerx, face.centery + c["cap_text_dy"])))
+    surf.blit(ink, ink.get_rect(center=centre))
 
 
 def render(state: BellState) -> pygame.Surface:

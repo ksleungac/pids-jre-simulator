@@ -59,22 +59,28 @@ def strip(zoom: int, states: dict) -> pygame.Surface:
     return out
 
 
-def beside_reference(render: pygame.Surface) -> pygame.Surface:
-    """Reference photo and render at the SAME height, side by side.
+def beside_reference(render: pygame.Surface, refs: "list[Path]") -> pygame.Surface:
+    """Reference photos and render at the SAME height, side by side.
 
     Height-aligned rather than width-aligned: the box is the subject in both, so
     matching its height is what makes proportions comparable (visual-adjust
     skill, § Side-by-side composites).
     """
-    ref = pygame.image.load(str(REFERENCE)).convert()
-    h = render.get_height()
-    rw = int(ref.get_width() * h / ref.get_height())
-    ref = pygame.transform.smoothscale(ref, (rw, h))
     pad = 16
-    out = pygame.Surface((pad * 3 + rw + render.get_width(), h + pad * 2))
+    h = render.get_height()
+    scaled = []
+    for p in refs:
+        ref = pygame.image.load(str(p)).convert()
+        rw = int(ref.get_width() * h / ref.get_height())
+        scaled.append(pygame.transform.smoothscale(ref, (rw, h)))
+    w = pad + sum(s.get_width() + pad for s in scaled) + render.get_width() + pad
+    out = pygame.Surface((w, h + pad * 2))
     out.fill((18, 20, 24))
-    out.blit(ref, (pad, pad))
-    out.blit(render, (pad * 2 + rw, pad))
+    x = pad
+    for s in scaled:
+        out.blit(s, (x, pad))
+        x += s.get_width() + pad
+    out.blit(render, (x, pad))
     return out
 
 
@@ -82,6 +88,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--zoom", type=int, default=2)
     ap.add_argument("--compare", action="store_true", help="stack the reference photo beside it")
+    ap.add_argument(
+        "--ref",
+        action="append",
+        default=None,
+        help="reference image for --compare; repeatable (default: the in-situ photo)",
+    )
     ap.add_argument("--state", choices=sorted(STATES), help="render one state only")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
@@ -92,7 +104,8 @@ def main() -> int:
     picked = {args.state: STATES[args.state]} if args.state else STATES
     img = strip(args.zoom, picked)
     if args.compare:
-        img = beside_reference(img)
+        refs = [Path(p) for p in args.ref] if args.ref else [REFERENCE]
+        img = beside_reference(img, refs)
 
     out = args.out or (f"screenshot_bell_{args.state}.png" if args.state else "screenshot_bell.png")
     pygame.image.save(img, out)
