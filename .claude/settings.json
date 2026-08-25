@@ -36,6 +36,24 @@
             "command": "uv run _harness/edit_nudge_hook.py 2>/dev/null || exit 0"
           }
         ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run _harness/no_generated_source_hook.py 2>/dev/null || exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run _harness/new_tool_hook.py 2>/dev/null || exit 0"
+          }
+        ]
       }
     ],
     "PostToolUse": [

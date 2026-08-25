@@ -60,6 +60,15 @@ Classify each and propose canonical home. Every entry promotes or is omitted.
 
 If no corrections, state explicitly. All omits → "all N corrections omitted as passing remarks."
 
+### Scratch this session
+
+Backstop only — the throwaway-or-keep call was made at WRITE time, in each file's docstring
+(`conventions.md` § Naming). List any `_dev_scripts/_*.py` written this session and answer one
+question: **did anything marked throwaway turn out to matter to a later session?** A yes is a
+misclassification worth naming, and that file's docstring stops saying "Throwaway".
+
+No scratch → state "no scratch this session."
+
 ### Issue backlog reconcile (GitHub Issues)
 Closure is authoritative — a pushed commit with `Closes #N` already closed the issue, so there's no fuzzy matching. Then:
 - **Closed this session**: `gh issue list --state closed --search "closed:>=<last-session-date>"` — confirm each maps to work that shipped (GitHub already closed them; no action needed).

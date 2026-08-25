@@ -382,7 +382,164 @@ A non-final frame's right edge (the junction) is a continuation, NOT a terminus 
 
 ---
 
+## Specifying a new display (spec-first workflow)
+
+**Scope: any display work beyond small tuning** — a new train model, a new view on an
+existing one, a view rebuilt against fresh references. Small nudges to a calibrated element
+skip this and go straight to `/calibration-editor`.
+
+The spec is written before the code and the code follows it. Established 2026-08-22 on
+E233-0; `docs/wip/WIP_e233_0_display.md` is the worked example.
+
+### 1. One reference per view
+
+`_references/lcd/<model>/`, named `<view>-<state>-<lang>.png`. That path is already
+inventoried in `THIRD-PARTY.md` § "Reference material", so a file placed there is covered by
+an existing carve-out; a new folder elsewhere is an uninventoried asset class
+(`conventions.md` § Tooling).
+
+**Note what the reference set cannot show you.** References captured at one instant share
+one state, one station name, one train type — so they can agree perfectly and still say
+nothing about what varies. Write that limit down next to the measurement rather than
+reading the agreement as invariance (`critical_lessons.md` § 9: a check that consumes the
+same enumeration the artifact came from verifies fidelity, never coverage).
+
+### 2. Whole-display basics FIRST
+
+In order, before any element: **aspect → upper/lower divide → background colours →
+canvas**. Every later number is expressed against these, so settling them last means
+redoing everything — and **font size is part of the atlas key**, so a late canvas change
+re-bakes and re-tunes the whole model.
+
+Do not assume the fork source's canvas carries over. E235 is 730 × 420 (≈16:9); E233-0
+measured 4:3, which is the first thing its fork could not inherit.
+
+### 3. Ratios before pixels, measured by script
+
+Never estimate a ratio by eye — an off-axis or rescaled reference yields a different number
+every time you look (`conventions.md` § UI code style). Threshold ink or detect colour runs
+inside known rects and read the bbox.
+
+Record ratios, not pixels: references arrive at assorted sizes and the canvas is chosen
+after measuring, so a ratio survives both and a pixel survives neither. Mark every value
+`[measured]` (a script produced it) or `[observed]` (read by eye, not yet trusted).
+
+### 4. Draw the base canvas, and stop at content-independence
+
+Ship the backgrounds, the divide and the border as the model's `__init__.py` and render it.
+Draw the render **from those constants**, never from a copy — the picture then also checks
+the module (`principles.md` § "A second implementation of a production decision drifts").
+
+The base layer takes only what is **state-, view- AND content-independent**. A container
+for content — the destination plate, a badge, a code box — does not qualify until its
+overflow rule is settled, because fixing its geometry early answers "does it grow, or does
+the text shrink" by accident, in the layer where a wrong answer is least visible.
+
+### 5. One drill-down session per view, with the author
+
+Its output is that view's section in the WIP doc: **element inventory · what drives each
+element · text overflow · adaptive behaviour at edge conditions.**
+
+**No view section is written ahead of its session.** A spec authored unprompted is a gap
+filled autonomously, and it arrives at the next reader indistinguishable from an author
+decision (`principles.md` § Implementation-completion-as-spec). Park raw observations under
+an explicit not-yet-decided heading instead.
+
+### 6. Build, then tune
+
+Build the view against the spec, then tune it in the calibration editor against the same
+reference (`/calibration-editor`, `--overlay`). New elements are wired editor-ready as they
+are written — for a new model that is free, since the fork source is already wired.
+
+**One element at a time, and the live element bounds the REPORT as well as the diff.** A
+settled or parked element is not measured, not mentioned, and not re-justified — and a bare
+noun ("the white box", "the font") resolves to the live element, not to the ambiguity between
+it and a finished one. Naming a finished element back at the author reads as correcting them
+on scope they already set. 2026-08-25, three times inside the clock element: the plate's
+corners were measured and led the reply when only the clock's were in play; asked why, the
+answer was "it was ambiguous to me", which tells the author their instruction was unclear
+when the loop had already made it clear; and a question about the clock's typeface was
+answered with an unasked enumeration of four parked elements' faces. Author — *"i do element
+by element with you, and i tell you to do the clock, the i mean only the clock, what the fuck
+are you correcting me for"*. If a referent genuinely is ambiguous, resolve it silently and
+report only the live element.
+
+**The artifact is the production renderer, and the tool that tunes it is the calibration
+editor.** `preview_display.py --edit --overlay <ref.png>` puts the reference over the live
+element; the editor reads that element's `_TUNEABLES_*` from the production module, nudges them
+live, and `Ctrl+S` writes only the edited keys back. **Registering the element in `_REGISTRY` IS
+the wiring step** — which is why this is not merely the tidier route: the thing being tuned and
+the thing being shipped are the same bytes, so a sandbox cannot drift from the renderer and a
+preview cannot show superseded code. Never fit an element in a separate harness. The blunt
+domain test — **if a script imports pygame, loads a font, or computes a position, it is drawing,
+and drawing is the renderer's job**; a measurement script reads the reference and prints
+numbers. General form:
+[principles.md § "Prototype INSIDE the code that will hold it"](../.claude/rules/principles.md).
+Two consequences, both of which the author had to state on 2026-08-26 after the station-name
+element was fitted in a temp-directory script and never wired in:
+
+- **A preview or comparison renders from the LIVE code**, always. Keeping the old arm around
+  while you work is your own business and your own call — *"i know sometimes you want to keep
+  the old before handing out the new, you think about this youself, just that when i said i want
+  overview or compare, it should just be the new one"* — but what goes to the author is the new
+  one. **Old-versus-new is on their EXPLICIT request only, and they will say so directly**: it
+  is for a call they cannot make without seeing both, like the train type's weight (§ 8.10 of
+  `WIP_e233_0_display.md` — DeBold against Heavy / Medium / Light). *"most of the time i don't,
+  if i am not sure i will say very directly and want old vs new, othertimes, if you re-read my
+  word, i never said your original results are ok and worth keeping."* Their silence is not a
+  reason to preserve the previous arm, and never a reason to show it. *"when i ask for a preview,
+  comparison of anytime, unless i said you compare new of old, then i MUST see the latest
+  algorithm, in your provision or in your mind or what i
+  don't fucking care, you show the old thing to me what's the fucking point"* — a sheet of
+  twelve stops went out rendered from the superseded layout, which invalidated every earlier
+  picture in the same session, because the author could no longer tell which of them had come
+  from where.
+- **An acceptance is an instruction to land the value, not a datum.** *"when i say correct i
+  fucking mean you can apply it"*, and *"when i say something looks good, without followup
+  comment, or what, i mean i accept, confirmed this already"*. Apply it in the same turn and
+  show the result; do not carry it forward as a finding. A confirm gate the author sets is
+  scoped to the one thing they asked about — satisfying it does not put the whole element back
+  into discussion.
+
+The badge and the station name went through this loop in the same session with opposite
+outcomes, which is the cheapest illustration available: the badge was measured, wired into the
+renderer, rendered from the renderer, and accepted first pass.
+
+**The coverage sheet is produced UNPROMPTED, with the element, and it opens at full spread.**
+Do not wait to be asked for a preview or a comparison, and do not start with the one stop the
+reference happens to show (author, 2026-08-26 — *"i want preview and compare results be
+automatically prepared, not i asking, also it should at start cover most of the possible
+scenarios, don't need me asking"*). Enumerate what the element actually varies over — every
+name length in the corpus, every state the machine reaches, a null field, an out-of-spec route —
+render one row per case from the live code, and send it as part of landing the element. It is
+also the only instrument that can catch the class below, so producing it is not politeness; it
+is the verification step.
+
+**An element whose layout VARIES WITH THE DATA cannot be settled against a frozen reference,
+and the fit will not tell you so.** A capture constrains the parameters visible in it and leaves
+every other one free — which is `principles.md` § "A parameter the score cannot see is not being
+fit", one level up: there the free parameter was a coordinate the sample did not bear on, here it
+is an axis of the WORLD the harness has no representation for. E233-0's first five upper elements
+are static, so one reference showed the whole of each and an exhaustive RMS fit settled it; five
+successes in a row taught nothing, because for a static element fitting the parameters and
+implementing the element are the same act. The station name is the first whose layout is a rule
+over character count, and no capture in the set shows one, three or five characters — so the fit
+reported a confident number for a rule it could not see. Fit what the reference constrains, drive
+the real corpus across every route and stop for the rest, and say in the spec which figures came
+from which. A request for "the whole display across other stations" is the author supplying the
+axis the reference cannot.
+
+### 7. Graduate
+
+Fold the settled spec into `docs/DISPLAY_<MODEL>.md` and delete the WIP section. The WIP
+doc dissolves when its stated trigger is met; until then keep its status current rather than
+letting it drift (`conventions.md` § "WIP-doc → canonical-doc graduation").
+
+---
+
 ## Adding New Train Model
+
+Mechanics, once § "Specifying a new display" has produced a spec.
 
 1. Create `displays/train_models/{model_name}/` directory.
 2. Copy and modify `upper_lcd.py` for fonts/positions (often a fork from sibling sub-series — see [conventions.md § "Display module structure"](../.claude/rules/conventions.md) for copy-don't-reinvent rule when forking).

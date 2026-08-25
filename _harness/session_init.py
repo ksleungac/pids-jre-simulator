@@ -207,6 +207,62 @@ def directions():
     print()
 
 
+def _docline(path: Path) -> str:
+    """First sentence of a module's docstring, or "" if it has none."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+    for quote in ('"""', "'''"):
+        i = text.find(quote)
+        if i == -1:
+            continue
+        line = text[i + 3 :].lstrip().splitlines()
+        if line:
+            return line[0].strip().rstrip(".")
+    return ""
+
+
+def tools():
+    """Print the tool inventory — the redline's "discover before you write" as a PUSH.
+
+    `redlines.md`: never write a new tool or instrument while one exists, and
+    expand rather than fork when one falls short. That is unenforceable as a
+    recollection — the model has to think of looking — so the inventory is put in
+    front of it at the one moment guaranteed to precede the thought
+    (`principles.md` § "Natural adoption gates tool value": a PULL tool loses to
+    the reflex; this converts it to a push).
+
+    2026-08-26 is the cost of not having this: 32 temp-directory scripts written
+    to answer four questions, every one of which already had a home here —
+    `calibration_editor.py`, `compare_fonts.py`, `compare_grid.py`, and the
+    `_dev_scripts/_<question>.py` throwaway convention.
+
+    Docstring first lines, so the inventory cannot drift from the tools: it is
+    derived, never a list typed into this file
+    (`principles.md` § "A second implementation of a production decision drifts").
+    """
+    root = Path(__file__).resolve().parent.parent
+    rows = []
+    for folder in ("_dev_scripts", "_harness"):
+        d = root / folder
+        if not d.is_dir():
+            continue
+        for f in sorted(d.glob("*.py")):
+            if f.name == "__init__.py":
+                continue
+            rows.append((f"{folder}/{f.name}", _docline(f)))
+    if not rows:
+        return
+    print(f"=== Tools you already have ({len(rows)}) — expand one before writing a new one ===")
+    width = max(len(n) for n, _ in rows)
+    for name, doc in rows:
+        print(f"  {name:<{width}}  {doc[:88]}")
+    print("  A HIT is a tool that already holds your INPUTS, even if it does not do your JOB.")
+    print('  redlines.md · principles.md § "Search before authoring"')
+    print()
+
+
 def main():
     git_sync()
 
@@ -257,6 +313,7 @@ def main():
     except Exception as e:
         print(f"=== Harness integrity check failed: {e} ===\n")
 
+    tools()
     gh_backlog()
     directions()
 
