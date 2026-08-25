@@ -52,7 +52,15 @@ ATLAS_DIRNAME = "font_atlas"
 # through `lcd_font`, so a display author never decides — and never needs to
 # know — whether the face they asked for is baked or shipped; widening the atlas
 # to another family is a change to this tuple and to nothing else.
-ATLAS_FACES = ("ShinGoPr6N",)
+#
+# Keyed on the FAMILY, not on one of its naming conventions. Morisawa ships the
+# same family under more than one (`ShinGoPr6N-Heavy.otf`, and a Pro cut whose
+# own filename was `A-OTF Shin Go Pro DB.otf`), and a prefix that names only one
+# of them silently classifies the other as a shipped face — it would then load
+# live in BOTH modes and have to travel with the build, which is the exact
+# posture the bake exists to end. Files are renamed to `ShinGo*` on arrival so
+# one prefix covers the family; `.gitignore` matches on the same basis.
+ATLAS_FACES = ("ShinGo",)
 
 
 def is_atlas_face(face: str) -> bool:
@@ -239,19 +247,20 @@ def data_fingerprint() -> str:
 class Source:
     """Where a renderer's text comes from — a data location or a literal set."""
 
-    __slots__ = ("locations", "literals", "prefix", "suffix", "split", "replace", "wrap")
+    __slots__ = ("locations", "literals", "prefix", "suffix", "split", "replace", "wrap", "cuts")
 
-    def __init__(self, locations=(), literals=(), prefix="", suffix="", split=False, replace=None, wrap=""):
+    def __init__(self, locations=(), literals=(), prefix="", suffix="", split=False, replace=None, wrap="", cuts=False):
         self.locations = tuple(locations)
         self.literals = tuple(literals)
         self.prefix, self.suffix = prefix, suffix
         self.split = split
         self.replace = tuple(replace) if replace else ()
         self.wrap = wrap
+        self.cuts = cuts
 
     def key(self) -> tuple:
         """Value identity, so two equivalent declarations share one cached font."""
-        return (self.locations, self.literals, self.prefix, self.suffix, self.split, self.replace, self.wrap)
+        return (self.locations, self.literals, self.prefix, self.suffix, self.split, self.replace, self.wrap, self.cuts)
 
     def __repr__(self):
         bits = list(self.locations) + [repr(s) for s in self.literals]
@@ -259,7 +268,7 @@ class Source:
         return f"Source({', '.join(bits)}{fix})"
 
 
-def at(*locations: str, prefix: str = "", suffix: str = "", split=False, replace=None, wrap: str = "") -> Source:
+def at(*locations: str, prefix: str = "", suffix: str = "", split=False, replace=None, wrap: str = "", cuts=False) -> Source:
     """Every value at these data locations, e.g. `audio/*/route.json:stops[].name`.
 
     Locations are fnmatch patterns over the keys `walk_shipped_json` produces, so
@@ -277,11 +286,18 @@ def at(*locations: str, prefix: str = "", suffix: str = "", split=False, replace
                        name laid out over two lines (a space inside a station name
                        is the data format's own line-break marker).
       split="·"        parts split on a given separator instead of whitespace.
+      cuts=True        BOTH halves of every two-way split of the value, for a
+                       renderer that lays a value over two lines and decides the
+                       break itself. Deliberately over-approximating like
+                       `wrap=`: it does not depend on WHERE the break lands, so
+                       changing that rule cannot leave the atlas a case short.
+                       Costs nothing in atlas size — a declaration only says
+                       what may be drawn, while the bake records what is.
 
     Applied in that order — replace, then split — because a renderer that
     substitutes and then splits is splitting on the substituted character.
     """
-    return Source(locations=locations, prefix=prefix, suffix=suffix, split=split, replace=replace, wrap=wrap)
+    return Source(locations=locations, prefix=prefix, suffix=suffix, split=split, replace=replace, wrap=wrap, cuts=cuts)
 
 
 def lit(*strings: str) -> Source:
@@ -401,6 +417,8 @@ def resolve(source: Source, walk: Optional[dict] = None) -> set:
                 extra.add(sep.join(bits[:i]) + sep)
                 extra.add(sep.join(bits[i:]))
         out |= extra
+    if source.cuts:
+        out |= {s[:i] for s in out for i in range(1, len(s))} | {s[i:] for s in out for i in range(1, len(s))}
     if source.split:
         sep = None if source.split is True else source.split
         out |= {part for s in out for part in s.split(sep)}

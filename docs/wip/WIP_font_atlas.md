@@ -415,7 +415,7 @@ and stop being mistaken for coverage.
 location keys, so `data/lines.json:*.name_ja` covers every line id without naming one. Options exist
 only for text a renderer DERIVES, which is text present in no JSON and therefore covered by
 reachability alone if undeclared. Applied in order — `replace=(a, b)`, `wrap="sep"`,
-`split=True | "sep"`, `prefix=/suffix=` — because a renderer that substitutes and then splits is
+`cuts=True`, `split=True | "sep"`, `prefix=/suffix=` — because a renderer that substitutes and then splits is
 splitting on the substituted character. Recurring declarations are named once (`STATION_NAMES`,
 `STATION_NAMES_EKI` reusing its locations) so two models cannot hold diverging copies of a location
 list.
@@ -429,6 +429,7 @@ than by reading:
 | `split="·"` | then splits on it, rendering each part **and** the `·` alone |
 | `split=True` | a space inside a station name is the data format's line-break marker — and the two LCDs disagree, the lower route bar honouring it (`さいたま` over `新都心`) while the upper station name strips it (`さいたま新都心`). Both are declared by one source. |
 | `wrap="･"` | shinkansen names wrap to ≤2 lines at a width-dependent boundary, keeping the separator on the leading line, so every boundary is a possible cut |
+| `cuts=True` | E233-0's train type lays a value over two lines and picks the break itself (`快速アーバン` → `快速` / `アーバン`), so BOTH halves of every two-way split are declared. Over-approximating like `wrap=` and for the same reason: it does not depend on WHERE the break lands, so changing that rule cannot leave the atlas a case short. |
 | `suffix="駅"` | E235-0's transfer header composes `{name}駅` at draw time |
 
 **The cook reads declarations; shape is still observed.** A declared combo's domain comes from

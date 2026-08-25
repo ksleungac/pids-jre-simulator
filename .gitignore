@@ -89,6 +89,13 @@ _sta_verify_*.json
 # blobs by the no-rewrite decision (2026-07-27). HelveticaNeue / NeueFrutigerWorld
 # remain tracked until #116 bakes them. See WIP_font_atlas.md.
 /fonts/ShinGoPr6N-*.otf
+# The rule above names ONE naming convention, and Morisawa's own filenames do not
+# follow it — `A-OTF Shin Go Pro DB.otf` arrived 2026-08-25 matching neither this
+# pattern nor any other, so it was untracked AND unignored, which is the one state
+# `git add -A` publishes. The exposure is a property of the FAMILY, not of a
+# filename, so match the family however it is spelled.
+/fonts/*Shin*Go*.otf
+/fonts/*ShinGo*.otf
 
 # User settings (language, future per-PC preferences). Lives next to the exe in
 # frozen builds / project root in dev. Local-only — separate per machine.
