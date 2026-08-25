@@ -343,7 +343,17 @@ def audit_source_literals(sink: dict) -> tuple:
             drawn.add(k.split("|", 4)[4])
 
     missing, skipped = [], []
-    for p in sorted((ROOT / "displays").rglob("*.py")):
+    # `displays/` is where LCD text lived when this audit was written, and the
+    # departure-bell box is the first drawing module outside it. The extra scope
+    # is DERIVED from the seam rather than listed — anything that imports
+    # `lcd_font` draws LCD text by definition — so a module joins this audit by
+    # using the seam, and a hand-kept list cannot go short of one.
+    on_seam = []
+    for p in sorted(ROOT.glob("*.py")):
+        src = p.read_text(encoding="utf-8")
+        if "from font_atlas import" in src and "lcd_font" in src:
+            on_seam.append(p)
+    for p in sorted((ROOT / "displays").rglob("*.py")) + on_seam:
         rel = p.relative_to(ROOT).as_posix()
         text = p.read_text(encoding="utf-8")
         lines = text.splitlines()
@@ -444,6 +454,24 @@ def sweep(on_frame) -> tuple:
             f"{len(MODES)}x{len(slots)}x{len(PA_PHASES)}x{n_frames}f  -> {ok} frames, "
             f"{sum(len(v) for v in failures.values())} failed"
         )
+
+    # The departure-bell box draws its 発車ベル plate through `lcd_font`, and it
+    # lives in a SECOND OS WINDOW — no state of the sweep above can reach it, so
+    # without this its combo is never recorded and a fontless build KeyErrors on
+    # the first bell frame. Production's own `render()` is called rather than the
+    # label being typed in here; the plate is drawn unconditionally, before any
+    # state branch, so one state records the combo and the `draws=` declaration
+    # at the call site supplies the text. It is that declaration, not this line,
+    # that decides the domain — which is why a second state would add nothing.
+    try:
+        import departure_bell
+
+        departure_bell.render(departure_bell.BellState())
+        on_frame()
+        ok += 1
+    except BaseException as e:
+        msg = f"{type(e).__name__}: {str(e)[:160]}"
+        failures.setdefault(msg, []).append(("departure_bell", 0, "-", "-", 0, traceback.format_exc()))
     return ok, failures, routes
 
 
@@ -817,6 +845,13 @@ def pixel_verify() -> int:
                             preview_display.render_frame(sim, timestamp=FROZEN)
                             raw = pygame.image.tostring(sim.screen, "RGB")
                             out[(stop, m, v, p, f)] = hashlib.sha256(raw).hexdigest()
+        # The bell box too — it is route-independent, so the same digest recurs
+        # for every route, but leaving it out would let this pass report IDENTICAL
+        # over a set the box was never in (critical_lessons.md § 10: count the
+        # frames a suite covers, not the cases).
+        import departure_bell
+
+        out[("bell",)] = hashlib.sha256(pygame.image.tostring(departure_bell.render(departure_bell.BellState()), "RGB")).hexdigest()
         sim.cleanup(full_quit=False)
         pygame.display.set_mode((1, 1))
         return out
@@ -871,6 +906,16 @@ from app import PASimulator
 from displays.train_models import TRAIN_MODELS
 
 bad = 0
+
+# The bell box, in the frame where a missing atlas entry actually bites: no
+# baked font files on disk, and its plate label resolved from the atlas alone.
+import departure_bell
+try:
+    departure_bell.render(departure_bell.BellState())
+except Exception as e:
+    bad += 1
+    print(f"  FAIL departure_bell: {type(e).__name__}: {str(e)[:200]}")
+
 for route in routes:
     for model in TRAIN_MODELS:
         try:

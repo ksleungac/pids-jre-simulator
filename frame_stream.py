@@ -40,6 +40,7 @@ import threading
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Optional
+from urllib.parse import parse_qs
 
 import pygame
 
@@ -53,19 +54,54 @@ _clients = 0
 _clients_lock = threading.Lock()
 _server: Optional[ThreadingHTTPServer] = None
 
-# Published by the main thread on present (flip/update); encoded lazily by the
-# server thread. `_seq` lets the encoder skip re-encoding an unchanged frame.
-_frame: Optional[pygame.Surface] = None
+# Published by the main thread on present (flip/update); COMPOSED and encoded
+# lazily by the server thread, per view. `_seq` lets the encoder skip work on an
+# unchanged frame.
+#
+# Composition is deferred rather than done at publish because each viewer picks
+# its own view (below): composing all three eagerly would do work nobody is
+# watching, on the render thread. Both sources are copies, never the live display
+# Surface, so a server thread may blit them — the contract at the top of this
+# file is about the DISPLAY surface, which only `_publish` touches.
+_main: Optional[pygame.Surface] = None
+_side: Optional[pygame.Surface] = None
 _seq = 0
-_png: Optional[bytes] = None  # cache of _frame at _png_seq
-_png_seq = -1
+_png: "dict[str, bytes]" = {}  # per view, valid at _png_seq
+_png_seq: "dict[str, int]" = {}
+
+# What a viewer can ask to see. Chosen per CONNECTION (`/stream?view=`) rather
+# than as a server setting: two people on two devices legitimately want
+# different things, and a query parameter is per-client by construction with no
+# shared state and no new write endpoint. The cost is that switching drops and
+# re-opens the stream, which the page's existing reconnect already handles.
+VIEWS = ("both", "main", "side")
+DEFAULT_VIEW = "both"
+
+# A second view docked beside the main window's, published by the main thread
+# alongside it. Today that is the departure-bell box, which is a real second OS
+# window on the PC and so has no frame of its own to publish.
+#
+# CONTRACT: the stream shows what the PC shows. Docking a view in here is only
+# legitimate because the PC really is displaying it, in its own window — this is
+# mirroring both windows, not compositing a remote-only control. The page's
+# 1:1/FIT button is deliberately browser chrome for exactly that reason; a
+# control drawn into the frame would be visible on the PC too, or would make the
+# stream diverge from it. So a view that closes on the PC must leave here as
+# well: the caller publishes None and the dock disappears.
+#
+# The per-viewer VIEWS above do not weaken that: choosing to look at one of the
+# PC's windows is not the same as inventing something the PC is not showing.
+SIDE_GAP = 8  # px between the two views, in frame pixels
+# The gutter behind them. Matches the page background so the dock reads as two
+# panes on one surface rather than a box floating on grey.
+_BG = (10, 13, 18)
 
 # Taps arrive on server threads and are replayed on the MAIN thread by the
 # present hook. Same shape as the OCR driver's `pending_next_pa`: the background
 # side only records, the main side acts. A deque rather than a single slot so a
 # quick second tap is not swallowed by the one before it; bounded so a wedged
 # main loop cannot grow it without limit.
-_taps: "deque[tuple[float, float]]" = deque(maxlen=8)
+_taps: "deque[tuple[float, float, str]]" = deque(maxlen=8)
 _taps_lock = threading.Lock()
 
 
@@ -163,6 +199,88 @@ def install_display_quit_guard() -> None:
     pygame.display.quit = _quit
 
 
+def set_side_view(surf: Optional[pygame.Surface]) -> None:
+    """Publish (or withdraw) the view docked beside the main window's.
+
+    Main thread only, same as everything else that writes ``_main``. Pass None
+    when there is nothing to dock — no second window, or the user closed it —
+    and the next frame is the main window alone.
+    """
+    global _side
+    _side = surf
+
+
+def compose(
+    main_surf: Optional[pygame.Surface], side_surf: Optional[pygame.Surface], view: str = DEFAULT_VIEW
+) -> "tuple[Optional[pygame.Surface], Optional[pygame.Rect]]":
+    """Build the frame for ``view``; return it and where the dock landed in it.
+
+    The rect is what resolves a tap, so the layout and the hit-routing cannot
+    disagree — they are the same arithmetic, returned together from here
+    (`principles.md` § "A second implementation of a production decision drifts
+    silently"). A caller that only wants the geometry still gets it by asking
+    for the frame.
+
+    Degrades rather than refuses: a viewer asking for the docked view when
+    nothing is docked — the box closed, or a setup screen with no second window
+    — gets the main view instead of an empty frame. That is what the PC is
+    showing, which is the rule this file is built on.
+
+    Neither surface is copied here. Both are already the copies `_publish` took,
+    and the caller owns that.
+    """
+    if view == "side" and side_surf is not None:
+        return side_surf, pygame.Rect(0, 0, *side_surf.get_size())
+    if main_surf is None:
+        return None, None
+    if view != "both" or side_surf is None:
+        return main_surf, None
+    mw, mh = main_surf.get_size()
+    sw, sh = side_surf.get_size()
+    frame = pygame.Surface((mw + SIDE_GAP + sw, max(mh, sh)))
+    frame.fill(_BG)
+    frame.blit(main_surf, (0, 0))
+    rect = pygame.Rect(mw + SIDE_GAP, 0, sw, sh)
+    frame.blit(side_surf, rect.topleft)
+    return frame, rect
+
+
+def frame_for(view: str) -> "tuple[Optional[pygame.Surface], Optional[pygame.Rect]]":
+    """`compose` against whatever was last published. One reader for the encoder
+    and the tap router, so a tap always resolves against the frame its viewer got."""
+    return compose(_main, _side, view)
+
+
+def clean_view(raw) -> str:
+    """A view name from the wire, or the default. Never raises, never trusts."""
+    return raw if raw in VIEWS else DEFAULT_VIEW
+
+
+def has_side() -> bool:
+    """Whether a second view is currently docked. Read by `/views` so the page
+    can offer the choice only while there is one to make."""
+    return _side is not None
+
+
+def tap_target(view: str, has_dock: bool) -> Optional[str]:
+    """Which view a tap should resolve against, or None to DROP it.
+
+    # CONTRACT: a tap for a view that is not there must MISS, never land
+    # somewhere else. Showing the main view as a fallback is a kindness — a
+    # frame beats a broken <img>. RESOLVING a tap against that fallback is not:
+    # the finger was aimed at a box that is not on screen, and re-aiming it
+    # turns a miss into a press on whatever occupies that point. Measured
+    # 2026-08-23 on the setup menu: a tap at the ON cap's position resolved to
+    # (365, 256) of the 730x610 setup screen, which is inside a TIMS button.
+    #
+    # A miss is the correct outcome and the one a real mouse gives — the same
+    # reasoning as `_drain_taps`' note on a tap arriving across a screen change.
+    """
+    if view == "side" and not has_dock:
+        return None
+    return view
+
+
 def _publish() -> None:
     """Capture the just-presented frame. Runs on the MAIN thread, from the
     flip/update hook — never from a server thread.
@@ -176,29 +294,32 @@ def _publish() -> None:
     # pages: the most elements to redraw = the widest window to catch torn.
     # Capturing here means every published frame is one the user actually saw.
     """
-    global _frame, _seq
+    global _main, _seq
     surf = pygame.display.get_surface()
     if surf is None:
         return
-    _frame = surf.copy()  # ~0.4ms; never mutated after publish, so no lock needed
+    _main = surf.copy()  # ~0.4ms; never mutated after publish, so no lock needed
     _seq += 1
 
 
-def _snapshot() -> Optional[bytes]:
-    """Encode the latest published frame as PNG. Runs on the server thread.
+def _snapshot(view: str = DEFAULT_VIEW) -> Optional[bytes]:
+    """Compose and encode the latest published frame for ``view``, as PNG. Runs
+    on the server thread.
 
-    Reuses the cached encoding while the frame is unchanged, so a static
-    display costs one encode rather than one per client per tick.
+    Cached PER VIEW while the frame is unchanged, so a static display costs one
+    compose+encode per view being WATCHED — not one per client per tick, and
+    nothing at all for a view nobody asked for.
     """
-    global _png, _png_seq
-    frame, seq = _frame, _seq  # atomic reads; a torn pair only costs one stale tick
+    seq = _seq  # read once; a torn pair against the surfaces costs one stale tick
+    if _png_seq.get(view) == seq:
+        return _png.get(view)
+    frame, _rect = frame_for(view)
     if frame is None:
-        return _png
-    if seq != _png_seq:
-        buf = io.BytesIO()
-        pygame.image.save(frame, buf, "frame.png")
-        _png, _png_seq = buf.getvalue(), seq
-    return _png
+        return _png.get(view)  # nothing published yet; serve the last one if there is one
+    buf = io.BytesIO()
+    pygame.image.save(frame, buf, "frame.png")
+    _png[view], _png_seq[view] = buf.getvalue(), seq
+    return _png[view]
 
 
 def frame_point(fx: float, fy: float, w: int, h: int) -> Optional[tuple[int, int]]:
@@ -224,10 +345,16 @@ def frame_point(fx: float, fy: float, w: int, h: int) -> Optional[tuple[int, int
     return x, y
 
 
-def queue_tap(fx: float, fy: float) -> None:
-    """Record a normalised tap. Runs on a SERVER thread -- records only, never acts."""
+def queue_tap(fx: float, fy: float, view: str = DEFAULT_VIEW) -> None:
+    """Record a normalised tap and WHICH VIEW it was normalised against. Runs on
+    a SERVER thread -- records only, never acts.
+
+    The view travels with the tap because viewers differ: a fraction of the
+    docked-only view is a completely different point in the both view, and the
+    server has no other way to know which frame the finger was on.
+    """
     with _taps_lock:
-        _taps.append((fx, fy))
+        _taps.append((fx, fy, clean_view(view)))
 
 
 def _drain_taps() -> None:
@@ -244,7 +371,7 @@ def _drain_taps() -> None:
             return
         pending = list(_taps)
         _taps.clear()
-    # Drained BEFORE this frame is published, deliberately: `_frame` is the frame
+    # Drained BEFORE this frame is published, deliberately: `_main` is the frame
     # BEFORE the one about to go out, so a tap arriving on the same present as a
     # screen change resolves against the size the client last saw rather than the
     # one it has not received yet. That is one present of slack (~33 ms), not a
@@ -252,15 +379,36 @@ def _drain_taps() -> None:
     # older by the stream pacing plus the network plus human reaction. Correctness
     # does not rest on it: a stale tap misses, exactly as a real mouse click does
     # during a screen transition.
-    frame = _frame
-    if frame is None:
-        return  # nothing published yet; a tap has no frame to be relative to
-    w, h = frame.get_size()
-    for fx, fy in pending:
+    for fx, fy, view in pending:
+        view = tap_target(view, has_side())
+        if view is None:
+            continue  # aimed at a view that is not on screen — a miss, not a re-aim
+        frame, side = frame_for(view)
+        if frame is None:
+            continue  # nothing published yet; a tap has no frame to be relative to
+        w, h = frame.get_size()
         pt = frame_point(fx, fy, w, h)
         if pt is None:
             continue
-        pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=pt, button=1))
+        pygame.event.post(tap_event(pt, side))
+
+
+def tap_event(pt, side: Optional[pygame.Rect]) -> pygame.event.Event:
+    """The synthetic click for a frame-space point: which view it belongs to, and
+    that view's own coordinates.
+
+    A tap in the dock carries ``side_view=True`` and coordinates relative to the
+    DOCK, not the frame — so the consumer works in the docked view's own space
+    and never has to know where the dock was placed. A tap anywhere else is
+    exactly the event this file has always posted, unmarked, in main-window
+    coordinates.
+
+    Split out from `_drain_taps` because this is the whole of the routing
+    decision and it is worth testing without a display, a server or a queue.
+    """
+    if side is not None and side.collidepoint(pt):
+        return pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(pt[0] - side.x, pt[1] - side.y), button=1, side_view=True)
+    return pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=pt, button=1)
 
 
 def install_present_hook() -> None:
@@ -326,22 +474,89 @@ _PAGE = """<!doctype html>
      rather than a pygame-drawn control -- a control drawn into the frame would
      either appear on the PC window too, or make the stream a composited view
      that no longer matches what the PC shows. */
-  #zoom{position:fixed;right:10px;bottom:10px;z-index:2;
+  /* Both controls share one look and one size, because they read as a group
+     (conventions.md § UI code style: grouped buttons share size AND design).
+     `view` sits left of `zoom` in the order you reach for them -- pick what to
+     look at, then how big. */
+  button.ctl{position:fixed;bottom:10px;z-index:2;
         -webkit-appearance:none;appearance:none;border:1px solid #2a3340;
         border-radius:6px;background:#141a22cc;color:#96a2b0;
         font:600 12px system-ui,sans-serif;letter-spacing:.05em;
-        padding:8px 12px;min-width:52px;cursor:pointer}
-  #zoom:active{background:#1e2733}
+        padding:8px 12px;min-width:62px;cursor:pointer}
+  button.ctl:active{background:#1e2733}
+  #zoom{right:10px}
+  /* Hidden until the app actually has a second window — see refreshViews(). */
+  #view{right:82px;display:none}
 </style>
 <img id="v" src="/stream" alt="PA Simulator"
-     onerror="setTimeout(()=>this.src='/stream?'+Date.now(),1000)">
-<button id="zoom" type="button">1:1</button>
+     onerror="setTimeout(()=>this.src=streamSrc()+'&r='+Date.now(),1000)">
+<button id="view" class="ctl" type="button">BELL</button>
+<button id="zoom" class="ctl" type="button">1:1</button>
 <div id="tag"></div>
 <script>
 // Display path works without this -- the <img> above renders on its own.
 // JS only adds the 1:1 mode and the reconnect nudge.
 const img = document.getElementById('v'), tag = document.getElementById('tag'),
-      zoom = document.getElementById('zoom');
+      zoom = document.getElementById('zoom'), viewBtn = document.getElementById('view');
+
+// --- which of the PC's windows to look at ----------------------------------
+// The app can put two windows on screen -- the PIDS itself, and the departure
+// bell box in its own window -- and the stream carries both side by side. On a
+// phone that shrinks the PIDS to make room, so this cycles through looking at
+// one of them full-size instead.
+//
+// The choice is a query parameter on the stream, NOT a POST: it is a read, so
+// it adds no write endpoint, and it is per-connection so two devices can watch
+// different things. Switching re-points the <img>, which drops and re-opens the
+// stream -- one brief reconnect, which the error handler above already covers.
+//
+// Labels name today's only docked view. The mechanism is generic; the copy is
+// not, because "SIDE VIEW" would tell the reader nothing.
+//
+// Each entry describes ITSELF. The button shows the NEXT one, the same way the
+// zoom button reads `1:1` while you are in fit mode -- a control labelled with
+// what it will do, not with where you are.
+const VIEWS = [
+  {id: 'both', name: 'BOTH', say: 'PIDS and bell'},
+  {id: 'side', name: 'BELL', say: 'bell only'},
+  {id: 'main', name: 'PIDS', say: 'PIDS only'}
+];
+let vi = 0;
+function streamSrc() { return '/stream?view=' + VIEWS[vi].id; }
+function nextView() { return VIEWS[(vi + 1) % VIEWS.length]; }
+viewBtn.addEventListener('click', () => {
+  vi = (vi + 1) % VIEWS.length;
+  viewBtn.textContent = nextView().name;
+  say(VIEWS[vi].say);
+  lastW = 0;                    // the frame changes size, so re-apply the zoom
+  img.src = streamSrc();
+});
+
+// The control only exists while the app has a second window to choose between.
+// On the setup menu there is one window, so all three views are the same picture
+// and the button is a no-op that LOOKS broken -- pressing BELL there served the
+// setup screen. Worse, a tap in that state used to be re-aimed at the screen
+// underneath and could press a real setup button; the server drops those now,
+// and this stops the user being offered the state at all.
+//
+// Polled rather than pushed: an <img> stream carries no side channel, and the
+// transition this tracks (setup -> drive) is human-paced, so 2s is ample.
+let hasDock = null;
+function refreshViews() {
+  fetch('/views').then(r => r.json()).then(s => {
+    if (s.side === hasDock) return;
+    hasDock = s.side;
+    viewBtn.style.display = hasDock ? '' : 'none';
+    if (!hasDock && VIEWS[vi].id !== 'both') {
+      vi = 0;                   // the view we were on is gone; fall back visibly
+      lastW = 0;
+      img.src = streamSrc();
+    }
+    viewBtn.textContent = nextView().name;
+  }).catch(() => {});           // server gone: leave the control as it is
+}
+refreshViews();
+setInterval(refreshViews, 2000);
 // FIT is the default; tap switches to 1:1. 1:1 maps one source pixel to one
 // PHYSICAL device pixel, so AA-on LCD text and AA-off TIMS chrome both land
 // with no resampling -- but it is an opt-in now rather than the default,
@@ -388,7 +603,11 @@ img.addEventListener('click', e => {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
       x: (e.clientX - r.left) / r.width,
-      y: (e.clientY - r.top) / r.height
+      y: (e.clientY - r.top) / r.height,
+      // Which frame the finger was on. A fraction of the bell-only view is a
+      // different point entirely in the both view, and the server has no other
+      // way to tell them apart.
+      view: VIEWS[vi].id
     })
   }).catch(() => {});   // a dropped tap is a missed press, not a broken page
 });
@@ -407,6 +626,14 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):  # silence per-request console spam
         pass
 
+    def _view(self) -> str:
+        """The view this request asked for. A READ parameter, so it adds no write
+        surface — and being per-request makes it per-viewer with no server state.
+        Anything unrecognised falls back to the default rather than erroring: a
+        stale bookmark should still show the app."""
+        _, _, query = self.path.partition("?")
+        return clean_view(parse_qs(query).get("view", [None])[0])
+
     def do_GET(self):
         path = self.path.split("?", 1)[0]
         if path == "/":
@@ -415,6 +642,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_single()
         elif path == "/stream":
             self._send_stream()
+        elif path == "/views":
+            self._send_views()
         else:
             self.send_error(404)
 
@@ -441,7 +670,9 @@ class _Handler(BaseHTTPRequestHandler):
             if n <= 0 or n > 256:  # a tap is ~40 bytes; anything else is not one
                 raise ValueError("bad length")
             body = json.loads(self.rfile.read(n).decode("utf-8"))
-            queue_tap(float(body["x"]), float(body["y"]))
+            # `view` is optional and validated by `clean_view`, so an older
+            # client that does not send it still taps the default view.
+            queue_tap(float(body["x"]), float(body["y"]), body.get("view"))
         except Exception:
             self.send_error(400, 'expected {"x": <0..1>, "y": <0..1>}')
             return
@@ -458,10 +689,25 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_views(self):
+        """Which views exist right now, so the page can offer only the real ones.
+
+        A READ endpoint, so it adds no write surface and needs no Host or
+        Content-Type gate: the one bit it discloses — whether the app has a
+        second window open — is already visible in the frames themselves.
+        """
+        body = json.dumps({"side": has_side()}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
     def _send_single(self):
         """One-shot frame. Fallback for clients where multipart in an <img>
         misbehaves (historically iOS Safari) -- poll this instead."""
-        png = _snapshot()
+        png = _snapshot(self._view())
         if png is None:
             self.send_error(503, "no frame yet")
             return
@@ -484,9 +730,10 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", f"multipart/x-mixed-replace; boundary={BOUNDARY}")
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
+            view = self._view()
             delay = 1.0 / FPS
             while True:
-                png = _snapshot()
+                png = _snapshot(view)
                 if png is not None:
                     self.wfile.write(f"--{BOUNDARY}\r\n".encode())
                     self.wfile.write(b"Content-Type: image/png\r\n")

@@ -61,9 +61,10 @@ One row per module, because one module is one feature (§ "Module scope"). A reg
 | `test_ocr_read.py` | T1 | the read itself: `profile_for` capture geometry (16:9, 16:10 letterbox, every refusal) · glyph matching under 8 measured degradations · decimal-stop vs digit-fragment · speed value domain |
 | `test_lower_lcd.py` | T1 | 8-station window + FULL-slot lock (pointer-always-visible) · 5-station content incl. passing stations · band-fill slot-enter trigger |
 | `test_window.py` | T1 | zoom pick / ceiling / drag-snap · the single window→LCD transform |
+| `test_bell.py` | T1 | the departure-bell box: state derived from the audio · cap hit-test incl. the dead band and the window→canvas divide · its window's own whole-multiple zoom + drag snap + placement beside the PA window · a remote tap resolving through the same geometry · ON-latches / OFF-momentary press asymmetry |
 | `test_playback.py` | T1 | one Page Up press fires once · STA loop/cut dispatch |
 | `test_startup.py` | T1 | language resolution · audio-root resolution · the start-station grid |
-| `test_stream.py` | T1 + T3 | who may bind + where a tap maps (T1); frames keeping up + taps reaching the event queue (T3) |
+| `test_stream.py` | T1 + T3 | who may bind + where a tap maps + which view owns a tap when a second one is docked (T1); frames keeping up + taps reaching the event queue (T3) |
 | `test_publish_memory.py` | T1 | narrative merge logic — block/entry dedup, divergence union, edited-content refusal |
 | `test_publish_memory_transport.py` | T3 | the journal-ref transport: bootstrap orphan commit, chained publish, master-untouched, two-folder race union, idempotent re-run. Keeps a distinct name because it is a different subject (the git transport), not the same feature one tier up |
 | `test_ocr_reads.py` | T3 | the production OCR pipeline over committed real-HUD fixtures, both resolutions |

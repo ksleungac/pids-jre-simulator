@@ -13,9 +13,11 @@ from typing import Dict, Any, Optional
 
 from constants import DEBUG_PANEL_HEIGHT, FRAME_RATE, KEY_REPEAT_DELAY, TIME_SCALE
 from audio import AudioPlayer
+import bell_window
 from displays.base import ChangeScheduler
 from displays.train_models import get_train_model
 from displays.utils import draw_text
+import frame_stream
 import i18n
 import tims.band as status_band
 import window_utils
@@ -205,6 +207,10 @@ class PASimulator:
         # model's window dims) and the display instances below.
         self._train_model = get_train_model(model)
         self._load_route_data()
+        # The departure-bell box's own window, when there is one. `_init_pygame`
+        # opens it for the real app; preview and tutorial leave it None, and every
+        # site that touches it is written to treat None as "no box".
+        self.bell: Optional[bell_window.BellWindow] = None
         self._init_pygame()
 
         # Initialize state
@@ -408,6 +414,17 @@ class PASimulator:
             except Exception as e:
                 print(f"Warning: Could not set window position: {e}")
 
+            # The departure-bell box, in its own window beside this one. Real app
+            # only — it is a second OS window, so preview (headless sweeps, the
+            # atlas baker) and the tutorial (which owns its own display) both do
+            # without it. `open()` never raises; None simply means no box, and the
+            # Page Up path is identical either way. The PA window's handle is for
+            # PLACEMENT only — the box sizes itself, from its own setting.
+            #
+            # CONTRACT: this window must be destroyed in `cleanup()` BEFORE
+            # `pygame.display.quit()`. See bell_window.py's lifetime contract.
+            self.bell = bell_window.BellWindow.open(pygame.display.get_wm_info().get("window"))
+
     def run(self) -> None:
         """Main game loop."""
         # Boot lands in STOPPING@curr_stop=0 by default (see AppState.__init__);
@@ -450,6 +467,20 @@ class PASimulator:
 
             self._render_panel()
 
+            # The box is a picture of the audio and nothing else, so it is drawn
+            # from `is_sta_looping()` every frame with no state of its own.
+            #
+            # MUST run before `_present()`: the box lives in a second OS window
+            # whose content never goes through `pygame.display.flip`, so the
+            # present hook cannot see it and it has to be handed over
+            # explicitly — and the hand-over has to happen before the flip that
+            # composites it, or the stream is always one frame behind on it.
+            # None once it is closed, which is what drops it from the remote
+            # view as well.
+            if self.bell is not None:
+                self.bell.update(self.audio.is_sta_looping(), timestamp)
+                frame_stream.set_side_view(self.bell.surface())
+
             self._present()
 
             # Handle input
@@ -458,7 +489,25 @@ class PASimulator:
 
             # Event handling
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
+                # The bell's own window claims its events FIRST and consumes them.
+                # Every handler below reads `event.pos` in PA-window coordinates,
+                # so one branch that matches on window identity is what keeps them
+                # correct — and keeps them correct as new ones are added, which a
+                # per-handler `event.window is None` guard would not.
+                if self.bell is not None and self.bell.owns(event):
+                    pressed = self.bell.handle(event, timestamp)
+                    if pressed:
+                        self._bell_press(pressed)
+                elif getattr(event, "side_view", False):
+                    # A remote tap that landed in the docked box, already in that
+                    # box's own coordinates. Consumed whether or not there is a
+                    # bell to receive it — falling through would hand the LCD
+                    # handlers a point measured against a different view.
+                    if self.bell is not None:
+                        pressed = self.bell.tap(event.pos, timestamp)
+                        if pressed:
+                            self._bell_press(pressed)
+                elif event.type == pygame.QUIT:
                     self.running = False
                 elif event.type == pygame.VIDEORESIZE:
                     # Snap the dragged size to a whole multiple so the blit stays nearest-neighbour.
@@ -599,6 +648,10 @@ class PASimulator:
         changed = k != self.zoom
         self.zoom = k
         self.window = pygame.display.set_mode(target, pygame.RESIZABLE)
+        # The departure-bell box is deliberately NOT touched here: it is a separate
+        # window the user sizes separately, with its own `bell_zoom` setting. And
+        # `set_mode` does not disturb a `_sdl2` window — only `display.quit()`
+        # does — so there is nothing to rebuild for it either.
         if changed:  # only a deliberate zoom change is worth a settings write
             settings = i18n.load_settings()
             settings["window_zoom"] = k
@@ -623,6 +676,11 @@ class PASimulator:
 
     def _update_hover_cursor(self) -> None:
         """Set pointer-hand cursor over clickable cells, default elsewhere."""
+        # While the pointer is inside the departure-bell box, the box owns it.
+        # `pygame.mouse.get_pos()` answers for whichever window holds the mouse,
+        # so without this the line below reads bell-window pixels as LCD pixels.
+        if self.bell is not None and self.bell.set_hover_cursor():
+            return
         lcd = self.window_to_lcd(pygame.mouse.get_pos())
         clickable = lcd is not None and self._click_target(*lcd) is not None
         pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND if clickable else pygame.SYSTEM_CURSOR_ARROW)
@@ -1007,6 +1065,23 @@ class PASimulator:
         if self.state.cnt_sta < len(sta_tracks) - 1:
             self.state.cnt_sta += 1
 
+    def _bell_press(self, which: str) -> None:
+        """A cap on the departure-bell box was pressed.
+
+        Routed to ``_next_sta`` — the same entry Page Up calls — so the box adds
+        no second audio path and no state of its own. What it adds is the real
+        box's asymmetry: ON LATCHES, so pressing it again while the melody loops
+        does nothing, and OFF is MOMENTARY, so it does nothing unless there is a
+        loop to release. Page Up carries both meanings on one key because a
+        keyboard has no latch to look at; two caps do, and each one only acts on
+        the side it models.
+        """
+        looping = self.audio.is_sta_looping()
+        if which == "on" and not looping:
+            self._next_sta()
+        elif which == "off" and looping:
+            self._next_sta()
+
     # CONTRACT: snapshot/restore is for the OOBE tutorial's [Back] button + the
     # progress-bar's backward-jump path. AppState fields are scalar-only
     # (verified) so shallow copy via copy.copy() is sufficient; restore via
@@ -1042,6 +1117,13 @@ class PASimulator:
         caller can re-enter the setup screen (the band Home path)."""
         if hasattr(self, "audio"):
             self.audio.cleanup()
+        # BEFORE either teardown. Both destroy the display subsystem, which takes
+        # `_sdl2` windows with it silently — the object survives, `.size` returns
+        # garbage, nothing raises. See bell_window.py's lifetime contract.
+        if self.bell is not None:
+            self.bell.close()
+            self.bell = None
+            frame_stream.set_side_view(None)  # the dock goes with the window it mirrors
         if full_quit:
             pygame.quit()
         else:

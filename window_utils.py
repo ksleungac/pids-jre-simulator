@@ -93,14 +93,19 @@ def max_zoom(canvas_w: int, canvas_h: int, work_w: int, work_h: int) -> int:
     return k
 
 
-def pick_default_zoom(canvas_w: int, canvas_h: int, work_w: int, work_h: int) -> int:
-    """The multiple whose height sits closest to TARGET_HEIGHT_FRAC of the work area.
+def pick_default_zoom(canvas_w: int, canvas_h: int, work_w: int, work_h: int, frac: float = TARGET_HEIGHT_FRAC) -> int:
+    """The multiple whose height sits closest to ``frac`` of the work area.
 
     This is the "app looks right without anyone touching it" default: 1x on 1080p and 1440p, 2x on
     4K, 2x on 5K. Ties break toward the SMALLER multiple — the app is a companion overlay beside a
     game, so when two choices are equally close it should take the lesser of the screen.
+
+    ``frac`` is a parameter rather than a second copy of this rule because the departure-bell box
+    wants the same rule at a smaller share of the screen (`bell_window.pick_zoom`). An accessory
+    window and the window the user looks AT differ in how much screen they should take, not in how
+    a whole multiple is chosen.
     """
-    target = work_h * TARGET_HEIGHT_FRAC
+    target = work_h * frac
     best, best_d = 1, abs(canvas_h - target)
     for k in range(2, max_zoom(canvas_w, canvas_h, work_w, work_h) + 1):
         d = abs(canvas_h * k - target)

@@ -11,8 +11,13 @@ page keeps working while the thing it is for stops.
   2. TAPS COME BACK     — a tap that lands one button over produces no error;
                           a tap posted off the main thread appears to work
 
-The pure decisions behind the same feature (who may bind, where a tap maps to)
-are T1 `test_stream.py`.
+Each viewer also picks WHICH of the app's windows to look at, so a tap carries
+the view it was measured against. That wiring is here rather than in T1 because
+it runs from the POST body through the queue to the posted event; T1 owns the
+geometry it resolves with.
+
+The pure decisions behind the same feature (who may bind, where a tap maps to,
+which view owns a point) are T1 `test_stream.py`.
 
 Headless (SDL dummy driver), so it runs in the normal suite.
 """
@@ -50,10 +55,13 @@ def _post_raw(body: bytes, content_type=None) -> int:
         return r.status
 
 
-def _tap(fx: float, fy: float) -> int:
+def _tap(fx: float, fy: float, view: str = None) -> int:
+    body = {"x": fx, "y": fy}
+    if view is not None:
+        body["view"] = view
     req = urllib.request.Request(
         f"http://127.0.0.1:{PORT}/tap",
-        data=json.dumps({"x": fx, "y": fy}).encode(),
+        data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
@@ -235,6 +243,75 @@ def main() -> int:
         print(f"FAIL  tap across a screen change resolved to {[e.pos for e in got]}, expected [(199, 119)] (the OLD size)")
         failed += 1
 
+    # 9b. A TAP CARRIES ITS VIEWER'S VIEW, and is resolved against THAT frame.
+    #     Each viewer picks what to look at (`/stream?view=`), so the same fraction
+    #     is a different point per view — 0.5,0.5 is the middle of the docked box
+    #     in `side` and the middle of the PIDS in `main`. Resolving every tap
+    #     against one view sends the others somewhere plausible and wrong, with no
+    #     error anywhere. T1 covers the geometry; only this reaches the wiring that
+    #     carries the view from the POST body through to the posted event.
+    pygame.display.set_mode((W, H))
+    dock = pygame.Surface((40, 60))
+    frame_stream.set_side_view(dock)
+    pygame.display.flip()
+    _clicks()
+
+    _tap(0.5, 0.5, view="side")
+    pygame.display.flip()
+    got = _clicks()
+    if len(got) != 1 or not getattr(got[0], "side_view", False) or got[0].pos != (20, 30):
+        print(f"FAIL  a tap in the dock-only view gave {[(e.pos, getattr(e, 'side_view', False)) for e in got]}, expected [((20, 30), True)]")
+        failed += 1
+
+    _tap(0.5, 0.5, view="main")
+    pygame.display.flip()
+    got = _clicks()
+    if len(got) != 1 or getattr(got[0], "side_view", False) or got[0].pos != (W // 2, H // 2):
+        print(
+            f"FAIL  the same fraction in the main-only view gave {[(e.pos, getattr(e, 'side_view', False)) for e in got]}, expected [((100, 60), False)]"
+        )
+        failed += 1
+
+    # An unknown view is the default, never an error: a stale bookmark still taps.
+    _tap(0.5, 0.5, view="bogus")
+    pygame.display.flip()
+    got = _clicks()
+    if len(got) != 1 or getattr(got[0], "side_view", False):
+        print(f"FAIL  an unknown view did not fall back to the default: {[(e.pos, getattr(e, 'side_view', False)) for e in got]}")
+        failed += 1
+
+    # 9c. THE DOCK GOES AWAY UNDER A VIEWER who is still asking for it — the
+    #     drive ends and the app returns to the setup menu. The frame falls back
+    #     to the main view so the <img> keeps working, but a tap must MISS: the
+    #     finger was aimed at a box that is no longer on screen, and re-aiming it
+    #     presses whatever occupies that point. Found 2026-08-23 on the real setup
+    #     menu, where it landed inside a TIMS button.
+    frame_stream.set_side_view(None)
+    pygame.display.flip()
+    _clicks()
+
+    _tap(0.5, 0.5, view="side")
+    pygame.display.flip()
+    got = _clicks()
+    if got:
+        print(f"FAIL  a tap for the absent dock was re-aimed at the main view: {[e.pos for e in got]}, expected no click")
+        failed += 1
+
+    # The page is told, so it can stop offering a view that is not there.
+    for expect_side, when in ((False, "with nothing docked"),):
+        state = json.loads(_pull_frame(f"http://127.0.0.1:{PORT}/views").decode())
+        if state.get("side") is not expect_side:
+            print(f"FAIL  /views {when} reported {state}, expected side={expect_side}")
+            failed += 1
+    frame_stream.set_side_view(pygame.Surface((10, 10)))
+    state = json.loads(_pull_frame(f"http://127.0.0.1:{PORT}/views").decode())
+    if state.get("side") is not True:
+        print(f"FAIL  /views with a dock reported {state}, expected side=True")
+        failed += 1
+    frame_stream.set_side_view(None)
+    pygame.display.flip()
+    _clicks()
+
     # 10. the tap queue is BOUNDED — a wedged main loop must not let it grow without
     #     limit. Past the bound the OLDEST taps drop, which is the intended loss:
     #     the newest presses are the ones the user still means.
@@ -252,7 +329,7 @@ def main() -> int:
         failed += 1
 
     frame_stream.stop()
-    print(f"test_stream: {18 - failed}/18 checks passed")
+    print(f"test_stream: {24 - failed}/24 checks passed")
     return 1 if failed else 0
 
 
