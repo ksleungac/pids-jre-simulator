@@ -44,6 +44,73 @@ All changes land in `README.md` first. Discuss wording with the user; get it to 
 
 **`## Credits` is thanks only — licensing does NOT go in the README.** The grant lives in `LICENSE`, the asset carve-out in `THIRD-PARTY.md`, and GitHub shows the license in its own sidebar, so a README licensing section is redundant. Credits name who to thank (and thereby satisfy any attribution obligation — CC BY-SA §3(a)(2) allows attribution by linking to a resource that carries the detail), then point at `THIRD-PARTY.md`. Don't add "code is MIT, assets are not" breakdowns. 2026-07-27, over two rounds: user — *"don't need to be super clear like to draft in readme"*, then *"no need to say which part are in which license, only just credits are enough"*.
 
+### Badges — three, one style, each answering a real question
+
+Under the description, above the language bar, in all three READMEs. Current set: **latest
+release** (is this alive), **downloads** (do people use it), **platform** (Windows — saves
+a wasted download, since nothing else above the fold says so). Labels are localized in the
+zh files via shields' `&label=`, URL-encoded; the badge STYLE is `flat-square` everywhere.
+
+**A badge row is the classic AI-slop tell, so the bar is that every one renders a real
+value.** No `PRs Welcome`, no `Made with Python`, no `build: passing` on a repo whose CI
+does not test anything. Two that were considered and rejected 2026-08-29: **stars** (19 at
+the time — the badge invites a comparison you lose, and GitHub's sidebar already shows it)
+and **license** (GitHub classifies this repo `NOASSERTION` because `LICENSE` carries the
+`THIRD-PARTY.md` carve-out; hard-coding `MIT` would overstate a grant that does not cover
+the audio or the fonts).
+
+**The downloads badge is an `endpoint` badge, not a live one**, because shields can read a
+value but cannot add two together and the real figure is `live releases + deleted ones`.
+`.github/workflows/badge-downloads.yml` computes it and force-pushes a one-commit `badges`
+branch. Consequences worth knowing: it renders `resource not found` until that workflow
+has run once, and **deleting a release without first bumping `DELETED_BASE` silently drops
+the number** — the rule lives in `/release` § "Deleting an old release", which is where
+deletions happen.
+
+### The hero image is GENERATED, and generated PER LANGUAGE
+
+`_dev_scripts/gen_readme_hero.py` annotates one clean plate (`docs/assets/15-in-use.jpg`, a
+screenshot of the game running with the app beside it) and writes one JPEG per language.
+Each README points at its own. Edit `LANGS` in that script, never the images.
+
+Two rules it enforces mechanically, because both failures are invisible until published:
+the panels are **asserted clear of the app window and the canvas** (a longer translation
+silently grows a panel over the thing the screenshot exists to show), and the HUD marker
+box is **derived from `auto_input.hud_layout`** rather than typed, so it cannot drift into
+pointing at scenery.
+
+Panel copy takes its terms from the APP, not a dictionary — `OCR自動報站` / `OCR自动报站`,
+`遠端控制` / `远程控制` are the strings on its own screens. `運転曲線` stays Japanese in all
+three: it is the heading the report prints, so the zh form would name something the reader
+never sees.
+
+Font note: `NotoSansJP.otf` is weight **Thin** and far too light over a photograph — the
+panel uses `NotoSansCJKsc-Bold.otf`. Latin-only faces render the kanji as tofu SILENTLY,
+since PIL does not raise on a missing glyph.
+
+### A README CANNOT embed anything live — verified, not assumed
+
+`<iframe>`, `<script>`, `<style>` come back **escaped to literal text**; `<object>`,
+`<embed>`, `<svg>`, `<canvas>`, `<form>`, `<video>` are **stripped**; `style`, `class` and
+`on*` attributes are removed and `data:` URIs on `<img>` are dropped. So an interactive
+chart cannot run on the README, and no clever SVG gets around it: `<img>`-referenced SVG
+runs in a secure processing mode with scripting AND interactivity disabled, which is why
+the animated-README-SVG ecosystem stops at animation. GitHub's own Mermaid / GeoJSON /
+STL embeds *are* interactive, hydrated against a privileged render host on a fixed type
+list user content cannot join.
+
+**GitHub documents none of this.** The way to settle any future "will this survive a
+README" question is to ask the renderer itself — the same pipeline the README uses:
+
+```bash
+curl -s -X POST -d '{"mode":"gfm","text":"<iframe src=\"x\"></iframe>"}' https://api.github.com/markdown
+```
+
+The only real option is a hosted page behind a link, ideally a clickable screenshot. Since
+`style` is stripped, whatever signals "clickable" must live in the image's own pixels or
+in the link text. (2026-08-30; the Pages workflow exists at
+`.github/workflows/pages-drive-report.yml`, dormant until Pages is enabled.)
+
 ### Step 2 — Extract anything language-agnostic
 
 Before translating, ask: *"Would the zh-HK and zh-CN translations of this section be identical to the English, character for character?"* If yes, it belongs in a shared file linked from all three READMEs. Current examples: `ROUTES.md` (all Japanese line names), anywhere you'd list raw file paths / diagram codes.

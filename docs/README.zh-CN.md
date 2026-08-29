@@ -2,32 +2,49 @@
 
 JR 东日本风格列车广播与车内 LCD 显示模拟器。
 
+[![最新版本](https://img.shields.io/github/v/release/ksleungac/pids-jre-simulator?style=flat-square&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC)](https://github.com/ksleungac/pids-jre-simulator/releases/latest)
+[![下载次数](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fksleungac%2Fpids-jre-simulator%2Fbadges%2Fdownloads.json&style=flat-square&label=%E4%B8%8B%E8%BD%BD%E6%AC%A1%E6%95%B0)](https://github.com/ksleungac/pids-jre-simulator/releases)
+[![系统平台](https://img.shields.io/badge/%E7%B3%BB%E7%BB%9F%E5%B9%B3%E5%8F%B0-Windows-blue?style=flat-square)](https://github.com/ksleungac/pids-jre-simulator/releases/latest)
+
 **[English](../README.md)** · **[繁體中文](README.zh-HK.md)** · **[支持的路线](ROUTES.md)**
+
+---
+
+## 功能
+
+![](assets/15-in-use-ocr.zh-CN.jpg)
+
+速度对比限速、每段行车时间,以及停车位置差多少。
+
+![](assets/16-drive-report.jpg)
 
 ---
 
 ## 截图
 
-| 精简显示 | 通过站动画 | 全路线显示 |
-|---|---|---|
-| ![](assets/01-keihin-tohoku-compact.png) | ![](assets/02-sobu-skip-animation.png) | ![](assets/03-sobu-full-route.png) |
+### <img src="../data/line_icons/JC.png" width="18"> E233-0 — 中央線快速
 
-| 换乘信息 (东京) | 换乘信息 (新宿) | 山手线 5 站显示 (E235-0) |
+| 6 站显示 | 换乘信息 |
+|---|---|
+| ![](assets/10-chuo-6station-kanda.png) | ![](assets/11-chuo-transfer-tachikawa.png) |
+
+### <img src="../data/line_icons/JY.png" width="18"> E235-0 — 山手線
+
+| 5 站显示 | 全路线显示 |
+|---|---|
+| ![](assets/07-yamanote-5station-tokyo.png) | ![](assets/17-yamanote-full-route.png) |
+
+### <img src="../data/line_icons/JO.png" width="18"> E235-1000 — 総武快速線
+
+| 通过站动画 | 全路线显示 | 换乘信息 |
 |---|---|---|
-| ![](assets/04-tokyo-transfer-info.png) | ![](assets/05-shinjuku-transfer-info.png) | ![](assets/07-yamanote-5station-tokyo.png) |
+| ![](assets/02-sobu-skip-animation.png) | ![](assets/03-sobu-full-route.png) | ![](assets/04-tokyo-transfer-info.png) |
+
+### 设置界面
 
 | 报站设置 | 车次选择 |
 |---|---|
 | ![](assets/08-tims-pa-setting.png) | ![](assets/09-tims-diagram-select.png) |
-
----
-
-## 下载
-
-前往 [**Releases**](https://github.com/ksleungac/pids-jre-simulator/releases/latest):
-
-- **`JRE-PA-Simulator-<version>-distribution.zip`** — 完整版本(包含 exe、字体、数据和音频文件,约 629 MB)。解压后运行 `JRE-PA-Simulator.exe`。
-- **`JRE-PA-Simulator.exe`** — 独立可执行文件,如你已经拥有 `fonts/`、`data/` 和 `audio/` 文件夹。
 
 ---
 
@@ -55,9 +72,9 @@ JR 东日本风格列车广播与车内 LCD 显示模拟器。
 ## 计划中的功能
 
 - 更多线路及车次
-- 更多 LCD 样式(E233-0 番台、E231 系列等)
-- 强化下部 LCD
-- 支持更多屏幕尺寸及画面比例
+- E233-1000、-5000、-7000、-8000
+- 全站换乘信息
+- 更多屏幕比例
 
 ---
 
@@ -65,6 +82,6 @@ JR 东日本风格列车广播与车内 LCD 显示模拟器。
 
 线路及运营商标志均取自 [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:Rapid_transit_icons_of_Japan)，感谢绘制及维护这些图标的贡献者，其中新干线与东京樱花电车标志来自 Carnby、Perhelion、KANAO22 及东京都交通局。
 
-广播及发车音乐由铁道爱好者在站台录制并公开发布。宇都宫线是唯一在制作当时已记录来源的线路，感谢 全国駅メロチャンネル、ちいぼす、East Railway Redwing 及 µ'wing，其中大部分素材出自四位之手，也感谢 70-000 SHINANO、Kent_K、SAGAMI-LINE さがみせん、Ueno-Tokyo Line、ケヨポコ チャンネル short、ハマ音鉄、下今市、京葉ラビット、武蔵野快速、関石ライン / Kamishi Line 及 音鉄DK。其余线路的录音者同样值得道谢，只是当时未有记录来源。
+广播及发车音乐由铁道爱好者在站台录制并公开发布。宇都宫线和中央线 602H 是在制作当时已记录来源的部分,602H 两段录音均来自 East Railway Redwing;宇都宫线方面感谢 全国駅メロチャンネル、ちいぼす、East Railway Redwing 及 µ'wing，其中大部分素材出自四位之手，也感谢 70-000 SHINANO、Kent_K、SAGAMI-LINE さがみせん、Ueno-Tokyo Line、ケヨポコ チャンネル short、ハマ音鉄、下今市、京葉ラビット、武蔵野快速、関石ライン / Kamishi Line 及 音鉄DK。其余线路的录音者同样值得道谢，只是当时未有记录来源。
 
 完整鸣谢及素材资料：[THIRD-PARTY.md](../THIRD-PARTY.md)。

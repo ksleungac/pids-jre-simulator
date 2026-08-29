@@ -1,0 +1,79 @@
+# Publishes the README's download-count badge.
+#
+# WHY THIS EXISTS. shields.io can read a value but cannot add two together, and this
+# project's lifetime download count is a sum: the releases GitHub still holds, plus a
+# fixed base for releases that were DELETED. GitHub keeps no record of a deleted
+# release's download count — it lives on the asset and goes with it, and there is no
+# API, no export, and (checked 2026-08-29) no Wayback capture of the releases page. So
+# a live badge alone would show only the surviving releases and would DROP each time an
+# old one is pruned, which is what this exists to prevent.
+#
+# The badge is a shields `endpoint` badge pointing at the JSON this writes:
+#   https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/<repo>/badges/downloads.json
+#
+# The `badges` branch is DATA, not history — this force-pushes a single orphan commit
+# every run, so it never grows and nothing needs pruning. Nothing else may live there.
+
+name: Download count badge
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  release:
+    types: [published, deleted]
+  workflow_dispatch:
+
+# Only the badges branch is written. No secret is needed: the built-in token can push
+# to this repo, which is why this route was chosen over a gist + a PAT that would
+# expire silently a year from now.
+permissions:
+  contents: write
+
+concurrency:
+  group: badge-downloads
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sum live downloads, add the deleted-release base, publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Downloads of releases that no longer exist, and so can never be counted
+          # again. Author's figure, 2026-08-29: at least 400 across the pre-v0.6.3
+          # releases, which were removed for licensing reasons. Deliberately rounded
+          # DOWN — the badge should understate rather than claim what it cannot show.
+          DELETED_BASE: 400
+        run: |
+          set -euo pipefail
+
+          live=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+                   --jq '[.[].assets[].download_count] | add // 0')
+          total=$(( live + DELETED_BASE ))
+          echo "live=${live}  deleted_base=${DELETED_BASE}  total=${total}"
+
+          # A live count of 0 means the API answered but returned nothing — a transient
+          # failure or a repo with every release pruned. Publishing the bare base then
+          # would be a number that is not a measurement, so refuse and keep the last
+          # good JSON in place.
+          if [ "${live}" -eq 0 ]; then
+            echo "::error::live count came back 0 — refusing to publish base-only figure"
+            exit 1
+          fi
+
+          work=$(mktemp -d)
+          printf '{"schemaVersion":1,"label":"downloads","message":"%s","color":"blue"}\n' \
+            "${total}" > "${work}/downloads.json"
+          cat "${work}/downloads.json"
+
+          cd "${work}"
+          git init -q -b badges
+          git add downloads.json
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -qm "downloads: ${total} (live ${live} + ${DELETED_BASE} deleted)"
+
+          git push -q --force \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}" badges
+          echo "published ${total} to the badges branch"

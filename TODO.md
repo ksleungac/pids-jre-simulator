@@ -50,6 +50,26 @@ Two levers, neither taken. Encoding runs 75–321 kbps at 48 kHz stereo and much
 
 Three that cannot proceed until something external arrives. **Pale-brand line colours** — Sōbu yellow `#FFD400` and Yamanote yellow-green render at full saturation and would be hard to read as eyebrow text on a white card; a W3C relative-luminance darkening was drafted and reverted, waiting on a drive recording that shows the problem for real. **Passing stations in the 5-station view** — drawn as an empty countdown ring, a degenerate reuse of a calibrated primitive; the proper native chevron needs calibration that does not exist. **Terminus fidelity** — the 8-station lock and the E235-0 ahead-walks measure to `len(stops)` rather than `dest_stop_idx`, which only shows on a route whose data runs past its operational terminus; blocked on a Sōbu reference photo of what the real display does there. **The E235-0 5-station view's own finetune sits here too** — marker sizes, positions and sweep timing, plus a re-probe of Yamanote's `contrast_color` (currently `[101,20,5]`, taken off a maxresdefault frame where JPEG clips saturated red; it wants a cleaner reference shot). *(was #2, #14, #99, #103)*
 
+### A page of its own, somewhere between a showcase and a place to put drive records
+
+Wanted, shape undecided (author, 2026-08-30: *"i am actually happy to have a special page that
+lets us better demo and showcase this app… but i might eventually just use it to host the
+driving record, don't know yet"*). The two readings pull apart — a showcase is a landing page
+that sells the app to someone who has not downloaded it, a drive-record host is a utility for
+people already using it — and which one it is decides everything else about it.
+
+The mechanism is already built and dormant: `.github/workflows/pages-drive-report.yml` renders
+`docs/demo/*.jsonl` through `plot_drive.py` and deploys to Pages, with the HTML never entering
+git. It is `workflow_dispatch`-only and the README carries no link, because Pages is not
+enabled and a front-page 404 is worse than nothing. Turning it on is: enable Pages (Settings →
+Pages → Source: GitHub Actions), restore the push trigger the workflow's header spells out,
+and add the link back.
+
+Two facts worth not re-deriving. A **project** site serves at `/<repo>/` and cannot shadow the
+personal site at `ksleungac.github.io/`, which is a separate Nuxt repo on its own `gh-pages`
+branch. And a hosted page, unlike a README, **can** embed the live chart in an `<iframe>` — the
+sanitisation is the README's restriction, not Pages' (`.claude/skills/readme/SKILL.md`).
+
 ### The repo's front page leads with the README, not with a wall of files
 
 GitHub always draws the root file list before the README, there is no setting, and the [collapse-button request](https://github.com/orgs/community/discussions/109986) was never built — so the only lever is how many entries sit at the top level. 42 today, and **18 of them are root `.py` files**, which is why the 2026-08-19 tidy (docs into `docs/`, reference photos into `_references/`) only reached 42 from 46. Putting the code in one named folder — the 13 production modules plus `displays/`, `tims/`, `auto_input/`, root keeping a `main.py` shim — reaches ~22; anything short of that stalls around 37. Note `src/` is a *different* proposal: that name exists to stop tests importing the working copy instead of the installed one, a library-on-PyPI problem, and this ships an exe, so the folder can be called anything. Two neighbouring consolidations were measured and rejected so a later tidy does not re-derive them: one `_dev/` for the four `_*` dirs (126 pointer sites to remove 3 rows) and merging the runtime asset dirs (touches the path resolution that has caused four release crashes). Gets `/third-man` before any file moves. Numbers and reasoning: `memory/2026-08-19.md`.

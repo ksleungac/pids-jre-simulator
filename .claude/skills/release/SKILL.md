@@ -212,6 +212,30 @@ https://github.com/ksleungac/pids-jre-simulator/releases/tag/v<VERSION>
 
 `<VERSION>` is the literal value resolved in Step 1 — substitute before printing.
 
+### Deleting an old release — bump `DELETED_BASE` FIRST
+
+**Before removing any published release, add its download count to `DELETED_BASE` in
+`.github/workflows/badge-downloads.yml`.** The README's download badge is
+`live releases + DELETED_BASE`, and GitHub destroys a release's count when the release
+goes — it lives on the asset, and there is no API, no export, and no Wayback capture of
+the releases page to recover it from (checked 2026-08-29, all three). Delete first and
+the number is gone permanently; the badge just drops and nothing says why.
+
+```bash
+# the release about to be deleted
+gh api repos/ksleungac/pids-jre-simulator/releases/tags/vX.Y.Z \
+  --jq '[.assets[].download_count] | add'
+# add that to DELETED_BASE, commit, THEN delete the release
+```
+
+This has already cost the project once: the pre-v0.6.3 releases were removed for
+licensing reasons and their counts are unrecoverable, so `DELETED_BASE` opens at the
+author's recollection of "at least 400" rather than a measurement. Every figure added
+after this is exact — keep it that way.
+
+Rounding is DOWN, always. The badge understating is fine; claiming downloads that cannot
+be shown is not.
+
 ## Out of scope
 
 - **Building**: that's `/build`. If artifacts are missing, halt; direct user.

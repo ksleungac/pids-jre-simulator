@@ -1,0 +1,86 @@
+# Publishes the interactive 運転曲線 report to GitHub Pages.
+#
+# WHY THIS EXISTS. A GitHub README cannot host a live chart. `<iframe>`, `<script>`,
+# `<object>`, `<embed>`, `<svg>` and `<canvas>` are stripped or escaped by the markdown
+# renderer — verified 2026-08-30 by posting each to `api.github.com/markdown`, the same
+# pipeline that renders the README, and reading back what survived. GitHub's own
+# Mermaid / GeoJSON / STL embeds ARE interactive, but they hydrate against a privileged
+# render host on a fixed type list that user content cannot join. An SVG can animate but
+# never interact: `<img>`-referenced SVG runs in a secure processing mode with scripting
+# and interactivity disabled (SVG Integration spec). So a hosted page behind a link is
+# not a compromise, it is the only shape that exists.
+#
+# THE HTML IS NEVER COMMITTED. It is ~7 MB with plotly inlined, and anything in git
+# history is paid for by every clone forever and cannot be removed without a rewrite.
+# Instead the small drive LOG is committed (1.5 MB raw, ~88 KB packed) and the page is
+# built here, so the repository carries the input rather than the output.
+#
+# Pages limits are not a constraint: 1 GB per site, no documented per-file cap, and Pages
+# serves HTML gzipped — the ~7 MB page goes out at roughly 2 MB, so the 100 GB/month soft
+# bandwidth limit is tens of thousands of loads.
+#
+# ONE-TIME SETUP, which only the repo owner can do:
+#   Settings -> Pages -> Build and deployment -> Source: GitHub Actions
+# Without that this workflow runs and the deploy step fails.
+
+name: Drive report on Pages
+
+# DORMANT BY DESIGN — manual trigger only. Pages is not enabled on this repo (author,
+# 2026-08-30: a proper showcase page is wanted, but not yet), so the deploy step would
+# fail on every push and leave a red cross on the repo for a feature nobody asked to ship
+# today. A push trigger belongs here the day Pages is turned on, not before:
+#
+#   Settings -> Pages -> Build and deployment -> Source: GitHub Actions
+#
+# then add back:
+#   push:
+#     branches: [master]
+#     paths: ["docs/demo/*.jsonl", "plot_drive.py", ".github/workflows/pages-drive-report.yml"]
+#
+# The README carries a STATIC crop of the report meanwhile, and deliberately no link —
+# a front-page link to a 404 is worse than no link.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a half-finished deploy; queue instead.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Render the report
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          # --no-project: plot_drive needs only plotly and app_paths (a stdlib-only
+          # module in this repo). Installing the full dependency set would drag in
+          # pygame and the audio stack to draw a chart.
+          uv run --no-project --with plotly python plot_drive.py \
+            docs/demo/drive_chuo_602H.jsonl --out _site/index.html
+          ls -la _site/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
