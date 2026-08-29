@@ -14,7 +14,7 @@ setup-window dims (SCREEN_W/H) live in ``tims/setup/dims.py`` — never a band c
   * LEFT         — OCR state, SMALL k=1: segment · inferred·played · BADGE.
   * CENTER       — readout cell: speed limit / speed / distance(m), WIDE numerals.
   * CENTER-RIGHT — two dim message strips (re-aligning / fire / stopping / paused), yellow flash.
-  * RIGHT        — control cluster [pause][save][home], uniform squares; home always rightmost.
+  * RIGHT        — control cluster [save][home], uniform squares; home always rightmost.
 """
 
 import time
@@ -54,6 +54,9 @@ BAND_COLOR         = chrome.PANEL_BG       # near-black strip
 # names ONLY ever surface here, so k=1 keeps the dense left column from crowding the band (the real
 # TIMS left column is small dense text — a k=2 segment would dominate the strip).
 LEFT_X             = 12
+LEFT_PAD_R         = 8                 # clearance the left column keeps from the readout cell's separator
+LEFT_FIT_STEP      = 0.08              # each shrink step when a row overruns that budget
+LEFT_FIT_STEPS     = 6                 # ...and how many are allowed — 6 x 8% floors the row at ~0.6
 NOTIF_TEXT         = "ツウコク　ジョウホウ"  # green notif — tims_002 通告情報, full-width gap. INTENDED fixed-JP (a real TIMS system label, like station names) — NOT an i18n miss; don't localize (user 2026-07-11)
 NOTIF_NATIVE       = 11                # green notif px — SMALLER (least-important line)
 NOTIF_COLOR        = chrome.GREEN     # TIMS dot-matrix green
@@ -77,6 +80,18 @@ STREAM_ADDR_NATIVE = 15                # ADDRESS px — the part you read off th
                                        # so it outranks its own label. Ink bottom-aligned to it (_blit_row)
 STREAM_COLOR       = NOTIF_COLOR       # the notif's green — this row is the same kind of system notice
 STREAM_HIT_PAD     = 4                 # click target grown past the ink — an 11px label is a small target
+# IN A DRIVE the address SURFACES ON A TIMER and row 0 carries the green notif
+# the rest of the time. All three rows are spoken for once OCR is live — notif,
+# segment, state — and the address needs a whole row (188px worst case), so it
+# cannot fold onto a neighbour. Giving row 0 up permanently was the first fix and
+# the author declined it; a timer costs the notif only the seconds it is away.
+#
+# PERIODIC, not once at drive start. The case is a mid-drive reconnect — a
+# sleeping tablet, a closed browser — which a one-shot at t=0 cannot reach
+# (author, 2026-08-30). No trigger to remember, which is the author's ask; the
+# same idiom the message strips and the model-select blink already use.
+STREAM_SHOW_MS     = 6000              # address visible
+STREAM_HIDE_MS     = 24000             # ...then the notif, before it comes round again
 STREAM_RULE_GAP    = 3                 # hover underline: px below the row baseline
 STREAM_RULE_W      = 1                 # ...and its thickness. Underline + hand cursor together are
                                        # what say "this is a link"; the row is green like its
@@ -146,7 +161,7 @@ MSG_NATIVE         = 17                # message-strip text px (AA-off native) �
 MSG_FLASH_MS       = 450               # message-display flash half-period (bright yellow, auto-clears)
 MSG_PAD_X          = 6                 # text inset inside a strip
 
-BAND_BTN_GAP       = 6                 # gap between the right-edge control buttons (pause/save/home)
+BAND_BTN_GAP       = 6                 # gap between the right-edge control buttons (save/home)
 HOME_MARGIN        = 4                 # rightmost band button = "return to home" — small margin = cluster hugs the corner
 HOME_TEXT_MARGIN   = 5                 # gap between the label block and the bevel — sets the control-square size (−1 → box 2px smaller)
 BAND_BTN_BOX_K     = 1                 # box hugs the native label (AA-off, no upscale) + HOME_TEXT_MARGIN
@@ -384,6 +399,31 @@ def _short(url: str) -> str:
     return url.split("://", 1)[-1].rstrip("/")
 
 
+def _row0_drive():
+    """Row 0 during a drive: the mirror address while its window is open, else
+    the green notif.
+
+    Returns the row in `(parts, link)` form either way, so the caller cannot
+    tell them apart — which is what keeps the click target and the QR hover
+    correct without a second code path. `_stream_links` is rebuilt from the rows
+    on every render, so the address is only clickable in the seconds it shows.
+
+    Falls back to the notif when mirroring is off, where `_stream_rows` is empty.
+    """
+    rows = _stream_rows()
+    if rows:
+        period = STREAM_SHOW_MS + STREAM_HIDE_MS
+        # THE TIMER HOLDS WHILE THE ROW IS HOVERED. Hovering is what raises the
+        # QR popup, and the popup is drawn only while the row's hit-rect exists —
+        # so letting the timer hide the row mid-hover would take the code away
+        # while it was being scanned, after at most STREAM_SHOW_MS. Six seconds
+        # is not a scan. The timer governs the IDLE rotation; a hover suspends it
+        # and it resumes the frame the pointer leaves.
+        if _stream_hovered or pygame.time.get_ticks() % period < STREAM_SHOW_MS:
+            return rows[0]
+    return ([(NOTIF_TEXT, NOTIF_COLOR, NOTIF_NATIVE, "name")], None)
+
+
 def _stream_rows():
     """The mirror-address row for the left column, or [] when mirroring is off.
 
@@ -440,6 +480,13 @@ def _qr_surface(url: str):
 
 
 _hovered_url = None  # set by `render`, consumed by the flip hook below
+# Whether the mirror row was under the pointer on the LAST render. Separate from
+# `_hovered_url` because that one is CONSUMED by the flip hook (set to None on
+# every present), so by the time the next frame builds its rows it reads None and
+# cannot answer "is the user on it". This flag is only ever read to decide which
+# row 0 to draw, so a stale True costs one frame of the address instead of the
+# notif — not the painting hazard `_draw_qr_popup` documents.
+_stream_hovered = False
 _overlay_installed = False  # see install_overlay_hook — a flag, not a wrapper attribute
 _overlay_failed = False
 
@@ -621,7 +668,13 @@ def _band_vals(status, sim_state, stops):
     n = len(stops or [])
 
     def nm(i):
-        return stops[i].get("name", "?") if 0 <= i < n else "?"
+        # NORMALISED — the space is stripped. A space in a `name` is the data
+        # format's LINE-BREAK marker (`docs/DATA_FORMAT.md` § Station names), so
+        # `さいたま 新都心` is one station instructing a two-line layout. This row
+        # is a single line, so the marker has nothing to instruct and drawing it
+        # renders a word gap that reads as two stations. The LCD's own name
+        # renderers already drop it for the same reason.
+        return (stops[i].get("name", "?") if 0 <= i < n else "?").replace(" ", "")
 
     badge = status.get("badge")
     seg_start = status.get("segment_start_stop")
@@ -653,9 +706,10 @@ def _band_vals(status, sim_state, stops):
     over = sp is not None and sl is not None and sl > 0 and sp > sl
     badge_tail = f" · {badge_disp}" if badge_disp else ""
     return {
-        # row0 green notif (persistent), row1 segment, row2 state · played · BADGE (folded onto the line)
+        # row0 green notif, yielding to the mirror address on a timer (see the
+        # STREAM block); row1 segment; row2 state · played · BADGE, folded on.
         "left": [
-            ([(NOTIF_TEXT, NOTIF_COLOR, NOTIF_NATIVE, "name")], None),
+            _row0_drive(),
             ([(seg, STATE_INK, STATE_NATIVE, "name")], None),
             ([(f"{word} · {played}{badge_tail}", STATE_SUB, STATE_NATIVE, "chrome")], None),
         ],
@@ -711,7 +765,17 @@ def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, f
     btn_top = (BAND_H - btn_sz) // 2
     home_rect = pygame.Rect(width - btn_sz - HOME_MARGIN, btn_top, btn_sz, btn_sz)
     save_rect = pygame.Rect(home_rect.left - BAND_BTN_GAP - btn_sz, btn_top, btn_sz, btn_sz)
-    pause_rect = pygame.Rect(save_rect.left - BAND_BTN_GAP - btn_sz, btn_top, btn_sz, btn_sz)
+    # NO PAUSE BUTTON. It was a play/pause toggle on the auto-driver and the
+    # author never used it once (2026-08-30). Dropping it returns 70px — a
+    # button, a gap — to the message strips, which is what E233-0's 640px canvas
+    # took away from them: three of the band's four regions are fixed, so the
+    # strips absorbed the whole 90px difference and came out 72px wide against
+    # messages that measure 102..142.
+    #
+    # `AutoDriver.paused` stays. Nothing sets it now, so it rests False and its
+    # branches are inert — but it is the driver's own state, not the band's, and
+    # a control for it can come back on the tap surface without the band having
+    # to hold a square for it in the meantime.
 
     # LEFT column: 3 lines bottom-aligned to the SAME row baselines as the readout (LIMIT_Y/SPEED_Y/
     # DIST_Y), so the state column and the speed column line up row-for-row. Per-line font: station
@@ -725,11 +789,29 @@ def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, f
     _stream_links.clear()
     hovered_qr = None
     for (parts, link), base in zip(vals["left"], (LIMIT_Y, SPEED_Y, DIST_Y)):
+        # A ROW THAT OVERRUNS THE COLUMN COMPRESSES; it is never cut (author,
+        # 2026-08-30). The budget is the gap to the readout cell's separator, so
+        # the row can use everything up to it and no more. `npx` is the AA-off
+        # native size, so stepping it down is the only lever — the face has no
+        # condensed cut — and it is stepped for the WHOLE row at once, keeping
+        # the chunks' relative sizes (the mirror row's address is deliberately
+        # larger than its label).
+        budget = CELL_X - LEFT_X - LEFT_PAD_R
+        scale = 1.0
+        for _ in range(LEFT_FIT_STEPS):
+            wid = sum(
+                lowres_text_size(txt, i18n.pixel_font_for_lang("en" if k == "name" else ACTIVE_LANG, max(8, int(px * scale))), 1, 0)[0]
+                for txt, _c, px, k in parts
+                if txt
+            )
+            if wid <= budget:
+                break
+            scale -= LEFT_FIT_STEP
         x, top = LEFT_X, base
         for text, color, npx, kind in parts:
             if not text:
                 continue
-            f = i18n.pixel_font_for_lang("en" if kind == "name" else ACTIVE_LANG, npx)
+            f = i18n.pixel_font_for_lang("en" if kind == "name" else ACTIVE_LANG, max(8, int(npx * scale)))
             cw, ch = lowres_text_size(text, f, 1, 0)
             chrome.blit_lowres(surf, text, x, base - ch, f, color, 1)
             x += cw
@@ -785,7 +867,7 @@ def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, f
     _blit_readout(surf, *vals["dist"], rx, DIST_Y, num_font, unit_font, rd_ink, CELL_UNIT_INK)
 
     # MESSAGE strips: two dim bars; active messages render BRIGHT YELLOW + FLASH (auto-clear when none)
-    msg_w = pause_rect.left - MSG_GAP_R - MSG_X
+    msg_w = save_rect.left - MSG_GAP_R - MSG_X
     msg_on = force_flash_on or (pygame.time.get_ticks() // MSG_FLASH_MS) % 2 == 0
     for i in range(2):
         sy = STRIP_Y1 + i * (STRIP_H + STRIP_GAP)
@@ -799,17 +881,13 @@ def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, f
     # Home is live everywhere EXCEPT the home screen itself (home_inert), where it's a no-op → SILVER.
     setup_ctx = sim_state is None
     dis_t = {**t, **chrome.DISABLED}
-    # Pause is a play/pause TOGGLE: paused → "繼續/Play" (the label conveys the paused state), else
-    # "暫停/Pause". Drawn NORMAL (not persistent-yellow) in both states so the click press-flash reads
-    # on EITHER direction — the paused state is signaled by this label + the "已暫停" message strip.
-    paused = not setup_ctx and vals["paused"]
-    pause_label = i18n.t("setup_tims.band.resume") if paused else i18n.t("setup_tims.band.pause")
-    draw_tims_button(surf, pause_rect, pause_label, font=btn_font, t=dis_t if setup_ctx else t)
     draw_tims_button(surf, save_rect, i18n.t("setup_tims.band.save"), font=btn_font, t=dis_t if setup_ctx else t)
     draw_tims_button(surf, home_rect, home_label, font=btn_font, t=dis_t if home_inert else t)
+    global _stream_hovered
     _hovered_url = hovered_qr  # the flip hook draws the popup once the screen is done painting
+    _stream_hovered = hovered_qr is not None  # holds the drive band's row-0 timer — see `_row0_drive`
     _update_hover_cursor()  # after the rects are current, so the hand tracks what was just drawn
-    return {"home": home_rect, "save": save_rect, "pause": pause_rect}
+    return {"home": home_rect, "save": save_rect}
 
 
 # Band control buttons flash yellow on press — the TIMS "registered" feedback every clickable

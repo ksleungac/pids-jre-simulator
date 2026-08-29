@@ -337,7 +337,7 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 |-------|-------------|
 | `code_3` | JR East 3-letter station code. Only 22 stations total have one — rule = "3+ JR East systems converge" (with 浜松町 and 高輪ゲートウェイ as explicit exceptions). Absent on all other stations. |
 | `transfers` | Optional. Ordered array of slug references into `data/lines.json`. Each entry = either plain slug `"yamanote"` or dotted variant reference `"slug.variant"` (see `lines.json` § Variant resolution). Order matches IRL PIDS reading order (top-to-bottom, left-to-right). Include all lines reaching the station, including user's active line — runtime active-line filter drops slugs whose effective `badges[].code` matches active route. |
-| `transfers_by_view` | Optional. Per-station map keyed by `"<line>_<qualifier>"`, where the qualifier is whatever distinguishes one PIDS reading from another on that line code — usually direction (`"JY_inner"`, `"JT_south"`), but SERVICE where two services share a code (`"JU_utsunomiya"` / `"JU_takasaki"`, which announce each other at 大宮 and so cannot share a view). Value = object with optional ops: `{"drop": [base-slug names...], "add": [exact refs...], "edit": {base-slug: replacement-slug-ref, ...}, "rows": [int, ...]}`. `drop` and `edit` match by base slug name — `drop: ["keihin_tohoku"]` drops both plain and any `keihin_tohoku.<variant>` references; `edit: {"keihin_tohoku": "keihin_tohoku.oimachi_kamata"}` replaces whatever `keihin_tohoku`-base entry the flat list has with the variant ref. Drop applied first, then edit. `rows` = explicit row-partition override — list of ints summing to post-drop/edit entry count, e.g. `[2, 1]` forces first 2 entries onto row 0, 3rd onto row 1. Bypasses both shinkansen-prefix detection and small-N structural rules; real-render positioning (Rules 1-4 + track-back) still runs within each forced row. Use only when algorithm row-grouping doesn't match IRL — last-resort data hint, expected empty for most stations. Mismatched sum → warning + algorithm fallback (no crash). **`add` exempts an exact ref from the active-line filter, and is the only op that runs BEFORE it** — that filter is the only thing `add` can undo. It exists for a SIBLING service sharing the active line's code: 宇都宮線 and 高崎線 are both `JU`, so riding either drops both, yet 大宮's PA (where they diverge) announces the other one — `"JU_utsunomiya": {"add": ["utsunomiya_takasaki.takasaki"]}`. Matching is by **exact ref**, unlike `drop`/`edit`, because the route's own variant must still go while the sibling survives; a base slug would re-admit both. Re-admitted entries keep their position in `transfers[]`, so IRL order needs no index. A `drop` of the same base still wins — drop runs after. Ordering is add → active-line filter → drop → edit. |
+| `transfers_by_view` | Optional. Per-station map keyed by `"<line>_<qualifier>"`, where the qualifier is whatever distinguishes one PIDS reading from another on that line code — usually direction (`"JY_inner"`, `"JT_south"`), but SERVICE where two services share a code (`"JU_utsunomiya"` / `"JU_takasaki"`, which announce each other at 大宮 and so cannot share a view). Value = object with optional ops: `{"drop": [base-slug names...], "add": [exact refs...], "edit": {base-slug: replacement-slug-ref, ...}, "rows": [int, ...]}`. `drop` and `edit` match by base slug name — `drop: ["keihin_tohoku"]` drops both plain and any `keihin_tohoku.<variant>` references; `edit: {"keihin_tohoku": "keihin_tohoku.oimachi_kamata"}` replaces whatever `keihin_tohoku`-base entry the flat list has with the variant ref. Drop applied first, then edit. **`edit` rewrites EVERY entry of that base, and consecutive duplicates then collapse — which is how a view MERGES a through-service listed as its branches.** Mapping a base **to itself** looks like a no-op and is not: the key matches by base while the value is an exact ref, so `slug.a` and `slug.b` both become the bare `slug` and show as one entry under the base's own `name_ja`. 東京 lists 横須賀線 and 総武線快速 separately (a JY train shows both, a JO train shows neither), and the Chūō view collapses them: `"JC_up": {"edit": {"yokosuka_sobu": "yokosuka_sobu"}}` → `横須賀線・総武線快速`. The collapse is **consecutive-only**, so an `edit` that maps two unrelated entries onto one ref from different places in the list still yields both — branches of one service are adjacent by construction, because `transfers[]` is in IRL reading order. **A view can merge but never SPLIT**, so the flat list always holds the finest-grained form and views coarsen it; that also fails safe, since a view with no ops shows the branches rather than a silently missing entry. Locked by `_tests/t1_unit/test_transfer_info.py`. `order` = **the view's own reading order**, a list of BASE slugs. Nothing else can permute: `transfers[]` is one ordered list shared by every view, and `add` / `drop` / `edit` / `rows` all preserve position — while the IRL order is a property of the PIDS being read rather than of the station. 新宿 is the case: a Chūō train names 中央・総武線 first (`"JC_up": {"order": ["sobu_local", "yamanote", "saikyo_kawagoe", "shonan_shinjuku"]}`), where the Yamanote panel leads with 山手線. **LEADING, not total** — listed slugs come first in the order given and everything else keeps its relative position behind them, so a view states only the part it cares about (usually the JR block) and a line added to `transfers[]` later cannot silently jump to the front. Applied LAST, after the merge collapse, so it sees final refs. A slug the station does not carry orders nothing and is silent at runtime, so `validate_data.py` rejects it. `rows` = explicit row-partition override — list of ints summing to post-drop/edit entry count, e.g. `[2, 1]` forces first 2 entries onto row 0, 3rd onto row 1. Bypasses both shinkansen-prefix detection and small-N structural rules; real-render positioning (Rules 1-4 + track-back) still runs within each forced row. Use only when algorithm row-grouping doesn't match IRL — last-resort data hint, expected empty for most stations. Mismatched sum → warning + algorithm fallback (no crash). **`add` exempts an exact ref from the active-line filter, and is the only op that runs BEFORE it** — that filter is the only thing `add` can undo. It exists for a SIBLING service sharing the active line's code: 宇都宮線 and 高崎線 are both `JU`, so riding either drops both, yet 大宮's PA (where they diverge) announces the other one — `"JU_utsunomiya": {"add": ["utsunomiya_takasaki.takasaki"]}`. Matching is by **exact ref**, unlike `drop`/`edit`, because the route's own variant must still go while the sibling survives; a base slug would re-admit both. Re-admitted entries keep their position in `transfers[]`, so IRL order needs no index. A `drop` of the same base still wins — drop runs after. Ordering is add → active-line filter → drop → edit. |
 
 ### Notes
 
@@ -346,6 +346,17 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
 - 3-letter Roman codes (`code_3`) distinct from 2-character katakana telegraph codes (電略) — latter = separate internal JR system, not stored here.
 - `transfers` populated only for stations with `code_3` in v1 scope (the 22 major interchange catalog). Other stations may gain `transfers` later as data is collected.
 - **Typical category ordering** (within IRL reading order — use as starting guess, override per IRL reference photo): Shinkansen → own JR line → JR runners (other JR East lines through the station) → private operators (Tōkyū / Keiō / Odakyū / Tōbu / Seibu / Keisei / Tsukuba Express / Yurikamome / monorails) → Tokyo Metro → Toei. Sub-order *within* a category = IRL-driven, varies per station — don't enforce algorithmically. New stations: list candidates by category as draft, then reorder against reference photo.
+- **The flat list names a line as it is AT THAT STATION, not as the operator files it.** A through-service carries different names along its length, and `transfers[]` is read by every view, so a name that is only right in one place is wrong in the others. `sobu_local` is the worked case, and it takes three forms along one line:
+
+  | where | ref | drawn |
+  |---|---|---|
+  | 新宿 and west — 武蔵境 · 三鷹 · 吉祥寺 · 荻窪 · 中野 · 新宿 | `sobu_local.chuo_local` | `中央線各駅停車` |
+  | east of 新宿 — 代々木 · 四ツ谷 · 御茶ノ水 … | `sobu_local.chuo` | `中央・総武線（各駅停車）` |
+  | on the Sōbu itself — 錦糸町 · 船橋 · 千葉 … | `sobu_local` (base) | `総武線各駅停車` |
+
+  The boundary is geographic, not per-view: *"it is not sobu line yet"*, *"the pattern is on the stations that is near the actual sobu line, it changes to sobu"*, and *"the point is from sjk"* (author, 2026-08-29). Two references pin it from either side — `transfer-shinjuku.png` draws `中央線各駅停車` and `transfer-ocha-ja.png` draws `中央・総武線(各駅停車)` — with 新宿 itself the last station on the Chūō side.
+
+  **Reference photographs disagree with each other on this**, showing the same line four ways across frames, which is why the naming is settled from the geography rather than from whichever capture is to hand. Finest grain in the flat list, views coarsen — the direction `transfers_by_view` § "`edit` as a merge" already sets.
 
 ---
 
@@ -363,7 +374,7 @@ A station has a single entry even if it appears on multiple routes (e.g., 秋葉
     "line_code": "JY",             // Optional. Active-line badge code (JY/JK/JC/JO/JU/JT/JJ/JE/JN/JA). Drives transfer-info active-line filter — entries whose badges include this code are dropped. Absent → no filter (renders raw transfers).
     "transfer_view": "JY_inner",   // Optional. Key into each station's `transfers_by_view` map (e.g. JY_inner, JK_south, JU_utsunomiya). Selects per-station drop/edit ops for this train direction. Absent → no view ops applied.
     "color": [R, G, B],            // Main route color for UI elements
-    "contrast_color": [R, G, B],   // Contrast color for pointers/highlights (optional, default: [224, 54, 37] JR red)
+    "contrast_color": [R, G, B],   // Contrast color for pointers/highlights (optional). E235 models default to [224, 54, 37] JR red when absent. E233-0 reads it only on routes OUTSIDE its own line set — see § contrast_color below.
     "type_color": [R, G, B],       // Color for train type text (optional, default: black)
     "type": "列車種別",             // Train type (e.g., 快速，普通，各駅停車)
     "dest": "終点",                 // Final destination (kanji) - furigana loaded from data/translations.json
@@ -519,11 +530,32 @@ part of the name: the route-bar label renders the space-separated parts on two v
 exist nowhere in the JSON — so anything enumerating renderable text from the data has to apply the
 same split (`font_atlas.STATION_NAMES` declares `split=True` for exactly this).
 
+**A SINGLE-LINE surface strips it rather than drawing it.** The marker instructs a break, so a
+surface with nowhere to break has nothing to obey — and a drawn space there reads as a word gap,
+which on a row like the status band's `A → B` segment makes one station look like two. Every
+one-line renderer already does this (the E233-0 upper plate's `draw_station`, the 6-station name
+column); `tims/band.py::nm` was the one that did not, until 2026-08-30.
+
 **Note:** `time` field = scheduled **incoming** travel time — minutes from previous PA station's departure to this stop's arrival. Display semantics (countdown formula, floor division, forced "1" on last PA, STOPPING blanking, `TIME_SCALE` constant) live at inline `# CONTRACT:` on `displays/train_models/e235_1000/lower_lcd.py` `draw_times` per [CLAUDE.md](../CLAUDE.md). State-machine interaction → [DISPLAY.md § Unified State Machine](DISPLAY.md).
 
 **Convention rationale:** the field is anchored on the destination station, not the source — `stops[N].time` answers "how long does it take to reach N?" (= travel from N−1 → N), not "how long until I leave N?". Verified via Tokaido 1865E: 新橋.time=2 matches IRL 東京→新橋 (~2 min), 品川.time=5 matches 新橋→品川 (~5 min). 東京.time=0 because there's no previous station.
 
 ### Field Details
+
+#### `contrast_color`
+
+The colour a train model gives the position marker when the route's own `color` would swallow the model's native one. Authored **only on the routes that need it** — a route without the field keeps whatever the model draws natively, and filling it in everywhere would be authoring a value nobody reads.
+
+Models consume it differently, and both readings are correct:
+
+| Model | Reading |
+|---|---|
+| E235-1000 / E235-0 | The marker colour outright, on every route. Absent → `[224, 54, 37]` JR red. |
+| E233-0 | Out-of-spec compatibility only. On its own lines (`_IN_SPEC_LINE_CODES`, currently `JC`) the marker keeps its two greens whatever the field says; on any other route a declared `contrast_color` becomes the marker's **dark** tone and the light one is derived from it. Absent → native greens. |
+
+E233-0's derivation reuses the lift its own pair already carries — `−2.6°` hue, `×0.659` saturation, `×1.709` value, read off `tri_color_top` / `tri_color_bot` rather than restated — so retuning the greens carries the out-of-spec tints with them.
+
+**The measure is hue distance, not luminance.** Saikyō's bar `(46,139,87)` scores a *better* luminance ratio against the green marker than Chūō's own bar does (1.52 against 1.25) and looks far worse, because it sits 26.5° of hue away where Chūō sits 102°. Yamanote `(116,193,30)` is the other one, at 31.7°. Those two are what the field exists for on this model.
 
 #### `pa` Array (PA Announcements)
 

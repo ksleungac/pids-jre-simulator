@@ -1,22 +1,35 @@
 # SPDX-License-Identifier: MIT
 """Stack reference + multiple candidate renders for one station into a tall grid.
 
-Useful for A/B/C comparing several font/size variants at once. List each
-candidate as a (label_prefix, human_label) tuple in CANDIDATES; the script
-picks up screenshot_<label_prefix>_<station>.png for each.
+Two modes, one composer:
 
-Usage:
-    # render every variant under a distinct label first (see compare_fonts.py),
-    # then edit CANDIDATES below and run:
-    uv run compare_grid.py
+1. **Coverage sheet** — tile any set of labelled renders into a grid. This is
+   what `docs/DISPLAY.md` § "Specifying a new display" step 6 asks for with
+   every element: one cell per case the element varies over, every cell
+   rendered from the LIVE renderer (`preview_display.py --screenshot`), so the
+   sheet cannot show superseded code.
 
-Outputs grid_<station>.png — reference at top, each candidate stacked below
-with its label, all scaled to matching width for direct visual comparison.
+       uv run preview_display.py --screenshot screenshot_a.png --route chuo/1654T --model e233_0 --stop 0
+       uv run _dev_scripts/compare_grid.py --out sheet.png --cols 4 "高尾=screenshot_a.png" ...
+
+2. **A/B/C font hunt** (the original) — reference at top, candidates stacked
+   below. List each candidate as a (label_prefix, human_label) tuple in
+   CANDIDATES; the script picks up screenshot_<label_prefix>_<station>.png for
+   each and writes grid_<station>.png.
+
+       uv run _dev_scripts/compare_grid.py            # no args = this mode
 """
 
+import argparse
+import sys
 from pathlib import Path
 
 import pygame
+
+# Cell labels carry station names, so the summary line prints kanji. Windows
+# pipes default to cp1252 and the script died on the label rather than on
+# anything it was doing (`conventions.md` § Tooling).
+sys.stdout.reconfigure(encoding="utf-8")
 
 pygame.init()
 
@@ -93,6 +106,75 @@ def build_grid(station, ref_path, file_suffix, out_path):
     print(f"wrote {out_path}")
 
 
+def build_sheet(cells, out_path, cols=4, cell_w=None, title="", crop=None):
+    """Tile labelled renders into a grid — the coverage sheet of mode 1.
+
+    `cells` is a list of (label, path). Cells are scaled to one common width so
+    frames from different models still line up; the grid is row-major.
+
+    `crop` is an optional (x, y, w, h) taken from every cell before scaling —
+    an upper-band sweep wants the band, not the whole 640x480 frame under it.
+    """
+    loaded = []
+    for label, path in cells:
+        if not Path(path).exists():
+            print(f"missing {path}, skipping")
+            continue
+        surf = pygame.image.load(str(path))
+        if crop:
+            surf = surf.subsurface(pygame.Rect(*crop)).copy()
+        loaded.append((label, surf))
+    if not loaded:
+        print("no cells to compose")
+        return
+
+    target_w = cell_w or max(s.get_width() for _, s in loaded)
+    scaled = [(label, scale_to_w(s, target_w)) for label, s in loaded]
+    cell_h = max(s.get_height() for _, s in scaled)
+
+    label_h, pad = 22, 8
+    font = pygame.font.SysFont("arial", 14, bold=True)
+    title_h = 28 if title else 0
+
+    rows = (len(scaled) + cols - 1) // cols
+    out = pygame.Surface(
+        (
+            cols * target_w + (cols + 1) * pad,
+            title_h + rows * (label_h + cell_h + pad) + pad,
+        )
+    )
+    out.fill((30, 30, 30))
+    if title:
+        out.blit(font.render(title, True, (255, 255, 0)), (pad, 7))
+
+    for i, (label, surf) in enumerate(scaled):
+        cx = pad + (i % cols) * (target_w + pad)
+        cy = title_h + pad + (i // cols) * (label_h + cell_h + pad)
+        out.blit(font.render(label, True, (180, 220, 255)), (cx, cy + 3))
+        out.blit(surf, (cx, cy + label_h))
+
+    pygame.image.save(out, out_path)
+    print(f"wrote {out_path}  ({len(scaled)} cells, {cols} cols)")
+
+
 if __name__ == "__main__":
-    for name, (ref, suffix) in STATIONS.items():
-        build_grid(name, ref, suffix, f"grid_{name}.png")
+    if len(sys.argv) > 1:
+        ap = argparse.ArgumentParser(description="Tile labelled renders into a coverage sheet")
+        ap.add_argument("cells", nargs="+", help='one "label=path.png" per cell, in reading order')
+        ap.add_argument("--out", default="sheet.png")
+        ap.add_argument("--cols", type=int, default=4)
+        ap.add_argument("--cell-w", type=int, default=None, help="common cell width (default: widest input)")
+        ap.add_argument("--title", default="")
+        ap.add_argument("--crop", default=None, help="x,y,w,h taken from every cell (e.g. an upper band)")
+        a = ap.parse_args()
+        build_sheet(
+            [tuple(c.split("=", 1)) for c in a.cells],
+            a.out,
+            cols=a.cols,
+            cell_w=a.cell_w,
+            title=a.title,
+            crop=tuple(int(v) for v in a.crop.split(",")) if a.crop else None,
+        )
+    else:
+        for name, (ref, suffix) in STATIONS.items():
+            build_grid(name, ref, suffix, f"grid_{name}.png")

@@ -100,6 +100,14 @@ def parse_args():
         "Default: leave STOPPING state from jump_to_stop (= 2).",
     )
     parser.add_argument(
+        "--skip",
+        type=int,
+        default=None,
+        help="Hold a mid-skip frame: the visual cursor rests this many stations behind --stop. "
+        "`jump_to_stop` rolls a passing index back to the nearest stopping station, so this is "
+        "the only way to preview the cursor ON a station the train runs through.",
+    )
+    parser.add_argument(
         "--route",
         type=str,
         default=DEFAULT_MOCK_ROUTE,
@@ -142,7 +150,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def apply_state(sim, *, stop=0, pa=None, mode=None, lower_view="cycle"):
+def apply_state(sim, *, stop=0, pa=None, mode=None, lower_view="cycle", skip=None):
     """Put `sim` into one previewable state.
 
     Factored out of main() so anything that needs to visit many states — the
@@ -159,6 +167,12 @@ def apply_state(sim, *, stop=0, pa=None, mode=None, lower_view="cycle"):
         else:
             sim.state.at_station = False
             sim.state.cnt_pa = forced
+    # `cursor_pos` derives as `curr_stop - (skip - skip_progress)`, so setting the
+    # pair holds the frame just after departing across passing stations.
+    if skip:
+        sim.state.at_station = False
+        sim.state.skip = int(skip)
+        sim.state.skip_progress = 0
     sim.upper.set_state(sim.state.curr_stop, sim.state.cnt_pa, at_station=sim.state.at_station)
 
     # Force display mode if requested
@@ -214,7 +228,7 @@ def main():
     # cnt_pa=0). --pa overrides that into a different prefix state for visual
     # iteration: 0=次は, 1=まもなく, 2=ただいま (STOPPING). Omitted leaves the
     # natural STOPPING landing.
-    apply_state(sim, stop=args.stop, pa=args.pa, mode=args.mode, lower_view=args.lower_view)
+    apply_state(sim, stop=args.stop, pa=args.pa, mode=args.mode, lower_view=args.lower_view, skip=args.skip)
 
     if args.screenshot:
         render_frame(sim)

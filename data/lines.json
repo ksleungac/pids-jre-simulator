@@ -42,6 +42,8 @@
     "keiyo":              {"badges": [{"code": "JE", "icon": "JE"}], "name_ja": "京葉線",     "name_en": "Keiyō Line",                                                     "category": "jr_east"},
     "yokosuka_sobu": {
         "badges": [{"code": "JO", "icon": "JO"}],
+        "name_ja": "横須賀線・総武線快速",
+        "name_en": "Yokosuka Line / Sōbu Rapid Line",
         "category": "jr_east",
         "variants": {
             "yokosuka": {"name_ja": "横須賀線",   "name_en": "Yokosuka Line"},
@@ -57,7 +59,16 @@
             "naruto": {"name_ja": "総武本線(成東方面)", "name_en": "Sōbu Main Line (for Naruto)"}
         }
     },
-    "sobu_local":         {"badges": [{"code": "JB", "icon": "JB"}], "name_ja": "総武線各駅停車", "name_en": "Sōbu Line (Local)",                                              "category": "jr_east"},
+    "sobu_local": {
+        "badges": [{"code": "JB", "icon": "JB"}],
+        "name_ja": "総武線各駅停車",
+        "name_en": "Sōbu Line (Local)",
+        "category": "jr_east",
+        "variants": {
+            "chuo":       {"name_ja": "中央・総武線（各駅停車）", "name_en": "Chūō-Sōbu Line (Local)"},
+            "chuo_local": {"name_ja": "中央線各駅停車",           "name_en": "Chūō Line (Local)"}
+        }
+    },
     "saikyo_kawagoe": {
         "badges": [{"code": "JA", "icon": "JA"}],
         "category": "jr_east",
@@ -80,6 +91,9 @@
     "negishi":            {"badges": [{"code": "JK", "icon": "JK"}], "name_ja": "根岸線",     "name_en": "Negishi Line",                                                   "category": "jr_east"},
     "yokohama_line":      {"badges": [{"code": "JH", "icon": "JH"}], "name_ja": "横浜線",     "name_en": "Yokohama Line",                                                  "category": "jr_east"},
     "nambu":              {"badges": [{"code": "JN", "icon": "JN"}], "name_ja": "南武線",     "name_en": "Nambu Line",                                                     "category": "jr_east"},
+    "ome_itsukaichi":     {"badges": [{"code": "JC", "icon": "JC"}], "name_ja": "青梅・五日市線", "name_en": "Ōme / Itsukaichi Line",                                      "category": "jr_east"},
+    "hachiko":            {"badges": [{"icon": "_universal", "color": [160, 160, 160]}], "name_ja": "八高線",   "name_en": "Hachikō Line",                                                   "category": "jr_east"},
+    "musashino":          {"badges": [{"code": "JM", "icon": "JM"}], "name_ja": "武蔵野線",   "name_en": "Musashino Line",                                                 "category": "jr_east"},
     "sotobo":             {"badges": [{"icon": "_universal", "color": [187, 66, 88]}],   "name_ja": "外房線",     "name_en": "Sōtobō Line",                                                    "category": "jr_east"},
     "uchibo":             {"badges": [{"icon": "_universal", "color": [65, 143, 195]}],  "name_ja": "内房線",     "name_en": "Uchibō Line",                                                    "category": "jr_east"},
     "narita_line": {
@@ -120,6 +134,10 @@
     "tokyo_monorail":     {"badges": [{"icon": "tokyo_monorail"}],        "name_ja": "東京モノレール羽田空港線", "name_en": "Tokyo Monorail Haneda Airport Line",                  "category": "non_jr"},
     "yurikamome":         {"badges": [{"icon": "_universal"}],            "name_ja": "ゆりかもめ", "name_en": "Yurikamome",                                                 "category": "non_jr"},
     "tsukuba_express":    {"badges": [{"icon": "_universal"}],            "name_ja": "つくばエクスプレス線", "name_en": "Tsukuba Express Line",                                  "category": "non_jr"},
+    "tama_monorail":      {"badges": [{"icon": "_universal"}],            "name_ja": "多摩モノレール", "name_en": "Tama Monorail",                                          "category": "non_jr"},
+    "seibu_kokubunji":    {"badges": [{"icon": "_universal"}],            "name_ja": "西武国分寺線", "name_en": "Seibu Kokubunji Line",                                     "category": "non_jr"},
+    "seibu_tamako":       {"badges": [{"icon": "_universal"}],            "name_ja": "西武多摩湖線", "name_en": "Seibu Tamako Line",                                        "category": "non_jr"},
+    "seibu_tamagawa":     {"badges": [{"icon": "_universal"}],            "name_ja": "西武多摩川線", "name_en": "Seibu Tamagawa Line",                                      "category": "non_jr"},
     "tobu_noda":          {"badges": [{"icon": "_universal"}],            "name_ja": "東武野田線", "name_en": "Tōbu Noda Line",                                             "category": "non_jr"},
     "tobu_nikko":         {"badges": [{"icon": "_universal"}],            "name_ja": "東武日光線", "name_en": "Tōbu Nikkō Line",                                            "category": "non_jr"},
     "tobu_isesaki":       {"badges": [{"icon": "_universal"}],            "name_ja": "東武伊勢崎線", "name_en": "Tōbu Isesaki Line",                                        "category": "non_jr"},

@@ -178,6 +178,12 @@ def check_transfers_by_view(stations_data: dict, lines_data: dict, issues: list)
                 ok, err = _resolve_slug_ref(ev, lines_data)
                 if not ok:
                     issues.append(("data/stations.json", f"'{sname}' view '{view_key}': edit value {err}"))
+            # order validity. A slug the station does not carry orders nothing and
+            # reports nothing at runtime — the entry simply keeps its place — so a
+            # typo here is invisible on screen, which is exactly what this catches.
+            for o in ops.get("order", []):
+                if o not in base_slugs_in_transfers:
+                    issues.append(("data/stations.json", f"'{sname}' view '{view_key}': order '{o}' — not a base slug in transfers[]"))
             # rows sum (edit doesn't change count, so post-ops count = len(transfers) - len(drop))
             rows = ops.get("rows")
             if rows is not None:

@@ -241,6 +241,58 @@ _REGISTRY = {
         # which rebuilds the font when it changes (a size is part of the atlas
         # key, so it cannot just be read per frame).
     },
+    "e233_full_route": {
+        "model": "e233_0",
+        "rect_module": "displays.train_models.e233_0.lower_lcd",
+        "rect_attr": "FULL_ROUTE_RECT",
+        "target": "lower",
+        "view": "full",
+        "dicts": [
+            ("displays.train_models.e233_0.lower_lcd", "_TUNEABLES_FULL_ROUTE"),
+            ("displays.train_models.e233_0.lower_lcd", "_TUNEABLES_FULL_ROUTE_MARKS"),
+            ("displays.train_models.e233_0.lower_lcd", "_TUNEABLES_FULL_ROUTE_NAMES"),
+        ],
+        # Three dicts rather than one: the bars' geometry, the marks that sit ON
+        # them, and the name stack above them are three refinement passes, and
+        # keeping them apart is what lets one be nudged without scrolling past
+        # the others. Every key is read per frame, so no resync hook is needed —
+        # except the two font sizes, which rebuild through the renderer's own
+        # per-size font cache.
+        #
+        # A separate key from e235_0's `full_route`: the rects mean different
+        # canvases, and the editor filters on `model`.
+    },
+    "e233_six_station": {
+        "model": "e233_0",
+        "rect_module": "displays.train_models.e233_0.lower_lcd",
+        "rect_attr": "SIX_STATION_RECT",
+        "target": "lower",
+        "view": "eight",
+        "dicts": [
+            ("displays.train_models.e233_0.lower_lcd", "_TUNEABLES_SIX_STATION"),
+            ("displays.train_models.e233_0.lower_lcd", "_TUNEABLES_SIX_STATION_MARKS"),
+            ("displays.train_models.e233_0.lower_lcd", "_TUNEABLES_SIX_STATION_NAMES"),
+            ("displays.train_models.e233_0.lower_lcd", "_TUNEABLES_SIX_STATION_TRANSFERS"),
+            ("displays.train_models.e233_0.lower_lcd", "_TUNEABLES_SIX_STATION_SKIP"),
+        ],
+        # Split the same three ways as the full route's, for the same reason.
+        # `view: "eight"` because the slot is "the zoomed view" rather than a
+        # station count — E235-0's 5-station renderer owns the same slot.
+    },
+    "e233_transfer": {
+        "model": "e233_0",
+        "rect_module": "displays.train_models.e233_0.transfer_info",
+        "rect_attr": "TRANSFER_VIEW_RECT",
+        "target": "lower",
+        "view": "transfer",
+        "dicts": [
+            ("displays.train_models.e233_0.transfer_info", "_TUNEABLES_TRANSFER_VIEW"),
+        ],
+        # ONE dict, unlike the six-station view's five: this view has a banner
+        # and a repeated row and nothing else, so there is no element to split
+        # the tuneables between. Drive it at a two-entry stop (八王子, the
+        # reference) for the calibrated case and at 新宿 for the column wrap.
+    },
 }
 
 

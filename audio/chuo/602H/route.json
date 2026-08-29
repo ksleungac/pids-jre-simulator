@@ -1,5 +1,6 @@
 {
     "route": "中央線快速",
+    "model": "e233_0",
     "line_code": "JC",
     "transfer_view": "JC_up",
     "color": [
@@ -140,7 +141,7 @@
             ],
             "sta_code": "JC05",
             "sta_cut": 20.1,
-            "time": 17
+            "time": 27
         },
         {
             "name": "代々木",

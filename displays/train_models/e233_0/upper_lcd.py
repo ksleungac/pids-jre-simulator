@@ -20,9 +20,10 @@ import math
 
 import pygame
 
+from app_paths import load_json_relative
 from displays.base import DisplayMode, ModeCycler
 from displays.utils import clip, draw_station_code_badge, draw_text_given_width
-from font_atlas import DESTINATIONS, STATION_NAMES, at, lcd_font, lit
+from font_atlas import DESTINATIONS, STATION_NAMES, STATION_READINGS, at, lcd_font, lit
 
 from displays.train_models.e233_0 import (
     S_WIDTH,
@@ -325,6 +326,59 @@ def _split_type(text: str) -> list:
 _TYPE_SUPERSAMPLE = 4
 
 
+def outlined(core_big: "pygame.Surface", ow: float, feather: float, color) -> "pygame.Surface":
+    """Halo a SUPERSAMPLED core and resolve the whole element to 1x.
+
+    `core_big` is the coloured glyph or row already rendered at
+    `_TYPE_SUPERSAMPLE` times its final size. What comes back is the finished
+    element at 1x, padded by `ceil(ow)` on every side. See the antialiasing note
+    above for why the composite happens before the downscale rather than after.
+
+    Surfaces are pre-filled with the halo colour at zero alpha rather than left
+    transparent-black: `smoothscale` does not premultiply, so resolving
+    white-opaque against black-transparent would pull a grey fringe out of pixels
+    that are supposed to be pure white fading out.
+
+    Module-level and public because the lower LCD's 分 is the same construction —
+    dark text with a white outline on the route bar (author, 2026-08-27: "text,
+    white outline maybe some feathering, like train type display").
+    """
+    s = _TYPE_SUPERSAMPLE
+    bw, bh = core_big.get_size()
+    pad_b = int(math.ceil(ow)) * s
+
+    comp = pygame.Surface((bw + 2 * pad_b, bh + 2 * pad_b), pygame.SRCALPHA, 32)
+    comp.fill((*color, 0))
+    if ow > 0:
+        # The glyph's own coverage recoloured to the halo colour: MULT by black
+        # zeroes RGB, ADD writes the colour in, and neither touches alpha. Exact
+        # for any colour, where a single BLEND_RGB_MAX would only be exact for
+        # white — and no second render, so one baked atlas entry still serves
+        # both the fill and the halo.
+        sil = core_big.copy()
+        sil.fill((0, 0, 0, 255), special_flags=pygame.BLEND_RGB_MULT)
+        sil.fill((*color, 0), special_flags=pygame.BLEND_RGB_ADD)
+
+        # Grouped by coverage, so a feathered dilation costs one pre-multiplied
+        # copy per LEVEL rather than one per offset. The multiply scales alpha
+        # only; MAX then keeps the strongest stamp reaching each pixel, which is
+        # what makes this a dilation and not an accumulation.
+        by_cov: dict = {}
+        for dx, dy, cov in _halo_offsets(ow * s, feather * s):
+            by_cov.setdefault(cov, []).append((dx, dy))
+        for cov, offsets in by_cov.items():
+            stamp = sil
+            if cov < 1.0:
+                stamp = sil.copy()
+                stamp.fill((255, 255, 255, int(round(255 * cov))), special_flags=pygame.BLEND_RGBA_MULT)
+            for dx, dy in offsets:
+                comp.blit(stamp, (pad_b + dx, pad_b + dy), special_flags=pygame.BLEND_RGBA_MAX)
+    comp.blit(core_big, (pad_b, pad_b))
+
+    cw, ch = comp.get_size()
+    return pygame.transform.smoothscale(comp, (max(1, round(cw / s)), max(1, round(ch / s))))
+
+
 def _halo_offsets(radius_px: float, feather_px: float, levels: int = 64) -> tuple:
     """`(dx, dy, coverage)` for a FEATHERED max-dilation, in SUPERSAMPLED pixels.
 
@@ -419,12 +473,21 @@ _TUNEABLES_DESTINATION = {
 
 _DEST_FACE = "ShinGoPr6N-Medium.otf"
 _DEST_SUFFIX = " 行"
+# A LOOP LINE HAS NO TERMINUS, so its destination is a direction rather than a
+# bound-for: 品川･東京方面, not 品川･東京行. Same rule and same predicate E235
+# applies (`e235_0/upper_lcd.py` draw_destination — `"方面" if route_name ==
+# "山手線"`), only this model's particle is 行 where E235's is ゆき. Keyed on the
+# route NAME rather than on `circular`, so both models answer it the same way
+# and a route that happens to carry the flag does not silently change wording.
+_DEST_SUFFIX_LOOP = " 方面"
+_LOOP_ROUTE = "山手線"
 
 # The row is drawn CHARACTER BY CHARACTER, so what reaches the font is single
 # characters of a destination plus the composed particle. `check_declared`
 # admits any single character of a declared string, so `DESTINATIONS` covers the
-# name itself; `行` exists in no route field and is declared as the literal it is.
-_DEST_DRAWS = (DESTINATIONS, lit("行"))
+# name itself; the particles exist in no route field and are declared as the
+# literals they are.
+_DEST_DRAWS = (DESTINATIONS, lit("行"), lit("方面"))
 
 
 # =============================================================================
@@ -564,10 +627,23 @@ _TUNEABLES_STATION_PLATE = {
 # Ink then lands where the reference's does — letters y 74-88 and digits y 91-110
 # against the reference's 74-88 and 91-111, both rows centred within a pixel.
 #
-# - OPEN — the 3-letter interchange band (`code_3`, the top band E235 grows for
-#   TYO / SJK). Neither 高尾 nor 御茶ノ水 carries a `code_3` in
-#   `data/stations.json`, so no reference can say whether this model draws one.
-#   Not drawn until one does.
+# THE INTERCHANGE VARIANT — a black frame plus the 3-letter band, at the stations
+# that carry a `code_3` in `data/stations.json` (author, 2026-08-26). On Chūō that
+# is 東京 TYO, 神田 KND and 新宿 SJK; everywhere else the badge is the plain orange
+# outline the references show. So `ring_black` is not a constant of this model —
+# it is 0 unless the station has a 3-letter code, which is what makes the two
+# shapes ONE element rather than two.
+#
+# THE BLACK FRAME GROWS OUTWARD. The rect handed to the helper is the badge's
+# `x/y/w/h` expanded by `ring_black`, so the helper's colour rect lands back on
+# exactly the measured orange square and the white interior does not move — the
+# variant adds a frame around the calibrated badge rather than eating into it.
+# The band then extends further up, still inside the white plate.
+#
+# THE BAND'S OWN FIGURES ARE THE HELPER'S, REUSED — frame 7, band 12, 20pt. No
+# reference shows this variant (all five captures are non-code_3 stations), and
+# the logic already exists and is calibrated on E235, so it is taken as it stands
+# rather than re-fitted here. Tuneable if a capture at 東京 or 新宿 turns up.
 # =============================================================================
 # fmt: off
 _TUNEABLES_STATION_BADGE = {
@@ -583,6 +659,13 @@ _TUNEABLES_STATION_BADGE = {
     "text_gap":     3,  # px of clear ink between the two rows
     "text_y_offset": 0,  # the block is centred in the interior; the ref agrees
     "prefix_x_offset": 1,  # the letters sit a pixel right of the digits' centre
+    # --- the interchange variant, drawn ONLY where the station has a code_3 ---
+    # The shared helper's own values, reused as they stand — see the block above.
+    "ring_black":      7,  # black frame, outside the orange
+    "code_3_band_h":  12,  # the band above it
+    "code_3_size":    20,  # "TYO" pt
+    "code_3_x_offset": 0,  # 0 = centred on the badge
+    "code_3_y_offset": 4,  # positive = lower in the band
 }
 # fmt: on
 
@@ -730,7 +813,7 @@ _PREFIX_FACE = "ShinGoPr6N-Medium.otf"
 
 # The three forms `UpperDisplay.set_state` can produce, and nothing else — they
 # live in the source, not in any route file, so they are literals.
-_PREFIX_DRAWS = lit("次は", "まもなく", "ただいま")
+_PREFIX_DRAWS = lit("次は", "まもなく", "ただいま", "つぎは")
 
 # =============================================================================
 # Clock — WIP § 8.5
@@ -1135,56 +1218,7 @@ class JapaneseDisplay:
         self._type_glyphs[key] = img
         return img
 
-    @staticmethod
-    def _outlined(core_big: "pygame.Surface", ow: float, feather: float, color) -> "pygame.Surface":
-        """Halo a SUPERSAMPLED core and resolve the whole element to 1x.
-
-        `core_big` is the coloured glyph or row already rendered at
-        `_TYPE_SUPERSAMPLE` times its final size. What comes back is the
-        finished element at 1x, padded by the halo radius on every side. See the
-        antialiasing note above for why the composite happens before the
-        downscale rather than after it.
-
-        Surfaces are pre-filled with the halo colour at zero alpha rather than
-        left transparent-black: `smoothscale` does not premultiply, so resolving
-        white-opaque against black-transparent would pull a grey fringe out of
-        pixels that are supposed to be pure white fading out.
-        """
-        s = _TYPE_SUPERSAMPLE
-        bw, bh = core_big.get_size()
-        pad_b = int(math.ceil(ow)) * s
-
-        comp = pygame.Surface((bw + 2 * pad_b, bh + 2 * pad_b), pygame.SRCALPHA, 32)
-        comp.fill((*color, 0))
-        if ow > 0:
-            # The glyph's own coverage recoloured to the halo colour: MULT by
-            # black zeroes RGB, ADD writes the colour in, and neither touches
-            # alpha. Exact for any colour, where a single BLEND_RGB_MAX would
-            # only be exact for white — and no second render, so one baked
-            # atlas entry still serves both the fill and the halo.
-            sil = core_big.copy()
-            sil.fill((0, 0, 0, 255), special_flags=pygame.BLEND_RGB_MULT)
-            sil.fill((*color, 0), special_flags=pygame.BLEND_RGB_ADD)
-
-            # Grouped by coverage, so a feathered dilation costs one
-            # pre-multiplied copy per LEVEL rather than one per offset. The
-            # multiply scales alpha only; MAX then keeps the strongest stamp
-            # reaching each pixel, which is what makes this a dilation and not
-            # an accumulation.
-            by_cov: dict = {}
-            for dx, dy, cov in _halo_offsets(ow * s, feather * s):
-                by_cov.setdefault(cov, []).append((dx, dy))
-            for cov, offsets in by_cov.items():
-                stamp = sil
-                if cov < 1.0:
-                    stamp = sil.copy()
-                    stamp.fill((255, 255, 255, int(round(255 * cov))), special_flags=pygame.BLEND_RGBA_MULT)
-                for dx, dy in offsets:
-                    comp.blit(stamp, (pad_b + dx, pad_b + dy), special_flags=pygame.BLEND_RGBA_MAX)
-        comp.blit(core_big, (pad_b, pad_b))
-
-        cw, ch = comp.get_size()
-        return pygame.transform.smoothscale(comp, (max(1, round(cw / s)), max(1, round(ch / s))))
+    _outlined = staticmethod(outlined)
 
     def _type_row(self, row: str, color, size: int, width: int) -> "pygame.Surface":
         """One whole row of a long type, laid out to `width`, with the halo.
@@ -1303,12 +1337,13 @@ class JapaneseDisplay:
         return got
 
     def draw_destination(self, dest_text: str, route_name: str) -> None:
-        """`{dest} 行`, monospaced, at the fixed left edge. See the note above."""
+        """`{dest} 行` — or `方面` on the loop. See the note above."""
         if not dest_text:
             return
         t = _TUNEABLES_DESTINATION
+        suffix = _DEST_SUFFIX_LOOP if route_name == _LOOP_ROUTE else _DEST_SUFFIX
         row, pad = self._dest_row(
-            dest_text + _DEST_SUFFIX,
+            dest_text + suffix,
             t["font_size"],
             t["cell_adv"],
             t["space_w"],
@@ -1347,39 +1382,64 @@ class JapaneseDisplay:
         pad = self._plate_pad
         self.screen.blit(self._plate_img, (ox - pad, oy - pad))
 
-    def draw_badge(self, sta_code: str, color) -> None:
+    def draw_badge(self, sta_code: str, color, code_3: str = "") -> None:
         """The station-code badge, via the shared helper. See the block above.
 
         `color` is the route's own, handed down by the manager rather than read
         here — same reason the destination is: this renderer draws what it is
-        given, and the route owns the orange.
+        given, and the route owns the orange. `code_3` arrives the same way, and
+        being non-empty is the whole of what selects the interchange variant.
         """
         if not sta_code:
             return
         t = _TUNEABLES_STATION_BADGE
         x, y, w, h = (round(t["x"]), round(t["y"]), round(t["w"]), round(t["h"]))
-        BADGE_RECT.update(x, y, w, h)
+        # The frame and the band exist only in the interchange variant. At every
+        # other station both are zero, which collapses the call back to the plain
+        # orange outline the references measure — same rect, same interior, and
+        # radii equal so the helper's black rect is covered exactly.
+        rb = round(t["ring_black"]) if code_3 else 0
+        band = round(t["code_3_band_h"]) if code_3 else 0
+        # Expanded by the frame's own thickness, so the colour rect the helper
+        # insets by `rb` lands back on the measured square.
+        fx, fy, fw, fh = x - rb, y - rb, w + 2 * rb, h + 2 * rb
+        # The rect follows the variant rather than standing at E235's fixed
+        # max-extent (`e235_0/upper_lcd.py` `_TUNEABLES_BADGE_RECT`): there the
+        # rect is the authored value and the square is derived from it, here the
+        # measured SQUARE is authored and the rect derives, so it can only ever
+        # agree with what was drawn. Synced before the clip either way.
+        BADGE_RECT.update(fx, fy - band, fw, fh + band)
         with clip(self.screen, BADGE_RECT):
             draw_station_code_badge(
                 self.screen,
-                x,
-                y,
-                w,
-                h,
+                fx,
+                fy,
+                fw,
+                fh,
                 sta_code,
                 color,
                 prefix_size=t["prefix_size"],
                 num_size=t["num_size"],
-                # ring_black=0 with the two radii EQUAL is what turns the helper's
-                # E235 shape into this one — see the block above.
-                ring_black=0,
+                # The badge sits INSIDE the plate, so its white is the plate's
+                # (254) — the helper's own default is the darker LCD white E235
+                # sits on, which reads as a grey square in here. Measured: the
+                # reference's interior samples 252-254, the plate around it 254.
+                interior_color=PLATE_WHITE,
+                code_3=code_3,
+                code_3_size=t["code_3_size"],
+                ring_black=rb,
                 ring_color=t["ring"],
-                outer_radius=t["radius"],
+                # Concentric: the black corner runs a frame-thickness wider than
+                # the orange one it wraps.
+                outer_radius=t["radius"] + rb,
                 color_radius=t["radius"],
                 interior_radius=t["interior_radius"],
                 text_gap=t["text_gap"],
                 text_y_offset=t["text_y_offset"],
                 prefix_x_offset=t["prefix_x_offset"],
+                code_3_band_h=band,
+                code_3_x_offset=t["code_3_x_offset"],
+                code_3_y_offset=t["code_3_y_offset"],
             )
 
     def _name_font(self, size: int):
@@ -1533,6 +1593,65 @@ class JapaneseDisplay:
             self.screen.blit(row, (round(x), round(t["y"])))
 
 
+class FuriganaDisplay(JapaneseDisplay):
+    """Kanji everything, except the PREFIX and the STATION NAME read as kana.
+
+    Author, 2026-08-29: *"furigana happens only on the prefix and the station
+    names"* — and `transfer-hachioji-ja.png` is a capture of exactly this mode,
+    showing つぎは / はちおうじ beside a train type, destination and code badge
+    that all stay in kanji. So this is a two-element override rather than a
+    second renderer: geometry, plate, badge and clock are inherited unchanged
+    and cannot drift from the kanji mode.
+
+    Only 次は has a kana form to switch to; まもなく and ただいま are already
+    kana and pass through, which is why the map has one entry rather than three.
+    """
+
+    _PREFIX_KANA = {"次は": "つぎは"}
+
+    def __init__(self, screen, route_data, stops):
+        super().__init__(screen, route_data, stops)
+        self._readings = {k: v.get("furigana", "") for k, v in load_json_relative("data/translations.json").items()}
+        self._kana_fonts: dict = {}
+        self._drawing_kana = False
+
+    def _name_font(self, size: int):
+        """The name face at `size` — declared against the READINGS while drawing
+        a reading, and against the parent's names while drawing a fallback.
+
+        Two declarations rather than one covering both: the modes draw disjoint
+        strings out of the same face at the same size, and a merged `draws=`
+        would let an undeclared reading pass `font_atlas.check_declared` on the
+        strength of some kanji name.
+        """
+        if not self._drawing_kana:
+            return super()._name_font(size)
+        f = self._kana_fonts.get(size)
+        if f is None:
+            f = lcd_font(_NAME_FACE, size, draws=STATION_READINGS)
+            self._kana_fonts[size] = f
+        return f
+
+    def draw_prefix(self, prefix_text: str) -> None:
+        super().draw_prefix(self._PREFIX_KANA.get(prefix_text, prefix_text))
+
+    def draw_station(self, station_text: str) -> None:
+        """The reading, or the kanji name where the data holds no reading.
+
+        Falling back to the name is the honest degrade for an out-of-spec route
+        whose stations are absent from `translations.json`; the alternative is a
+        blank plate, and the plate is the one element that must never be empty.
+        The fallback then draws KANJI, so it must not use the kana declaration —
+        hence the flag rather than a second `draw_station`.
+        """
+        reading = self._readings.get(station_text, "")
+        self._drawing_kana = bool(reading)
+        try:
+            super().draw_station(reading or station_text)
+        finally:
+            self._drawing_kana = False
+
+
 class UpperDisplay:
     """E233-0 Upper LCD manager — owns state and the mode cycler, delegates drawing."""
 
@@ -1554,9 +1673,14 @@ class UpperDisplay:
         self.color = route_data.get("color", [255, 255, 255])
         self.type_color = route_data.get("type_color", [0, 0, 0])
 
-        # One renderer, three modes — see the module docstring.
+        # Station metadata — read for `code_3`, which selects the badge's
+        # interchange variant. Same source E235 reads.
+        self.stations = load_json_relative("data/stations.json")
+
+        # FURIGANA is its own renderer now; ENGLISH still resolves to the kanji
+        # one (WIP § 4 — deferred, and all three modes render until it lands).
         self.japanese_display = JapaneseDisplay(screen, route_data, stops)
-        self.furigana_display = self.japanese_display
+        self.furigana_display = FuriganaDisplay(screen, route_data, stops)
         self.english_display = self.japanese_display
 
         self.mode_displays = {
@@ -1612,6 +1736,17 @@ class UpperDisplay:
             return self.stops[self.curr_stop].get("sta_code") or ""
         return ""
 
+    def _current_code_3(self) -> str:
+        """This stop's 3-letter interchange code, or "" — the badge variant gate.
+
+        A name absent from `data/stations.json`, or present without a `code_3`,
+        both mean the plain badge, so one `.get` chain covers the whole corpus.
+        """
+        if not (self.stops and 0 <= self.curr_stop < len(self.stops)):
+            return ""
+        name = self.stops[self.curr_stop].get("name", "")
+        return self.stations.get(name, {}).get("code_3", "")
+
     def draw(self, current_time_str: str = None) -> None:
         """Draw the upper band: chrome first, then every element in order."""
         display = self.mode_cycler.get_current_display()
@@ -1634,7 +1769,7 @@ class UpperDisplay:
         display.draw_train_type(self.train_type, self.type_color)
         display.draw_destination(self._current_dest(), self.route_name)
         display.draw_station_plate()
-        display.draw_badge(self._current_sta_code(), self.color)
+        display.draw_badge(self._current_sta_code(), self.color, self._current_code_3())
         display.draw_prefix(self.prefix_text)
         display.draw_station(self.stops[self.curr_stop]["name"] if self.stops else "")
         display.draw_clock(current_time_str or "")

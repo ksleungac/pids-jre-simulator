@@ -131,6 +131,43 @@ check(
     ["keihin_tohoku", "tobu_noda", "shonan_shinjuku", "tobu_noda"],
 )
 
+# --- edit as a MERGE ----------------------------------------------------------
+# Mapping a base slug TO ITSELF looks like a no-op and is not: the KEY matches by
+# base, the VALUE is an exact ref, so every variant of that base is rewritten to
+# the bare base — and the resulting run of identical refs collapses to one. That
+# is how a view says "name this through-service once": 東京 lists 横須賀線 and
+# 総武線快速 separately, and the Chūō view (`JC_up`) shows 横須賀線・総武線快速.
+check(
+    "edit base->itself merges a base's variants into one entry",
+    run("JS", "v", {"v": {"edit": {"utsunomiya_takasaki": "utsunomiya_takasaki"}}}),
+    ["keihin_tohoku", "utsunomiya_takasaki", "tobu_noda"],
+)
+
+# The collapse is CONSECUTIVE-ONLY, which is what lets the case above coexist
+# with "add then edit composes" — there `tobu_noda` legitimately appears twice at
+# a DISTANCE and both must survive. Branches of one service are adjacent by
+# construction, because `transfers[]` is in IRL reading order.
+# --- order -------------------------------------------------------------------
+# A view's own reading order, by base slug. Nothing else can permute: transfers[]
+# is one ordered list shared by every view. LEADING, not total — listed slugs
+# lead in the order given, everything else keeps its relative position behind.
+check(
+    "order leads by base slug, unlisted keep their relative order",
+    run("JS", "v", {"v": {"order": ["tobu_noda", "utsunomiya_takasaki"]}}),
+    ["tobu_noda", "utsunomiya_takasaki.utsunomiya", "utsunomiya_takasaki.takasaki", "keihin_tohoku"],
+)
+check(
+    "order is inert when the view does not declare one",
+    run("JS", "v", {"v": {}}),
+    ["keihin_tohoku", "utsunomiya_takasaki.utsunomiya", "utsunomiya_takasaki.takasaki", "tobu_noda"],
+)
+
+check(
+    "edit-produced duplicates that are NOT adjacent both survive",
+    run("JS", "v", {"v": {"edit": {"keihin_tohoku": "tobu_noda"}}}),
+    ["tobu_noda", "utsunomiya_takasaki.utsunomiya", "utsunomiya_takasaki.takasaki", "tobu_noda"],
+)
+
 
 # --- view selection -----------------------------------------------------------
 # Ops are keyed by the route's transfer_view; a route with none applies none.

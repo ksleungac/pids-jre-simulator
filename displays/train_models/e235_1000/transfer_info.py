@@ -59,20 +59,10 @@ def _font(filename: str, size: int) -> pygame.font.Font:
     return f
 
 
-def load_icon(slug: str, target_h: int, cache: dict) -> pygame.Surface:
-    key = (slug, target_h)
-    if key in cache:
-        return cache[key]
-    path = project_root() / "data" / "line_icons" / f"{slug}.png"
-    if not path.exists():
-        # Fail loud per critical_lessons.md § "Runtime-required materials must be committed".
-        raise FileNotFoundError(f"line_icon asset missing: {path} (slug={slug!r}). " f"Drop a PNG at that path or fix the badge slug in lines.json.")
-    img = pygame.image.load(str(path)).convert_alpha()
-    sw, sh = img.get_size()
-    target_w = int(round(sw * (target_h / sh)))
-    scaled = pygame.transform.smoothscale(img, (target_w, target_h))
-    cache[key] = scaled
-    return scaled
+# Moved to `displays.transfer_info`, the model-agnostic parent, once a third
+# renderer wanted it. Re-exported here so the existing import sites — E235-0's
+# inline panel and `_dev_scripts/_sim_panel_layout.py` — keep working.
+from displays.transfer_info import load_icon  # noqa: E402,F401
 
 
 def render_mixed(text: str, latin_font, cjk_font, color, latin_fallback=None, kern=True):

@@ -201,7 +201,15 @@ def draw_aapolygon(
     h = y_max - y_min + 1
 
     s = pygame.Surface((w * scale, h * scale), pygame.SRCALPHA, surface)
-    s.fill((255, 255, 255, 0))
+    # PRE-FILLED WITH THE POLYGON'S OWN COLOUR at zero alpha, never with white.
+    # `smoothscale` averages RGB and alpha independently — it does not
+    # premultiply — so a filled edge resolving against transparent WHITE comes
+    # back part-white, and every antialiased edge this helper draws carries a
+    # pale rim. On an orange shape against an orange bar that rim reads as a
+    # seam inside the shape (author, 2026-08-28). Filling with `color` makes the
+    # blend a no-op in RGB, so only alpha varies across the edge, which is what
+    # antialiasing is supposed to do.
+    s.fill((*color, 0))
     s_points = [((int(x) - x_min) * scale, (int(y) - y_min) * scale) for x, y in points]
     pygame.draw.polygon(s, color, s_points, width)
     s2 = pygame.transform.smoothscale(s, (w, h))
@@ -500,6 +508,7 @@ def draw_station_code_badge(
     code_3: str = "",
     code_3_size: float = 20,
     text_color=BADGE_TEXT,
+    interior_color=WHITE_BG,
     ring_black: int = 7,
     ring_color: int = 7,
     outer_radius: int = 8,
@@ -535,6 +544,11 @@ def draw_station_code_badge(
     The typeface is fixed (NeueFrutigerWorld-Bold, the JR signage face) — see
     `_badge_font`. Callers control only the point sizes (`prefix_size`,
     `num_size`, `code_3_size`), which scale per badge.
+
+    `interior_color` is this badge's white — the interior fill and the `code_3`
+    letters together. It defaults to the LCD `WHITE_BG` E235's badge sits on; a
+    model whose badge sits on a whiter surface (E233-0's plate is 254) passes
+    that surface's white, or the interior reads as a grey square inside it.
     """
     m = re.match(r"([A-Za-z]+)(\d*)", sta_code or "")
     if not m:
@@ -567,7 +581,7 @@ def draw_station_code_badge(
         0,
         color_radius,
     )
-    pygame.draw.rect(screen, WHITE_BG, pygame.Rect(interior_x, interior_y, interior_w, interior_h), 0, interior_radius)
+    pygame.draw.rect(screen, interior_color, pygame.Rect(interior_x, interior_y, interior_w, interior_h), 0, interior_radius)
 
     letter_surf = font_prefix.render(letters, True, text_color)
     l_rect = letter_surf.get_bounding_rect()
@@ -587,7 +601,7 @@ def draw_station_code_badge(
         screen.blit(num_surf, (center_x - n_rect.width // 2 - n_rect.x, num_y - n_rect.y))
 
     if code_3:
-        code_3_surf = _badge_font(code_3_size).render(code_3, True, WHITE_BG)
+        code_3_surf = _badge_font(code_3_size).render(code_3, True, interior_color)
         c_rect = code_3_surf.get_bounding_rect()
         band_center_x = x + w // 2
         band_center_y = outer_y + code_3_band_h // 2
@@ -687,12 +701,24 @@ def compose_text_parts(font, text, color, width, collapse=False, script="japanes
             img = draw_text(text, font, color, 0, 0)
             parts.append(((width - t_w) // 2, img))
     elif t_w > width:
-        # Japanese text too wide - compress character by character
+        # Japanese text too wide - compress character by character.
+        # Each character gets an equal `sep` slot, and is CENTRED in it: a
+        # narrow glyph (the halfwidth digit in 空港第2ビル, a ･) is otherwise
+        # flush left in a full-width slot, reading as a gap to its right
+        # (author, 2026-08-26). `draw_1col_text` already centres per character
+        # for the vertical column — this is the same fix on the horizontal axis,
+        # for the same station name its docstring names.
+        #
+        # INERT for uniform-width text, which is every other Japanese render:
+        # there `int(t_w_s * hr) == int(sep)`, so the slack is 0 and the offset
+        # is the old `int(sep * i)` exactly. Integer arithmetic throughout, so
+        # it cannot round a uniform run onto a different pixel.
         sep = width / len(text)
         hr = width / (len(text) * t_w_s) if t_w_s > 0 else 1.0
         for i, char in enumerate(text):
             img = draw_text(char, font, color, 0, 0, h_ratio=hr)
-            parts.append((int(sep * i), img))
+            slack = (int(sep) - img.get_width()) // 2
+            parts.append((int(sep * i) + max(0, slack), img))
     elif collapse:
         # Collapse mode for Japanese: render full text centered
         img = draw_text(text, font, color, 0, 0)

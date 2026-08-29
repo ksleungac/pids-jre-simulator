@@ -29,11 +29,12 @@ BG_COLOR = dims.BG_COLOR
 SCREEN_CODE = "X00AA"  # mirrors the IRL 番台選択 register code (droppable, kept for fidelity)
 
 # Roadmap models NOT yet in the registry — shown GRAYED so the family reads complete (per the reference,
-# where unavailable 番台 are dimmed, not hidden). Ordered ABOVE the built models (E231 → E233 → E235, by
-# series number). (series, sub-series). Trim / extend freely — drop a sub-series once it's registered.
+# where unavailable 番台 are dimmed, not hidden). (series, sub-series). Trim / extend freely — drop a
+# sub-series once it's registered; `_entries` sorts these in among the built ones by series number.
 _GRAYED = [
     ("E231", "500"),
-    ("E233", "0"),
+    # ("E233", "0") — built and registered 2026-08-29, so it now arrives from
+    # `model_choices()` as a selectable button rather than a grayed placeholder.
     ("E233", "1000"),
     ("E233", "5000"),
 ]
@@ -66,15 +67,27 @@ def _model_font():
 
 
 def _entries():
-    """Unified grid list ordered by series number: grayed roadmap models (E231 → E233…) FIRST, then the
-    built/selectable models (E235, from the registry) LAST. Each entry: {key, line1 (series, e.g.
-    'E235系'), line2 (sub-series, e.g. '1000番台'), enabled}."""
+    """Unified grid list ordered by series then sub-series, grayed and built INTERLEAVED — a roadmap
+    E233-1000 sits directly after the built E233-0. Each entry: {key, line1 (series, e.g. 'E235系'),
+    line2 (sub-series, e.g. '1000番台'), enabled}."""
     out = []
     for series, sub in _GRAYED:
         out.append({"key": None, "line1": f"{series}系", "line2": f"{sub}番台", "enabled": False})
     for key, label in model_choices():
         series, _, sub = label.partition("-")  # "E235-1000" → "E235" / "1000"
         out.append({"key": key, "line1": f"{series}系", "line2": f"{sub}番台", "enabled": True})
+
+    # SORTED BY SERIES THEN SUB-SERIES, across both groups. The two used to be
+    # concatenated — every grayed model, then every built one — which read as
+    # ordered only while all the built ones were the highest series. E233-0
+    # graduating broke that: it arrived after the E235s. Sorting the combined
+    # list is what the comment above `_GRAYED` always described.
+    def _num(entry):
+        series = int("".join(c for c in entry["line1"] if c.isdigit()) or 0)
+        sub = int("".join(c for c in entry["line2"] if c.isdigit()) or 0)
+        return series, sub
+
+    out.sort(key=_num)
     return out
 
 

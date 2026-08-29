@@ -168,14 +168,65 @@
             "tozai"
         ]
     },
+    "高尾": {
+        "transfers": ["keio"]
+    },
+    "八王子": {
+        "transfers": ["yokohama_line", "hachiko"]
+    },
+    "立川": {
+        "transfers": ["ome_itsukaichi", "nambu", "tama_monorail"],
+        "transfers_by_view": {
+            "JC_up": {"add": ["ome_itsukaichi"]}
+        }
+    },
+    "西国分寺": {
+        "transfers": ["musashino"]
+    },
+    "国分寺": {
+        "transfers": ["seibu_kokubunji", "seibu_tamako"]
+    },
+    "三鷹": {
+        "transfers": ["sobu_local.chuo_local"]
+    },
+    "武蔵境": {
+        "transfers": ["sobu_local.chuo_local", "seibu_tamagawa"]
+    },
+    "吉祥寺": {
+        "transfers": ["sobu_local.chuo_local", "keio_inokashira"]
+    },
+    "荻窪": {
+        "transfers": ["sobu_local.chuo_local", "marunouchi"]
+    },
+    "中野": {
+        "transfers": ["sobu_local.chuo_local", "tozai"]
+    },
+    "四ツ谷": {
+        "transfers": ["sobu_local.chuo", "marunouchi", "namboku"]
+    },
+    "市ヶ谷": {
+        "transfers": ["yurakucho", "namboku", "shinjuku"]
+    },
+    "飯田橋": {
+        "transfers": ["tozai", "yurakucho", "namboku", "oedo"]
+    },
+    "水道橋": {
+        "transfers": ["mita"]
+    },
+    "御茶ノ水": {
+        "transfers": ["sobu_local.chuo", "marunouchi", "chiyoda"]
+    },
     "代々木": {
         "transfers": [
             "yamanote",
-            "sobu_local",
+            "sobu_local.chuo",
             "oedo"
         ],
         "transfers_by_view": {
-            "JY_inner": {"drop": ["sobu_local"]}
+            "JY_inner": {"drop": ["sobu_local"]},
+            "JC_up": {
+                "order": ["sobu_local", "yamanote"]
+            }
         }
     },
     "原宿": {
@@ -309,7 +360,7 @@
         "transfers": [
             "yamanote",
             "chuo_rapid",
-            "sobu_local",
+            "sobu_local.chuo_local",
             "shonan_shinjuku",
             "saikyo_kawagoe.saikyo",
             "odakyu",
@@ -317,7 +368,12 @@
             "marunouchi",
             "shinjuku",
             "oedo"
-        ]
+        ],
+        "transfers_by_view": {
+            "JC_up": {
+                "order": ["sobu_local", "yamanote", "saikyo_kawagoe", "shonan_shinjuku"]
+            }
+        }
     },
     "新橋": {
         "code_3": "SMB",
@@ -363,6 +419,7 @@
             "marunouchi"
         ],
         "transfers_by_view": {
+            "JC_up": {"edit": {"yokosuka_sobu": "yokosuka_sobu"}},
             "JY_inner": {"drop": ["keihin_tohoku"]}
         }
     },

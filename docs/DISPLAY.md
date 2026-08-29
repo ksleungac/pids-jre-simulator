@@ -290,6 +290,8 @@ Canonical example: `UpperDisplay._draw_station_code_badge` centers two text rows
 
 For **horizontal centering inside fixed-width cell** (e.g. passing-station chevron in lower LCD): use `(cell_w - element_w) // 2` for true center. Don't copy magic-number approximations like `stops_w * 0.3` — that constant happens to work for full-route's narrow cells (~1 px off true center) but is ~8 px off in 8-station view's wide cells.
 
+**A narrow glyph in an equal-width slot is centered, not flush left.** Text laid out on uniform slots (`utils.compose_text_parts`'s compression branch, `draw_1col_text`'s column) mixes full-width kanji with halfwidth characters — the digit in `空港第2ビル`, the `･` of a compound destination — and placing every glyph at its slot's left edge leaves the narrow one with all its slack on the right, which reads as a gap rather than as spacing. Both axes now center per character: horizontal by the slot's own slack (`(int(sep) - glyph_w) // 2`), vertical against the widest character's column width. The correction is **0 for uniform-width text**, so it moves only the mixed runs — on E235's compound destinations exactly one glyph moves, the `･`, from 60 to 66 in its 30 px slot. It centers the glyph's SURFACE; a face's own asymmetric side bearing (katakana `ビ`) is left as the typeface set it.
+
 ---
 
 ## Lower LCD — Cross-Model Interface
@@ -505,6 +507,20 @@ The badge and the station name went through this loop in the same session with o
 outcomes, which is the cheapest illustration available: the badge was measured, wired into the
 renderer, rendered from the renderer, and accepted first pass.
 
+**Pixel-tune against the reference FIRST, then sweep the edge cases** (author, 2026-08-29 —
+*"ref and compare was for pixel tuning. pixel tuning first then overview"*). The two artifacts
+answer different questions and the order is not interchangeable: the overlay
+(`compare_fonts.py --overlay`, or `preview_display --edit --overlay` live) says whether the element
+sits where the reference puts it, and the coverage sheet says whether it survives the states and
+routes the reference never shows. Sweeping first spends the author's attention on eighteen cells
+of a geometry that is still moving, and the sheet has to be rebuilt anyway.
+
+**EVERY render handed to the author is the WHOLE SCREEN — overlay and coverage sheet alike, never
+a crop to the element's band** (author, 2026-08-29 — *"when you show overview always show full
+screen"*, then *"overlay only preview with full screen"*). Zoom instead when an element needs to
+be read closely. Cropping hides what the rest of the display is doing, which is the context that
+makes a change judgeable at all, and the author has to ask for the missing half.
+
 **The coverage sheet is produced UNPROMPTED, with the element, and it opens at full spread.**
 Do not wait to be asked for a preview or a comparison, and do not start with the one stop the
 reference happens to show (author, 2026-08-26 — *"i want preview and compare results be
@@ -514,6 +530,23 @@ name length in the corpus, every state the machine reaches, a null field, an out
 render one row per case from the live code, and send it as part of landing the element. It is
 also the only instrument that can catch the class below, so producing it is not politeness; it
 is the verification step.
+
+**ONE composed sheet, never a handful of screenshots** (author, 2026-08-29 — *"for this kind of
+things always and only use the overview for my convenient"*, and *"i like the overview displays,
+this saves me so much time"*). `_dev_scripts/compare_grid.py --out sheet.png --cols N "label=file"`
+tiles labelled cells; render the cells, compose, send the sheet, delete the cells. A stream of
+individual files makes the author open and compare them by hand, which is the work the sheet exists
+to remove. Re-send the SAME sheet as it is rebuilt rather than accumulating new ones.
+
+**The axes it must cover are a standard, not a per-element judgement call** (author, 2026-08-29 —
+*"the edge cases covered should be a standard"*). For a lower-LCD view that is: every state the
+machine reaches (each PA phase, boot at the route origin, at the terminus, mid-skip with the cursor
+on a run-through station), every structural edge the layout can present (either side of a wrap or a
+window swap, either side of a through-service junction), the extreme VALUE its content can take (a
+three-digit countdown, the longest name in the corpus), and **every shipped line**, since the
+out-of-spec paths are only exercised by real route data. Cases missing from the sheet are the ones
+that ship broken: this session's window swap, three-digit minutes and single-row layout were all
+found by adding a cell, not by reading code.
 
 **An element whose layout VARIES WITH THE DATA cannot be settled against a frozen reference,
 and the fit will not tell you so.** A capture constrains the parameters visible in it and leaves

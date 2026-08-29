@@ -112,14 +112,35 @@ to them on 2026-08-21; the material comes out if they would rather it did not st
 
 ## Assets derived from third-party software
 
-`ocr_templates/`, `data/disclaimer/`
+`ocr_templates/`, `data/disclaimer/`, `docs/assets/15-in-use.jpg`
 
 Glyph templates and reference frames extracted from a third-party train simulator's
 on-screen display, used to locate and read its HUD. Rights in the depicted software
 and its interface belong to its publisher and to East Japan Railway Company.
 
+`docs/assets/15-in-use.jpg` is listed here rather than under § Reference material, which
+covers the rest of `docs/assets/`: it is a screenshot of that simulator running with this
+application beside it, and is the only file in that folder depicting third-party software
+rather than this project's own output or a photograph of railway equipment.
+
 The release also contains `font_atlas/`, pre-rendered raster output of the LCD
 typefaces. It is generated at build time and is not in this repository. See § Fonts.
+
+## Renditions of signage designs
+
+`displays/train_models/e233_0/priority_seat.py`,
+`displays/train_models/e233_0/manner_mode.py`
+
+The priority-seat placard and the mobile-phone notice are **drawn in code** from
+vector primitives, with every dimension measured off a reference photograph. No
+image file of either is shipped or stored — the drawing exists only as the
+geometry in those two modules.
+
+They are nonetheless renditions of signage designed by East Japan Railway
+Company, and rights in the underlying designs — the placard's layout, the five
+seated pictograms, the handset mark — belong to them. Drawing rather than copying
+means this repository distributes no artwork of theirs; it does not make the
+designs ours.
 
 ## Reference material
 

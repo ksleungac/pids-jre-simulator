@@ -1,5 +1,6 @@
 {
     "route": "中央線快速",
+    "model": "e233_0",
     "line_code": "JC",
     "transfer_view": "JC_up",
     "color": [

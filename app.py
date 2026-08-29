@@ -248,7 +248,7 @@ class PASimulator:
         # pressed → stop PA + return to the setup screen). main.py reads the return of run().
         self.exit_action: str = "quit"
 
-        # {home/save/pause: Rect} from the status band's last render — the run-loop click handler
+        # {home/save: Rect} from the status band's last render — the run-loop click handler
         # hit-tests against these. Empty until the first _render_panel (boot draw sets it).
         self._band_hits: dict = {}
 
@@ -521,7 +521,7 @@ class PASimulator:
                     and self.debug_surface is not None
                     and self.window_to_canvas(event.pos)[1] < self.debug_surface.get_height()
                 ):
-                    # Click inside the status band → its control cluster (pause / save / home).
+                    # Click inside the status band → its control cluster (save / home).
                     self._handle_band_click(self.window_to_canvas(event.pos))
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     # Click below the debug panel (or anywhere when no panel)
@@ -538,7 +538,7 @@ class PASimulator:
         PASimulator owns the window allocation; ``status_band`` owns all panel
         rendering (layout, fonts, colors) — same hand-off contract the retired
         debug panel had, now the shared band. The band's returned
-        {home/save/pause} hit-rects are stashed for the run-loop click handler.
+        {home/save} hit-rects are stashed for the run-loop click handler.
         No-op when auto_input is off.
         """
         if not self.auto_input or self.debug_surface is None:
@@ -550,25 +550,17 @@ class PASimulator:
 
     def _handle_band_click(self, pos) -> None:
         """Dispatch a click inside the status band's control cluster (hit-rects from the last render):
-        Pause toggles the auto-driver, Save generates the drive report, Home stops PA + returns to the
+        Save generates the drive report, Home stops PA + returns to the
         setup screen (run() exits "home" → main.py re-shows setup).
 
         ``pos`` is in CANVAS coordinates — the caller applies ``window_to_canvas`` first, because the
         band's hit-rects come from rendering into the canvas and know nothing about window zoom."""
         hits = self._band_hits
-        home, pause, save = hits.get("home"), hits.get("pause"), hits.get("save")
+        home, save = hits.get("home"), hits.get("save")
         if home is not None and home.collidepoint(pos):
             status_band.press_flash(self.debug_surface, home, "home")
             self.exit_action = "home"
             self.running = False
-        elif pause is not None and pause.collidepoint(pos):
-            driver = self.auto_driver
-            # Flash the CURRENTLY-shown label (the toggle's pre-click state): "繼續/Play" when
-            # already paused, "暫停/Pause" when running.
-            status_band.press_flash(self.debug_surface, pause, "resume" if (driver is not None and driver.paused) else "pause")
-            if driver is not None:
-                driver.paused = not driver.paused
-                print(f"[AutoDriver] {'paused' if driver.paused else 'resumed'} via band button")
         elif save is not None and save.collidepoint(pos):
             status_band.press_flash(self.debug_surface, save, "save")
             from auto_input import generate_report  # local import: defer dxcam pull

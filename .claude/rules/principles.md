@@ -123,6 +123,20 @@ Before claiming "X is a bug" or "X works like Y", read the call sites and trace 
   lifted from a web-search *summary* of a page that had returned 403, and had to retract that too. When a
   question stays unresolved, leave it unresolved rather than sourcing a replacement claim from a proxy.
 
+**Source order, when several sources describe the same artifact: the AUTHOR'S STATEMENT, then
+the repo's own code, then a reference photograph. Last is last, and it never outranks a human
+word.** A photo is the only one of the three that has been through a lens and a resampler, so it
+is the one carrying artefacts — yet it is the easiest to "measure", which is what makes it feel
+authoritative. 2026-08-28: across one element the author said the marks were solid, that a rim
+ran all the way round, and that there was no white outline on the arrows; each time a pixel probe
+said otherwise and each time the probe was wrong. Meanwhile the element's structure sat in one
+comment line in the sibling model's source (`e235_1000/lower_lcd.py:694`) and went unread for two
+sessions while the geometry was reconstructed from a 2.35× capture — arriving at a different,
+wrong answer. Author: *"you are still quiet shit at drawing and understanding this things"*, and
+on an earlier instance, *"treating my minute as ref error"*. **Before measuring anything on an
+element forked from a sibling, read the sibling's code for it.** The cost is one grep; the
+alternative is inventing an element the artifact does not have.
+
 **How to apply:**
 - When the user references their own existing setup ("if you read my X you'll know") — read it BEFORE theorizing, especially before raising a risk/blocker. The answer is often already in-repo.
 - When user pushes back, re-read the source — don't re-justify from memory.
@@ -204,6 +218,7 @@ After a visible change, if a CHEAP IMMEDIATE preview lets the user verify, just 
 **How to apply:**
 - Change lands in an immediate preview (`preview_display.py`, a `_dev_scripts/preview_*` harness, a headless screenshot) → launch / render it while reporting.
 - Change is only reachable by navigating the live app → report + let the user launch; still gate genuinely irreversible / outward-facing actions.
+- **Once you have said the words "relaunch to see it", RELAUNCH — the sentence is the decision, and stopping after it just makes the user type the word back.** This overrides the 2026-07-15 bullet above for the case where *you* are the one proposing the relaunch: that entry bars auto-launching after a fix the user never asked to see, not handing back a step you have already named. It applies with force in a test loop, where the user is at the keyboard waiting and every round-trip costs them a turn. 2026-08-29, after four consecutive "relaunch when you want" endings: *"next time when you tell me relaunch, just relaunch for me unless i tell you not to do so."*
 
 ### Draw spatial structure — prose loses
 When the answer is "where is this relative to that" — capture regions, crop chains, bounding boxes, layout offsets — render a labelled overlay on the REAL artifact and hand over the path, instead of describing it.
@@ -460,6 +475,7 @@ Touch only what the task requires. Don't expand edit scope autonomously.
 - Remove orphans your own changes created. Clean up your own mess only.
 - Render symptom from a wrong upstream input → fix the input so existing draw code works untouched; don't add compensating draw-side logic.
 - **Bug in an existing state machine → enforce its model, don't add state.** When a bug appears in a designed state machine, first check whether an existing invariant already resolves it and enforce that at the one violating site — before introducing new flags/state. (2026-07-16) A re-entry silent-advance ate a departure PA; I proposed a new `synced` flag, but the fix was a one-line deletion enforcing the existing "PASSING ≡ MOVING (arrival aside)" invariant. User: *"don't complicate … the state machines we've discussed should be complete about these."*
+- **A SIGNED-OFF element is frozen, and an element ANCHORED on a value you are changing is in the diff whether or not you edit its code.** Approval is not a moment, it is a state that holds until the user re-opens it. The blast radius of a tuneable is every element that derives from it — so a change to a container silently moves everything positioned against it, and the diff shows one edited line while the screen shows a regression. 2026-08-28: the author signed off the continuity marks' sizing, and they were then altered three times in a row as side effects of editing the bar's length and a label's placement, because the marks anchor off the bar's edge. Author: *"i've already said your cont arrows are mostly right, and you ruined it next iteration, how fun?"* Before changing a value, name what reads it; if a settled element does, say so and stop rather than re-tuning it back into place afterwards.
 - The test: every changed line should trace directly to the user's request.
 
 ### A measurement is a claim until the instrument is calibrated
@@ -512,6 +528,16 @@ A tool's output is not the fact it was meant to establish. Before a comparison /
   - **A wrong baseline misattributes the fault — it indicts whatever was measured AGAINST it.** Scoring express route diagrams against the all-stations diagrams whose stations they skip, three segments came back with an implausible time saving; the error was two hops in the BASELINE, so every one of those reports named a diagram that was correct. Two of the three landed on exactly the expected value once the baseline was fixed, having needed no change themselves. Before believing a verdict about A measured against B, ask what checks B — and say so in the report when the answer is nothing. (2026-08-21)
   - **A gate whose INPUT is live content goes stale the moment anyone edits that content, and it fails looking exactly like a code regression.** A pixel-hash gate proving a refactor moved nothing read a real corpus mp3; the author then spliced that mp3 in the ordinary course of work, and the gate went red on precisely the checks that decode it. The code was untouched — re-running against the pre-splice bytes returned all-identical. **Pin a gate to fixed bytes** (a synthetic input, or a copy the workflow cannot reach), and when one goes red, ask what its inputs did before concluding anything about its subject. (2026-08-18)
 - **A PARAMETER THE SCORE CANNOT SEE IS NOT BEING FIT — it is free, and it drifts while the number improves.** Fitting a shape to a reference by RMS is only a fit over the parameters some sample actually bears on. (2026-08-25, three times in one session.) A station-plate fit scored ten cuts and none on the RIGHT edge, so `w` wandered 0.9px while the RMS fell; adding right-edge cuts raised the score from 4.75 to **5.06**, and that rise is the honest number. A clock-face comparison held `y` fixed across candidates — but each face seats its digits at a different height in the font box, so the fixed y was a handicap unrelated to the face: it picked ShinGo, and giving every candidate its own best y and right edge reversed the answer to Helvetica and took the score 75 → 24. Before believing a fit, list its parameters and name the sample that constrains each; a parameter with no answer there is decoration. Same family as printing the denominator above — an aggregate that cannot distinguish "clean" from "empty" and a fit that cannot distinguish "correct" from "unconstrained" fail identically, by looking numeric.
+  - **On an UPSCALED capture, a band brighter than BOTH its neighbours is resampling overshoot,
+    not ink.** Ringing is what a resampler does at every high-contrast edge, and across a gap
+    only a few pixels wide the overshoots from either side meet and pile into a peak that reads
+    as a bright feature sitting there deliberately. 2026-08-28: the pale bands between the
+    E233-0 continuity chevrons measured above both the orange and the background, so they were
+    modelled as a white outline and drawn — a whole element invented out of the capture. The
+    author saw it immediately (*"what was that?"*). Two cheap checks: profile a plain edge of
+    the same two colours elsewhere in the SAME image and see whether it overshoots too, and
+    look at the colour — the fabricated "white" peaked at `(252,187,151)`, pink rather than
+    neutral, which no white outline can be.
   - **Measure a sub-pixel feature by its INTEGRAL, not by its extreme pixel.** A ~1.2px line lands on a different sub-pixel phase in every capture, so its darkest pixel read 43 on one reference and 64 on another while their integrated ink agreed to within 1%. Reading the phase instead of the quantity is what makes two captures of one thing look like a disagreement, and it is also what makes a threshold-derived extent wrong, since the feature's own shoulder moves where the threshold thinks the edge is.
   - **After a resample, an artifact touching its own surface edge is not evidence it was cut.** A clipping detector built on edge alpha reported 57 clipped rows, most of them fine — a downscale's antialiasing tail legitimately reaches the edge. The real tests were upstream and downstream of the resample: does the SOURCE render have room for the glyph (from `metrics`), and does the drawn ink land outside its clip rect. Both then read zero, and both had been observed failing beforehand.
 - **A query tool's default page size is part of the instrument.** `gh issue list` returns 30 unless `--limit` says otherwise, so `--json number --jq length` reports 30 for a 68-issue backlog — a number, not an error. I quoted it as the total twice, and the same truncation hid 13 issues from a classification sweep built on it. A count that lands on a round default (30, 50, 100) is a tell; pass the limit explicitly before believing any aggregate a list command hands back. (2026-08-08)
@@ -528,6 +554,7 @@ Exhaustive search over combinations is the right instrument for "can this happen
 **How to apply:**
 - State the physical constraint first ("the game never shows STOPPED above 0 km/h"), prune on it, and report the pruning alongside the result.
 - Prune for COST, never for correctness. A negative result ("no case exists") survives pruning, because the space only shrank. A positive result must then be checked for REACHABILITY — otherwise you have found a case the system cannot produce and will chase a phantom.
+- **The inverse bites too: never CONSTRUCT a worst case the domain cannot produce.** Taking the extreme of each axis independently and combining them measures the instrument, not the artifact — and the number it returns is a real measurement of nothing, which is what makes it convincing. 2026-08-30: sizing the status band's segment row, I paired the two widest station names in the corpus into `さいたま新都心 → 葛西臨海公園` and reported 236px against a 210px budget. They are on different lines and can never be one segment. Author: *"your case didn't exists"*. Build the worst case by enumerating what the system emits, exactly as the pruning rule below demands for the search — the two are one discipline pointed in opposite directions. And when a real overflow does turn up, the answer was *"we should be able to comperss it"*: shrink the row, never truncate it.
 - Never prune by what feels unlikely, only by what the domain forbids. Unlikely-but-possible is exactly the degraded case that ships broken (`critical_lessons §7`), and a hand-narrowed axis list is how a gate goes blind (`critical_lessons §9`).
 
 ### Merging N things into one needs two proofs, not one
@@ -684,6 +711,20 @@ Pick the metric that IS the thing you care about. A proxy that correlates in the
 - A proxy that is a *component* of the outcome (a score, a margin, a distance) is the most dangerous kind: it looks causal.
 - When a measurement contradicts a change you reasoned carefully about, suspect the measurement once before suspecting the reasoning — then test both.
 - **Synthesized inputs are a proxy for real ones.** Gate anything tuned on them against real captured samples before it ships; hold the real set back as the arbiter rather than folding it into the tuning.
+
+### A fix is a claim — reproduce the failure first, then prove the fix removes it
+A reported bug gets REPRODUCED before a fix is written, and the fix gets MUTATION-PROVEN before it is called done: revert it and confirm the bug returns. Both halves are cheap and both are skippable, which is why they get skipped — a plausible mechanism plus a green suite feels like proof and is not.
+
+**Why:** a fix built on an unreproduced theory is a guess wearing evidence, and it costs the user the round-trip of testing it. Examples:
+- (2026-08-29) "After some swaps the image can't be loaded and gives me a question mark." I reasoned out a mechanism in the page's JavaScript — abandoned `<img>` loads stacking retry timers — fixed it, and handed it back to test. It was wrong. The user: *"swap mechanism still buggy … please debug youself."* Reproducing took ~20 lines of socket code against a standalone server and named the real cause immediately: a stream handler blocks forever writing to an abandoned-but-open socket, never releasing its `MAX_CLIENTS` slot, so the fourth switch got a 503. The reproduction was entirely local and available the whole time.
+- (2026-08-29) The same session, the other half: a guard added against a stale QR popup read `if _hovered_url is None or not _stream_links`. The second term is implied by the first — `_hovered_url` is only ever assigned inside the branch that fills `_stream_links` — so it could never fire, and the hazard it named was still live. A fresh reviewer found it; reverting to the pre-fix form and watching the QR paint over a drive frame is what proved the real fix.
+
+**How to apply:**
+- No reproduction → no fix. If the failure cannot be reproduced, say so and instrument, rather than shipping the best theory.
+- Then break it back: a fix you cannot make fail on demand has not been shown to do anything. This is `§ "A measurement is a claim until the instrument is calibrated"`'s mutation-proof, pointed at the FIX rather than at a new gate.
+- **A guard whose new term is implied by an existing one is inert** — the shape to check for whenever a fix reads as "add a condition". Ask which input makes the new term decide, and construct it.
+- Reproduce with the cheapest instrument that touches the real code path — a standalone server and a raw socket, not the whole app.
+- Once analysis and observation have disagreed across 2+ rounds, stop and read the next section instead.
 
 ### Construction-proof model beats the next repro theory
 When static analysis keeps contradicting a reproducible observation across 2+ rounds — your trace says the bug can't happen, the user keeps seeing it — stop generating repro theories. Either instrument for ground truth, or redesign the invariant so the whole bug CLASS is impossible by construction. The Nth theory has diminishing value once analysis and observation disagree.

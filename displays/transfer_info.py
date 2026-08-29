@@ -17,7 +17,79 @@ import json
 import re
 from typing import List, Optional
 
+import pygame
+
 from app_paths import project_root as _project_root
+
+
+def load_icon(slug: str, target_h: int, cache: dict) -> pygame.Surface:
+    """A line badge PNG, scaled to `target_h` and cached by `(slug, height)`.
+
+    Model-agnostic, and lives here rather than in a train model's own module
+    because three renderers already want it — E235-1000's horizontal slot,
+    E235-0's inline panel and now E233-0's — and a shared asset loader reached
+    through one model's package is the misfiling `conventions.md` § "Display
+    module structure" names. `e235_1000.transfer_info` re-exports it, so every
+    existing import site keeps working unchanged.
+
+    Fails loud on a missing asset per `critical_lessons.md` § "Runtime-required
+    materials must be committed": a silent placeholder would hide a bad badge
+    slug until someone noticed the wrong icon on a shipped screen.
+    """
+    key = (slug, target_h)
+    if key in cache:
+        return cache[key]
+    path = _project_root() / "data" / "line_icons" / f"{slug}.png"
+    if not path.exists():
+        raise FileNotFoundError(f"line_icon asset missing: {path} (slug={slug!r}). " f"Drop a PNG at that path or fix the badge slug in lines.json.")
+    img = pygame.image.load(str(path)).convert_alpha()
+    sw, sh = img.get_size()
+    scaled = pygame.transform.smoothscale(img, (int(round(sw * (target_h / sh))), target_h))
+    cache[key] = scaled
+    return scaled
+
+
+def wrap_two_lines(name: str, font, avail_w: int):
+    """Greedy-to-width split of a line name into `(line1, line2)`.
+
+    Model-agnostic, and here rather than on a train model because three
+    renderers want it — E235-0's inline panel, E233-0's 6-station band and now
+    its transfer view. `docs/wip/WIP_e233_0_display.md` § 10.3.5 asked for the
+    lift rather than a third copy; `conventions.md` § "Display module structure"
+    is the rule behind it.
+
+    Three separators, tried in order, each keeping its own side:
+
+    - `･` (half-width U+FF65, the separator `docs/DATA_FORMAT.md` § "Punctuation
+      in `name_ja`" names as the wrap point) stays on LINE 1. The longest run of
+      segments whose joined width including that trailing dot fits `avail_w`
+      goes first; the dot is not dropped at the break, which is what pins the
+      IRL cut 東北･山形･秋田 | 北海道･上越･北陸新幹線.
+    - `（` moves to LINE 2, so a parenthetical qualifier takes its own line
+      whole: 横浜市営地下鉄 | （ブルーライン）. Same rule the E233-0 6-station
+      band applies, and the reason it is here rather than a caller's special
+      case — breaking anywhere else inside a parenthetical strands the bracket.
+    - a space is DROPPED, which is what an English name offers.
+
+    Failing all three, break at the longest character prefix that fits. Always
+    returns two strings; line 2 may overrun a remainder too wide for any split.
+    """
+    for sep, side in (("･", 1), ("（", 2), (" ", 0)):
+        if sep in name and not name.startswith(sep):
+            segs = name.split(sep)
+            k = 1  # at least the first segment stays on line 1
+            for i in range(1, len(segs)):
+                if font.size(sep.join(segs[:i]) + (sep if side == 1 else ""))[0] <= avail_w:
+                    k = i
+                else:
+                    break
+            head = sep.join(segs[:k]) + (sep if side == 1 else "")
+            return head, (sep if side == 2 else "") + sep.join(segs[k:])
+    for i in range(len(name) - 1, 0, -1):
+        if font.size(name[:i])[0] <= avail_w:
+            return name[:i], name[i:]
+    return name, ""
+
 
 SCALE_SUFFIX_RE = re.compile(r"\.scale\(([0-9]*\.?[0-9]+)\)$")
 
@@ -99,6 +171,51 @@ def apply_transfer_filter(
         editmap = view_ops.get("edit", {})
         if editmap:
             transfers = [editmap.get(r.split(".", 1)[0], r) for r in transfers]
+            # DE-DUPLICATED, so an `edit` can MERGE. `edit` maps by base slug and
+            # is applied to every entry, so pointing a base at one ref collapses
+            # all of that base's variants onto it — which is how a view says
+            # "show this through-service as one line". 東京 lists 横須賀線 and
+            # 総武線快速 separately, and the Chūō display names them once as
+            # 横須賀線・総武線快速; without this the merge renders that name twice.
+            #
+            # This is what makes the op match its own documented wording,
+            # "replaces whatever X-base entry the flat list has" — singular. It
+            # is inert on every existing config: no station today maps two
+            # entries onto the same ref, so nothing else can produce a duplicate.
+            #
+            # The DIRECTION matters. A view can merge but never split, so the
+            # flat list holds the finest-grained form and views coarsen it. That
+            # fails safe: a view with no ops shows the two branches, never three
+            # entries or a silently missing one.
+            #
+            # CONSECUTIVE ONLY, and that bound is load-bearing. `edit` is allowed
+            # to produce a duplicate at a DISTANCE — two unrelated entries can
+            # legitimately map onto one ref from different places in the list,
+            # and `_tests/t1_unit/test_transfer_info.py` pins exactly that. A
+            # merge is collapsing a RUN, not making the list unique: the branches
+            # of one through-service are adjacent by construction, because
+            # `transfers[]` is in IRL reading order.
+            collapsed = [transfers[0]] if transfers else []
+            for ref in transfers[1:]:
+                if ref != collapsed[-1]:
+                    collapsed.append(ref)
+            transfers = collapsed
+
+        # `order` — the view's own reading order, by BASE slug, leading. Nothing
+        # else can permute: `transfers[]` is one ordered list shared by every
+        # view, and add / drop / edit / rows all preserve position. Reordering
+        # the list itself would move every other view with it, and the IRL order
+        # is a property of the PIDS being read, not of the station: Chūō names
+        # 中央・総武線 first at 新宿 where the Yamanote panel does not.
+        #
+        # LEADING, not total: listed slugs come first in the order given, and
+        # everything else keeps its relative position behind them. So a view
+        # states only the part it cares about — usually the JR block — and a line
+        # added to `transfers[]` later does not silently jump to the front.
+        ordering = view_ops.get("order", [])
+        if ordering:
+            rank = {slug: i for i, slug in enumerate(ordering)}
+            transfers = sorted(transfers, key=lambda r: rank.get(r.split(".", 1)[0], len(rank)))
 
     return transfers
 

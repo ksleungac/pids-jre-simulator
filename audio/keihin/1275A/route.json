@@ -1,5 +1,6 @@
 {
     "route": "京浜東北線",
+    "model": "e233_0",
     "line_code": "JK",
     "transfer_view": "JK_south",
     "color": [

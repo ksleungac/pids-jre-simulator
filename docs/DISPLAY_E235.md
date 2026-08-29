@@ -574,7 +574,7 @@ Pre-implementation reference set for validating the row-grouping pipeline. `N` c
 | 8 | 原宿 | JY | JY_inner | 2 | (2,) | (2,) ✓ | N=2 structural | flat |
 | 9 | 有楽町 | JY | JY_inner | 2 | (2,) | (2,) ✓ | N=2 structural | drops keihin_tohoku |
 | 10 | 新橋 | JY | JY_inner | 3 | (2,1) | (2,1) ✓ | N=3 structural | drops {keihin_tohoku, tokaido, ueno_tokyo} |
-| 11 | 新宿 | JY | JY_inner | 9 | (3,3,3) | (3,3,3) ✓ | greedy + cascade | within-row spacing observations remain |
+| 11 | 新宿 | JY | JY_inner | 9 | (3,3,3) | **re-verify** | greedy + cascade | its JB entry was renamed 2026-08-29 — see below |
 | 12 | 日暮里 | JY | JY_inner | 3 | (2,1) | (2,1) ✓ | N=3 structural | |
 | 13 | 上野 | JY | JY_inner | 7 | (1,3,3) | (1,3,3) ✓ | shinkansen + cascade | within-row anchoring observations remain |
 | 14 | 秋葉原 | JY | JY_inner | 3 | (2,1) | (2,1) ✓ | N=3 structural | drops keihin_tohoku |

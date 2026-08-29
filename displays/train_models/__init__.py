@@ -30,10 +30,7 @@ TRAIN_MODELS = {
         "e235_1000", "E235-1000", e235_1000.UpperDisplay, e235_1000.LowerDisplay, e235_1000.S_WIDTH, e235_1000.S_HEIGHT, e235_1000.UPPER_HEIGHT
     ),
     "e235_0": TrainModel("e235_0", "E235-0", e235_0.UpperDisplay, e235_0.LowerDisplay, e235_0.S_WIDTH, e235_0.S_HEIGHT, e235_0.UPPER_HEIGHT),
-    # BUILD IN PROGRESS — upper band draws only its specced elements, lower LCD
-    # is a background placeholder. Listed so it is previewable and calibratable;
-    # see docs/wip/WIP_e233_0_display.md before treating a blank area as a bug.
-    "e233_0": TrainModel("e233_0", "E233-0 (WIP)", e233_0.UpperDisplay, e233_0.LowerDisplay, e233_0.S_WIDTH, e233_0.S_HEIGHT, e233_0.UPPER_HEIGHT),
+    "e233_0": TrainModel("e233_0", "E233-0", e233_0.UpperDisplay, e233_0.LowerDisplay, e233_0.S_WIDTH, e233_0.S_HEIGHT, e233_0.UPPER_HEIGHT),
 }
 
 DEFAULT_MODEL_KEY = "e235_1000"
