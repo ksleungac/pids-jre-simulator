@@ -5,7 +5,7 @@
 Module scope is the FEATURE, not a function or an incident. Two decisions live
 here because both are pure, both belong to mirroring, and both fail silently:
 
-  1. WHO CAN REACH IT  — resolve_bind_host: launch flags -> bind address
+  1. WHO CAN REACH IT  — resolve_bind_host / clean_mode: saved setting -> bind address
   2. WHERE A TAP LANDS — frame_point: a normalised tap -> a frame pixel
   3. WHICH VIEW OWNS IT — compose / tap_event: the docked second view, and the
                           routing of a tap that lands in it
@@ -33,11 +33,19 @@ import frame_stream  # noqa: E402
 # asked for.
 
 BIND_CASES = [
-    # (stream, lan, expected)
-    (False, False, None),  # default launch -> streaming off entirely
-    (True, False, "127.0.0.1"),  # --stream -> loopback only, no firewall prompt
-    (False, True, "0.0.0.0"),  # --stream-lan alone implies streaming
-    (True, True, "0.0.0.0"),  # both -> LAN wins (widest requested)
+    # (saved, expected). The launch flags are gone — the TIMS 設定 page is the only switch, so the
+    # saved mode is the whole input. The unrecognised rows are the ones that matter: settings.json
+    # is a hand-editable file read before any UI runs, and whatever is in it must never widen the
+    # bind. `0.0.0.0` is reachable only from the one literal value that asks for it, which is the
+    # invariant these rows exist to hold: not "the default is X" but "nothing but 'lan' opens the
+    # machine to the network".
+    ("off", None),
+    ("local", "127.0.0.1"),  # loopback only — no firewall prompt, nothing reachable off this PC
+    ("lan", "0.0.0.0"),  # the ONLY value that may bind past loopback
+    (None, "127.0.0.1"),  # never configured -> the shipped default, which is loopback
+    ("LAN", "127.0.0.1"),  # case-sensitive: not a mode, so the default — crucially NOT 0.0.0.0
+    ("everywhere", "127.0.0.1"),  # garbage likewise falls to the default, never to a wider bind
+    ("", "127.0.0.1"),
 ]
 
 # ── 2. where a tap lands ──────────────────────────────────────────────────────
@@ -73,16 +81,104 @@ DEGENERATE_CASES = [(0.5, 0.5, 0, 0), (0.0, 0.0, 0, 100), (1.0, 1.0, 100, 0)]
 # (the three corner rows + both invariant sweeps at f == 1.0).
 
 
+# Which addresses may be OFFERED as a connect target. The band draws these and the page opens
+# them, so an address here is a claim that a phone on the local network can reach it.
+#
+# The public rows are the ones with teeth. A machine whose Ethernet takes a public address by DHCP
+# (a modem in bridge mode, no NAT router) enumerated it and put it on the status band — useless as
+# a LAN target, and a leak, since that window is screenshotted and streamed. Observed 2026-08-29.
+LAN_FILTER_CASES = [
+    ("192.168.1.42", True),  # the ordinary home-router case
+    ("10.5.0.2", True),  # RFC1918 10/8 — also where a VPN tunnel lands; private either way
+    ("172.16.4.9", True),
+    ("172.32.4.9", False),  # just OUTSIDE 172.16/12 — public, and the easy off-by-one to get wrong
+    ("221.127.188.34", False),  # the observed public DHCP address
+    ("8.8.8.8", False),
+    ("127.0.0.1", False),  # loopback is not a LAN target
+    ("169.254.9.205", False),  # APIPA: an adapter that failed DHCP, never routable
+    ("", False),  # the OS is the source, but a malformed value must not raise
+    ("not-an-ip", False),
+]
+
+# WHICH address the band prints. `_stream_rows` shows exactly ONE (`urls()[:1]`), so this ordering
+# IS the address the user types into a phone — get it wrong and they get the VPN tunnel, which is
+# the precise failure `_lan_rank` exists to prevent (observed: NordLynx 10.5.0.2 ranked ahead of
+# the real 192.168.0.104). Expected lists are pinned literally, never computed from `_lan_rank`.
+# (route-probe address, interface addresses) -> what the band would offer, in order.
+# The ROUTE half matters on its own: it is the first place a public address surfaces — the observed
+# bridge-mode machine got 221.127.188.34 from the default route, not from the interface list — so a
+# row with `route=None` everywhere would leave `lan_candidates`' own `_is_usable_lan(route)` guard
+# untested while LAN_FILTER_CASES proved the predicate in isolation.
+RANK_CASES = [
+    ("10.5.0.2", ["10.5.0.2", "192.168.0.104"], ["192.168.0.104", "10.5.0.2"]),  # the observed VPN case
+    (None, ["10.0.0.1", "172.16.4.9", "192.168.1.1"], ["192.168.1.1", "172.16.4.9", "10.0.0.1"]),
+    (None, ["192.168.1.1", "192.168.0.104"], ["192.168.1.1", "192.168.0.104"]),  # equal rank keeps discovery order
+    (None, ["10.5.0.2"], ["10.5.0.2"]),  # a tunnel alone is still offered — ranking never drops anything
+    ("221.127.188.34", ["192.168.0.104"], ["192.168.0.104"]),  # a PUBLIC route address must not be offered
+    ("221.127.188.34", [], ["127.0.0.1"]),  # ...and with nothing else, the fallback, never the public one
+    ("192.168.0.104", ["192.168.0.104", "10.5.0.2"], ["192.168.0.104", "10.5.0.2"]),  # route also in the list -> no dupe
+]
+
+# `clean_port` — the persisted value is read before any window exists, so it must never raise.
+PORT_CASES = [(8541, 8541), (8500, 8500), (8599, 8599), (8499, 8500), (99999, 8599), (None, 8541), ("abc", 8541), ("8550", 8550)]
+
+# `clean_mode` is asserted DIRECTLY, because the bind rows above cannot see it: `bind_host_for`
+# falls through to None for anything it does not recognise, so an unvalidated garbage mode reaches
+# the same address a validated one does. Mutation-proven 2026-08-29 — relaxing `clean_mode` to
+# accept any non-None value left every bind row green, which is the downstream-backstop trap
+# (`principles.md` § "Test real logic, not ceremony"). The settings page is where it IS observable:
+# it lights the cell whose name equals the mode, so an unrecognised one lights nothing at all.
+MODE_CASES = [
+    ("off", "off"),
+    ("local", "local"),
+    ("lan", "lan"),
+    (None, "local"),  # unset -> the shipped default
+    ("LAN", "local"),
+    ("everywhere", "local"),
+    (3, "local"),  # a non-string survives the `in` test without raising
+]
+
+
 def check_bind() -> int:
     failed = 0
-    for stream, lan, expected in BIND_CASES:
-        got = frame_stream.resolve_bind_host(stream, lan)
+    for saved, expected in BIND_CASES:
+        got = frame_stream.resolve_bind_host(saved)
         if got != expected:
-            print(f"FAIL  bind stream={stream} lan={lan}: expected {expected!r}, got {got!r}")
+            print(f"FAIL  bind saved={saved!r}: expected {expected!r}, got {got!r}")
             failed += 1
-    if frame_stream.resolve_bind_host(stream=True, lan=False) == "0.0.0.0":
-        print("FAIL  --stream alone must NOT bind the LAN")
+    if frame_stream.resolve_bind_host() == "0.0.0.0":  # no argument at all = never configured
+        print("FAIL  an absent setting must NOT bind the LAN")
         failed += 1
+    for ip, expected in LAN_FILTER_CASES:
+        got = frame_stream._is_usable_lan(ip)
+        if got != expected:
+            print(f"FAIL  _is_usable_lan({ip!r}): expected {expected}, got {got}")
+            failed += 1
+    # Driven through `lan_candidates` itself, with its two discovery sources stubbed — asserting
+    # `sorted(addrs, key=_lan_rank)` would have re-implemented production's own line, so a
+    # `reverse=True` or a re-sort after the rank would leave every row green while the phone got
+    # the tunnel (`principles.md` § "A second implementation of a production decision drifts").
+    _real_all, _real_route = frame_stream._all_local_addresses, frame_stream._default_route_address
+    try:
+        for route, addrs, expected in RANK_CASES:
+            frame_stream._all_local_addresses = lambda a=addrs: list(a)
+            frame_stream._default_route_address = lambda r=route: r
+            got = frame_stream.lan_candidates()
+            if got != expected:
+                print(f"FAIL  lan_candidates(route={route!r}, addrs={addrs}): expected {expected}, got {got}")
+                failed += 1
+    finally:
+        frame_stream._all_local_addresses, frame_stream._default_route_address = _real_all, _real_route
+    for raw, expected in PORT_CASES:
+        got = frame_stream.clean_port(raw)
+        if got != expected:
+            print(f"FAIL  clean_port({raw!r}): expected {expected}, got {got}")
+            failed += 1
+    for raw, expected in MODE_CASES:
+        got = frame_stream.clean_mode(raw)
+        if got != expected:
+            print(f"FAIL  clean_mode({raw!r}): expected {expected!r}, got {got!r}")
+            failed += 1
     return failed
 
 
@@ -256,10 +352,58 @@ def check_dock() -> int:
     return failed
 
 
+# ── 4. what the UI is allowed to offer ────────────────────────────────────────
+# `urls()` is what the setup band draws as a clickable row, so it is a claim
+# that the address is live. The silent failure is a STALE claim: `stop()`
+# releasing the socket while `urls()` still names it leaves the band offering a
+# dead link that opens a browser on nothing, with no error anywhere. Same
+# "a key read but never written" family as `reentry_pending` (conventions.md
+# § Tooling), one step along — here it is read but never CLEARED.
+#
+# Oracle is the lifecycle, not the implementation: nothing is reachable before
+# start and nothing is reachable after stop. Written against the module state
+# directly so the check needs no socket — binding a real port in a unit test
+# would make it fail on a machine where 8541 is busy.
+
+
+def check_urls() -> int:
+    failed = 0
+    saved = frame_stream._urls
+    try:
+        frame_stream._urls = []
+        if frame_stream.urls():
+            print("FAIL  urls() offers an address while mirroring is off")
+            failed += 1
+
+        frame_stream._urls = ["http://10.0.0.4:8541/"]
+        got = frame_stream.urls()
+        if got != ["http://10.0.0.4:8541/"]:
+            print(f"FAIL  urls() did not report the bound address: {got}")
+            failed += 1
+        got.append("http://evil/")  # a caller must not be able to edit what start recorded
+        if len(frame_stream.urls()) != 1:
+            print("FAIL  urls() handed out its own list, so a caller can add addresses to it")
+            failed += 1
+
+        frame_stream.stop()
+        if frame_stream.urls():
+            print("FAIL  urls() still offers an address after stop() released the socket")
+            failed += 1
+    finally:
+        frame_stream._urls = saved
+        frame_stream._stop.clear()  # stop() latches the event; leave the module as we found it
+    return failed
+
+
 def main() -> int:
-    failed = check_bind() + check_tap() + check_dock()
-    total = len(BIND_CASES) + 1 + len(TAP_CASES) + len(DEGENERATE_CASES) + 2 + 33
-    print(f"test_stream: {total - failed}/{total} checks passed")
+    failed = check_bind() + check_tap() + check_dock() + check_urls()
+    # NO DENOMINATOR. It used to be a hand-maintained sum carrying bare magic numbers (`+ 33 + 4`)
+    # for two of the sections, so it drifted the moment a case was added and then described a run
+    # that never happened. A total that cannot be trusted is worse than none —
+    # `principles.md` § "A measurement is a claim until the instrument is calibrated". Counting for
+    # real would mean instrumenting all 32 assertion sites; the honest cheap answer is to claim
+    # only what is known, which is whether anything failed.
+    print("test_stream: all checks passed" if not failed else f"test_stream: {failed} check(s) FAILED")
     return 1 if failed else 0
 
 

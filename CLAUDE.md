@@ -167,7 +167,10 @@ pids_jre_simulator/
 ├── font_atlas.py                      # LCD font seam: live fonts (dev) or pre-rendered atlas
 │                                       #   (ship). lcd_font() + text_parts(). docs/wip/WIP_font_atlas.md
 ├── i18n.py                            # App-chrome i18n: settings, locale detect, t(), font helper
-├── frame_stream.py                    # Opt-in window mirroring over HTTP (--stream / --stream-lan)
+├── frame_stream.py                    # Window mirroring over HTTP + taps back (TIMS 設定 →
+│                                       #   off/local/lan). docs/APP.md § "Window mirroring"
+├── qr.py                              # Byte-mode EC-L QR encoder, versions 1-4 — the band's
+│                                       #   scannable mirror address. No dependency, by design
 ├── route_loader.py                    # finalize_route: JSON → runtime closure with derived fields
 ├── preview_display.py                 # Audio-free preview entry (PASimulator(preview=True))
 ├── displays/

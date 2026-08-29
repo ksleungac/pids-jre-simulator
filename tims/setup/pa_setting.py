@@ -320,6 +320,8 @@ def run_on(screen):
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if band.click_stream(event.pos):  # band mirror address → open it in the PC's browser
+                    continue
                 if hits["home"].collidepoint(event.pos):  # band Home → press + load beat → back to menu
                     press_transition(
                         screen,

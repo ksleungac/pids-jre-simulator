@@ -460,5 +460,16 @@
   "setup_tims.band.home": { "en": "Back\nHome", "zh_HK": "返回\n主頁", "zh_CN": "返回\n主页" },
   "setup_tims.band.pause": { "en": "Pause", "zh_HK": "暫停", "zh_CN": "暂停" },
   "setup_tims.band.resume": { "en": "Play", "zh_HK": "繼續", "zh_CN": "继续" },
-  "setup_tims.band.save": { "en": "Save\nPlot", "zh_HK": "保存\n記錄", "zh_CN": "保存\n曲线" }
+  "setup_tims.band.save": { "en": "Save\nPlot", "zh_HK": "保存\n記錄", "zh_CN": "保存\n曲线" },
+  "setup_tims.stream.heading": { "en": "Remote Control", "zh_HK": "遠端控制", "zh_CN": "远程控制" },
+  "setup_tims.stream.mode_label": { "en": "Access", "zh_HK": "存取範圍", "zh_CN": "访问范围" },
+  "setup_tims.stream.mode.off": { "en": "Off", "zh_HK": "關閉", "zh_CN": "关闭" },
+  "setup_tims.stream.mode.local": { "en": "PC", "zh_HK": "本機", "zh_CN": "本机" },
+  "setup_tims.stream.mode.lan": { "en": "LAN", "zh_HK": "網絡", "zh_CN": "网络" },
+  "setup_tims.stream.port_label": { "en": "Port", "zh_HK": "連接埠", "zh_CN": "端口" },
+  "setup_tims.stream.firewall_note": {
+    "en": "LAN needs Windows firewall permission.",
+    "zh_HK": "「網絡」需要 Windows 防火牆權限。",
+    "zh_CN": "“网络”需要 Windows 防火墙权限。"
+  }
 }

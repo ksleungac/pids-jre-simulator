@@ -118,7 +118,9 @@ _LANG_TUNEABLES = {
 # no nav). ACTION_KEYS parallels them — the i18n labels (translations_app.json). Leftmost card = 報站設定
 # (PA setup; the route → diagram → station flow), keyed "route" but labelled action.pa_setup.
 ACTION_IDS = ["route", "tutorial", "settings", "record"]
-INACTIVE_ACTIONS = {"settings", "record"}  # not in this release — silver + inert
+INACTIVE_ACTIONS = {"record"}  # 行車記錄 not in this release — silver + inert. 設定 opens the
+# remote-terminal page; it stays a single page rather than a hub of setting groups until there is a
+# second group to list (the OCR settings keep their own entry on the PA page, beside the OCR buttons).
 ACTION_KEYS = [
     "setup_tims.action.pa_setup",
     "setup_tims.action.tutorial",
@@ -284,6 +286,18 @@ def _launch_pa_setting():
     return pa_setting.run_on(screen)
 
 
+def _launch_stream_setting():
+    """Open the remote-terminal page (リモート端末設定) — the in-app switch for window mirroring.
+    Same shape as the sibling launchers: own the display for the sub-screen, run it, hand back.
+    Returns "home" when the sub-screen's band Home was pressed, else None."""
+    from . import stream_setting
+
+    stream_setting.ACTIVE_LANG = ACTIVE_LANG  # carry the menu's UI language into the page
+    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
+    pygame.display.set_caption("TIMS remote-terminal settings")
+    return stream_setting.run_settings(screen)
+
+
 def run(screen):
     """Production menu loop on an EXISTING ``screen``. Returns a LAUNCH CONFIG dict when the user commits
     a route and 起動s in the PA-setting flow (bubbled up from pa_setting.run_on); None on quit / ESC. The
@@ -303,6 +317,8 @@ def run(screen):
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 return None
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if band.click_stream(event.pos):  # band mirror address → open it in the PC's browser
+                    continue
                 # version tag (flashing) → release page
                 if hint_rect is not None and hint_rect.collidepoint(event.pos):
                     info = update_check.get_update()
@@ -337,7 +353,7 @@ def run(screen):
                         continue
                     if aid in INACTIVE_ACTIONS:
                         break  # out of scope this release — silver + inert (no press beat, no nav)
-                    is_nav = aid in ("tutorial", "route")  # Tutorial + 報站設定 navigate; others inert
+                    is_nav = aid in ("tutorial", "route", "settings")  # these navigate; 行車記錄 stays inert
                     # press beat (yellow) for every card; loading beat only for the navigational ones
                     press_transition(
                         screen,
@@ -356,6 +372,8 @@ def run(screen):
                             cfg = _launch_pa_setting()
                             if isinstance(cfg, dict):
                                 return cfg  # 起動 committed → bubble the launch config up to main.py
+                        elif aid == "settings":
+                            _launch_stream_setting()  # "home" from its band Home lands us right here anyway
                         else:
                             # OOBE flip is deferred to the basic-tutorial entry (in tutorial_select), so the
                             # flash keeps guiding home 教學 → 基本操作 → the walkthrough.

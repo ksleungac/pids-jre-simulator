@@ -24,7 +24,9 @@ Headless (SDL dummy driver), so it runs in the normal suite.
 
 import json
 import os
+import socket
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -67,6 +69,22 @@ def _tap(fx: float, fy: float, view: str = None) -> int:
     )
     with urllib.request.urlopen(req, timeout=5) as r:
         return r.status
+
+
+def _post_host(host) -> int:
+    """POST a well-formed tap with an arbitrary (or absent) Host; return the status.
+
+    Raw socket rather than urllib, because urllib always supplies a Host and the ABSENT case is
+    exactly the one that used to pass.
+    """
+    body = b'{"x": 0.5, "y": 0.5}'
+    head = f"POST /tap HTTP/1.1\r\nContent-Type: application/json\r\nContent-Length: {len(body)}\r\n"
+    if host is not None:
+        head += f"Host: {host}\r\n"
+    with socket.create_connection(("127.0.0.1", PORT), timeout=5) as s:
+        s.sendall((head + "Connection: close\r\n\r\n").encode() + body)
+        s.settimeout(5)
+        return int(s.recv(64).split(b" ")[1])
 
 
 def _clicks() -> list:
@@ -212,6 +230,53 @@ def main() -> int:
         print("FAIL  a refused tap produced a click")
         failed += 1
 
+    # 6b. THE HOST GATE, on reads as well as writes. Any page in the user's browser can point a
+    #     short-TTL hostname at 127.0.0.1 and become same-origin with this server; without a Host
+    #     check `GET /frame.png` hands it the app's screen, which it can read back off a canvas.
+    #     Measured 2026-08-29: before the fix that request returned 200 with the frame while the
+    #     same header on /tap correctly returned 421 — the gate existed on exactly one endpoint
+    #     while `_allowed_hosts`' docstring and `conventions.md` both said it covered the reads.
+    #     An ABSENT Host must fail too; it used to pass, which made the gate opt-out.
+    for path, hdrs, want, why in [
+        ("/frame.png", {"Host": "evil.example.com"}, 421, "a rebound name must not read the screen"),
+        ("/views", {"Host": "evil.example.com"}, 421, "a rebound name must not probe for a second window"),
+        ("/", {"Host": "evil.example.com"}, 421, "a rebound name must not be served the page"),
+        ("/frame.png", {"Host": f"127.0.0.1:{PORT}"}, 200, "the real client must still be served"),
+    ]:
+        req = urllib.request.Request(f"http://127.0.0.1:{PORT}{path}", headers=hdrs)
+        try:
+            got = urllib.request.urlopen(req, timeout=5).status
+        except urllib.error.HTTPError as e:
+            got = e.code
+        if got != want:
+            print(f"FAIL  {path} with Host={hdrs['Host']!r} returned {got}, expected {want} ({why})")
+            failed += 1
+    # 6c. THE PAGE IS SERVED SUBSTITUTED, not concatenated. `_page_prelude` injects the TIMS button
+    #     palette and VIEW_IDS at a `<!--PRELUDE-->` marker; prepending instead put a <style> ahead
+    #     of the doctype and dropped the page into quirks mode. And if a `_PAGE` edit ever loses the
+    #     marker, `.replace` becomes a silent no-op whose failure is NOT cosmetic: every `--btn-*`
+    #     goes invalid AND `VIEW_IDS` is undefined, which throws at `VIEW_IDS.map(...)` and takes out
+    #     the whole script — view cells, zoom, reconnect and the tap POST — while the <img> keeps
+    #     streaming, so the page looks alive and does nothing.
+    page = _pull_frame(f"http://127.0.0.1:{PORT}/")
+    if not page.startswith(b"<!doctype html>"):
+        print(f"FAIL  the served page does not start with the doctype: {page[:40]!r}")
+        failed += 1
+    if b"<!--PRELUDE-->" in page:
+        print("FAIL  the PRELUDE marker survived into the served page; the substitution silently no-opped")
+        failed += 1
+    for token in (b"--btn-top", b"VIEW_IDS"):
+        if token not in page:
+            print(f"FAIL  the served page is missing {token!r}; the injected prelude did not land")
+            failed += 1
+
+    if _post_host(None) != 421:
+        print("FAIL  a POST with NO Host header was accepted; an absent Host must fail closed")
+        failed += 1
+    if _post_host("evil.example.com") != 421:
+        print("FAIL  a POST with a foreign Host was accepted")
+        failed += 1
+
     # 7. presenting with nothing queued must not invent a click
     pygame.display.flip()
     if _clicks():
@@ -328,8 +393,93 @@ def main() -> int:
         )
         failed += 1
 
+    # 11. SWITCHING VIEW MUST NEVER RUN OUT OF STREAM SLOTS.
+    #     Re-pointing the page's <img> abandons the previous request. A browser that leaves that
+    #     socket OPEN is invisible to the server until its send buffer fills and the write times
+    #     out — measured at 8.5s — so with a refusing cap, MAX_CLIENTS switches inside that window
+    #     locked every later stream out with 503, which draws as a broken image. Reported
+    #     2026-08-29 ("after some swaps the image can't be loaded and gives me a question mark").
+    #
+    #     Oracle is the user-visible contract, independent of how the cap is implemented: every
+    #     request I make gets a stream, and the newest one carries frames. Sockets are deliberately
+    #     kept open and unread — closing them is what the old code needed in order to cope, and is
+    #     exactly what the real browser did not do.
+    abandoned = []
+    try:
+        for i in range(frame_stream.MAX_CLIENTS * 3 + 1):
+            s = socket.create_connection(("127.0.0.1", PORT), timeout=5)
+            abandoned.append(s)
+            s.sendall(f"GET /stream?view=both HTTP/1.1\r\nHost: 127.0.0.1:{PORT}\r\n\r\n".encode())
+            s.settimeout(3)
+            status = s.recv(60).split(b"\r\n")[0]
+            if b"200" not in status:
+                print(f"FAIL  stream request {i + 1} after {i} abandoned switches was refused: {status!r}")
+                failed += 1
+                break
+        else:
+            pygame.display.flip()
+            newest, blob = abandoned[-1], b""
+            deadline = time.time() + 3
+            while time.time() < deadline and b"\x89PNG" not in blob:
+                blob += newest.recv(8192)
+            if b"\x89PNG" not in blob:
+                print("FAIL  the newest stream was admitted but delivered no frame")
+                failed += 1
+        if len(frame_stream._streams) > frame_stream.MAX_CLIENTS:
+            print(f"FAIL  {len(frame_stream._streams)} live handlers, cap is {frame_stream.MAX_CLIENTS}")
+            failed += 1
+    finally:
+        for s in abandoned:
+            s.close()
+
+    # 12. TURNING MIRRORING OFF MUST STOP THE MIRRORING, not merely close the listener.
+    #     The oracle is the promise, not a proxy for it: an EXISTING stream has to end. Checking
+    #     only that a NEW connection is refused passes while a live handler keeps shipping frames,
+    #     which is precisely the hole the shared `_stop` latch left — `apply_mode` clears it to
+    #     start the next generation, so a handler whose write straddles the clear sees an unset
+    #     event and carries on with no server left to evict it (`principles.md` § "Validate against
+    #     the outcome, not a proxy"). `stop` now sets every registered handler's own Event instead.
+    live = socket.create_connection(("127.0.0.1", PORT), timeout=5)
+    try:
+        live.sendall(f"GET /stream HTTP/1.1\r\nHost: 127.0.0.1:{PORT}\r\n\r\n".encode())
+        live.settimeout(3)
+        live.recv(4096)  # headers + first part: the stream is genuinely running
+        frame_stream.apply_mode("off", PORT)
+        live.settimeout(5)
+        drained = b""
+        while True:  # EOF is the assertion — the server ended the handler, not just the listener
+            chunk = live.recv(8192)
+            if not chunk:
+                break
+            drained += chunk
+            if len(drained) > 2_000_000:
+                print("FAIL  a live stream kept delivering frames after mirroring was turned off")
+                failed += 1
+                break
+    except (socket.timeout, TimeoutError):
+        print("FAIL  a live stream neither ended nor errored after mirroring was turned off")
+        failed += 1
+    except OSError:
+        pass  # a reset is a clean end too
+    finally:
+        live.close()
+    if frame_stream._streams:
+        print(f"FAIL  {len(frame_stream._streams)} handler(s) still registered after stop()")
+        failed += 1
+
+    # 13. and the settings page's apply really rebinds — including onto the SAME port it just
+    #     released, which is the common case since only the mode changed.
+    for mode, want in (("local", True), ("off", False), ("local", True)):
+        urls = frame_stream.apply_mode(mode, PORT)
+        if bool(urls) is not want:
+            print(f"FAIL  apply_mode({mode!r}) returned {urls}, expected {'addresses' if want else 'none'}")
+            failed += 1
+    frame_stream.apply_mode("off", PORT)
+
     frame_stream.stop()
-    print(f"test_stream: {24 - failed}/24 checks passed")
+    # No denominator: it was a hand-maintained literal that drifted the moment a section was added
+    # (`principles.md` § "A measurement is a claim…" — claim only what is known).
+    print("test_stream: all checks passed" if not failed else f"test_stream: {failed} check(s) FAILED")
     return 1 if failed else 0
 
 

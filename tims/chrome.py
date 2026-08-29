@@ -88,6 +88,66 @@ CODE_GAP_FRAC    = 0.8            # code↔heading gap = this × a heading full-
 # fmt: on
 
 
+_WRAP_CACHE = {}  # (font, max_w, text) -> [line, ...]; see wrap_lines
+_WRAP_CACHE_MAX = 512  # inputs are a fixed string set x 3 locales; the cap is a runaway backstop
+
+
+def wrap_lines(text, font, max_w):
+    """Greedy pixel wrap (CJK char-by-char; blank line preserved). Caller owns the paragraph split.
+
+    A Latin run backtracks to its last space so a word is never cut mid-run ("Windo / ws"),
+    while CJK keeps breaking at the column edge — the same rule the classic panel's wrap_text
+    uses. A single Latin word wider than the column still hard-breaks rather than overflowing.
+
+    Lives here rather than in a screen because two screens now wrap text (the OCR consent body and
+    the remote-terminal page's caution line), and the second one reaching into the first's privates
+    is the smell that says a helper has outgrown its module (`principles.md` § "Search before
+    authoring", vibe-check #11).
+
+    MEMOIZED. The consent view rebuilds its whole body every frame, and this loop measures
+    `font.size()` once per CHARACTER — 1737 calls per build, 48% of the frame cost, all of it
+    re-deriving identical breaks (#60). The result depends only on (text, font, max_w), so it is
+    cached on exactly those. The font object IS the key, which both keys per-locale correctly and
+    holds a reference so its id can never be reused by a later font. Callers must treat the
+    returned list as read-only — it is the cached instance, not a copy.
+    """
+    key = (font, max_w, text)
+    cached = _WRAP_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    lines = []
+    for para in text.split("\n"):
+        if not para:
+            lines.append("")
+            continue
+        cur = ""
+        for ch in para:
+            if font.size(cur + ch)[0] <= max_w or not cur:
+                cur += ch
+                continue
+            if ch == " ":
+                lines.append(cur)
+                cur = ""
+                continue
+            sp = cur.rfind(" ")
+            tail = cur[sp + 1 :] if sp >= 0 else ""
+            # Backtrack only when the carried tail is Latin: a CJK continuation has no word
+            # boundary worth preserving, and moving it would just ragged the column for nothing.
+            if sp > 0 and tail and ord(tail[0]) < 0x3000:
+                lines.append(cur[:sp])
+                cur = tail + ch
+            else:
+                lines.append(cur)
+                cur = ch
+        lines.append(cur)
+
+    if len(_WRAP_CACHE) >= _WRAP_CACHE_MAX:
+        _WRAP_CACHE.clear()
+    _WRAP_CACHE[key] = lines
+    return lines
+
+
 def title_row(surf, code, heading, lang):
     """Draw the screen-code (smaller, fatter stretch) + cyan heading, both x-stretched and
     bottom-aligned on one baseline, at (TITLE_X, TITLE_Y). ``code`` is the Latin screen code

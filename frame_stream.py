@@ -5,7 +5,7 @@ Serves whatever is currently on the PC screen — setup flow, tutorial, drive �
 as an MJPEG-style ``multipart/x-mixed-replace`` stream of PNG frames. The
 client is a plain ``<img>``; no JavaScript on the display path.
 
-Design decisions + rejected alternatives live in ``docs/wip/WIP_frame_streaming.md``.
+Design decisions + rejected alternatives live in ``docs/APP.md`` § "Window mirroring".
 Summary of the load-bearing ones:
 
 - **PNG, not JPEG.** Measured on this app's AA-off content: PNG is 4x smaller
@@ -13,7 +13,8 @@ Summary of the load-bearing ones:
   (flat fills, sharp glyphs) is JPEG's worst case.
 - **Zero new dependencies.** stdlib ``http.server`` + pygame's own PNG writer.
   If this design ever needs a dep, re-examine the design (critical_lessons 3).
-- **Off by default.** Enabled per-launch via ``--stream`` / ``--stream-lan``.
+- **Off by default.** Turned on in the TIMS 設定 page, which persists a mode
+  (``off`` / ``local`` / ``lan``) that ``main.py`` reads at launch.
 - **A tap is a synthetic left MOUSEBUTTONDOWN, nothing more** (stage 2). Every
   click consumer in this app — the whole TIMS setup flow, the tutorial, and the
   drive's click-to-jump — reads ``event.pos`` off a ``MOUSEBUTTONDOWN`` with
@@ -34,9 +35,14 @@ Summary of the load-bearing ones:
 from __future__ import annotations
 
 import io
+import ipaddress
 import json
+import select
 import socket
+import sys
 import threading
+import time
+import traceback
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Optional
@@ -44,15 +50,47 @@ from urllib.parse import parse_qs
 
 import pygame
 
+# The page dresses its controls as TIMS bevel buttons; the palette is read, never restated.
+# Safe at module scope: `tims/__init__` deliberately re-exports nothing and `tims.widgets` imports
+# only stdlib + pygame, so this cannot close a cycle with `tims.band`, which imports this module.
+from tims.widgets import _TUNEABLES_TIMS_BUTTON
+
 DEFAULT_PORT = 8541
 FPS = 15  # stream pacing; the LCD is mostly static so this is ample
 MAX_CLIENTS = 3  # browsers routinely open a speculative 2nd connection, so >1
+# A stream handler must not be able to sit in a blocked write forever. Switching view re-points the
+# page's <img>, which ABANDONS the request; the browser may leave the socket open, so the server
+# writes into a buffer nobody drains, fills it, and blocks in `wfile.write` — never reaching the
+# `finally` that releases its MAX_CLIENTS slot. Three switches then exhaust the cap and every
+# stream after that is refused with 503, which the browser draws as a broken-image icon. Measured
+# 2026-08-29: swaps 1-3 returned 200 and swap 4 onward 503, with `_clients` pinned at 3.
+STREAM_WRITE_TIMEOUT = 2.0  # seconds; a live client drains a ~4 KB frame in microseconds
 BOUNDARY = "pidsframe"
 
-_lock = threading.Lock()  # held across display teardown (install_display_quit_guard)
-_clients = 0
+# NOTE: deliberately has NO reader. `install_display_quit_guard` takes this across
+# `pygame.display.quit`, and nothing else acquires it — capture moved to `_publish` on the MAIN
+# thread (see the CONTRACT at the top of this file), so no server thread touches the display
+# surface and the read-after-free race it was built for is already closed (D14).
+# Kept because the NEXT teardown site is the one that would race, and the guard is what makes
+# forgetting impossible. Wire a reader in if anything ever reads the display surface off-thread.
+_lock = threading.Lock()
+# Live /stream handlers, oldest first, each with the Event that ends its loop. A deque rather than
+# a counter because MAX_CLIENTS is enforced by EVICTION, not refusal — see `_admit`.
+_streams: "deque[threading.Event]" = deque()
+# When each live handler last got a frame out. Keyed on the handler's OWN Event, which it holds for
+# its whole life and `_retire` removes — not a side table on a recycled identity.
+_last_write: "dict[threading.Event, float]" = {}
 _clients_lock = threading.Lock()
 _server: Optional[ThreadingHTTPServer] = None
+# The addresses `start` bound and printed, kept so the UI can show them too. `start` returns
+# them as well; a caller that only wants to DISPLAY the feature's state should not have to have
+# been the one that turned it on (`tims.band` renders them on every setup screen).
+_urls: "list[str]" = []
+# Every address this server is actually reachable at, captured at bind time — the Host allow-list.
+# Distinct from `_urls`, which is the shortlist the UI OFFERS: a 0.0.0.0 bind listens on interfaces
+# `lan_candidates` deliberately does not advertise, and a client arriving on one of those is
+# legitimate. See `_allowed_hosts`.
+_bound_hosts: "set[str]" = set()
 
 # Published by the main thread on present (flip/update); COMPOSED and encoded
 # lazily by the server thread, per view. `_seq` lets the encoder skip work on an
@@ -106,38 +144,163 @@ _taps_lock = threading.Lock()
 
 
 def _allowed_hosts() -> set:
-    """Host-header values this server answers to.
+    """Host-header values this server answers to: loopback names plus the addresses it BOUND.
 
-    Loopback names plus whatever `lan_candidates()` found, so a tablet reaching
-    the printed LAN URL is accepted while an attacker-controlled DNS name
-    resolving to 127.0.0.1 (DNS rebinding) is not.
+    Bound, not displayable. `lan_candidates()` answers "what should we show the user", and
+    `_is_usable_lan` deliberately narrows that to private ranges — but a `lan` bind takes 0.0.0.0,
+    i.e. every interface, so the two sets can differ. On a machine whose only routable address is
+    public (bridge-mode modem, no NAT router — the configuration this was found on), the mirror
+    really is reachable at an address `lan_candidates()` refuses to list, and deriving the
+    allow-list from the display list refused that client's taps with 421 while still serving it
+    video. `_bound_hosts` is captured in `start` from the interfaces actually listening.
+
+    Recomputing per request also cost a `getaddrinfo(gethostname())` on every POST.
     """
-    return {"localhost", "127.0.0.1", "0.0.0.0", "::1", *lan_candidates()}
+    return {"localhost", "127.0.0.1", "::1", *(h.lower() for h in _bound_hosts)}
 
 
-def resolve_bind_host(stream: bool, lan: bool) -> Optional[str]:
-    """Map the launch flags to a bind address, or None when streaming is off.
+# How far the mirror reaches. A TRI-STATE, not two booleans: the three are mutually exclusive by
+# nature, and the two launch flags are a 4-cell truth table with a duplicate cell (both set = lan).
+# The settings page shows exactly these three, so this is the shape the user picks from and the
+# shape that is persisted; the flags resolve INTO it rather than beside it, so there is one
+# decision (`principles.md` § "A second implementation of a production decision drifts silently").
+MODES = ("off", "local", "lan")
+# A fresh install mirrors to LOOPBACK. It costs nothing a user would notice — a 127.0.0.1 socket is
+# unreachable from the network, so Windows raises no firewall prompt — and it buys the second-window
+# case (a browser on this PC, freely resizable) without anyone having to discover a setting first.
+# `lan` stays opt-in precisely because it does not have that property: it is the bind that prompts,
+# and it is the one that lets another device drive the app.
+DEFAULT_MODE = "local"
 
-    Pure function — the unit-test seam for the flag matrix. ``lan`` implies
-    streaming even without ``--stream``, so ``--stream-lan`` alone works.
 
-    LAN binding is deliberately opt-in: 127.0.0.1 needs no firewall grant and
-    exposes nothing, while 0.0.0.0 raises the Windows Defender prompt.
+def bind_host_for(mode: str) -> Optional[str]:
+    """Bind address for a mirror mode, or None when it is off. The ONE place a mode becomes an address.
+
+    ``local`` (127.0.0.1) serves a browser on this PC with zero network exposure and NO Windows
+    firewall prompt — a loopback socket is unreachable from the network, so there is nothing for
+    Defender to ask about. ``lan`` (0.0.0.0) is what a phone or tablet needs, and it is the bind
+    that raises the prompt. That asymmetry is the whole reason these are separate positions.
     """
-    if lan:
+    if mode == "lan":
         return "0.0.0.0"
-    if stream:
+    if mode == "local":
         return "127.0.0.1"
     return None
 
 
-def _is_usable_lan(ip: str) -> bool:
-    """True for an address a phone on the same Wi-Fi could plausibly reach.
+def clean_mode(raw) -> str:
+    """A mode from settings.json, or the default. Never raises, never trusts a persisted value."""
+    return raw if raw in MODES else DEFAULT_MODE
 
-    Excludes loopback and APIPA/link-local (169.254.x — an adapter that failed
-    DHCP, present on every idle virtual NIC and never routable).
+
+# The range the settings page steps over. Here rather than there because `main.py` binds the value
+# at launch, long before that page could clamp it — one owner for the range and for the reading.
+PORT_MIN, PORT_MAX = 8500, 8599
+
+
+def clean_port(raw) -> int:
+    """A port from settings.json, clamped to the offered range. Never raises — same contract as
+    `clean_mode`, for the same reason.
+
+    Three readers had three behaviours: the settings page guarded its own read, `main.py` did not,
+    and `start` caught only `OSError`. `"stream_port": 99999` therefore raised an uncaught
+    `OverflowError` out of `bind()` and killed the app BEFORE any window existed — so the user
+    could not reach the page that would have fixed it. A value outside the range was also bound
+    raw while the page displayed the clamped one.
     """
-    return not (ip.startswith("127.") or ip.startswith("169.254."))
+    try:
+        return min(PORT_MAX, max(PORT_MIN, int(raw)))
+    except (TypeError, ValueError):
+        return DEFAULT_PORT
+
+
+def resolve_bind_host(saved=None) -> Optional[str]:
+    """The saved setting as a bind address, or None when mirroring is off. Pure — the test seam.
+
+    There were launch flags here (`--stream` / `--stream-lan`) and they are gone: the TIMS 設定
+    page is the switch now, and a second way to set the same thing is a second answer to one
+    question. The settings value is the only input, which is why an unrecognised one must land on
+    the default rather than anywhere wider (see `clean_mode`).
+    """
+    return bind_host_for(clean_mode(saved))
+
+
+def _is_usable_lan(ip: str) -> bool:
+    """True for an address a phone on the same local network could plausibly reach.
+
+    PRIVATE ranges only (RFC 1918 and friends, via ``ipaddress.is_private``), minus loopback and
+    APIPA/link-local — 169.254.x means an adapter that failed DHCP, which sits on every idle
+    virtual NIC and is never routable.
+
+    Excluding PUBLIC addresses is the load-bearing part, and it is not a tidy-up. A machine whose
+    Ethernet takes a public address by DHCP (no NAT router — an ordinary setup with a modem in
+    bridge mode) had that address enumerated and drawn on the status band as a "connect here"
+    target: useless, since no phone reaches it from another network, and a real leak, because this
+    window gets screenshotted and streamed. Observed 2026-08-29 on the author's own machine, which
+    offered its public IP alongside a VPN tunnel and no private address at all.
+
+    A malformed value is not usable — the caller collects these from the OS, but `ipaddress` is
+    strict and a non-address must not take the enumeration down.
+    """
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return a.is_private and not (a.is_loopback or a.is_link_local)
+
+
+def _all_local_addresses() -> "list[str]":
+    """Every IPv4 address bound to this host, unfiltered — the Host allow-list's raw material.
+
+    Deliberately NOT `lan_candidates()`: that one narrows to what is worth OFFERING a user, and a
+    0.0.0.0 bind answers on everything regardless. Filtering here would reject a real client.
+    """
+    try:
+        return [info[4][0] for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
+    except OSError:
+        return []
+
+
+def _default_route_address() -> Optional[str]:
+    """The local address a packet to the internet would leave by, or None.
+
+    A UDP connect sends nothing — it only makes the OS pick a route — so this costs no traffic.
+    Split out from `lan_candidates` so the discovery sources are seams a test can stand in for;
+    otherwise the ordering could only be checked by re-implementing the sort, which is the
+    second-implementation trap.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        s.close()
+
+
+def _own_names() -> "list[str]":
+    """This machine's own host names, lower-cased — Host values a client may legitimately arrive by.
+
+    A phone on the LAN often reaches a PC by name or by its mDNS `.local` form rather than by the
+    printed IP, and the Host gate covers the READ endpoints now, so refusing those serves a blank
+    page instead of the mirror.
+    """
+    try:
+        name = socket.gethostname().lower()
+    except OSError:
+        return []
+    return [name, f"{name}.local"] if not name.endswith(".local") else [name]
+
+
+def _lan_rank(ip: str) -> int:
+    """Sort key for `lan_candidates`: home-router ranges first, VPN-ish ranges last. Stable, so
+    two addresses in the same range keep the order they were discovered in."""
+    if ip.startswith("192.168."):
+        return 0
+    if ip.startswith("172."):
+        return 1
+    return 2  # 10/8 — a real LAN sometimes, a tunnel more often
 
 
 def lan_candidates() -> list[str]:
@@ -155,31 +318,27 @@ def lan_candidates() -> list[str]:
 
     # Default-route address first — usually right, and when a VPN is up it is
     # at least a real interface, just possibly not the useful one.
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        if _is_usable_lan(ip):
-            found.append(ip)
-    except OSError:
-        pass
-    finally:
-        s.close()
+    route = _default_route_address()
+    if route is not None and _is_usable_lan(route):
+        found.append(route)
 
     # Then everything else bound to this host.
-    try:
-        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            ip = info[4][0]
-            if _is_usable_lan(ip) and ip not in found:
-                found.append(ip)
-    except OSError:
-        pass
+    for ip in _all_local_addresses():
+        if _is_usable_lan(ip) and ip not in found:
+            found.append(ip)
 
-    return found or ["127.0.0.1"]
+    # Order by how likely the range is to be the Wi-Fi a phone is on, rather than by discovery.
+    # The default-route probe above finds the tunnel first whenever a VPN is up — measured on the
+    # author's machine, which offered NordLynx's 10.5.0.2 ahead of the real 192.168.0.104. 192.168/16
+    # is the home-router default; 10/8 is where WireGuard and corporate VPNs land, so it goes last.
+    # Nothing is hidden — every candidate is still offered, this only decides which is read first.
+    return sorted(found, key=_lan_rank) or ["127.0.0.1"]
 
 
 def install_display_quit_guard() -> None:
-    """Wrap ``pygame.display.quit`` so every teardown holds the frame lock.
+    """Wrap ``pygame.display.quit`` so every teardown holds ``_lock`` — which today no reader takes.
+
+    See the NOTE on `_lock`: this is reserved scaffolding, not a live protection.
 
     Same one-seam idiom as ``window_utils.install_topmost_hook``: there are two
     teardown sites (``main.py`` setup->drive, ``app.py`` cleanup on home-return)
@@ -187,7 +346,7 @@ def install_display_quit_guard() -> None:
     the call itself is regression-proof; scattering the guard is what rots.
     Idempotent.
     """
-    if getattr(pygame.display.quit, "_stream_wrapped", False):
+    if _already_wrapped(pygame.display.quit, "_stream_wrapped"):
         return
     _orig = pygame.display.quit
 
@@ -196,6 +355,7 @@ def install_display_quit_guard() -> None:
             return _orig(*args, **kwargs)
 
     _quit._stream_wrapped = True
+    _quit._orig = _orig  # same scheme as the present hook: the chain must stay walkable
     pygame.display.quit = _quit
 
 
@@ -226,8 +386,12 @@ def compose(
     — gets the main view instead of an empty frame. That is what the PC is
     showing, which is the rule this file is built on.
 
-    Neither surface is copied here. Both are already the copies `_publish` took,
-    and the caller owns that.
+    Neither surface is copied here, and the two are safe to blit off-thread for DIFFERENT reasons:
+    `_main` because `_publish` stored a copy, `_side` because its producer REBINDS rather than
+    redraws (`bell_window.update` renders a fresh Surface on each state change). The second is a
+    cross-module invariant, so it is named at both ends — see the CONTRACT on
+    `bell_window.surface()`. An in-place redraw there for perf would tear the docked view, which
+    is the same mid-draw sampling the `_publish` CONTRACT exists to prevent.
     """
     if view == "side" and side_surf is not None:
         return side_surf, pygame.Rect(0, 0, *side_surf.get_size())
@@ -262,6 +426,16 @@ def has_side() -> bool:
     return _side is not None
 
 
+def urls() -> "list[str]":
+    """Every address the running server can be reached on; empty when mirroring is off.
+
+    A COPY, so a caller cannot mutate what `start` recorded. Empty is the honest answer for both
+    "never started" and "the bind failed" — in each case there is nothing to open, which is all a
+    display surface needs to know.
+    """
+    return list(_urls)
+
+
 def tap_target(view: str, has_dock: bool) -> Optional[str]:
     """Which view a tap should resolve against, or None to DROP it.
 
@@ -281,9 +455,24 @@ def tap_target(view: str, has_dock: bool) -> Optional[str]:
     return view
 
 
+def _forget_frames() -> None:
+    """Drop everything captured from the last session. Called by `stop`."""
+    global _main, _side, _seq
+    _main = _side = None
+    _seq += 1  # invalidate the per-view PNG cache rather than trusting it to be re-keyed
+    _png.clear()
+    _png_seq.clear()
+
+
 def _publish() -> None:
     """Capture the just-presented frame. Runs on the MAIN thread, from the
     flip/update hook — never from a server thread.
+
+    No server, no capture. D7 justified publishing unconditionally on the grounds that the cost was
+    "bounded by the feature being off by default"; `DEFAULT_MODE = "local"` retired that premise, so
+    a user who turns mirroring OFF would otherwise keep paying a full-window copy (0.37 ms) on every
+    present, forever, for nobody (`principles.md` § "A simplification must carry its constraints
+    forward"). One attribute read replaces the copy.
 
     # CONTRACT: capture on present, never asynchronously.
     # Reading pygame.display.get_surface() from the server thread samples the
@@ -295,6 +484,8 @@ def _publish() -> None:
     # Capturing here means every published frame is one the user actually saw.
     """
     global _main, _seq
+    if _server is None:
+        return  # mirroring is off — nothing to publish to
     surf = pygame.display.get_surface()
     if surf is None:
         return
@@ -411,6 +602,41 @@ def tap_event(pt, side: Optional[pygame.Rect]) -> pygame.event.Event:
     return pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=pt, button=1)
 
 
+_reported: "set[str]" = set()
+
+
+def _guarded(fn, what: str) -> None:
+    """Run ``fn``; on failure print the traceback ONCE for ``what``, then stay quiet.
+
+    Mirroring must never break the app's render loop, but a guard that has never spoken has not
+    been shown to run: the thing a silent swallow hides is usually a bug in the guarded call
+    itself, and at 15 Hz an unconditional `pass` hides it forever.
+    """
+    try:
+        fn()
+    except Exception:  # noqa: BLE001 - the render loop outranks any of this
+        if what not in _reported:
+            _reported.add(what)
+            print(f"Warning: {what} failed and is now suppressed for this session:")
+            traceback.print_exc()
+
+
+def _already_wrapped(fn, marker: str) -> bool:
+    """Whether ``marker`` appears ANYWHERE in a wrapper chain, not merely on its outermost link.
+
+    Every hook here and in `tims.band` replaces `pygame.display.flip`/`update` with a closure that
+    carries `_orig`. Asking only about the top function makes idempotence depend on install ORDER —
+    whoever wrapped last hides everyone beneath, and the next install stacks a duplicate layer.
+    """
+    seen = 0
+    while fn is not None and seen < 16:  # bounded: a cycle here would hang the app at import
+        if getattr(fn, marker, False):
+            return True
+        fn = getattr(fn, "_orig", None)
+        seen += 1
+    return False
+
+
 def install_present_hook() -> None:
     """Wrap ``pygame.display.flip`` / ``update`` so each completed frame is
     captured. One seam — flip/update are called from 18 files and a new screen
@@ -418,7 +644,12 @@ def install_present_hook() -> None:
     """
     for name in ("flip", "update"):
         orig = getattr(pygame.display, name)
-        if getattr(orig, "_stream_wrapped", False):
+        # Walk the CHAIN, not just the outermost. Reading the top function only asks "is the
+        # outermost wrapper mine?", so anything that wraps on top of us — `band.install_overlay_hook`
+        # deliberately marks nothing — hides us and the next call stacks a second publish layer,
+        # costing an extra full-window copy per present forever. The wrappers carry `_orig`, so the
+        # chain is walkable and the answer becomes order-independent.
+        if _already_wrapped(orig, "_stream_wrapped"):
             continue
 
         def _wrapped(*args, _orig=orig, **kwargs):
@@ -427,26 +658,67 @@ def install_present_hook() -> None:
             # in it must not stop the display half from publishing. Sharing a
             # try/except would freeze the browser on a cached frame with nothing
             # logged anywhere (`principles.md` § "A bonus feature ... is not a bonus").
-            try:
-                _drain_taps()
-            except Exception:
-                pass
-            try:
-                _publish()
-            except Exception:
-                pass  # mirroring must never break the app's render loop
+            # Each REPORTS ONCE — a blanket swallow on a 15 Hz call is how the bell window's
+            # topmost re-pin silently stopped working for a whole session behind a NameError
+            # (`conventions.md` § UI code style).
+            _guarded(_drain_taps, "the streamed tap queue")
+            _guarded(_publish, "the streamed frame capture")
             return r
 
         _wrapped._stream_wrapped = True
+        _wrapped._orig = orig  # the link _already_wrapped walks
         setattr(pygame.display, name, _wrapped)
+
+
+def _rgb(c) -> str:
+    return "rgb(%d,%d,%d)" % tuple(c[:3])
+
+
+def _page_prelude() -> str:
+    """The values `_PAGE` must not restate: the TIMS button palette, the gutter colour, the view ids.
+
+    The page dresses its controls as TIMS bevel buttons, and nine RGB literals spelling that out in
+    CSS is `conventions.md` § Tooling's canonical-source duplication — correct the day it is typed
+    and silently forked by the next hand-nudge of `_TUNEABLES_TIMS_BUTTON`, under a comment claiming
+    the two match. Injected as CSS custom properties rather than formatted into `_PAGE`, because the
+    page is full of literal `{}` in CSS and JS and `%` in `100%`, so every templating syntax would
+    need escaping throughout — a var block needs none.
+
+    The view IDS come across the same way: the JS array restated the Python `VIEWS` tuple, and a
+    drift there is silent (`clean_view` falls back to the default, so the lit cell and the served
+    view simply disagree). Only the human-readable labels stay client-side.
+    """
+    t = _TUNEABLES_TIMS_BUTTON
+    return (
+        "<style>:root{"
+        f"--page-bg:{_rgb(_BG)};"
+        # The caption scrim, derived from the same tuple. As `color-mix()` it needed Chrome 111 /
+        # Safari 16.2, and an older tablet — which D12 says is the target — would drop the whole
+        # declaration and lose the scrim. rgba() has no such floor and is just as derived.
+        f"--page-bg-80:rgba({_BG[0]},{_BG[1]},{_BG[2]},.8);"
+        f"--btn-edge:{_rgb(t['outer_border_color'])};"
+        f"--btn-hi:{_rgb(t['bezel_hi_color'])};"
+        f"--btn-lo:{_rgb(t['bezel_lo_color'])};"
+        f"--btn-top:{_rgb(t['face_top_color'])};"
+        f"--btn-bot:{_rgb(t['face_bottom_color'])};"
+        f"--btn-ink:{_rgb(t['text_color'])};"
+        f"--btn-hi-on:{_rgb(t['bezel_hi_pressed_color'])};"
+        f"--btn-lo-on:{_rgb(t['bezel_lo_pressed_color'])};"
+        f"--btn-top-on:{_rgb(t['face_top_pressed_color'])};"
+        f"--btn-bot-on:{_rgb(t['face_bottom_pressed_color'])};"
+        f"--btn-ink-on:{_rgb(t['text_dark_color'])};"
+        "}</style>"
+        f"<script>const VIEW_IDS={json.dumps(list(VIEWS))};</script>"
+    )
 
 
 _PAGE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PA Simulator</title>
+<!--PRELUDE-->
 <style>
-  html,body{margin:0;height:100%;background:#0a0d12;overflow:hidden}
+  html,body{margin:0;height:100%;background:var(--page-bg);overflow:hidden}
   body{display:flex;align-items:center;justify-content:center}
   /* NO image-rendering override by default.
      The stream mixes two kinds of content: TIMS chrome drawn anti-aliasing-OFF
@@ -466,32 +738,52 @@ _PAGE = """<!doctype html>
   img{display:block;max-width:100vw;max-height:100vh}
   #tag{position:fixed;left:0;right:0;bottom:0;padding:6px;
        font:12px system-ui,sans-serif;color:#96a2b0;text-align:center;
-       background:#0a0d12cc;opacity:0;transition:opacity .25s}
+       background:var(--page-bg-80);opacity:0;transition:opacity .25s}
   #tag.show{opacity:1}
-  /* The zoom control is its OWN button, not a gesture on the image: a tap on
-     the image now means "click the thing under my finger", so a whole-page
-     gesture would fight every button in the app. Deliberately browser chrome
-     rather than a pygame-drawn control -- a control drawn into the frame would
-     either appear on the PC window too, or make the stream a composited view
-     that no longer matches what the PC shows. */
-  /* Both controls share one look and one size, because they read as a group
-     (conventions.md § UI code style: grouped buttons share size AND design).
-     `view` sits left of `zoom` in the order you reach for them -- pick what to
-     look at, then how big. */
-  button.ctl{position:fixed;bottom:10px;z-index:2;
-        -webkit-appearance:none;appearance:none;border:1px solid #2a3340;
-        border-radius:6px;background:#141a22cc;color:#96a2b0;
-        font:600 12px system-ui,sans-serif;letter-spacing:.05em;
-        padding:8px 12px;min-width:62px;cursor:pointer}
-  button.ctl:active{background:#1e2733}
-  #zoom{right:10px}
-  /* Hidden until the app actually has a second window — see refreshViews(). */
-  #view{right:82px;display:none}
+  /* The controls are their OWN buttons, not gestures on the image: a tap on the
+     image now means "click the thing under my finger", so a whole-page gesture
+     would fight every button in the app. Deliberately browser chrome rather
+     than pygame-drawn -- a control drawn into the frame would either appear on
+     the PC window too, or make the stream a composited view that no longer
+     matches what the PC shows.
+     Browser chrome does NOT have to look like a web page. These are dressed as
+     TIMS bevel buttons, with every colour read off
+     `tims/widgets.py::_TUNEABLES_TIMS_BUTTON` rather than invented, so the
+     controls belong to the same console as the picture above them. */
+  button.ctl{-webkit-appearance:none;appearance:none;cursor:pointer;
+        border:1px solid var(--btn-edge);        /* outer_border_color */
+        border-top-color:var(--btn-hi);          /* bezel_hi_color -- lit crest, top + left */
+        border-left-color:var(--btn-hi);
+        border-bottom-color:var(--btn-lo);       /* bezel_lo_color -- shadow, bottom + right */
+        border-right-color:var(--btn-lo);
+        background:linear-gradient(var(--btn-top),var(--btn-bot));  /* face_top/bottom_color */
+        color:var(--btn-ink);                    /* text_color */
+        font:600 12px system-ui,sans-serif;letter-spacing:.08em;
+        padding:9px 12px;min-width:56px;border-radius:4px}
+  /* Selected = the TIMS "pressed" palette: the WHOLE button goes yellow, bevel
+     included, and the ink flips dark for contrast. The same idiom as the
+     存取範圍 cells on the settings page, so a picked view reads the way a
+     picked anything reads in this app. */
+  button.ctl.on{background:linear-gradient(var(--btn-top-on),var(--btn-bot-on));
+        border-top-color:var(--btn-hi-on);border-left-color:var(--btn-hi-on);
+        border-bottom-color:var(--btn-lo-on);border-right-color:var(--btn-lo-on);
+        color:var(--btn-ink-on)}
+  #bar{position:fixed;bottom:10px;right:10px;z-index:2;display:flex;gap:10px}
+  /* The three views are a SEGMENTED row with the current one lit, not one button
+     cycling through them. Cycling forced the label to name the NEXT view while
+     you were looking at the current one, which is a puzzle rather than a control:
+     press BELL, get the bell, and the button then reads PIDS. Three cells show
+     every option AND where you are, in one glance and one tap.
+     Hidden entirely until the app has a second window -- see refreshViews(). */
+  #view{display:none;gap:2px}
+  #view button:not(:first-child){border-top-left-radius:0;border-bottom-left-radius:0}
+  #view button:not(:last-child){border-top-right-radius:0;border-bottom-right-radius:0}
 </style>
-<img id="v" src="/stream" alt="PA Simulator"
-     onerror="setTimeout(()=>this.src=streamSrc()+'&r='+Date.now(),1000)">
-<button id="view" class="ctl" type="button">BELL</button>
-<button id="zoom" class="ctl" type="button">1:1</button>
+<img id="v" src="/stream" alt="PA Simulator">
+<div id="bar">
+  <div id="view"></div>
+  <button id="zoom" class="ctl" type="button">1:1</button>
+</div>
 <div id="tag"></div>
 <script>
 // Display path works without this -- the <img> above renders on its own.
@@ -513,23 +805,46 @@ const img = document.getElementById('v'), tag = document.getElementById('tag'),
 // Labels name today's only docked view. The mechanism is generic; the copy is
 // not, because "SIDE VIEW" would tell the reader nothing.
 //
-// Each entry describes ITSELF. The button shows the NEXT one, the same way the
-// zoom button reads `1:1` while you are in fit mode -- a control labelled with
-// what it will do, not with where you are.
-const VIEWS = [
-  {id: 'both', name: 'BOTH', say: 'PIDS and bell'},
-  {id: 'side', name: 'BELL', say: 'bell only'},
-  {id: 'main', name: 'PIDS', say: 'PIDS only'}
-];
+// Each entry describes ITSELF, and every one gets its own cell -- the current
+// cell is lit, so the control shows both the options and where you are.
+// The IDS come from Python (VIEW_IDS, injected by _page_prelude) so the wire values cannot drift;
+// only the labels below are client-side copy. Order is the server's.
+const LABELS = {both: ['BOTH', 'PIDS and bell'], side: ['BELL', 'bell only'], main: ['PIDS', 'PIDS only']};
+const VIEWS = VIEW_IDS.map(id => ({id: id, name: (LABELS[id] || [id, id])[0], say: (LABELS[id] || [id, id])[1]}));
 let vi = 0;
-function streamSrc() { return '/stream?view=' + VIEWS[vi].id; }
-function nextView() { return VIEWS[(vi + 1) % VIEWS.length]; }
-viewBtn.addEventListener('click', () => {
-  vi = (vi + 1) % VIEWS.length;
-  viewBtn.textContent = nextView().name;
-  say(VIEWS[vi].say);
-  lastW = 0;                    // the frame changes size, so re-apply the zoom
+function streamSrc() { return '/stream?view=' + VIEWS[vi].id + '&r=' + Date.now(); }
+
+const cells = VIEWS.map((v, i) => {
+  const b = document.createElement('button');
+  b.className = 'ctl';
+  b.type = 'button';
+  b.textContent = v.name;
+  b.addEventListener('click', () => { if (i !== vi) { vi = i; paint(); say(v.say); show(); } });
+  viewBtn.appendChild(b);
+  return b;
+});
+function paint() { cells.forEach((b, i) => b.classList.toggle('on', i === vi)); }
+paint();
+
+// ONE place that re-points the <img>, and ONE pending retry at a time.
+//
+// Both halves matter. Assigning `src` ABORTS the in-flight multipart request, and an aborted
+// <img> load fires `error` -- indistinguishable from the stream actually dying. The old handler
+// was an inline `onerror` that scheduled a reload 1s later with no timer handle, so every switch
+// left a retry pending: three quick switches stacked three of them, each re-pointing `src`, each
+// aborting the last, each firing `error` again. It compounded, which is why switching worked at
+// first and broke after a few. Now a switch cancels any pending retry, and a retry can never
+// queue behind another. (2026-08-29, reported as the toggle breaking on the way back to BOTH.)
+let retry = 0;
+function show() {
+  clearTimeout(retry);
+  retry = 0;
+  lastW = 0;                    // the frame changes size per view, so re-apply the zoom on load
   img.src = streamSrc();
+}
+img.addEventListener('error', () => {
+  if (retry) return;            // one in flight is enough; never build a queue of them
+  retry = setTimeout(show, 1000);
 });
 
 // The control only exists while the app has a second window to choose between.
@@ -546,13 +861,15 @@ function refreshViews() {
   fetch('/views').then(r => r.json()).then(s => {
     if (s.side === hasDock) return;
     hasDock = s.side;
-    viewBtn.style.display = hasDock ? '' : 'none';
+    // 'flex', not '': the hidden state is a STYLESHEET rule (`#view{display:none}`), so clearing
+    // the inline style falls back to that rule and the control stays hidden forever. It looked
+    // right and could never appear -- 2026-08-29, reported as "the bell toggle is not shown".
+    viewBtn.style.display = hasDock ? 'flex' : 'none';
     if (!hasDock && VIEWS[vi].id !== 'both') {
       vi = 0;                   // the view we were on is gone; fall back visibly
-      lastW = 0;
-      img.src = streamSrc();
+      paint();
+      show();
     }
-    viewBtn.textContent = nextView().name;
   }).catch(() => {});           // server gone: leave the control as it is
 }
 refreshViews();
@@ -620,8 +937,103 @@ addEventListener('resize', apply);
 """
 
 
+def _admit() -> threading.Event:
+    """Register a new /stream handler, evicting the STALEST if that puts us over MAX_CLIENTS.
+
+    # CONTRACT: a new stream request always succeeds. The cap bounds concurrent writers; it must
+    # never refuse the request the user just made.
+    #
+    # Refusing was the original behaviour and it is the wrong end to give way. Switching view
+    # re-points the page's <img>, which abandons the previous request; a browser that leaves that
+    # socket open is not noticed until its send buffer fills and the write times out — measured at
+    # 8.5s. Three switches inside that window filled the cap and every later stream got 503, drawn
+    # as a broken image.
+    #
+    # STALEST, not oldest. "Oldest == abandoned" holds for the view-switch case this was written
+    # for and fails for two real devices: A watching (plus the speculative second connection every
+    # browser opens) and B arriving would evict A's LIVE stream, whose page then retries and evicts
+    # B's — the two ping-pong indefinitely.
+    #
+    # What the ranking actually measures is the last SUCCESSFUL WRITE, which lags abandonment by
+    # one send buffer: for roughly the first second after a switch the abandoned socket still
+    # accepts writes and looks as fresh as a live one, so the victim among them is arbitrary. That
+    # is the best signal available on this side — `_peer_gone` is the fast path for a socket that
+    # was actually closed — and the user-visible contract holds either way, because a live viewer
+    # that loses the draw simply reconnects.
+    """
+    ev = threading.Event()
+    with _clients_lock:
+        _streams.append(ev)
+        # Seed the clock NOW. A handler that has not written yet would otherwise rank as the
+        # stalest thing here and evict ITSELF on the very admission that created it — which is the
+        # one outcome the CONTRACT above forbids. Freshness starts at birth and decays.
+        _last_write[ev] = time.monotonic()
+        while len(_streams) > MAX_CLIENTS:
+            victim = min(_streams, key=lambda e: _last_write.get(e, 0.0))
+            _streams.remove(victim)
+            _last_write.pop(victim, None)
+            victim.set()
+    return ev
+
+
+def _note_write(ev: threading.Event) -> None:
+    """Record that this handler just got a frame out — its liveness, for `_admit`'s ranking."""
+    _last_write[ev] = time.monotonic()
+
+
+def _retire(ev: threading.Event) -> None:
+    """Drop a finished handler's registration. Safe to call for one already evicted."""
+    with _clients_lock:
+        try:
+            _streams.remove(ev)
+        except ValueError:
+            pass  # already evicted by _admit
+        _last_write.pop(ev, None)
+
+
+def _peer_gone(conn) -> bool:
+    """True once the client has hung up — checked WITHOUT blocking, before each frame is written.
+
+    A closed peer makes the socket readable at EOF, so a zero-length peek is the signal. The peek
+    is deliberate: a pipelined request would otherwise be consumed here and lost.
+
+    This is the fast exit. It fires the instant a browser closes an aborted request, which is the
+    common case when the view switches; the write timeout is the backstop for a client that
+    abandons the request but leaves the socket open.
+    """
+    try:
+        if not select.select([conn], [], [], 0)[0]:
+            return False
+        return conn.recv(1, socket.MSG_PEEK) == b""
+    except OSError:
+        return True  # unreadable socket: gone by any definition
+
+
+class _Server(ThreadingHTTPServer):
+    """Only difference from the stock server: an ordinary client hang-up is not an error.
+
+    `socketserver` prints a full traceback per disconnect, and a phone reconnects on every
+    screen-lock and network roam (D11), so the console fills with them — which is exactly when
+    someone is reading it to debug something else. Anything that is NOT a disconnect still prints.
+    """
+
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        if isinstance(sys.exc_info()[1], (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, TimeoutError)):
+            return
+        super().handle_error(request, client_address)
+
+
 class _Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    # Applied by `StreamRequestHandler.setup()` BEFORE the request line is read, which is the one
+    # phase the in-body `settimeout` calls in `_send_stream` / `do_POST` cannot cover: a peer that
+    # connects and then dribbles (or sends nothing) would otherwise park a thread for the life of
+    # the process, and MAX_CLIENTS does not bound it because `_admit` is never reached. D11's
+    # "explicit socket timeout" is what this completes. Generous, because it must not cut a slow
+    # but real request short; the stream loop sets its own tighter one once it starts writing.
+    timeout = STREAM_WRITE_TIMEOUT * 5
 
     def log_message(self, *a):  # silence per-request console spam
         pass
@@ -634,7 +1046,32 @@ class _Handler(BaseHTTPRequestHandler):
         _, _, query = self.path.partition("?")
         return clean_view(parse_qs(query).get("view", [None])[0])
 
+    def _host_ok(self) -> bool:
+        """Whether this request's Host names an address we actually bound.
+
+        # CONTRACT: EVERY endpoint, read and write. The reads are not exempt.
+        # A page in the user's own browser can point a short-TTL hostname at 127.0.0.1 and become
+        # same-origin with this server (DNS rebinding); `GET /frame.png` then hands it the app's
+        # screen, which it can draw to a canvas and read back. Gating only `/tap` left that open —
+        # measured 2026-08-29, `Host: evil.example.com` on /frame.png returned 200 with the frame
+        # while the same header on /tap correctly returned 421, and both `_allowed_hosts`' own
+        # docstring and `conventions.md` § Tooling already claimed the reads were covered.
+        #
+        # An ABSENT Host fails. It was previously admitted (`if host and ...`), which made the gate
+        # opt-out for any client that simply omits the header — HTTP/1.1 requires it, so nothing
+        # legitimate does.
+        """
+        host = self.headers.get("Host", "").strip()
+        if host.startswith("["):  # IPv6 literal: [::1]:8541 — the colons are part of the address
+            host = host[1:].split("]", 1)[0]
+        elif host.count(":") == 1:  # host:port. A bare IPv6 has several colons and no port.
+            host = host.rsplit(":", 1)[0]
+        return bool(host) and host.lower() in _allowed_hosts()
+
     def do_GET(self):
+        if not self._host_ok():
+            self.send_error(421, "unrecognised Host")
+            return
         path = self.path.split("?", 1)[0]
         if path == "/":
             self._send_page()
@@ -648,6 +1085,9 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self):
+        if not self._host_ok():
+            self.send_error(421, "unrecognised Host")
+            return
         if self.path.split("?", 1)[0] != "/tap":
             self.send_error(404)
             return
@@ -656,16 +1096,16 @@ class _Handler(BaseHTTPRequestHandler):
         # A tap drives the app, and any page in the user's browser can reach loopback: a
         # CORS-*simple* POST (text/plain) is sent with no preflight. Requiring
         # application/json forces a preflight, which this server answers with 501 (no
-        # do_OPTIONS), and checking Host closes DNS rebinding. Both are what the client
-        # already sends, so nothing on the page changes.
-        if not self.headers.get("Content-Type", "").split(";")[0].strip() == "application/json":
+        # do_OPTIONS). The Host half now lives in `_host_ok`, shared with do_GET.
+        # Media types are case-insensitive per RFC 9110, so the comparison is folded.
+        if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
             self.send_error(415, "expected Content-Type: application/json")
             return
-        host = self.headers.get("Host", "").rsplit(":", 1)[0].strip("[]")
-        if host and host not in _allowed_hosts():
-            self.send_error(421, "unrecognised Host")
-            return
         try:
+            # A client-declared Content-Length with no timeout parks this thread until the peer
+            # closes — D11's connection hygiene applies to reads on this endpoint too, and did not
+            # get carried over. A ~40-byte body has no honest reason to take seconds.
+            self.connection.settimeout(STREAM_WRITE_TIMEOUT)
             n = int(self.headers.get("Content-Length", 0))
             if n <= 0 or n > 256:  # a tap is ~40 bytes; anything else is not one
                 raise ValueError("bad length")
@@ -682,7 +1122,12 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _send_page(self):
-        body = _PAGE.encode("utf-8")
+        # Substituted INTO the document, never prepended. Concatenating in front put a <style>
+        # element ahead of <!doctype html>, which per the HTML tree-construction algorithm sets
+        # quirks mode and makes the later doctype a parse error — measured, the doctype landed at
+        # byte 393 and `document.compatMode` went CSS1Compat -> BackCompat. A single marker also
+        # needs no brace escaping, which is why this is `.replace` and not `.format`.
+        body = _PAGE.replace("<!--PRELUDE-->", _page_prelude()).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -692,9 +1137,10 @@ class _Handler(BaseHTTPRequestHandler):
     def _send_views(self):
         """Which views exist right now, so the page can offer only the real ones.
 
-        A READ endpoint, so it adds no write surface and needs no Host or
-        Content-Type gate: the one bit it discloses — whether the app has a
-        second window open — is already visible in the frames themselves.
+        A READ endpoint: it adds no write surface, so it carries no body gate. It is NOT exempt
+        from the Host check — `do_GET` applies `_host_ok` to every path. This docstring used to
+        claim the exemption, which is the reasoning that left the reads open to DNS rebinding in
+        the first place, sitting at the one site a reader would consult before exempting another.
         """
         body = json.dumps({"side": has_side()}).encode()
         self.send_response(200)
@@ -719,20 +1165,26 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(png)
 
     def _send_stream(self):
-        global _clients
-        with _clients_lock:
-            if _clients >= MAX_CLIENTS:
-                self.send_error(503, "too many clients")
-                return
-            _clients += 1
+        evicted = _admit()
         try:
+            # CONTRACT: this loop must always be able to END. It holds one of MAX_CLIENTS slots,
+            # and the only thing that frees a slot is leaving here — so a write that can block
+            # forever is a permanent leak, not a slow frame. THREE independent exits, because a
+            # client goes away in three different ways: a clean abort closes the socket (caught by
+            # `_peer_gone` on the next tick); an abandoned-but-open one stops READING, which only
+            # surfaces once the buffer fills and the write times out, ~8.5s; and a newer request
+            # for the same cap evicts this one immediately (`evicted`). The third exists because
+            # the second is far too slow to keep up with someone tapping through views.
+            self.connection.settimeout(STREAM_WRITE_TIMEOUT)
             self.send_response(200)
             self.send_header("Content-Type", f"multipart/x-mixed-replace; boundary={BOUNDARY}")
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             view = self._view()
             delay = 1.0 / FPS
-            while True:
+            while not evicted.is_set():
+                if _peer_gone(self.connection):
+                    break
                 png = _snapshot(view)
                 if png is not None:
                     self.wfile.write(f"--{BOUNDARY}\r\n".encode())
@@ -740,6 +1192,7 @@ class _Handler(BaseHTTPRequestHandler):
                     self.wfile.write(f"Content-Length: {len(png)}\r\n\r\n".encode())
                     self.wfile.write(png)
                     self.wfile.write(b"\r\n")
+                    _note_write(evicted)  # liveness, so _admit evicts the stalest and not this one
                 # Mobile browsers reconnect on screen-lock / network roam; a
                 # stale handler would otherwise block on write until an OS
                 # timeout, leaking a thread per reconnect.
@@ -748,8 +1201,7 @@ class _Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
             pass  # ordinary client disconnect
         finally:
-            with _clients_lock:
-                _clients -= 1
+            _retire(evicted)
 
 
 _stop = threading.Event()
@@ -764,24 +1216,89 @@ def start(host: str, port: int = DEFAULT_PORT) -> Optional[list[str]]:
     # leaves a dead port. Swallowing that silently is the critical_lessons 2
     # silent-skip pathology -- the caller prints the failure.
     """
-    global _server
+    # NOTE: `port` is taken as given. `clean_port` belongs at the SETTINGS boundary — the callers
+    # that read a persisted value — not here: clamping inside the general API silently binds a
+    # different port than the caller asked for, which is how this first broke T3 (it uses 8421 to
+    # avoid colliding with a real running app, and got 8500).
+    global _server, _urls, _bound_hosts
     install_display_quit_guard()
     install_present_hook()
+    _stop.clear()  # `stop()` latches this; clearing HERE makes a bare stop()->start() work too,
+    # rather than only the apply_mode path that happened to know about the latch. It is pacing now:
+    # ending live streams is `stop()`'s per-handler `evicted` Events.
+    # Both address sets are computed BEFORE the listener exists. Assigning them after would leave a
+    # window — spanning a UDP connect and two getaddrinfo calls — in which the server accepts
+    # requests with an empty allow-list and 421s a legitimate client.
+    #
+    # What the UI OFFERS (private only, best-first) vs what is REACHABLE. The allow-list must be a
+    # SUPERSET of everything the server can be reached by, because the gate now covers reads: a
+    # miss costs the whole page, not just the taps. So it unions three sources — the interfaces
+    # enumerated, whatever the UI advertises (`lan_candidates` has a route probe `getaddrinfo`
+    # does not, and would otherwise be advertising an address the gate refuses), and this machine's
+    # own NAMES, since a client that reached us as `<hostname>` or `<hostname>.local` is legitimate.
+    # None of that weakens the DNS-rebinding property: an attacker-controlled name is still absent.
+    hosts = lan_candidates() if host == "0.0.0.0" else ["127.0.0.1"]
+    # Note the bind address itself is NOT in the set for a LAN bind: no client can send
+    # `Host: 0.0.0.0` meaningfully, so it would be dead weight inside a security gate.
+    _bound_hosts = {*_all_local_addresses(), *hosts, *_own_names()} if host == "0.0.0.0" else {host}
     try:
-        _server = ThreadingHTTPServer((host, port), _Handler)
-    except OSError as e:
+        _server = _Server((host, port), _Handler)
+    except (OSError, OverflowError, ValueError) as e:
+        # OverflowError is NOT an OSError: `bind()` raises it for a port outside 0-65535, so an
+        # `except OSError` alone turned "bind failure must be LOUD" into "bind failure is fatal"
+        # and killed the app before any window existed. `clean_port` above makes that unreachable;
+        # this stays as the backstop the CONTRACT actually promises.
         print(f"[stream] FAILED to bind {host}:{port} -- {e}")
         print("[stream] streaming is OFF for this session (firewall prompt declined, or port in use)")
+        _bound_hosts = set()  # the allow-list must never outlive the listener it describes
         return None
-    _server.daemon_threads = True
-    _server.timeout = 1.0
     threading.Thread(target=_server.serve_forever, daemon=True, name="frame-stream").start()
-    hosts = lan_candidates() if host == "0.0.0.0" else ["127.0.0.1"]
-    return [f"http://{h}:{port}/" for h in hosts]
+    _urls = [f"http://{h}:{port}/" for h in hosts]
+    return list(_urls)
 
 
 def stop() -> None:
-    """Shut the server down and release its socket."""
+    """Shut the server down, end every live stream, and release the socket.
+
+    # CONTRACT: ending the streams is PER-HANDLER, not via `_stop`.
+    # `_stop` is one latch shared by every server generation, and `apply_mode` clears it to start
+    # the next one — so a handler whose write cycle straddles that clear sees an unset event and
+    # keeps mirroring, with no new server to evict it. Each handler already owns an `evicted` Event
+    # from `_admit` and checks it at the top of its loop; setting all of them is deterministic where
+    # the latch is a race. `_stop` stays, but only as pacing.
+    """
+    global _urls, _server, _bound_hosts
+    with _clients_lock:
+        for ev in _streams:
+            ev.set()
+        _streams.clear()
     _stop.set()
+    _urls = []  # the addresses stop being reachable here, so nothing may still offer them
     if _server is not None:
         _server.shutdown()
+        _server.server_close()  # release the port NOW, so an immediate re-bind on it succeeds
+        _server = None
+    # AFTER the listener is down. Clearing first left a window where the server was still accepting
+    # and every request met an empty allow-list, so a legitimate in-flight one got 421.
+    _bound_hosts = set()
+    # Publishing is hooked into flip/update with no removal path, so `_publish` keeps running; it
+    # now no-ops on `_server is None`. Drop what the last session captured rather than retaining a
+    # copy of the user's screen after they turned mirroring off.
+    _forget_frames()
+
+
+def apply_mode(mode: str, port: int = DEFAULT_PORT) -> "list[str]":
+    """Switch mirroring to ``mode`` right now; return the URLs it can be reached on ([] when off).
+
+    What the TIMS 設定 page calls when the user commits. The alternative was a caption telling them
+    to restart the app, which is a worse answer to the same question and would have had to be
+    deleted the moment this landed.
+
+    A bind address cannot be changed on a live socket, so this really is stop-then-start. The hooks
+    ``start`` installs are idempotent, so re-entering costs nothing, and ``start`` itself clears the
+    ``_stop`` latch — this function no longer needs to know the latch exists, which also makes a
+    bare ``stop(); start(...)`` from anywhere else work rather than serving one frame and freezing.
+    """
+    stop()
+    host = bind_host_for(clean_mode(mode))
+    return (start(host, port) or []) if host is not None else []

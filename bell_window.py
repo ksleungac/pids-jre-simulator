@@ -338,6 +338,12 @@ class BellWindow:
             self._flash_until[which] = now + FLASH_S
         return which
 
+    # CONTRACT: the returned Surface must never be drawn into after it is returned.
+    # `frame_stream` docks it and a SERVER thread blits it without copying — safe only because
+    # `update` renders a fresh Surface and REBINDS `_surf` rather than redrawing in place. Changing
+    # that to an in-place redraw for perf would tear the docked view, which is exactly the mid-draw
+    # sampling the `_publish` CONTRACT in frame_stream.py exists to prevent. Named at both ends
+    # because nothing else records the dependency.
     def surface(self) -> "pygame.Surface | None":
         """The box exactly as this window is showing it, for the stream to dock.
 

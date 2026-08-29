@@ -56,6 +56,36 @@ The dict `tims.setup.run()` returns:
 ## App run loop (`app.py::PASimulator.run`)
 Main loop drives events → PA/STA/pause + the render path; `_handle_band_click` dispatches the status-band cluster (pause / save-record / home). `exit_action` defaults `"quit"`, set `"home"` by band Home. On exit: `cleanup(full_quit = exit_action != "home")`, returns `exit_action` to `_run_drive`. State-machine spec: `DISPLAY.md § Unified State Machine`.
 
+## Window mirroring — the remote terminal (`frame_stream.py`)
+Mirrors **the whole app window** — setup, tutorial, drive alike — to a browser over HTTP, and takes taps back. The point is screen real estate: the display sits on a tablet instead of covering the game. Named リモート端末 after the flightsim *remote CDU* — since touch landed it is a second instance of the console, not a video feed.
+
+**Where it is set.** TIMS 設定 (`tims/setup/stream_setting.py`), which persists one tri-state and a port. There are no launch flags — the page is the only switch, and it applies immediately via `apply_mode` (stop-then-start; a bind address cannot change on a live socket).
+
+| mode | binds | cost |
+|---|---|---|
+| `off` | — | — |
+| `local` | `127.0.0.1` | none — a loopback socket is unreachable from the network, so Windows raises no firewall prompt. **The shipped default.** |
+| `lan` | `0.0.0.0` | the firewall prompt, once; and any device that can reach it can DRIVE the app |
+
+`clean_mode` / `clean_port` are the only place a persisted value becomes a usable one — `settings.json` is hand-editable and read before any window exists, so nothing but the literal `"lan"` may bind past loopback.
+
+**Finding it.** The status band draws one green row, `リモート <addr>:<port>`, on the setup screens only (`band._stream_rows`; a drive's rows carry OCR state). Clicking opens the PC's browser; hovering underlines it and drops a QR to scan — `qr.py`, a self-contained encoder, because D3 below makes new dependencies the signal to re-examine the design. `lan_candidates()` returns SEVERAL addresses ranked private-first (192.168 → 172.16 → 10/8, where VPNs land) and never public ones; the band shows the first.
+
+**Client.** One `<img src="/stream">` on a `multipart/x-mixed-replace` feed of PNGs — no JavaScript on the display path. JS adds only the segmented view control (BOTH / BELL / PIDS, when the bell box is open), a 1:1 zoom toggle, and the tap POST. Controls are browser chrome dressed as TIMS bevel buttons, with the palette and the view ids **injected** from Python at a `<!--PRELUDE-->` marker so the page cannot restate them.
+
+**Security posture.** Unauthenticated by design, and `/tap` means "someone on your Wi-Fi can drive", not merely watch. Two gates, both what a same-origin client already sends: `Content-Type: application/json` (which forces a preflight the server answers 501, having no `do_OPTIONS`) and a `Host` check on **every** endpoint, reads included — without it a page in the user's own browser can point a short-TTL name at loopback and read the screen off a canvas. The allow-list is what was BOUND (plus this machine's names), never what the UI chose to display.
+
+**Load-bearing invariants** — each fixed a real defect; change one and re-read why:
+- **Capture on present, never on request.** `_publish` runs from a `flip`/`update` wrapper on the main thread; sampling the live surface from a server thread catches renderers mid-clear and shows as flicker.
+- **PNG, not JPEG.** Measured on this content: 4× smaller *and* pixel-exact, where JPEG damaged ~7% of subpixels. Flat fills and AA-off glyphs are JPEG's worst case.
+- **The cap EVICTS, never refuses.** Switching view abandons a request the server cannot see until its send buffer fills (~8.5 s), so refusing locked users out with a broken image. The victim is the stalest handler.
+- **A tap for a view that is not there MISSES.** Showing a fallback frame is a kindness; resolving a tap against it presses whatever occupies that point.
+- **Zero new dependencies** (`critical_lessons §3`, `§4`) — stdlib `http.server` + pygame's own PNG writer.
+
+**Rejected, so they are not re-proposed:** WebSocket / SSE / WebRTC (dependency weight for a LAN image feed) · JPEG or WebP · server-side scaling (forces a per-client stream) · a pygame-drawn view control (it would appear on the PC window too, or make the stream stop matching it) · `image-rendering: pixelated` (the stream carries AA-off chrome *and* AA-on LCD text; no one filter serves both, and on a phone's downscale it destroys 1px strokes). Why streaming rather than a mobile port: `TODO.md § Directions`.
+
+Hooks are installed once at `main()` entry and are idempotent regardless of order: `install_present_hook` (capture + replay taps), `band.install_overlay_hook` (the QR, which must draw AFTER each screen paints over the band), `install_display_quit_guard`.
+
 ## Setup flow (TIMS — default; `tims/setup/`)
 Console re-skin of the setup flow to the JR East TIMS cab look, and since 2026-07-30 the ONLY setup flow. Primitives in `tims/widgets.py`; shared vocabulary in `tims/chrome.py`. Chrome/font/interaction RULES → `conventions.md`.
 
@@ -120,6 +150,7 @@ Every setup screen's band Home returns to the HOME MENU (not one level up) with 
 `setup.py` (`SetupScreen`), its `--classic` flag, `preview_chrome.py`, and `i18n`'s per-language OTF chrome table (`_LANG_CHROME_FONT` / `font()` / `font_for_lang()`) were **deleted 2026-07-30** — TIMS reached feature parity 2026-07-11 and the classic path had no remaining user. Its keyboard-navigable route picker went with it, dropped deliberately for the console style. `tutorial.py` SURVIVES: `tims/setup/tutorial_basic.py` imports `Tutorial` / `STEPS` / `PHASE_KEYS` / the mixed-text helpers from it, so it is shared, not legacy.
 
 ## Cross-references
+- Window mirroring / remote terminal → § "Window mirroring" above.
 - Chrome / font / interaction RULES → `conventions.md § UI code style`, `§ "TIMS chrome text"`.
 - App state machine → `DISPLAY.md § Unified State Machine`.
 - LCD displays → `DISPLAY.md`, `DISPLAY_E235.md`.

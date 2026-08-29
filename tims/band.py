@@ -18,10 +18,14 @@ setup-window dims (SCREEN_W/H) live in ``tims/setup/dims.py`` — never a band c
 """
 
 import time
+import traceback
+import webbrowser
 
 import pygame
 
+import frame_stream
 import i18n
+import qr
 from . import chrome  # shared palette + low-res text blit (chrome.blit_lowres)
 from .widgets import (
     _TUNEABLES_TIMS_BUTTON,
@@ -56,6 +60,37 @@ NOTIF_COLOR        = chrome.GREEN     # TIMS dot-matrix green
 STATE_NATIVE       = 16                # OCR state + badge px — LARGER (primary band info)
 STATE_INK          = chrome.INK
 STATE_SUB          = chrome.DIM   # dimmer secondary line
+
+# STREAM rows — the browser-mirror address, directly under the green notif, CLICKABLE (opens the
+# PC's own browser). Shown on the SETUP band only (status=None): in a drive rows 1–2 carry the OCR
+# segment + state, and the address is wanted BEFORE you pick up the tablet, not while holding it.
+# Styled AS the green notif above it — same colour, same px, same fixed-JP katakana system label
+# with the full-width gap. That idiom is what makes 11px work: a localized kanji label (畫面轉送)
+# mushes AA-off at this size, which is why NOTIF_TEXT is katakana in the first place.
+#
+# The name is the flightsim REMOTE CDU idea, not a video one: a second instance of the console on
+# another device, which is what this is now that touch ships — the tablet drives, it does not just
+# watch. 画面転送 ("screen transfer") named only the video half and named it from our side.
+STREAM_LABEL       = "リモート"          # Fixed-JP like NOTIF_TEXT — a TIMS system label, not localized
+STREAM_NATIVE      = NOTIF_NATIVE      # label px = the notif's — the label is the quiet half of the row
+STREAM_ADDR_NATIVE = 15                # ADDRESS px — the part you read off the screen and type on a phone,
+                                       # so it outranks its own label. Ink bottom-aligned to it (_blit_row)
+STREAM_COLOR       = NOTIF_COLOR       # the notif's green — this row is the same kind of system notice
+STREAM_HIT_PAD     = 4                 # click target grown past the ink — an 11px label is a small target
+STREAM_RULE_GAP    = 3                 # hover underline: px below the row baseline
+STREAM_RULE_W      = 1                 # ...and its thickness. Underline + hand cursor together are
+                                       # what say "this is a link"; the row is green like its
+                                       # neighbour, so colour alone carries no affordance
+
+# QR popup — hovering the address shows a code to scan, because typing 192.168.0.104:8541 onto a
+# phone is the tedious part of using the mirror. On HOVER rather than always: it is wanted for a
+# few seconds once per session, and it is far too big to hold a permanent place on a 68px band.
+QR_MODULE          = 4                 # px per QR module. 25 modules + quiet zone -> 132px square
+QR_QUIET           = 4                 # quiet-zone modules; 4 is the standard's minimum
+QR_DARK            = (16, 20, 26)      # near-black on white — a scanner wants contrast, not chrome
+QR_LIGHT           = (236, 241, 246)
+QR_BORDER          = chrome.FRAME      # a thin frame so the white block reads as a panel
+QR_GAP             = 6                 # px below the band before the popup starts
 
 # CENTER readout cell — speed limit / speed / distance (OCR placeholders), right-aligned between
 # separators. The LIMIT is PLAIN at rest (no highlight); cyan is the CHANGE CUE only — when the limit
@@ -140,8 +175,13 @@ _digit_cell_cache: dict = {}
 def _tims_digit_cell(font, gap):
     """Cached full-width TIMS digit metrics for `font`: (cell_w, {d: ink_bbox}, ink_top, ink_bot). Each
     digit is the FAT full-width glyph (U+FF10..19); the monospace cell = widest digit ink + `gap`, ink
-    centered. ink_top/ink_bot = vertical ink extent shared across digits (baseline align)."""
-    key = (id(font), gap)
+    centered. ink_top/ink_bot = vertical ink extent shared across digits (baseline align).
+
+    Keyed on the FONT OBJECT, never `id(font)`: CPython reuses a collected object's address, so an
+    id-keyed side table silently hands a new font the metrics of a dead one (`conventions.md`
+    § Tooling). Holding the object as the key also holds a reference, so the address cannot be
+    reused while the entry lives — which is the property `id()` throws away."""
+    key = (font, gap)
     v = _digit_cell_cache.get(key)
     if v is None:
         boxes = {}
@@ -222,7 +262,7 @@ def _unit_ss_metrics(unit, font, gap):
     own ink width + `gap`, so `gap=0` makes the glyphs TOUCH — the dense CJK look). A uniform cell
     floats the narrow glyphs (`/`), which reads as bad spacing; proportional keeps the fat glyphs
     butting. Returns (ink_top, ink_bot, total_w)."""
-    key = (id(font), gap, unit)
+    key = (font, gap, unit)  # the object, not id(font) — see _tims_digit_cell
     v = _unit_cell_cache.get(key)
     if v is None:
         tops, bots = [], []
@@ -328,6 +368,220 @@ _FIRE_KEYS = {
 }
 
 
+# Mirror rows drawn by the last `render`, with the URL each one opens. Module state for the same
+# reason the hit-rects are re-derived every frame: the band is redrawn before events are read, so
+# what was drawn IS what the click lands on.
+_stream_links: "list[tuple[pygame.Rect, str]]" = []
+_hover_hand = False  # whether WE set the hand cursor, so we only ever restore one of our own
+
+
+def _short(url: str) -> str:
+    """``http://192.168.1.42:8541/`` -> ``192.168.1.42:8541`` — what a person retypes on a phone.
+
+    The scheme and the trailing slash are the two parts a browser supplies on its own, and the row
+    is 13px in a 210px column, so they are the first things to go.
+    """
+    return url.split("://", 1)[-1].rstrip("/")
+
+
+def _stream_rows():
+    """The mirror-address row for the left column, or [] when mirroring is off.
+
+    ONE row, always. ``frame_stream.lan_candidates`` may return several — a machine with a VPN up
+    has a tunnel address as well as its real Wi-Fi one — but it now returns them best-first, and a
+    band row is an instruction ("open this on your phone"), not an inventory. Two rows made the
+    reader choose between them with nothing to choose on; the tunnel row was noise.
+
+    Two chunks, not one string: the address renders LARGER than its label. The separator is a
+    FULL-WIDTH space, the same one the notif uses between its own two words — a half-width space
+    after a full-width katakana closes up to nothing and the two ran together.
+    """
+    return [
+        (
+            [
+                (f"{STREAM_LABEL}　", STREAM_COLOR, STREAM_NATIVE, "name"),
+                (_short(u), STREAM_COLOR, STREAM_ADDR_NATIVE, "name"),
+            ],
+            u,
+        )
+        for u in frame_stream.urls()[:1]
+    ]
+
+
+_qr_cache: dict = {}  # url -> rendered Surface. The matrix is fixed per URL and the popup is drawn
+# every frame while hovered, so encoding once per address keeps ~15 encodes/second off the loop.
+
+
+def _qr_surface(url: str):
+    """The scannable block for ``url``, cached. None if it cannot be encoded.
+
+    Fail-soft on purpose: a QR is a convenience over an address the user can still read and type,
+    so a URL this encoder cannot take (`qr.matrix` raises past its version-4 ceiling) must cost the
+    band nothing. It reports once rather than silently, because a QR that never appears is
+    otherwise indistinguishable from one nobody hovered.
+    """
+    if url not in _qr_cache:
+        try:
+            m = qr.matrix(url)
+            n = len(m) + 2 * QR_QUIET
+            surf = pygame.Surface((n * QR_MODULE, n * QR_MODULE))
+            surf.fill(QR_LIGHT)
+            for r, row in enumerate(m):
+                for c, dark in enumerate(row):
+                    if dark:
+                        px = ((c + QR_QUIET) * QR_MODULE, (r + QR_QUIET) * QR_MODULE, QR_MODULE, QR_MODULE)
+                        pygame.draw.rect(surf, QR_DARK, px)
+            pygame.draw.rect(surf, QR_BORDER, surf.get_rect(), 1)
+            _qr_cache[url] = surf
+        except Exception as e:  # noqa: BLE001 - convenience only; the address is still readable
+            print(f"Warning: could not build a QR for {url} ({e}); the address is still shown.")
+            _qr_cache[url] = None
+    return _qr_cache[url]
+
+
+_hovered_url = None  # set by `render`, consumed by the flip hook below
+_overlay_installed = False  # see install_overlay_hook — a flag, not a wrapper attribute
+_overlay_failed = False
+
+
+def _guarded_overlay() -> None:
+    """Draw the popup on the presented surface; report the FIRST failure, then stay quiet.
+
+    Never raises into the render loop — a missing QR is a convenience lost, not a broken app — but
+    a blanket `except: pass` on a 15 Hz call is how the bell window's topmost re-pin silently
+    stopped working behind a `NameError` for a whole session (`conventions.md` § UI code style).
+    """
+    global _overlay_failed
+    try:
+        surf = pygame.display.get_surface()
+        if surf is not None:
+            draw_overlay(surf)
+    except Exception:  # noqa: BLE001 - the render loop outranks the popup
+        if not _overlay_failed:
+            _overlay_failed = True
+            print("Warning: the band's QR overlay failed and is now suppressed for this session:")
+            traceback.print_exc()
+
+
+def draw_overlay(surf) -> None:
+    """Drop the QR popup under the band, left-aligned with the address row it belongs to.
+
+    # CONTRACT: this must run AFTER the screen has drawn its own content, which is why it is not
+    # part of `render`. The band is persistent chrome and every screen draws it FIRST, then paints
+    # over the top — so a popup drawn inside `render` is buried. Measured 2026-08-29: the home
+    # screen's 報站設定 card covered the right third of the code and it stopped scanning, while the
+    # source surface decoded perfectly, which is a difference no look at the encoder would explain.
+
+    Clamped to the surface so it cannot hang off a narrow window.
+    """
+    # CONSUMED, not merely read. `render` re-publishes `_hovered_url` on every frame it draws, so
+    # taking it here means the popup survives exactly one present and a surface that stops drawing
+    # the band cannot inherit it.
+    #
+    # That is the whole hazard: `_hovered_url` is module state whose only writer is `render`, and
+    # `app.py::_render_panel` returns early for a drive with OCR off — so nothing re-renders the
+    # band for the entire drive. A value carried out of the setup flow (click the mirror row, which
+    # leaves the physical pointer resting on it, then finish setup from the mirrored page so the
+    # cursor never moves) would paint a 132px block over the LCD on every frame with nothing to
+    # clear it. Guarding on `_stream_links` instead does NOT close it: that list is also only
+    # cleared by `render`, so it is stale-NON-empty in precisely this case — and `_hovered_url` is
+    # only ever set inside the same branch that populates it, so the extra term never decided
+    # anything at all.
+    global _hovered_url
+    url, _hovered_url = _hovered_url, None
+    if url is None:
+        return
+    block = _qr_surface(url)
+    if block is None:
+        return
+    w, h = block.get_size()
+    x = max(0, min(LEFT_X, surf.get_width() - w))
+    y = min(BAND_H + QR_GAP, max(0, surf.get_height() - h))
+    surf.blit(block, (x, y))
+
+
+def install_overlay_hook() -> None:
+    """Wrap ``pygame.display.flip`` / ``update`` so the popup lands on every completed frame.
+
+    One seam rather than a call in each of the nine setup screens' loops, which is the idiom this
+    codebase already uses for window pinning and frame capture (`conventions.md` § Display module
+    structure): the screens are many and grow, and the tenth would silently not have it.
+
+    Idempotence is a MODULE FLAG, not an attribute on the wrapper. The attribute form asks "is the
+    outermost flip mine?", and the answer is no as soon as `frame_stream.install_present_hook` wraps
+    on top — so calling this after `start()` stacked a second copy and drew the popup twice per
+    present, once more for every extra call. The flag asks "am I installed at all", which is the
+    real question.
+
+    Costs nothing when there is nothing to draw: `_hovered_url` is None unless a mirror row exists
+    AND the pointer is on it, which is false on every frame of a live drive.
+    """
+    global _overlay_installed
+    if _overlay_installed:
+        return
+    _overlay_installed = True
+    for name in ("flip", "update"):
+        orig = getattr(pygame.display, name)
+
+        def _wrapped(*args, _orig=orig, **kwargs):
+            _guarded_overlay()
+            return _orig(*args, **kwargs)
+
+        # Carry the link so `frame_stream._already_wrapped` can see PAST us: its idempotence check
+        # walks the chain, and a wrapper that hides its own `_orig` would make the layer beneath
+        # invisible and let a second present hook stack on top.
+        _wrapped._orig = orig
+        setattr(pygame.display, name, _wrapped)
+
+
+def _mouse_pos():
+    """The pointer, or None when there is no display to have one — a ``save_screenshot`` render
+    goes to an offscreen Surface, where asking pygame for the mouse is meaningless. Checked rather
+    than caught, so a real fault here still raises."""
+    return None if pygame.display.get_surface() is None else pygame.mouse.get_pos()
+
+
+def _update_hover_cursor():
+    """Hand cursor while the pointer sits on a mirror row — the only cue that the row does anything.
+
+    Owned by the band, called from its own ``render``, because the band owns the rows: a per-screen
+    call would have to be added to all nine setup click loops and silently missed by the tenth
+    (`conventions.md` § Display module structure — wrap the call, don't guard each site).
+
+    Two things keep it from stomping another owner. It does nothing at all when there are no rows to
+    hover, so a live drive — left column full of OCR state, ``_stream_links`` empty — keeps
+    ``app.py``'s own LCD hover behaviour untouched. And it restores only a hand IT set.
+
+    No display (a ``save_screenshot`` render into an offscreen Surface) means no cursor to set and
+    no mouse to read; that is checked rather than caught, so a real fault here still raises.
+    """
+    global _hover_hand
+    pos = _mouse_pos()
+    if (not _stream_links and not _hover_hand) or pos is None:
+        return
+    over = any(r.collidepoint(pos) for r, _u in _stream_links)
+    if over != _hover_hand:
+        pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND if over else pygame.SYSTEM_CURSOR_ARROW)
+        _hover_hand = over
+
+
+def click_stream(pos) -> bool:
+    """Open the mirror address under ``pos`` in the PC's own browser. True when the click was ours.
+
+    Every setup screen calls this FIRST in its click branch. The band is persistent chrome, so the
+    rows it draws are the band's to resolve — a screen that had to re-derive them would be a second
+    implementation of this layout (`principles.md` § "A second implementation ... drifts silently").
+
+    Only ever the loopback or a LAN address of this machine, and only one this process bound and
+    printed itself — never a URL from the wire.
+    """
+    for rect, url in _stream_links:
+        if rect.collidepoint(pos):
+            webbrowser.open(url)
+            return True
+    return False
+
+
 # NOTE: the live-status branch below (status != None) is exercised by the live in-drive app
 # (app.py::_render_panel feeds the auto_input.driver status dict). The tims.setup callers pass
 # status=None → only the placeholder branch runs there. Don't flag either branch as dead.
@@ -340,10 +594,20 @@ def _band_vals(status, sim_state, stops):
         # no segment, no speed / limit / distance readings (dim '--'), no fire/stop messages, no cyan or
         # yellow flashing. Applies to EVERY tims.setup screen (all pre-OCR). The live-status branch below
         # drives the real readings once auto_input feeds a status dict.
+        #
+        # The MIRROR ROW keys on `status is None`, NOT on this falsy test. The two are different
+        # questions and only the caller knows the answer: `app.py` initialises `auto_input_status = {}`
+        # and passes it every frame, so `{}` means "in a drive, no OCR sample yet" — which is the whole
+        # drive when the capture thread dies (critical_lessons §8), not a setup screen. Drawing the row
+        # there put a dead link on the drive band (`app.py` never calls `click_stream`), fought
+        # `app.py::_update_hover_cursor` for the cursor, and dropped the QR popup over the LCD.
+        # The dim '--' placeholders below are right for BOTH cases, which is why the branch stays shared.
         return {
+            # Rows 1–2 are free before OCR runs, which is exactly where the mirror address goes.
             "left": [
-                (NOTIF_TEXT, NOTIF_COLOR, NOTIF_NATIVE, "name"),
-            ],
+                ([(NOTIF_TEXT, NOTIF_COLOR, NOTIF_NATIVE, "name")], None),
+            ]
+            + (_stream_rows() if status is None else []),
             "limit": ("--", LIMIT_UNIT),
             "speed": ("--", SPEED_UNIT),
             "dist": ("--", DIST_UNIT),
@@ -391,9 +655,9 @@ def _band_vals(status, sim_state, stops):
     return {
         # row0 green notif (persistent), row1 segment, row2 state · played · BADGE (folded onto the line)
         "left": [
-            (NOTIF_TEXT, NOTIF_COLOR, NOTIF_NATIVE, "name"),
-            (seg, STATE_INK, STATE_NATIVE, "name"),
-            (f"{word} · {played}{badge_tail}", STATE_SUB, STATE_NATIVE, "chrome"),
+            ([(NOTIF_TEXT, NOTIF_COLOR, NOTIF_NATIVE, "name")], None),
+            ([(seg, STATE_INK, STATE_NATIVE, "name")], None),
+            ([(f"{word} · {played}{badge_tail}", STATE_SUB, STATE_NATIVE, "chrome")], None),
         ],
         "limit": (str(sl) if sl is not None else "--", "km/h"),
         "speed": (str(sp) if sp is not None else "--", "km/h"),
@@ -453,11 +717,31 @@ def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, f
     # DIST_Y), so the state column and the speed column line up row-for-row. Per-line font: station
     # names → JP face ("en" key = NotoSansJP); localized chrome → the ACTIVE locale face (TC/SC) so
     # zh_CN renders Simplified glyphs instead of tofu boxes (TC font lacks Simplified-only).
-    for (text, color, npx, kind), base in zip(vals["left"], (LIMIT_Y, SPEED_Y, DIST_Y)):
-        if text:
+    # Each row is a list of chunks laid left to right, every chunk's ink BOTTOM landing on the row's
+    # baseline — so a row may mix sizes (the mirror row's address is larger than its label) without
+    # the two staggering, which a shared top y would do since the fonts' ascents differ.
+    # A row carrying a `link` is the clickable mirror address; its rect is recorded for click_stream.
+    global _hovered_url
+    _stream_links.clear()
+    hovered_qr = None
+    for (parts, link), base in zip(vals["left"], (LIMIT_Y, SPEED_Y, DIST_Y)):
+        x, top = LEFT_X, base
+        for text, color, npx, kind in parts:
+            if not text:
+                continue
             f = i18n.pixel_font_for_lang("en" if kind == "name" else ACTIVE_LANG, npx)
-            _, th = lowres_text_size(text, f, 1, 0)
-            chrome.blit_lowres(surf, text, LEFT_X, base - th, f, color, 1)
+            cw, ch = lowres_text_size(text, f, 1, 0)
+            chrome.blit_lowres(surf, text, x, base - ch, f, color, 1)
+            x += cw
+            top = min(top, base - ch)  # the tallest chunk sets the row's top, and so the hit height
+        if link and x > LEFT_X:
+            hit = pygame.Rect(LEFT_X, top, x - LEFT_X, base - top).inflate(2 * STREAM_HIT_PAD, 2 * STREAM_HIT_PAD)
+            _stream_links.append((hit, link))
+            mp = _mouse_pos()
+            if mp is not None and hit.collidepoint(mp):  # hovered -> underline it, like a link
+                uy = base + STREAM_RULE_GAP
+                pygame.draw.line(surf, color, (LEFT_X, uy), (x - 1, uy), STREAM_RULE_W)
+                hovered_qr = link  # the popup itself is drawn by the flip hook — see _hovered_url
 
     # CENTER readout cell: speed limit / speed / distance, right-aligned between separators.
     num_font = i18n.pixel_font_for_lang("en", READOUT_NUM_SS_NATIVE)  # "en"=NotoSansJP — numbers are locale-independent
@@ -523,6 +807,8 @@ def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, f
     draw_tims_button(surf, pause_rect, pause_label, font=btn_font, t=dis_t if setup_ctx else t)
     draw_tims_button(surf, save_rect, i18n.t("setup_tims.band.save"), font=btn_font, t=dis_t if setup_ctx else t)
     draw_tims_button(surf, home_rect, home_label, font=btn_font, t=dis_t if home_inert else t)
+    _hovered_url = hovered_qr  # the flip hook draws the popup once the screen is done painting
+    _update_hover_cursor()  # after the rects are current, so the hand tracks what was just drawn
     return {"home": home_rect, "save": save_rect, "pause": pause_rect}
 
 

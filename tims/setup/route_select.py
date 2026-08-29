@@ -426,6 +426,8 @@ def _run_grid(screen, screen_key, labels, *, preselect=None):
                 band.ACTIVE_LANG = ACTIVE_LANG
                 i18n.set_language(ACTIVE_LANG)
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if band.click_stream(event.pos):  # band mirror address → open it in the PC's browser
+                    continue
                 if hits["home"].collidepoint(event.pos):
                     press_transition(
                         screen,
@@ -726,6 +728,8 @@ def _run_diagram(screen, route_name, start_name, end_name, variants, *, preselec
                 band.ACTIVE_LANG = ACTIVE_LANG
                 i18n.set_language(ACTIVE_LANG)
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if band.click_stream(event.pos):  # band mirror address → open it in the PC's browser
+                    continue
                 if hits["home"].collidepoint(event.pos):
                     press_transition(
                         screen,

@@ -94,59 +94,10 @@ def _img(name):
     return _load(project_root() / "data" / "disclaimer" / name)
 
 
-_WRAP_CACHE = {}  # (font, max_w, text) -> [line, ...]; see _wrap
-_WRAP_CACHE_MAX = 512  # inputs are a fixed string set x 3 locales; the cap is a runaway backstop
-
-
-def _wrap(text, font, max_w):
-    """Greedy pixel wrap (CJK char-by-char; blank line preserved). Caller owns the paragraph split.
-
-    A Latin run backtracks to its last space so a word is never cut mid-run ("Windo / ws"),
-    while CJK keeps breaking at the column edge — the same rule the classic panel's wrap_text
-    uses. A single Latin word wider than the column still hard-breaks rather than overflowing.
-
-    MEMOIZED. The consent view rebuilds its whole body every frame, and this loop measures
-    `font.size()` once per CHARACTER — 1737 calls per build, 48% of the frame cost, all of it
-    re-deriving identical breaks (#60). The result depends only on (text, font, max_w), so it is
-    cached on exactly those. The font object IS the key, which both keys per-locale correctly and
-    holds a reference so its id can never be reused by a later font. Callers must treat the
-    returned list as read-only — it is the cached instance, not a copy.
-    """
-    key = (font, max_w, text)
-    cached = _WRAP_CACHE.get(key)
-    if cached is not None:
-        return cached
-
-    lines = []
-    for para in text.split("\n"):
-        if not para:
-            lines.append("")
-            continue
-        cur = ""
-        for ch in para:
-            if font.size(cur + ch)[0] <= max_w or not cur:
-                cur += ch
-                continue
-            if ch == " ":
-                lines.append(cur)
-                cur = ""
-                continue
-            sp = cur.rfind(" ")
-            tail = cur[sp + 1 :] if sp >= 0 else ""
-            # Backtrack only when the carried tail is Latin: a CJK continuation has no word
-            # boundary worth preserving, and moving it would just ragged the column for nothing.
-            if sp > 0 and tail and ord(tail[0]) < 0x3000:
-                lines.append(cur[:sp])
-                cur = tail + ch
-            else:
-                lines.append(cur)
-                cur = ch
-        lines.append(cur)
-
-    if len(_WRAP_CACHE) >= _WRAP_CACHE_MAX:
-        _WRAP_CACHE.clear()
-    _WRAP_CACHE[key] = lines
-    return lines
+# The greedy pixel wrap moved to `tims/chrome.py` when a second screen needed it — a shared text
+# utility belongs beside `blit_lowres`, which every screen already imports. Alias kept because this
+# module reads `_wrap(...)` in a dozen places and the name is right here.
+_wrap = chrome.wrap_lines
 
 
 # ── consent view ───────────────────────────────────────────────────────────────
@@ -794,6 +745,8 @@ def run_consent(screen, read_only=False):
             elif event.type == pygame.MOUSEWHEEL:
                 scroll_y = max(0, min(scroll_y - event.y * 40, max_scroll))
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if band.click_stream(event.pos):  # band mirror address → open it in the PC's browser
+                    continue
                 if band_hits["home"].collidepoint(event.pos):  # band Home → press + load beat → bubble home
                     press_transition(
                         screen,
@@ -973,6 +926,8 @@ def run_settings(screen):
                 _lead_m, _interval_s = _entry_lead, _entry_int  # ESC = cancel → revert
                 return
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if band.click_stream(event.pos):  # band mirror address → open it in the PC's browser
+                    continue
                 if hits["home"].collidepoint(event.pos):  # band Home → press + load beat → bubble home
                     press_transition(
                         screen,

@@ -128,6 +128,8 @@ def run_on(screen):
                 band.ACTIVE_LANG = ACTIVE_LANG
                 i18n.set_language(ACTIVE_LANG)
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if band.click_stream(event.pos):  # band mirror address → open it in the PC's browser
+                    continue
                 bar_font = i18n.pixel_font_for_lang(ACTIVE_LANG, BAR_NATIVE)
                 if hits["home"].collidepoint(event.pos):
                     press_transition(

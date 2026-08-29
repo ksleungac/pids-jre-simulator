@@ -69,24 +69,7 @@ def _run_drive(config):
 
 def main():
     """Main entry point for the PA Simulator."""
-    import argparse
-
-    # The port is frame_stream's to own; the help text derives it rather than
-    # restating it, so the two cannot drift (conventions.md § Tooling).
     import frame_stream
-
-    parser = argparse.ArgumentParser(description="Japanese Train PA Simulator")
-    parser.add_argument(
-        "--stream",
-        action="store_true",
-        help=f"Mirror the app window to http://127.0.0.1:{frame_stream.DEFAULT_PORT}/ (same-PC browser only)",
-    )
-    parser.add_argument(
-        "--stream-lan",
-        action="store_true",
-        help="Mirror the app window to the LAN so a phone/tablet can view it. Raises a Windows firewall prompt on first use.",
-    )
-    args = parser.parse_args()
 
     # DPI awareness FIRST — before pygame creates any window, and before anything can import dxcam
     # (which declares it as an import side effect, so the app used to be unaware for setup and aware
@@ -104,21 +87,30 @@ def main():
     # companion overlay for the game. One seam wraps set_mode so no screen has to remember to re-pin.
     window_utils.install_topmost_hook()
 
-    # Window mirroring (opt-in, off by default). Owned HERE rather than by PASimulator: the setup<->drive
+    # The band's hover QR draws on top of whatever the screen painted, so it hangs off flip/update
+    # rather than off band.render — same one-seam reason as the pin above.
+    from tims import band as _band
+
+    _band.install_overlay_hook()
+
+    # Window mirroring (off by default). Owned HERE rather than by PASimulator: the setup<->drive
     # loop below rebuilds a sim per drive, so a sim-owned server would hit a bind failure on drive #2.
     # Living above the loop also means the stream spans setup, tutorial and drive without dropping.
-    stream_host = frame_stream.resolve_bind_host(args.stream, args.stream_lan)
+    # The mode + port come from the TIMS 設定 page. Read straight from settings (not via i18n.init,
+    # which happens further down) — load_settings is a plain JSON read and does not care about the
+    # language having been resolved yet.
+    _stream_settings = i18n.load_settings()
+    stream_host = frame_stream.resolve_bind_host(_stream_settings.get("stream_mode"))
     if stream_host is not None:
-        urls = frame_stream.start(stream_host)
+        # Both values go through frame_stream's cleaners — settings.json is hand-editable and is
+        # read here BEFORE any window exists, so a bad value must degrade, never raise.
+        urls = frame_stream.start(stream_host, frame_stream.clean_port(_stream_settings.get("stream_port")))
         if urls:
-            if args.stream_lan:
-                # Several candidates when a VPN or virtual adapter is present — the
-                # default route is often the tunnel, not the Wi-Fi the phone is on.
-                print("[stream] open ONE of these on a device on the same Wi-Fi:")
-                for u in urls:
-                    print(f"[stream]     {u}")
-            else:
-                print(f"[stream] mirroring this window at {urls[0]}")
+            # Several candidates when a VPN or virtual adapter is present — the default route is
+            # often the tunnel, not the Wi-Fi the phone is on. The band shows them too, clickable.
+            print("[stream] mirroring this window at:")
+            for u in urls:
+                print(f"[stream]     {u}")
 
     # Kick off the fail-silent update check early so its 3s network window
     # overlaps the setup screens; the setup screen polls the result.

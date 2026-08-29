@@ -208,6 +208,8 @@ class BasicTutorial(Tutorial):
     def process_event(self, event):
         """Band Home → leave the tutorial (back to the menu). Everything else is the inherited dispatch
         (ESC/QUIT, PgDn/PgUp/End, progress-jump, panel buttons, LCD click)."""
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and band.click_stream(event.pos):
+            return  # band mirror address → opened in the PC's browser; the tutorial stays put
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and self._home_rect and self._home_rect.collidepoint(event.pos):
             # band Home → yellow flash + loading beat (content emptied to slate), THEN leave to the menu —
             # same nav beat the tutorial_select page shows on its own band Home.
