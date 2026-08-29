@@ -1,6 +1,7 @@
 {
     "route": "中央線快速",
     "line_code": "JC",
+    "transfer_view": "JC_up",
     "color": [
         233,
         91,
@@ -13,13 +14,23 @@
     ],
     "type": "快速",
     "direction": "上り",
-    "remarks": "中央線快速上り",
+    "remarks": "上り　平日",
     "type_color": [
         233,
         91,
         31
     ],
     "dest": "東京",
+    "pre_stops": [
+        {"name": "大月", "sta_code": "JC32"},
+        {"name": "猿橋", "sta_code": "JC31"},
+        {"name": "鳥沢", "sta_code": "JC30"},
+        {"name": "梁川", "sta_code": "JC29"},
+        {"name": "四方津", "sta_code": "JC28"},
+        {"name": "上野原", "sta_code": "JC27"},
+        {"name": "藤野", "sta_code": "JC26"},
+        {"name": "相模湖", "sta_code": "JC25"}
+    ],
     "stops": [
         {
             "name": "高尾",

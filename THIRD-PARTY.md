@@ -62,10 +62,19 @@ railway enthusiasts, and this project cut its files from those publications. Cre
 them below does not make them rights holders and does not grant this project any
 licence — the copyright position above is unchanged. It records who did the work.
 
-The Utsunomiya Line (`audio/utsunomiya/`) is the one line whose sources were recorded
-as the work happened; the per-file mapping from source video to audio file is in
-[audio/README.md § "JU — Utsunomiya sources"](audio/README.md). Its 29 source
-recordings come from:
+Sources are recorded as the work happens wherever that step was in place. Two bodies of
+audio qualify, both mapped file-by-file in `audio/README.md`:
+
+- **Utsunomiya Line** (`audio/utsunomiya/`) — 29 source recordings,
+  [§ "JU — Utsunomiya sources"](audio/README.md).
+- **Chūō Line `602H`** (9 of `audio/chuo/`'s 62 PA files) — two recordings, both by
+  **East Railway Redwing**, [§ "JC — Chuo sources"](audio/README.md). The line's other
+  53 files predate the step. One of the nine, `shinjuku-arr-602H`, is **constructed**
+  rather than captured: five pieces, three from `stu9Duc6X8I` and two from the pool's own
+  `shinjuku-arr-916H` — whose own source is among the 53 that predate this step and is
+  therefore uncredited. Documented at that section.
+
+The Utsunomiya recordings come from:
 
 | Recordist | Recordings |
 |---|---|

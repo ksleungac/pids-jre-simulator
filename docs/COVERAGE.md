@@ -14,7 +14,7 @@ tracked here. Rolling-stock-only packs (185, E231, 209-500) add trains, not rout
 1. **Utsunomiya**, `3520M` first (快速ラビット, the only full-section diagram). Last pre-cutoff gap.
    Pure audio — E233-3000 has no LCD, so it brings no display work and competes with nothing.
 2. Then the remaining gap set: **Nambu Branch + Tsurumi** (7 diagrams, pack already owned, but wants
-   a 205 model first), **Takasaki 831M**, **Chūō 602H**.
+   a 205 model first) and **Takasaki 831M**. *(Chūō 602H — 通勤特快 — shipped 2026-08-29.)*
 3. Post-cutoff routes are by choice, not gap-filling — and want the phase model first if a full PA
    corpus isn't affordable.
 
@@ -45,10 +45,34 @@ cannot compete on — it will only ever model what exists.
 in-game passenger announcements. Everything before it shipped without them, which is the gap this
 app was built to fill.
 
-The boundary moves in one direction only, and it can move *backwards over an existing route*:
-**Jōban (2023-08-29) was retro-fitted** with driver voice and automatic broadcasting in a later
-update. That is the one known instance. So "the game doesn't announce this route" is a fact with a
-date on it, not a permanent property — re-check before starting a build, not after.
+**The boundary also moves backwards over routes already shipped, and it is TRIGGERED rather than
+gradual.** Two known instances:
+
+| line | released | what was added | apparent trigger |
+|---|---|---|---|
+| Jōban | 2023-08-29 | driver voice + automatic broadcasting | unexplained — no Jōban pack is recorded below, though that list is a floor (§ Method) |
+| **Tōkaidō Outbound** | 2022-11-14 | passenger announcements | **Tōkaidō Inbound shipped 2026-07-28** |
+
+Tōkaidō is the instance with a visible cause: the new Inbound pack brought the line up to the
+current standard and the Outbound pack came with it (author, 2026-08-29). The back catalogue is not
+being worked through in release order, so **a pre-cutoff route's exposure is a function of whether a
+NEW pack lands on the same line, not of how old it is**. "The game doesn't announce this route" is a
+fact with a date on it, and the date to re-check is the day a neighbouring pack ships.
+
+**Which of ours already have a trigger on the board**, strongest adjacency first. Every unchecked
+row is settled by loading the route and listening:
+
+| our line | pack that shipped afterwards | adjacency | status |
+|---|---|---|---|
+| **tokaido** | Tōkaidō Inbound (2026-07-28) | same line, other direction | **fired** |
+| **chuo** | Ōme (2024-11-27) · Chūō・Sōbu Local (2025-12-22) | through service · same corridor | **unchecked** |
+| **sobu** | Yokosuka (2024-10-29) | through service over the same track | **unchecked** |
+| **takasaki** | Hachikō (2025-03-25) · Shōnan-Shinjuku (2025-09-26) | shares a terminus only | **unchecked** |
+| keihin · yamanote · saikyo · keiyo · nambu | none recorded | — | no trigger yet |
+| *(joban)* | none recorded | — | retro-fitted anyway |
+
+`chuo` is the row that matters most — it is the line E233-0 is being built for, and it has had two
+neighbouring packs land since release.
 
 ## Our catalog is the pre-cutoff set
 
@@ -58,7 +82,7 @@ exceptions and no arbitrary picks:
 | our line | game route | released |
 |---|---|---|
 | keihin | base game | 2022 |
-| tokaido | Tōkaidō Line Outbound (Tokyo–Atami) | 2022-11-14 |
+| tokaido | Tōkaidō Line Outbound (Tokyo–Atami) | 2022-11-14 → **retro-updated 2026** |
 | chuo | Chūō Line Rapid Service (Takao–Tokyo) | 2022-11-14 |
 | saikyo | Saikyō-Kawagoe Line (Ōsaki–Kawagoe) | 2023-02-20 |
 | keiyo | Keiyō Line (Soga–Tokyo) | 2023-06-26 |
@@ -83,23 +107,29 @@ Model). Measured against that:
 | Tōkaidō Out | 1525E, 1531E, 1865E, 1567E, 3535E | 1865E, 3535E | none — the rest are 普通 terminating short |
 | Sōbu Rapid | 627F, 845F, 1217F | 1217F | none — all 快速; the others terminate short |
 | **Takasaki** | 829M, 831M, 3922E, 833M | 3922E | **831M** — 普通 over the full section |
-| **Chūō** | 602H, 692T, 916H, 1034T, 1654T | 916H, 1654T | **602H** — 通勤特快 |
+| Chūō | 602H, 692T, 916H, 1034T, 1654T | 602H, 916H, 1654T | none checkable — 692T / 1034T are label-only calls (§ Method) |
 | **Nambu pack** | +Branch ×3, +Tsurumi ×4 | none | **two whole lines** |
 | **Utsunomiya** | 1539E, 1567E, 1591E, 3520M, 2531Y, 4521Y | none | **whole route** |
 | Keihin-Tōhoku | *unknown — base game, no DLC page* | 1275A, 727B | unverified |
 
 ## What is actually left
 
-All four are pre-cutoff, so the game ships no announcements for any of them. These are gap-filling
-in the original sense, not duplication.
+All three are pre-cutoff, so the game ships no announcements for any of them **as of this writing**.
+That is gap-filling in the original sense, not duplication — but it is a status with a shelf life,
+and the trigger for losing it is a neighbouring pack, not the passage of time (§ "The announcement
+cutoff"). Re-check the specific line before starting its build.
 
 1. **Utsunomiya** — 6 diagrams. Canonical pick is 3520M (快速ラビット, full Kuroiso→Ueno) plus a 普通.
    Note 1567E appears in both this pack and Tōkaidō Outbound — one through service over the
    Ueno-Tokyo Line, so half its route is already modelled in `tokaido`.
+   **That shared diagram is now the cheapest exposure test available**: Tōkaidō Outbound has been
+   retro-fitted, so if 1567E is one run rather than two copies, the Utsunomiya pack may already
+   announce. Load it and listen before committing to a 6-diagram PA corpus.
 2. **Nambu Branch + Tsurumi** — 7 diagrams, two lines, inside a pack already owned. Different stock
    (205-1000, 205-1100), so they need their own display treatment.
 3. **Takasaki 831M** — 普通 to 高崎; only the 快速アーバン is built.
-4. **Chūō 602H** — 通勤特快, distinct from both the 中央特快 and 快速 held.
+
+*(Chūō 602H, 通勤特快, was the fourth. Shipped 2026-08-29 — `audio/chuo/602H/`.)*
 
 ## Post-cutoff routes (in-game announcements exist)
 
@@ -135,7 +165,6 @@ Pre-cutoff, so no in-game announcements exist for any of them.
 1. **Nambu Branch + Tsurumi** — 7 diagrams, two lines, in a pack already owned. Also a *display*
    gap: 205-1000 / 205-1100 stock, and no 205 model exists.
 2. **Takasaki 831M** — 普通 over the full section.
-3. **Chūō 602H** — 通勤特快.
 
 ### Enabler — the route phase model
 
@@ -190,6 +219,8 @@ inherit as skins. Beyond the catalogue: **E233-6000** (Yokohama Line) and **E231
 
 The eight routes listed above. **Tōkaidō Line Inbound** is the notable one: the catalogue holds 下り
 only, so it is the sole case where the game offers a direction we lack on a line we already cover.
+It is also the pack that retro-fitted our 下り (§ "The announcement cutoff"), so `tokaido` is now
+duplicated in both directions — building 上り would add a direction, not close a gap.
 
 ## Method, and what it cannot tell you
 
@@ -204,7 +235,7 @@ Compiled 2026-08-15 from the Steam store pages (aggregate DLC list + per-pack pa
   origin differs. Known-unsafe calls: Chūō **1034T** (weekend, from Ōme) and **692T** (weekday 快速
   but a rush-hour run against 1654T's afternoon one); Takasaki **829M / 833M** (same label, 10-car
   vs 15-car). The same service name can carry a different pattern on Sat/Sun. **Only the game
-  settles these** — the four items in "What is actually left" are safe because they differ by more
+  settles these** — the three items in "What is actually left" are safe because they differ by more
   than a label.
 - **The aggregate DLC page paginates and returns different subsets per fetch.** Two passes here
   returned different route sets; this table is a union of both plus targeted lookups, so treat it as
@@ -213,3 +244,6 @@ Compiled 2026-08-15 from the Steam store pages (aggregate DLC list + per-pack pa
 - **Keihin-Tōhoku is base-game content**, so it has no DLC page and its diagram list is unverified.
 
 Refresh when a new pack lands (roughly every two months) or before starting any route build.
+**A new pack is also the retro-fit trigger**, so refreshing is not only "what route was added" — it
+is "which line did it land on, and does that line's existing pack announce now." The store page
+cannot answer the second question; only loading the route can.

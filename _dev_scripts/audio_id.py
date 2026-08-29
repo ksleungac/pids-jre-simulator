@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Named instruments for the audio workflows — identity, structure, speech presence.
+"""Named instruments for the audio workflows — identity, structure, speech, voice.
 
 WHY THIS EXISTS. These questions come up on every `sta-make` / `pa-make` /
 pooling job, and each one has exactly one method that works and several that
@@ -16,7 +16,7 @@ these.
 CALIBRATE BEFORE YOU TRUST IT:  uv run _dev_scripts/audio_id.py --selftest
 A gate that has never been observed to fail has not been shown to work.
 
-    from audio_id import same_recording, exact_identity, structure, has_speech
+    from audio_id import same_recording, exact_identity, structure, has_speech, f0
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ from pathlib import Path
 
 import librosa
 import numpy as np
+import soundfile
 from scipy.signal import correlate
 
 SR = 22050
@@ -202,6 +203,68 @@ def loop_repeat(path: Path | str, base: tuple[float, float], later: tuple[float,
 
 
 # --------------------------------------------------------------------------
+# voice identity — live conductor (肉声) vs the automated announcer
+# --------------------------------------------------------------------------
+
+
+def f0(path: Path | str, start: float | None = None, end: float | None = None, fmin: float = 70.0, fmax: float = 400.0) -> dict:
+    """Median fundamental frequency over a window — separates two SPEAKERS.
+
+    The question this answers is "is this the conductor or the automated voice",
+    which every line with 肉声 in its source has to answer before cutting. It is
+    the only method that works; see `audio/README.md` §§ "JU — Utsunomiya" and
+    "JC — Chuo" for both outcomes. What travels between sources is the METHOD,
+    never the numbers.
+
+    CALIBRATE PER SOURCE. The threshold is a property of the two voices on that
+    recording, not of the technique: utsunomiya separates at 136-145 Hz
+    (conductor) against 212-225 Hz (automated), with nothing in between, and a
+    different source's pair sits somewhere else. Measure a window you already know
+    the answer for in BOTH classes before believing any verdict.
+
+    A NEGATIVE CALIBRATION IS A REAL OUTCOME, not a failed measurement. On chuo
+    `stu9Duc6X8I` the Chūō-leg conductor reads 217-229 Hz, inside that recording's
+    automated band of 213-236 Hz — the two speakers overlap and no threshold
+    exists. Two recordings of the SAME diagram by the SAME recordist disagreed
+    about this. When it happens, fall back to content and `structure` block
+    boundaries; do not widen the band until it "works".
+
+    WINDOW SCALE IS PART OF THE INSTRUMENT — announcement-sized, hundreds of
+    voiced frames. Two window choices are known to return confident nonsense:
+    - Per WHISPER SEGMENT. `seg.start` drifts on a compilation, so the window
+      describes the wrong audio — one conductor recital read 154 Hz then 249 Hz
+      mid-sentence.
+    - Per WORD. Too few voiced frames; it chopped single sentences into three
+      alternating verdicts.
+
+    And an ENGLISH automated announcement reads lower than the Japanese one (near
+    190 Hz on utsunomiya, against 212-225). A short window that is mostly English
+    looks borderline — transcribe it rather than re-tuning the threshold.
+    """
+    y = load(path)
+    i = int(max(0.0, start or 0.0) * SR)
+    # max(i, ...) so a negative `end` yields an EMPTY window like every other
+    # out-of-range input. Unclamped, `y[i:-N]` is the file minus its last N samples —
+    # a confident median over a window the caller never asked for, and the CLI then
+    # prints the requested span beside the real (large) one without erroring.
+    j = max(i, int(end * SR)) if end is not None else len(y)
+    y = y[i:j]
+    if not len(y):
+        return {"median": None, "p25": None, "p75": None, "n_voiced": 0, "seconds": 0.0}
+    track, _, _ = librosa.pyin(y, fmin=fmin, fmax=fmax, sr=SR)
+    vals = track[np.isfinite(track)]
+    if not len(vals):
+        return {"median": None, "p25": None, "p75": None, "n_voiced": 0, "seconds": len(y) / SR}
+    return {
+        "median": float(np.median(vals)),
+        "p25": float(np.percentile(vals, 25)),
+        "p75": float(np.percentile(vals, 75)),
+        "n_voiced": int(len(vals)),
+        "seconds": len(y) / SR,
+    }
+
+
+# --------------------------------------------------------------------------
 # speech presence
 # --------------------------------------------------------------------------
 
@@ -233,7 +296,10 @@ def has_speech(path: Path | str, device: str = "cuda") -> tuple[bool, str]:
     with tempfile.TemporaryDirectory() as td:
         out = Path(td) / "t.json"
         cmd = [sys.executable, str(_HERE / "transcribe_pa.py"), str(path), "--model", "large-v3", "--device", device, "--out", str(out)]
-        r = subprocess.run(cmd, capture_output=True, text=True)
+        # transcribe_pa.py prints the Japanese transcript, so a bare text=True decodes it as
+        # cp1252 and kills subprocess's reader thread — which empties r.stderr and leaves the
+        # failure branch below quoting nothing.
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode != 0 or not out.exists():
             raise RuntimeError(f"transcribe_pa failed: {r.stderr[-400:]}")
         data = json.loads(out.read_text(encoding="utf-8"))
@@ -283,17 +349,48 @@ def _selftest() -> int:
     ok &= good
     print(f"[{'ok ' if good else 'FAIL'}] structure(cut in content)  cut_silence={st2['cut_silence']}   expect None")
 
+    # f0's oracle is SYNTHESIZED, not a corpus file: the ground truth is the frequency
+    # we generated, so this is independent of the implementation rather than a
+    # restatement of it. Written at a rate DELIBERATELY unequal to SR, so `load()` must
+    # resample into SR and the case covers the constant and the resample path as well as
+    # fmin/fmax and a librosa signature change. Writing at SR would move the tone, the
+    # header and the reader together and prove nothing about SR at all.
+    FIXTURE_SR = 44100
+    with tempfile.TemporaryDirectory() as td:
+        wav = Path(td) / "tone.wav"
+        for hz, label in ((150.0, "conductor-ish"), (250.0, "announcer-ish")):
+            t = np.arange(int(FIXTURE_SR * 2.0)) / FIXTURE_SR
+            soundfile.write(str(wav), (0.5 * np.sin(2 * np.pi * hz * t)).astype(np.float32), FIXTURE_SR)
+            m = f0(wav)["median"]
+            good = m is not None and abs(m - hz) < 5.0
+            ok &= good
+            print(f"[{'ok ' if good else 'FAIL'}] f0({label})            median={m if m is None else round(m, 1)}Hz   expect ~{hz:.0f}")
+        # NEGATIVE end, not a positive one below start: a positive stop under a positive
+        # start already slices empty WITHOUT the clamp in f0, so it would not discriminate
+        # the clamp it exists to guard. `y[1.0s:-0.5s]` on a 2 s tone is 0.5 s of real
+        # audio unclamped (median ~250) and empty with it.
+        empty = f0(wav, start=1.0, end=-0.5)
+        good = empty["median"] is None and empty["n_voiced"] == 0
+        ok &= good
+        print(f"[{'ok ' if good else 'FAIL'}] f0(negative end clamped)  median={empty['median']}   expect None")
+
     print("\nSELFTEST", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
 
 def main() -> int:
+    # Windows pipes default to cp1252 and --speech prints a Japanese transcript verbatim;
+    # without this it raises instead of answering — see conventions.md § Tooling.
+    sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--selftest", action="store_true", help="calibrate against a known-same and known-different pair")
     ap.add_argument("--same", nargs=2, metavar=("A", "B"), help="report same_recording + containment for two files")
     ap.add_argument("--structure", nargs="+", metavar="FILE", help="print structure; optional trailing --cut N")
     ap.add_argument("--cut", type=float, help="sta_cut for --structure")
     ap.add_argument("--speech", metavar="FILE", help="report whether a file contains speech")
+    ap.add_argument("--f0", metavar="FILE", help="median F0 over a window — conductor vs automated voice")
+    ap.add_argument("--from", dest="t_from", type=float, help="window start (s) for --f0")
+    ap.add_argument("--to", dest="t_to", type=float, help="window end (s) for --f0")
     a = ap.parse_args()
 
     if a.selftest:
@@ -315,6 +412,20 @@ def main() -> int:
     if a.speech:
         yes, text = has_speech(a.speech)
         print(f"speech={yes}  {text[:200]}")
+        return 0
+    if a.f0:
+        r = f0(a.f0, a.t_from, a.t_to)
+        m = r["median"]
+        # `seconds` is the window's LENGTH, not an absolute offset — so the end is
+        # start + length whenever --to was omitted. This span gets transcribed into
+        # splitter docstrings and audio/README.md as the provenance of a measurement,
+        # so printing a length where an end belongs writes a wrong record.
+        t0 = a.t_from if a.t_from is not None else 0.0
+        t1 = a.t_to if a.t_to is not None else t0 + r["seconds"]
+        span = f"[{t0:.2f}, {t1:.2f}]"
+        print(
+            f"{a.f0} {span}  median={m if m is None else round(m, 1)}Hz  IQR={r['p25'] and round(r['p25'],1)}-{r['p75'] and round(r['p75'],1)}  voiced_frames={r['n_voiced']}  window={r['seconds']:.2f}s"
+        )
         return 0
     ap.print_help()
     return 0

@@ -29,6 +29,8 @@ For STA (departure melody + closing-door announcement) work, see the **sta-make*
 - `same_recording(a, b)` — "are these two diagrams' announcements one recording, or two takes of the same words?" This is the question pooling turns on. `r ~1.0` = one recording; a clean corpus separates hard (Saikyo scored 11 pairs ≥0.9966 and 8 at ≤0.35, nothing between).
 - `contains(a, b)` — which cut survives when collapsing a duplicate pair.
 - `has_speech(path)` — Whisper with the hallucination filter applied (below).
+- `f0(path, start, end)` — median fundamental frequency over a window. The instrument for
+  "is this the live conductor or the automated announcer" — see Step 0.3.0.c.
 
 **Waveform correlation cannot tell you whether two takes say the same WORDS** — speech takes never correlate acoustically. Only the transcript answers that, which is why the PA question needs Step 0's Whisper pass even when identity has already been measured.
 
@@ -153,6 +155,86 @@ block onset wins.
 produced deltas clustered at −6 / 0 / +6 s and a meaningless median, because the matcher hops to an
 adjacent onset whenever blocks sit ~6 s apart. That is the measurement failing, not a real offset —
 `principles.md § "A measurement is a claim until the instrument is calibrated"`.
+
+**0.3.0.c — When a source carries a live conductor (肉声), ASK whether it ships, then use
+F0 to find the boundary — and be ready for F0 to have no boundary to find.**
+
+Whether the conductor ships is the author's call and it turns on WHAT they say. Delay
+apologies and one-run specifics are noise (Chūō `RWodxjrHQnc`: excluded, 29 % of the
+range). Service information — the arrival platform, a connection, the stop list — is worth
+keeping, and the author asked for it (Chūō `stu9Duc6X8I`, an on-time run). Ask before
+cutting; the answer changes every boundary.
+
+Where they must be separated, content is not a discriminator: the conductor repeats the
+automated lines (「次は◯◯に停まります」, the don't-stop-until warning) in the same
+vocabulary, so a text-based split silently keeps them. `audio_id.f0` is the instrument.
+
+**CALIBRATE ON THE SOURCE, NOT THE LINE OR THE DIAGRAM.** The numbers are a property of one
+recording's two speakers — two recordings of the SAME diagram by the SAME recordist gave
+opposite answers:
+
+| source | conductor | automated | split |
+|---|---|---|---|
+| utsunomiya `q6Bt_iPrmMI` | 136–145 Hz | 212–225 Hz | clean |
+| chuo `RWodxjrHQnc` | 94 / 145 Hz | 220–233 Hz (JA windows; EN down to 210) | ~185 Hz |
+| chuo `stu9Duc6X8I` | 139 Hz (青梅線 leg) · **217–229 Hz** (Chūō leg) | 213–236 Hz | **NONE** |
+
+Four ways this measurement goes wrong, all observed:
+
+- **The voices simply overlap — a NEGATIVE calibration is a real outcome, not a failed
+  measurement.** On `stu9Duc6X8I` the Chūō-leg conductor sits inside the automated band and
+  no threshold exists. Fall back to content and `audio_id.structure` block boundaries. Run
+  the calibration BEFORE planning the cut, because discovering this afterwards means
+  re-deriving every boundary.
+- **Window too small.** Per Whisper segment: `seg.start` drifts, so the window describes
+  the wrong audio (one conductor recital read 154 Hz then 249 Hz mid-sentence). Per word:
+  too few voiced frames, and it alternated verdicts inside one sentence. Use
+  announcement-scale windows, hundreds of voiced frames.
+- **Window too LARGE — a median hides a short wrong head.** On `RWodxjrHQnc` the 新宿
+  departure read 253.8 Hz over 11.8 s and was placed there; its first 2.1 s alone read
+  **82.4 Hz**, still the conductor. The author's ear then caught a second one the same way
+  — a 9 s conductor head that a 13.8 s window had averaged to 212 Hz. **Always re-measure
+  the first ~2 s of a proposed cut on its own.**
+- **English reads lower, so a band measured on Japanese windows is not a floor.** The
+  automated English announcement sits below the Japanese one — ~190 Hz on utsunomiya, and
+  209.8–219.7 Hz on chuo `RWodxjrHQnc` against a 220–233 Hz band calibrated on its Japanese
+  windows. A window that is mostly English looks borderline: transcribe it rather than
+  moving the threshold, and quote any band as measured over the windows it came from.
+
+**Where the conductor is being EXCLUDED, verify the cut files, not just the windows**: run
+`--f0` over each output and confirm every one lands in the automated band. That is the
+end-to-end check that covers a boundary you placed wrongly, and it is the half of the job a
+per-window measurement cannot do. It says nothing where the calibration came back negative,
+and it is meaningless where the conductor deliberately ships — in both of those cases the
+ear is the only gate.
+
+**0.3.0.d — Two recordings of one diagram differ in WHAT THEY SAY, and the author's
+preference is to keep the information, not the single-recording purity.**
+
+Runs vary: an early-morning service gives abbreviated announcements, a busy one gives the
+full transfer list, a delayed one carries a conductor talking over both. So "cut from the
+exact-diagram recording" is not automatically the right answer — compare the CONTENT before
+choosing, per stop, and expect the answer to be a mix.
+
+The 2026-08-29 Chūō `602H` case, which is the shape to recognise: the exact-diagram
+recording (6:35) announces **no transfers at any stop**, while a same-pattern recording of
+another service (8:36) carries them at 四ツ谷 / 御茶ノ水 / 神田 / 東京. Blocks corroborate
+the transcript — 神田 is 14 s of audio against the other's 27 — so it is real, not a
+transcription artifact. The diagram now takes 立川 → 新宿 (and its conductor) from the exact
+recording and those four announcements from the other.
+
+Two constraints make a mix safe or unsafe, and both must be checked:
+
+- **The spoken PLATFORM SIDE must agree.** 「お出口は右側です」 in one file and 左側 in
+  another for the same station is a contradiction a listener hears. On this line 新宿 was
+  右側 in one recording and 左側 in the other, which is what disqualified the second take
+  and forced 新宿 to come from one source only.
+- **Nothing may be invented.** Where BOTH recordings omit something the author wants, the
+  material has to come from a real recording of the same line — 新宿's transfers were
+  grafted from the `916H` pool file, which says 左側 like its host. That produces a
+  CONSTRUCTED file; document it as one (§ "Record the source", and see utsunomiya's
+  `higashiwashinomiya_2`), build it decode-concat-**re-encode**, and never let anything
+  reasoning about provenance treat it as a single capture.
 
 **0.3.a — Homophone watch-list (build per-route as new ones surface)**
 
@@ -474,7 +556,7 @@ Hepburn romanization, macrons stripped, lowercase, hyphens for word boundaries �
 
 ## Tools
 
-- `_dev_scripts/audio_id.py` — named instruments (identity, containment, structure, speech presence); `--selftest` calibrates them.
+- `_dev_scripts/audio_id.py` — named instruments (identity, containment, structure, speech presence, voice identity via `--f0`); `--selftest` calibrates them.
 - `_dev_scripts/transcribe_pa.py` — Whisper wrapper. CUDA-enabled, downloads model on first run, outputs JSON with segment-level timestamps + text. Defaults to `large-v3` on `cuda`. JSON output lands next to the source mp3 by default.
 - `_dev_scripts/format_pa_timestamps.py` — formatter that converts a `{station: voice_onsets}` mapping into `timestamps.txt` with safety-margin (`floor()`) applied.
 - `_dev_scripts/trim_pa_silence.py` — voice-onset detection + stream-copy trimming. Finds actual voice start (noise_floor + 12 dB attack), trims to ~80ms pad before onset. Idempotent. Replaces the old simple -40 dB gate.

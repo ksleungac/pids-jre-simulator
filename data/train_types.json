@@ -28,7 +28,8 @@
         "english": "Commuter Rapid"
     },
     "通勤特快": {
-        "english": "Commuter Special Rapid"
+        "english": "Commuter Special Rapid",
+        "english_short": "Comm. Sp. Rapid"
     },
     "特急": {
         "english": "Limited Express"

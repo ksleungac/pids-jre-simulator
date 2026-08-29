@@ -12,100 +12,39 @@
         92,
         0
     ],
-    "type": "中央特快",
+    "type": "通勤特快",
     "direction": "上り",
     "remarks": "上り　平日",
     "type_color": [
-        45,
-        0,
-        255
+        212,
+        3,
+        5
     ],
     "dest": "東京",
     "pre_stops": [
-        {"name": "大月", "sta_code": "JC32"},
-        {"name": "猿橋", "sta_code": "JC31"},
-        {"name": "鳥沢", "sta_code": "JC30"},
-        {"name": "梁川", "sta_code": "JC29"},
-        {"name": "四方津", "sta_code": "JC28"},
-        {"name": "上野原", "sta_code": "JC27"},
-        {"name": "藤野", "sta_code": "JC26"},
-        {"name": "相模湖", "sta_code": "JC25"}
+        {"name": "青梅", "sta_code": "JC62"},
+        {"name": "東青梅", "sta_code": "JC61"},
+        {"name": "河辺", "sta_code": "JC60"},
+        {"name": "小作", "sta_code": "JC59"},
+        {"name": "羽村", "sta_code": "JC58"},
+        {"name": "福生", "sta_code": "JC57"},
+        {"name": "牛浜", "sta_code": "JC56"},
+        {"name": "拝島", "sta_code": "JC55"},
+        {"name": "昭島", "sta_code": "JC54"},
+        {"name": "中神", "sta_code": "JC53"},
+        {"name": "東中神", "sta_code": "JC52"},
+        {"name": "西立川", "sta_code": "JC51"}
     ],
     "stops": [
         {
-            "name": "高尾",
-            "pa": [],
-            "sta": [
-                "JC24"
-            ],
-            "sta_code": "JC24",
-            "sta_cut": 8.3,
-            "time": 0
-        },
-        {
-            "name": "西八王子",
-            "pa": [
-                "takao-dep-chuo-tokkai",
-                "nishi-hachioji-arr-916H"
-            ],
-            "sta": [
-                "JC23"
-            ],
-            "sta_code": "JC23",
-            "sta_cut": 10.6,
-            "time": 3
-        },
-        {
-            "name": "八王子",
-            "pa": [
-                "nishi-hachioji-dep-916H",
-                "hachioji-arr-916H"
-            ],
-            "sta": [
-                "JC22"
-            ],
-            "sta_code": "JC22",
-            "sta_cut": 7.9,
-            "time": 3
-        },
-        {
-            "name": "豊田",
-            "pa": [
-                "hachioji-dep-chuo-tokkai",
-                "toyoda-arr"
-            ],
-            "sta": [
-                "JC21"
-            ],
-            "sta_code": "JC21",
-            "sta_cut": 19.8,
-            "time": 5
-        },
-        {
-            "name": "日野",
-            "pa": [
-                "toyoda-dep-916H",
-                "hino-arr-916H"
-            ],
-            "sta": [
-                "JC20"
-            ],
-            "sta_code": "JC20",
-            "sta_cut": 8.7,
-            "time": 2
-        },
-        {
             "name": "立川",
-            "pa": [
-                "hino-dep-916H",
-                "tachikawa-arr-916H"
-            ],
+            "pa": [],
             "sta": [
                 "JC19"
             ],
             "sta_code": "JC19",
             "sta_cut": 21.0,
-            "time": 4
+            "time": 0
         },
         {
             "name": "国立",
@@ -120,8 +59,8 @@
         {
             "name": "国分寺",
             "pa": [
-                "tachikawa-dep-chuo-tokkai",
-                "kokubunji-arr-916H"
+                "tachikawa-dep-tsukin-tokkai",
+                "kokubunji-arr-602H"
             ],
             "sta": [
                 "JC16"
@@ -147,16 +86,8 @@
         },
         {
             "name": "三鷹",
-            "pa": [
-                "kokubunji-dep-chuo-tokkai",
-                "mitaka-arr-916H"
-            ],
-            "sta": [
-                "JC12"
-            ],
-            "sta_code": "JC12",
-            "sta_cut": 9.1,
-            "time": 7
+            "pa": [],
+            "sta_code": "JC12"
         },
         {
             "name": "吉祥寺",
@@ -185,16 +116,8 @@
         },
         {
             "name": "中野",
-            "pa": [
-                "mitaka-dep-chuo-tokkai",
-                "nakano-arr"
-            ],
-            "sta": [
-                "JC06"
-            ],
-            "sta_code": "JC06",
-            "sta_cut": 8.7,
-            "time": 8
+            "pa": [],
+            "sta_code": "JC06"
         },
         {
             "name": "東中野",
@@ -209,15 +132,15 @@
         {
             "name": "新宿",
             "pa": [
-                "nakano-dep-916H",
-                "shinjuku-arr-916H"
+                "kokubunji-dep-tsukin-tokkai",
+                "shinjuku-arr-602H"
             ],
             "sta": [
                 "JC05_SJK"
             ],
             "sta_code": "JC05",
             "sta_cut": 20.1,
-            "time": 4
+            "time": 17
         },
         {
             "name": "代々木",
@@ -237,8 +160,8 @@
         {
             "name": "四ツ谷",
             "pa": [
-                "shinjuku-dep-chuo-tokkai",
-                "yotsuya-arr-916H"
+                "shinjuku-dep-tsukin-tokkai",
+                "yotsuya-arr-602H"
             ],
             "sta": [
                 "JC04"
@@ -265,8 +188,8 @@
         {
             "name": "御茶ノ水",
             "pa": [
-                "yotsuya-dep-916H",
-                "ochanomizu-arr-916H"
+                "yotsuya-dep-602H",
+                "ochanomizu-arr-602H"
             ],
             "sta": [
                 "JC03"
@@ -278,7 +201,7 @@
         {
             "name": "神田",
             "pa": [
-                "kanda-arr-916H"
+                "kanda-arr-602H"
             ],
             "sta": [
                 "JC02"
