@@ -21,6 +21,41 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 sys.path.insert(0, str(Path(__file__).parent))
 
 
+def warn_preloaded_corpus_changed(old_sha, new_sha="HEAD"):
+    """Name any always-loaded rules file the pull just brought in.
+
+    The preloaded corpus — `CLAUDE.md` plus `.claude/rules/*` — is injected into
+    context BEFORE this script runs, so a pull that changes it leaves the copy in
+    context stale by construction, and nothing says so. The sync block's own
+    changed-file list reads as ordinary pull output and gets skimmed: 2026-07-27 a
+    pull brought three commits touching all four rules files and the new
+    `critical_lessons §8` corollary went unread for hours. `/clear` or an explicit
+    Read are the only refreshes; the mid-session modification notices truncate and
+    cannot be relied on. (#113)
+
+    `new_sha` exists so this can be proven on a chosen commit pair. Defaulting it
+    to HEAD and taking only one endpoint made the negative case untestable: every
+    old commit's range to HEAD spans the newest rules change, so the check could
+    only ever be observed firing, and a check never observed silent has not been
+    shown to discriminate.
+    """
+    r = subprocess.run(
+        ["git", "diff", "--name-only", old_sha, new_sha],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if r.returncode != 0:
+        return
+    hits = [f for f in r.stdout.splitlines() if f == "CLAUDE.md" or f.startswith(".claude/rules/")]
+    if not hits:
+        return
+    print("  !!! PRELOADED RULES CHANGED — the copy already in context is STALE !!!")
+    for f in hits:
+        print(f"        {f}")
+    print("      Read each one before acting on anything it governs.\n")
+
+
 def git_sync():
     """Fetch + fast-forward if possible; report divergence for manual resolution.
 
@@ -50,6 +85,11 @@ def git_sync():
     if ahead == 0 and behind == 0:
         print("=== Git sync — already up to date ===\n")
     elif ahead == 0:
+        # Captured BEFORE the merge: `HEAD@{1}` would also name it, but only if the
+        # merge actually moved HEAD, and the failure branch below is exactly the
+        # case where it did not.
+        head_r = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, encoding="utf-8")
+        old_sha = head_r.stdout.strip() if head_r.returncode == 0 else ""
         result = subprocess.run(
             ["git", "merge", "--ff-only", "origin/master"],
             capture_output=True,
@@ -71,6 +111,8 @@ def git_sync():
             )
         else:
             print(f"=== Git sync — pulled {behind} commit(s) ===\n{result.stdout.strip()}\n")
+            if old_sha:
+                warn_preloaded_corpus_changed(old_sha)
     else:
         print(
             f"=== Git sync — NEEDS MANUAL RESOLUTION ===\n"

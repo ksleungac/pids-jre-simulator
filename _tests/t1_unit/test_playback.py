@@ -9,6 +9,12 @@ invisible except through what the dispatch does with a second entry:
   1. HOW MANY TIMES A PRESS FIRES — PASimulator._handle_input_main
   2. WHAT EACH FIRE DOES          — PASimulator._next_sta
 
+The same function dispatches PA, the pause key and the AutoDriver's two single-shot
+signals. Those are a different feature — the dispatch itself, rather than what an
+STA press means — and live in `test_input_dispatch.py`. The press-edge cases stay
+HERE because they are only legible against `_next_sta`'s from-head/from-cut split;
+that coupling is the reason this module holds two layers.
+
 Both stub the audio layer and record the CALL, not merely that the method ran.
 The bug in this area was two calls with different effects, so a test that only
 counts entries proves nothing. Both call the method unbound against a
@@ -55,6 +61,11 @@ def drive_keys(frames, *, sta_playing_after_first=True):
     Each entry is the set of keys physically down that frame. Returns the list of
     calls made, in order. `sta_playing_after_first` models the real audio layer:
     once _next_sta has played something, the channel reports busy.
+
+    The AutoDriver's signals are seeded inert here — this module asserts what a
+    press does, and `test_input_dispatch.py` asserts what the dispatch does with
+    the signals. The fields still have to exist, or the function raises into its
+    own except clause and every case reports an empty call log.
     """
     calls: list[str] = []
     state = {"sta_playing": False}
@@ -63,6 +74,8 @@ def drive_keys(frames, *, sta_playing_after_first=True):
         _pageup_was_down=False,
         pending_next_pa=False,
         pending_silent_advance=None,
+        pending_pa_drain=False,
+        state=SimpleNamespace(at_station=False),
         audio=SimpleNamespace(
             is_pa_playing=lambda: False,
             is_playing=lambda: state["sta_playing"],
@@ -82,7 +95,8 @@ def drive_keys(frames, *, sta_playing_after_first=True):
 
     fake._next_sta = _next_sta
     fake._next_pa = lambda: calls.append("pa")
-    fake._silent_advance_to = lambda t: None
+    fake._silent_advance_to = lambda t: calls.append(f"silent_advance({t})")
+    fake._drain_pa_at_station = lambda: calls.append("drain")  # never reached here
 
     orig_pressed, orig_wait = app_module.keyboard.is_pressed, app_module.pygame.time.wait
     try:

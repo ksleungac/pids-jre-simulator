@@ -316,7 +316,7 @@
   },
   "tutorial.step.4.body": {
     "en": "The train will depart 国府津 (Kōzu) and announce the next stop, 鴨宮 (Kamonomiya). The upper LCD changes from 'ただいま 国府津' (now stopping at Kōzu) to '次は 鴨宮' (next stop Kamonomiya).",
-    "zh_HK": "列車從國府津出發，廣播下一站鴨宮。上方屏幕由「ただいま 国府津」變成「次は 鴨宮」(下一站鴨宮)。",
+    "zh_HK": "列車從國府津出發，廣播下一站鴨宮。上方屏幕由「ただいま 国府津」變成「次は 鴨宮」（下一站鴨宮）。",
     "zh_CN": "列车从国府津出发,广播下一站鸭宫。上方屏幕由「ただいま 国府津」变为「次は 鴨宮」(下一站鸭宫)。"
   },
   "tutorial.step.4.action": {
@@ -455,7 +455,7 @@
   "setup_tims.col.remark": { "en": "Remarks", "zh_HK": "備註", "zh_CN": "备注" },
 
   "setup_tims.hdr.from_to": { "en": "From / To", "zh_HK": "始發・終着站", "zh_CN": "始发・终到站" },
-  "setup_tims.hdr.line": { "en": "(Line)", "zh_HK": "(路線名)", "zh_CN": "(路线名)" },
+  "setup_tims.hdr.line": { "en": "(Line)", "zh_HK": "（路線名）", "zh_CN": "(路线名)" },
 
   "setup_tims.band.home": { "en": "Back\nHome", "zh_HK": "返回\n主頁", "zh_CN": "返回\n主页" },
   "setup_tims.band.pause": { "en": "Pause", "zh_HK": "暫停", "zh_CN": "暂停" },

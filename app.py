@@ -289,6 +289,17 @@ class PASimulator:
         # See auto_input/README.md § "When layers diverge".
         self.pending_silent_advance: Optional[str] = None
 
+        # Set by the AutoDriver alongside `pending_next_pa` when a departure fires
+        # while at-station announcements are still queued: the synthesized press
+        # must DEPART, not consume another queue entry, so the queue is marked
+        # exhausted first. The driver used to do that arithmetic itself, off the
+        # OCR thread — the one AppState write in `driver.py`, and a read-modify-
+        # write racing the main thread's own increment in `_next_in_stopping`
+        # (#3). A bare bool is all the thread writes now; the arithmetic happens
+        # in `_drain_pa_at_station` on the main thread, which is the only place
+        # AppState is ever mutated.
+        self.pending_pa_drain: bool = False
+
         # Latest OCR readings + detector state, written by AutoDriver thread, read
         # by the debug panel on the main thread. Atomic dict assignment in CPython.
         # Empty dict means "no data yet" — the panel renders a placeholder.
@@ -710,12 +721,24 @@ class PASimulator:
 
             # Re-entry silent advance (AutoDriver Layer 3 → Layer 1 catch-up).
             # Single-shot signal from the OCR thread; consumed here so AppState
-            # mutation stays on the main thread. No audio, no failing precondition
-            # — consume immediately (same pattern as the click-jump re-anchor).
+            # mutation stays on the main thread.
+            #
+            # `at_station` is RE-CHECKED, not assumed. The write side already
+            # refuses unless the app is parked at 1C (`_resolve_reentry_target`,
+            # "app already moving — normal flow owns it"), so the flag is correct
+            # when written — but it is written on the OCR thread and read here one
+            # or more frames later, and the app can leave 1C in the gap (a Page
+            # Down at the platform drains the at-station backlog and advances to
+            # 1A). Consuming a stale flag then advances a SECOND time and skips a
+            # stop. Dropping rather than holding is deliberate: re-entry is
+            # forward-only and irreversible, and the desync it described is gone —
+            # if a real one remains, the detector re-resolves it next cycle and its
+            # two-probe consensus latch re-confirms before committing. (#105)
             if self.pending_silent_advance is not None:
                 target = self.pending_silent_advance
                 self.pending_silent_advance = None
-                self._silent_advance_to(target)
+                if self.state.at_station:
+                    self._silent_advance_to(target)
             # Gate consumption on audio: `_next_pa` no-ops while a PA is mid-play
             # (PA-blocks-PA, line 599). Without this gate, an auto-fire's
             # single-shot `pending_next_pa` would be reset before _next_pa got a
@@ -724,6 +747,9 @@ class PASimulator:
             # via the next frame; pending_next_pa needs the same retry behavior.
             if (keyboard.is_pressed("page down") or self.pending_next_pa) and not self.audio.is_pa_playing():
                 self.pending_next_pa = False
+                if self.pending_pa_drain:
+                    self.pending_pa_drain = False
+                    self._drain_pa_at_station()
                 self._next_pa()
                 pygame.time.wait(KEY_REPEAT_DELAY)
             elif pageup_down:
@@ -876,6 +902,30 @@ class PASimulator:
             self._next_in_stopping()
         else:
             self._next_in_approaching()
+
+    def _drain_pa_at_station(self) -> None:
+        """Mark the at-station queue exhausted, so the next press departs.
+
+        Consumes the AutoDriver's ``pending_pa_drain`` signal. When a departure
+        fires with at-station announcements still unplayed, the synthesized press
+        would otherwise spend itself on the next queue entry instead of leaving
+        the platform — the user lagged on the announcements, and the game has
+        already gone.
+
+        On the MAIN thread by construction: this is a read-modify-write of the
+        same counter `_next_in_stopping` increments, so running it off the OCR
+        thread lost one update or the other (#3). ``at_station`` is re-checked for
+        the same reason `pending_silent_advance` re-checks it — the flag is set on
+        one thread and read on another, and the app can leave the platform in
+        between, at which point there is no queue to drain.
+        """
+        if not self.state.at_station:
+            return
+        pa_at_st = self.stops[self.state.curr_stop].get("pa_at_station", [])
+        if self.state.cnt_pa_at_station + 1 < len(pa_at_st):
+            dropped = len(pa_at_st) - 1 - self.state.cnt_pa_at_station
+            self.state.cnt_pa_at_station = len(pa_at_st) - 1
+            print(f"[App] Silent drain: dropped {dropped} unplayed pa_at_station entr{'y' if dropped == 1 else 'ies'}")
 
     def _next_in_stopping(self) -> None:
         """Press while at_station=True.

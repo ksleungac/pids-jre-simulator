@@ -265,13 +265,26 @@ Properties, by construction: a normal stopping pattern can never activate re-ent
    target stop has only 1 PA?                 → skip (no arrival announcement)
    sim.state.cnt_pa already at last PA?       → skip (user fired manually)
    otherwise                                  → sim.pending_next_pa = True
+   departure with pa_at_station still queued? → sim.pending_pa_drain  = True
               │
               ▼ (next pygame frame on main thread)
    [PASimulator._handle_input_main — pending_next_pa OR keyboard.is_pressed]
               │
               ▼
+   PASimulator._drain_pa_at_station()  (only if requested — marks the queue
+              │                         exhausted so the press below DEPARTS
+              │                         rather than playing another entry)
+              ▼
    PASimulator._next_pa() → state.curr_stop / state.cnt_pa advance
 ```
+
+Both signals are bare flags, and that is the invariant rather than a detail: the
+OCR thread writes only signals and its own detector flags, never `AppState`. The
+drain used to be an `AppState` read-modify-write done here on the OCR thread — the
+one such write in `driver.py` — which raced the main thread's own increment of the
+same counter and could silently undo itself (#3, fixed 2026-08-30). Both are also
+re-checked against `at_station` where they are consumed, because a flag written on
+one thread and read on another can describe a platform the app has since left.
 
 ## Resolution handling
 

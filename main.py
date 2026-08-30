@@ -6,6 +6,20 @@ visual display and audio playback with loudness normalization.
 """
 
 import os
+import sys
+
+# CONTRACT: console encoding is declared HERE, at the process entry, before anything prints.
+# A Windows console defaults to cp1252, which has no mapping for the arrows, ellipses and
+# em-dashes our diagnostics use — so `print` RAISES rather than mojibaking, and a raise inside
+# a worker kills that whole thread while the app window carries on looking healthy (#136: the
+# AutoDriver died on one `→`, taking OCR auto-drive down for the session). Doing it at the
+# entry rather than inside the thread keeps this process-global state declared at a
+# deterministic point — `critical_lessons.md § 3`'s corollary.
+# A windowed build has no stdout at all, so both halves are optional by construction.
+for _stream in (sys.stdout, sys.stderr):
+    if _stream is not None and hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 import pygame
 
 # Suppress pygame welcome message

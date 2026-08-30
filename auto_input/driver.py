@@ -1400,16 +1400,19 @@ class AutoDriver:
         if not self.sim.state.at_station:
             print(f"          [AD] >>> SKIPPED departure fire (app not parked; curr_stop={self.sim.state.curr_stop}, already departed)")
             return
-        # Silent pa_at_station drain — if user lagged on at-station announcements,
-        # the synthesized press below would consume one queue entry instead of
-        # advancing the segment. Mark the queue as exhausted so _next_in_stopping
-        # falls through to _advance_to_next_stop (plays pa[0] of next stop).
-        if self.sim.state.at_station:
-            pa_at_st = self.sim.stops[self.sim.state.curr_stop].get("pa_at_station", [])
-            if self.sim.state.cnt_pa_at_station + 1 < len(pa_at_st):
-                dropped = len(pa_at_st) - 1 - self.sim.state.cnt_pa_at_station
-                self.sim.state.cnt_pa_at_station = len(pa_at_st) - 1
-                print(f"          [AD] >>> Silent drain: dropped {dropped} unplayed pa_at_station entr{'y' if dropped == 1 else 'ies'}")
+        # Silent pa_at_station drain — if the user lagged on at-station
+        # announcements, the synthesized press below would consume one queue entry
+        # instead of advancing the segment. REQUEST the drain; the main thread
+        # performs it (app.py `_drain_pa_at_station`) so _next_in_stopping falls
+        # through to _advance_to_next_stop and plays pa[0] of the next stop.
+        #
+        # A bare bool, deliberately. This method runs on the OCR thread, and the
+        # arithmetic it used to do here — read cnt_pa_at_station, compute, write
+        # it back — raced the main thread's own increment of that same counter,
+        # which could undo the drain and leave the synthesized press spending
+        # itself on an announcement (#3). It was the only AppState write in this
+        # module, against a README that documents AppState as main-thread-only.
+        self.sim.pending_pa_drain = True
         self.sim.pending_next_pa = True
         self._last_fire = {"ts": time.time(), "type": "departure"}
         print("          [AD] >>> FIRED departure (set pending_next_pa)")
