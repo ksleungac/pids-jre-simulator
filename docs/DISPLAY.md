@@ -200,6 +200,12 @@ It deliberately does **not** sit below the cadence — safe only because evaluat
 - **Reactive** — current slot left `_available_slots`. *Layout-invalid* (FULL after the eight-lock engages) still renders coherently → deferrable. *Content-invalid* (TRANSFER at a station that lost its transfers) would show a blank panel → treated as Preemptive, never held.
 - **Preemptive** — intent-driven, immediate, bypasses the floor and re-anchors it: the STOPPING force-switch to TRANSFER (also fired by a cross-stop jump onto a transfer-bearing stop — same rising edge), content-invalid reconcile, the restart-logo reveal, and a position change that cancels the logo. The stop force-switch fires at every stop and re-anchors the language off its cadence — accepted, transfer info must show at once. Plain paging is NOT preemptive: `_advance_to_next_stop` clears `at_station`, so no edge fires and the slot rotates on cadence.
 
+### The TRANSFER slot's window — and the stations it can never reach
+
+`LowerDisplayBase._in_transfer_window` puts TRANSFER in the rotation from APPROACHING_FINAL through STOPPING, derived from `cnt_pa` rather than `is_last_pa` so a single-PA stop still qualifies. `_station_has_transfers` then drops it where the filtered list is empty, so the cycle rotates without a blank slot.
+
+**A stop with `"pa": []` is unreachable for this view, however many transfers it has** — `_in_transfer_window` returns False outright when the stop carries no PA tracks, and a station the train runs through carries none. That is not a defect; it is what "the train does not stop here" means. It matters when ENUMERATING cases: `data/stations.json` will happily resolve transfers for such a station, so a coverage sweep built from the transfer data alone lists states the app cannot produce. On `chuo/1654T` that is 代々木 / 市ヶ谷 / 飯田橋 / 水道橋 — four JB-only stations the 快速 passes. Worse, they do not fail loudly: `jump_to_stop` rolls a passing index back to the nearest stopping station, so each renders as its NEIGHBOUR and the sheet looks complete while carrying duplicates. Filter the enumeration on `pa` before rendering (`_dev_scripts/_e233_transfer_cases.py`).
+
 ### Restart logo
 
 While `lower.transition_active`, the scheduler applies no discrete change — the screen is a static logo, and a slot mutating out of sight would flash the instant it cleared. At logo-clear it fires one Preemptive: reveal the new frame's default slot AND restart its dwell. The restart matters even when the slot is unchanged — slot timers are wall-clock, so the logo burns dwell invisibly; without it the new segment's opening view expired after one floor instead of its full 3 beats.
@@ -537,6 +543,14 @@ this saves me so much time"*). `_dev_scripts/compare_grid.py --out sheet.png --c
 tiles labelled cells; render the cells, compose, send the sheet, delete the cells. A stream of
 individual files makes the author open and compare them by hand, which is the work the sheet exists
 to remove. Re-send the SAME sheet as it is rebuilt rather than accumulating new ones.
+
+**The CELLS never touch the repo root — only the composed sheet does** (author, 2026-08-30 — *"for
+those mid work individual sheets, don't spam by root folder, just show me composed version"*).
+Render them under `_visual_iter/` (gitignored) and write the sheet to the root as
+`screenshot_*.png`, which is the path the author opens. Eighty-odd cells at the root buries the
+sheet among its own inputs, which is the same complaint one level down from the bullet above.
+`compare_grid.py --cells-file <manifest>` takes the list as a UTF-8 file for this reason: a manifest
+also survives Japanese labels, which PowerShell mangles when they go through native argv.
 
 **The axes it must cover are a standard, not a per-element judgement call** (author, 2026-08-29 —
 *"the edge cases covered should be a standard"*). For a lower-LCD view that is: every state the

@@ -1832,10 +1832,10 @@ It lives on E235-0's class today and wants lifting to a shared primitive rather 
 Neither is a defect; both are things a later capture or session settles. Kept here rather than as
 issues (author, 2026-08-30) — an issue is an outcome, and these are conditions on work already done.
 
-- **The shinkansen row's alignment is UNVERIFIED.** Two shinkansen share their badge column with
-  the whole block; one does not, because 上野's would drag the grid 102px left. Both halves come
-  from the author's statements, and no JC capture of `東京` or `上野` exists to check either
-  against. § 11 carries the reasoning; a capture of either station decides it.
+- **The shinkansen row's alignment is UNVERIFIED.** Every row now shares one left edge set by the
+  widest row, which is E235's shape rule rather than a JC observation — no capture of `東京` or
+  `上野` exists to check it against. § 11.3 carries the reasoning and the measured offsets the
+  previous per-row centring produced; a capture of either station decides it.
 - **English mode**, § 4 — the model's only remaining gap now that furigana has landed.
 - **The E235 corpus row for `新宿` `JY_inner`** is marked re-verify in `docs/DISPLAY_E235.md`: its
   recorded `(3,3,3)` predates the JB rename and the grouping moved. Both E235 panels still lay out
@@ -1983,16 +1983,72 @@ pushes the sticking-out entry off the right edge. The overhang is also excluded 
 measured width, which is what "sticks out" means; measuring it in is what rejected `(2,2,2,3)` at
 every rung.
 
-**A shinkansen row centres on ITSELF and does not set the block's edge.** `東北･山形･秋田･北海道･
-上越･北陸新幹線` is ~590px against a paired row's ~380, so letting the widest row define one shared
-left edge dragged every narrow row hard against the left margin with the right half empty — visible
-at `上野`, and the author's own diagnosis of it (2026-08-29: *"is it because the fact the thing has
-to consider the shinkansen (which was long)"*). Every OTHER row, solo or paired, still shares one
-edge: `立川`'s three solo rows are left-aligned in its reference, so the exemption is *shinkansen*
-and not *solo*. **UNVERIFIED** — there is no JC capture of `東京` or `上野`, as the author noted, so
-this is judgement rather than fidelity and a capture could overturn it.
+**ONE LEFT EDGE FOR EVERY ROW, and the WIDEST row sets the page width — E235's shape rule, ported
+2026-08-30** (author: *"find overall rule of shape from e235 transfers, that is well tuned, just
+that for e233 max cols are 3, and spaces are a bit different, plus its shape should originates from
+in-spec chuo route"*). E235 states the principle in its column-system blueprint
+(`e235_1000/transfer_info.py:756`): *"justifying is right whenever the anchor row is the TOP row: it
+is then the widest row by construction, so it defines the page width and nothing can stick out past
+it."* So every row — solo, paired or shinkansen — anchors on one left edge, which is what makes a
+badge column uniform down the block. What does NOT come across is the Rule 1–4 cascade (§ 11.1);
+this is the *shape*, and the numbers stay E233-0's own.
 
-**A LONG NAME TAKES A ROW TO ITSELF, and the pairing is what is left over.** The author's rule
+Two exceptions, both from the in-spec references rather than from E235: a **single column** sits at
+the measured `col0_x` (`transfer-hachioji-ja.png`) rather than centring, yielding only when a row
+would not fit beside it; and a block with an **overhang** anchors at `side_pad`, because centring
+the grid pushes the sticking-out entry off the right edge.
+
+**What this replaced, and why the old rule looked reasonable.** The shinkansen row was centred on
+the canvas and the grid was centred on the canvas *independently*, so their badge columns agreed
+only by coincidence — the offset is exactly `|grid_w − shink_w| / 2`. On top sat a
+`len(shink_rows) >= 2` gate. That count was a **proxy for "is the grid at least as wide as the
+shinkansen row"**: with two shinkansen the block is 3-column or wide, so the grid wins and sharing
+an edge is nearly free (measured 2–41px across `東京` on five views). With one it never wins — the
+shinkansen is the wider row in every case in the corpus — and the columns sat up to **174px** apart
+(`宇都宮` at `宇都宮`: a 153px grid against a 501px shinkansen row). Measured by
+`_dev_scripts/_e233_transfer_cases.py`, which drives the production `_layout`.
+
+The out-of-spec cost is real and accepted: a 564px shinkansen row on a 612px usable width forces
+any shared edge left, so a two-entry grid beside it keeps ~200px of right margin. Aligned and
+left-heavy is the trade E235 already makes — its `anchor_overhang_trim` exists to bound the same
+effect, and it never breaks the shared edge to fix it.
+
+In-spec is untouched but for `東京`, whose block moves 21px left onto its shinkansen's badge column.
+**UNVERIFIED** — there is still no JC capture of `東京` or `上野`, so this is judgement rather than
+fidelity and a capture could overturn it.
+
+**A wide shinkansen does NOT wrap to two lines — measured, not assumed.** The mechanism is built
+and off (`shink_wrap_block`), because the condition the author set for it never occurs here: *"wrap
+effect is not so good. i think generally when the shinkansen is a small size like in those dense
+station, it's better"* (2026-08-30). Every station where the shinkansen is the widest row — 上野
+JU/JY, 大宮 JU/JA, 品川 JY/JK/JT, 小山, 宇都宮 — sits at rung 0.84 or 1.0, the large end; at every
+dense station (0.71, 0.6) the grid is already wider and there is nothing to wrap. Gated on the small
+rungs, exactly one case fired — 宇都宮 東京 — and it fell 0.71 → 0.6, because the second line costs a
+row and the row broke the cap. So the residual right margin beside a 564px name on a 612px canvas
+stands, which is the trade E235 also makes: its `anchor_overhang_trim` bounds that effect and never
+breaks the shared edge to fix it.
+
+**A LONG NAME TAKES A ROW TO ITSELF — but the row YIELDS when keeping it would cost a column.**
+E235 reaches its groupings by trying and repairing rather than from an absolute table
+(`docs/DISPLAY_E235.md` § Pipeline step 2, "greedy walk + cascade dry-run"), and that is the shape
+this view now uses: the strict form is tried first at every column count, and only where it does not
+place may the long row pair. A shinkansen is never relaxed — its own row is the `category` treatment
+E235 gives it, not a width judgement.
+
+`上野` on JY is the case (author, 2026-08-30: *"JU utsu and JU takasaki can be one 1 row?"*).
+`宇都宮線(東北線)` measures 266px against the 245px bar, clearing it by 21 — so it took a row, which
+made seven entries need five rows against a cap of four, which sent the station to THREE columns.
+Paired with `高崎線` (139) the row is 420px inside 612 and it places in two. The same relaxation
+improved `赤羽` on JK and JA (both to `(2,2)` a rung larger) and `上野` on JK (`(1,3,3,2)` at 0.84
+rather than five rows at 0.71). In-spec Chūō is unchanged at all fourteen stations.
+
+Moving the threshold instead would have been wrong: at a common scale `宇都宮線(東北線)` is ~317px
+against `青梅・五日市線`'s reference-confirmed 285, so by the length rule it *is* long. Worth knowing
+for any later retune — the bar compares a **rung-scaled** width against a **fixed** fraction of the
+canvas, so `中央線各駅停車` counts as long at rung 1.0 (285) and would not at 0.84 (239). Left as it
+is, since normalising it makes more entries solo, not fewer.
+
+**The rule the pairing falls out of:** The author's rule
 (2026-08-29: *"when the line got a very long transfer name, it has it's own row"*), and the
 references draw it: `transfer-ocha-ja.png` is `(1,2)` — `中央・総武線(各駅停車)` alone above
 `丸ノ内線` | `千代田線` — and `transfer-tachikawa-ja.png` is `(1,1,1)`, where `南武線` is short and

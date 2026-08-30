@@ -109,6 +109,36 @@ _TUNEABLES_TRANSFER_VIEW = {
     # and the author keeps (2,2,1), so the orphan is tolerated at three rows
     # and not at five.
     "fold_min_rows":     4,
+    # A SHINKANSEN WRAPS AGAINST THE BLOCK, NOT THE CANVAS — E235's own
+    # `tp_shink_wrap_x` idea (*"narrower fixed shinkansen 2-line wrap
+    # boundary"*). Its name is the one entry that can outgrow every other row
+    # combined, and the shared left edge is set by the widest row, so left
+    # unbudgeted it drags the whole block against the left margin.
+    #
+    # ONLY AT THE SMALL RUNGS (author, 2026-08-30: *"wrap effect is not so good.
+    # i think generally when the shinkansen is a small size like in those dense
+    # station, it's better"*). At a large rung the two-line name reads loose
+    # beside single-line neighbours, and the second line costs a row — which at
+    # 上野 was enough to push the list from two columns to three and shrink
+    # everything. `_max_rung` is that gate, as a rung VALUE rather than an index
+    # so it survives a change to the ladder.
+    #
+    # `_frac` is the FLOOR on the budget, of the usable width: without it a
+    # station whose grid is narrow (宇都宮's 153px) would squeeze the shinkansen
+    # to three or four lines.
+    #
+    # OFF, because the two conditions never coincide in the shipped corpus and
+    # the rule is kept rather than the behaviour. Measured 2026-08-30 with
+    # `_dev_scripts/_e233_transfer_cases.py`: the stations where the shinkansen
+    # IS the widest row — 上野 JU/JY, 大宮 JU/JA, 品川 JY/JK/JT, 小山, 宇都宮 —
+    # all sit at rung 0.84 or 1.0, the large end. At every dense station (0.71,
+    # 0.6) the grid is already wider, so there is nothing to wrap. With the gate
+    # in, exactly ONE case fired — 宇都宮 東京 — and it fell 0.71 -> 0.6, because
+    # the second line costs a row and the row broke the cap. Flip to True if a
+    # future line produces a dense station whose shinkansen still leads.
+    "shink_wrap_block": False,
+    "shink_wrap_max_rung": 0.71,
+    "shink_wrap_frac":  0.55,
     "ink":         (0, 0, 0),
     # A LADDER, because a font size is part of the atlas key: a pitch scaled
     # continuously to fit would ask for an arbitrary size and the bake has no
@@ -338,13 +368,18 @@ class TransferInfoDisplay(_BaseTransferInfoDisplay):
     def _badge_w(self, badges, badge_h: int) -> float:
         return sum(load_icon(b.get("icon", "_universal"), badge_h, self._icons).get_width() for b in badges)
 
-    def _wrap(self, entry, scale: float, budget: float):
+    def _wrap(self, entry, scale: float, budget: float, deliberate_wrap: bool = False):
         """`(ja1, ja2, en1, en2)` — the entry's name lines within `budget`.
 
         Second lines are empty for everything that fits, which is every entry on
         every station but the shinkansen ones. `東京` is what forces this: its
         東北･山形･秋田･北海道･上越･北陸新幹線 overruns the canvas at every rung, so
         no amount of shrinking places it and the block ran off both edges.
+
+        `deliberate_wrap` marks a wrap that is the LAYOUT'S INTENT rather than a
+        fit failure — the shinkansen budgeted against the block instead of the
+        canvas (`_place`). Without it the shrink-before-wrap preference reads
+        every such row as a failure and steps down a rung for nothing.
         """
         t = _TUNEABLES_TRANSFER_VIEW
         badges, name_ja, name_en = entry[0], entry[1], entry[2]
@@ -352,7 +387,7 @@ class TransferInfoDisplay(_BaseTransferInfoDisplay):
         avail = budget - self._badge_w(badges, badge_h) - float(t["badge_gap"]) * scale
         f_ja, f_en = self._ja_font(ja), self._en_font(en)
         ok = True
-        deliberate = False
+        deliberate = deliberate_wrap
         # NO UNCONDITIONAL PARENTHETICAL BREAK IN THIS VIEW. The 6-station band
         # puts （各駅停車） on its own line because its columns are one station
         # wide; `transfer-ocha-ja.png` draws 中央・総武線(各駅停車) on ONE line
@@ -373,7 +408,7 @@ class TransferInfoDisplay(_BaseTransferInfoDisplay):
             en1, en2 = name_en, ""
         else:
             ok = ok and " " in name_en
-            deliberate = False  # a width-driven EN wrap is not the paren rule
+            deliberate = deliberate_wrap  # a width-driven EN wrap is not itself intent
             en1, en2 = wrap_two_lines(name_en, f_en, int(avail))
         return ja1, ja2, en1, en2, ok, deliberate
 
@@ -434,27 +469,47 @@ class TransferInfoDisplay(_BaseTransferInfoDisplay):
             # 八王子 reference stacks its two with room either side — so a
             # fits-in-one-column search is wrong for N>=3 and right for N<=2.
             solo = self._solo(entries, scale, avail_w)
+            # A LONG NAME'S OWN ROW IS A PREFERENCE, NOT A CONSTRAINT — it yields
+            # when keeping it would cost a column. E235 reaches its groupings by
+            # trying and repairing rather than from an absolute table
+            # (`docs/DISPLAY_E235.md` § Pipeline step 2, "greedy walk + cascade
+            # dry-run"), and this is that idea at this view's scale: the strict
+            # form is tried first at every column count, and only where it does
+            # not place is the long-name row allowed to pair.
+            #
+            # 上野 on JY is the case (author, 2026-08-30: *"JU utsu and JU takasaki
+            # can be one 1 row?"*). 宇都宮線(東北線) measures 266 against a 245 bar,
+            # clearing it by 21px — so it took a row, which made 7 entries need 5
+            # rows against a cap of 4, which sent the station to THREE columns.
+            # Paired with 高崎線 (139) the row is 420 inside 612 and the station
+            # places in two.
+            #
+            # A SHINKANSEN IS NEVER RELAXED. Its own row is the treatment E235
+            # gives it off the same `category` field, not a width judgement, so it
+            # is the one member of `_solo`'s output that the relaxation keeps.
+            forced = {k for k, e in enumerate(entries) if e[3]}
             for cols in range(1 if n <= 2 else 2, int(t["max_cols"]) + 1):
-                plain = self._grid(entries, cols, solo)
-                # FOLDED FIRST where one is offered — `_fold` only offers on a
-                # list tall enough for the orphan to be the IRL form, so
-                # preferring it there cannot reach 武蔵小杉's (2,2,1).
-                for grid in [g for g in (self._fold(plain), plain) if g]:
-                    cand = self._place(entries, grid, scale, cols, gap, cap, avail_w)
-                    if cand is None:
-                        continue
-                    ok, wrapped, widths, wraps = cand
-                    if not ok:
-                        continue
-                    if not wraps:
-                        return (scale, cols, widths, wrapped, grid)
-                    # SHRINK BEFORE YOU WRAP. A two-line entry beside one-line
-                    # neighbours reads loose, and one rung down it usually fits
-                    # whole — so a wrapping candidate is held and the search
-                    # carries on, to be used only if no rung places the list
-                    # without one.
-                    if fallback is None:
-                        fallback = (scale, cols, widths, wrapped, grid)
+                for keep in (solo, forced) if solo != forced else (solo,):
+                    plain = self._grid(entries, cols, keep)
+                    # FOLDED FIRST where one is offered — `_fold` only offers on a
+                    # list tall enough for the orphan to be the IRL form, so
+                    # preferring it there cannot reach 武蔵小杉's (2,2,1).
+                    for grid in [g for g in (self._fold(plain), plain) if g]:
+                        cand = self._place(entries, grid, scale, cols, gap, cap, avail_w)
+                        if cand is None:
+                            continue
+                        ok, wrapped, widths, wraps = cand
+                        if not ok:
+                            continue
+                        if not wraps:
+                            return (scale, cols, widths, wrapped, grid)
+                        # SHRINK BEFORE YOU WRAP. A two-line entry beside one-line
+                        # neighbours reads loose, and one rung down it usually fits
+                        # whole — so a wrapping candidate is held and the search
+                        # carries on, to be used only if no rung places the list
+                        # without one.
+                        if fallback is None:
+                            fallback = (scale, cols, widths, wrapped, grid)
         return (
             fallback
             or chosen
@@ -475,19 +530,55 @@ class TransferInfoDisplay(_BaseTransferInfoDisplay):
         # an equal split. 御茶ノ水 shrank two rungs for that reason with 168px to
         # spare. First pass wraps only what cannot fit the WHOLE width; the equal
         # share is the second, reached only when that genuinely overflows.
+        t = _TUNEABLES_TRANSFER_VIEW
         share = (avail_w - gap * (cols - 1)) / cols
         wrapped = widths = None
         total = 0.0
         for budget in (avail_w, share):
-            # A full row keeps the WHOLE width in both passes — it has no
-            # neighbour to share with, so narrowing it to a column's share would
-            # wrap a shinkansen that fits.
-            wrapped = {k: self._wrap(entries[k], scale, avail_w if len(row) == 1 else budget) for row in grid for k in row}
+            # SHARED ROWS FIRST — they alone set the column widths, so the block's
+            # own width is known before any solo row is measured against it.
+            wrapped = {k: self._wrap(entries[k], scale, budget) for row in grid if len(row) > 1 for k in row}
             span = max(len(row) for row in grid)
             widths = [
                 max((self._entry_width(entries[row[c]], scale, wrapped[row[c]]) for row in grid if len(row) > c and len(row) > 1), default=0.0)
                 for c in range(span)
             ]
+            # A SHINKANSEN WRAPS AGAINST THE BLOCK, NOT THE CANVAS — E235's own
+            # `tp_shink_wrap_x`, *"narrower fixed shinkansen 2-line wrap
+            # boundary"*, which is the second half of its shape rule: the widest
+            # row defines the page width, and a shinkansen is not allowed to be
+            # that row unaided. Without it 東北･山形･秋田･北海道･上越･北陸新幹線 sets
+            # a 564px page on a 612px canvas, and the shared left edge it forces
+            # leaves a two-entry grid ~200px of dead right margin.
+            #
+            # Only a SHINKANSEN, keyed on `lines.json`'s `category` exactly as
+            # E235 keys on it. A long ordinary name must not wrap here:
+            # `transfer-ocha-ja.png` draws 中央・総武線(各駅停車) on ONE line and
+            # gives it a row to itself instead (§ 11.3), so a blanket rule would
+            # break the reference at 御茶ノ水 / 四ツ谷.
+            block = sum(widths[:cols]) + gap * (cols - 1)
+            if block <= 0:
+                # A ONE-COLUMN LIST HAS NO SHARED ROWS, so `widths` is all zeros
+                # and the block would measure nothing — which silently exempted
+                # exactly the worst case (宇都宮: a 153px 日光線 beside a 501px
+                # shinkansen). Fall back to the widest ordinary solo row. A list
+                # that is ONLY a shinkansen (那須塩原) still measures 0 and is
+                # left alone, which is right: there is no block for it to match.
+                block = max(
+                    (
+                        self._entry_width(entries[r[0]], scale, self._wrap(entries[r[0]], scale, avail_w))
+                        for r in grid
+                        if len(r) == 1 and not entries[r[0]][3]
+                    ),
+                    default=0.0,
+                )
+            narrow = float(t["shink_wrap_frac"]) * avail_w
+            for row in grid:
+                if len(row) == 1:
+                    k = row[0]
+                    to_block = entries[k][3] and block > 0 and bool(t["shink_wrap_block"]) and scale <= float(t["shink_wrap_max_rung"]) + 1e-9
+                    b = max(block, narrow) if to_block else avail_w
+                    wrapped[k] = self._wrap(entries[k], scale, b, deliberate_wrap=to_block and b < avail_w)
             # The GRID is `cols` wide; a folded row's extra entry OVERHANGS it
             # and is not part of the block's width. That is what "sticks out"
             # means in `transfer-shinjuku.png`, and measuring it into the block
@@ -571,81 +662,59 @@ class TransferInfoDisplay(_BaseTransferInfoDisplay):
         pitch = float(t["row_pitch"]) * scale
         gap = float(t["col_gap"]) * scale
 
-        # ANCHORED LEFT while it is one column, CENTRED once it wraps. The
-        # reference's single column sits at `col0_x` and is not centred, and
-        # keeping that is what makes the calibrated case reproduce; but carrying
-        # the same anchor into a wrap left 新宿's block with a 199px left gutter
-        # against 70 on the right, which is exactly what E235's own horizontal
-        # centring (pipeline step 5) exists to correct.
         overhang = len(widths) > cols
 
-        # THE BLOCK IS AS WIDE AS ITS WIDEST ROW, and a SOLO row is measured on
-        # its own entry. `widths` is a per-COLUMN table built from shared rows
-        # only, so a grid of nothing but solo rows — 立川's (1,1,1) — leaves it
-        # all zeros and centring on it put the whole list a third of the way
-        # right of where it belongs.
-        # A SHINKANSEN ROW DOES NOT SET THE BLOCK'S EDGE, it centres on itself.
-        # 東北･山形･秋田･北海道･上越･北陸新幹線 is ~590px against a paired row's
-        # ~380, so letting it define the width drags every narrow row hard
-        # against the left margin with the right half empty — visible at 上野,
-        # and the author's own diagnosis of it. Every OTHER row, solo or paired,
-        # still shares one edge: 立川's three solo rows are left-aligned in its
-        # reference, so "solo" is not the exemption — "shinkansen" is.
+        # ONE LEFT EDGE FOR EVERY ROW — E235's shape rule, ported (author,
+        # 2026-08-30: *"find overall rule of shape from e235 transfers, that is
+        # well tuned"*). Its column-system blueprint states the principle in the
+        # overhang-trim comment at `e235_1000/transfer_info.py:756`: *"justifying
+        # is right whenever the anchor row is the TOP row: it is then the widest
+        # row by construction, so it defines the page width and nothing can stick
+        # out past it"*. So the WIDEST row sets the page width and every other row
+        # anchors on its left edge, which is what makes a badge column uniform all
+        # the way down. What does NOT come across is the horizontal cascade — that
+        # is packing machinery for a wide short region (WIP § 11.1).
+        #
+        # This replaces two INDEPENDENT centrings — the widest shinkansen row on
+        # the canvas, the grid on the canvas — plus a `len(shink_rows) >= 2` gate.
+        # The count was a proxy for "is the grid at least as wide as the shinkansen
+        # row", which holds whenever there are two (the block is 3-column by then)
+        # and fails otherwise: the two badge columns then sat up to 174px apart
+        # (宇都宮 at 宇都宮 — measured across the corpus, one shinkansen, grid 153
+        # against a 501 shinkansen row).
+        #
+        # `widths` is a per-COLUMN table built from SHARED rows only, so a grid of
+        # nothing but solo rows — 立川's (1,1,1) — leaves it all zeros; a row's
+        # width therefore comes from its own entry when it is alone.
         def _row_w(row):
             if len(row) > 1:
                 return sum(widths[: len(row)]) + gap * (len(row) - 1)
             return self._entry_width(entries[row[0]], scale, wrapped[row[0]])
 
-        def _is_shink(row):
-            return len(row) == 1 and entries[row[0]][3]
-
-        total = max([_row_w(row) for row in grid if not _is_shink(row)] or [0.0])
-        # THE SHINKANSEN ROWS SHARE ONE LEFT EDGE, set by centring the WIDEST of
-        # them. 東京 has two and the second, 東海道･山陽新幹線, is less than half
-        # the first — centring it independently floated it away from the badge
-        # column above it. Author, 2026-08-29: *"no need to center tokaido as
-        # well, that should be badge aligned"*, and *"in cases where there are
-        # both shinkansen it's ok to be at the left"*.
-        shink_rows = [row for row in grid if _is_shink(row)]
-        shink_w = max([_row_w(row) for row in shink_rows] or [0.0])
-        shink_left = (S_WIDTH - shink_w) / 2.0
-        if cols < 2:
-            left = float(t["col0_x"])
-        elif overhang:
-            # A block with an overhang anchors LEFT — centring the grid pushes
-            # the sticking-out entry off the right edge, and the reference
+        widest = max([_row_w(row) for row in grid] or [0.0])
+        room = S_WIDTH - float(t["side_pad"])
+        if overhang:
+            # A block with an overhang anchors LEFT — centring the grid pushes the
+            # sticking-out entry off the right edge, and `transfer-shinjuku.png`
             # starts its list hard against the left margin.
             left = float(t["side_pad"])
-        elif len(shink_rows) >= 2:
-            # TWO SHINKANSEN — the whole block shares their badge column
-            # (author, 2026-08-29: *"just align the yamanote to shinkansen
-            # badge, it's only half a badge x diff"*, and earlier *"in cases
-            # where there are both shinkansen it's ok to be at the left"*). At
-            # 東京 the two edges sit 21px apart, a little over half a badge, and
-            # the mismatch reads as a mistake rather than as a layout.
-            #
-            # Gated on TWO because 上野 has one, and there the same alignment
-            # would put the grid 102px left of where it centres — which is the
-            # left-heavy look this whole rule was added to fix. One wide
-            # shinkansen is an outlier the grid should ignore; two are a block.
-            left = shink_left
+        elif cols < 2 and float(t["col0_x"]) + widest <= room:
+            # THE CHUO ORIGIN. A single column sits where the reference puts it
+            # (`transfer-hachioji-ja.png` measures `col0_x`), not where centring
+            # would — that anchor is measured, and the in-spec renders are
+            # accepted against it. It yields only when a row would not fit beside
+            # it, which is the lone-shinkansen case (宇都宮, 那須塩原).
+            left = float(t["col0_x"])
         else:
-            left = (S_WIDTH - total) / 2.0
+            left = (S_WIDTH - widest) / 2.0
 
         y = float(t["row0_top"])
         for row in grid:
             used = 1
             for c, k in enumerate(row):
-                # A shinkansen row centres on ITSELF (it does not sit on the
-                # block's edge — see the width note above); every other solo row
-                # starts at that edge, and a shared row takes its column's x
-                # from the same widths the fit measured.
-                if _is_shink(row):
-                    x = shink_left
-                elif len(row) == 1:
-                    x = left
-                else:
-                    x = left + sum(widths[:c]) + gap * c
+                # Solo or shared, every row starts on the block's edge; a shared
+                # row takes its column's x from the same widths the fit measured.
+                x = left if len(row) == 1 else left + sum(widths[:c]) + gap * c
                 used = max(used, self._draw_row(x, y, entries[k], wrapped[k], scale))
             y += used * pitch
 

@@ -11,6 +11,7 @@ Two modes, one composer:
 
        uv run preview_display.py --screenshot screenshot_a.png --route chuo/1654T --model e233_0 --stop 0
        uv run _dev_scripts/compare_grid.py --out sheet.png --cols 4 "高尾=screenshot_a.png" ...
+       uv run _dev_scripts/compare_grid.py --out sheet.png --cols 4 --cells-file cells.txt
 
 2. **A/B/C font hunt** (the original) — reference at top, candidates stacked
    below. List each candidate as a (label_prefix, human_label) tuple in
@@ -50,6 +51,21 @@ STATIONS = {
 CANDIDATES = []
 
 
+def _label_font(size, bold=False):
+    """Cell labels in a CJK face — a station name is what a cell IS.
+
+    `SysFont("arial")` has no kanji, so every Japanese label rendered as a row
+    of tofu boxes and the sheet could only be labelled in romaji. `NotoSansJP`
+    ships in `fonts/` for the TIMS chrome and covers both scripts. Falls back to
+    the old SysFont if it is ever absent — this is a dev tool and a missing face
+    should cost the labels, not the sheet.
+    """
+    path = Path(__file__).resolve().parent.parent / "fonts" / "NotoSansJP.otf"
+    if path.exists():
+        return pygame.font.Font(str(path), size)
+    return pygame.font.SysFont("arial", size, bold=bold)
+
+
 def crop_upper_band(surf):
     rect = pygame.Rect(270, 0, surf.get_width() - 270, 117)
     return surf.subsurface(rect).copy()
@@ -81,7 +97,7 @@ def build_grid(station, ref_path, file_suffix, out_path):
 
     label_h = 24
     pad = 6
-    font = pygame.font.SysFont("arial", 14, bold=True)
+    font = _label_font(14, bold=True)
 
     total_h = label_h + ref_s.get_height() + pad
     for _, s in cand_scaled:
@@ -133,7 +149,7 @@ def build_sheet(cells, out_path, cols=4, cell_w=None, title="", crop=None):
     cell_h = max(s.get_height() for _, s in scaled)
 
     label_h, pad = 22, 8
-    font = pygame.font.SysFont("arial", 14, bold=True)
+    font = _label_font(14)
     title_h = 28 if title else 0
 
     rows = (len(scaled) + cols - 1) // cols
@@ -160,15 +176,29 @@ def build_sheet(cells, out_path, cols=4, cell_w=None, title="", crop=None):
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         ap = argparse.ArgumentParser(description="Tile labelled renders into a coverage sheet")
-        ap.add_argument("cells", nargs="+", help='one "label=path.png" per cell, in reading order')
+        ap.add_argument("cells", nargs="*", help='one "label=path.png" per cell, in reading order')
+        ap.add_argument(
+            "--cells-file",
+            default=None,
+            help="UTF-8 file with one 'label=path.png' per line (blank lines and # comments "
+            "ignored). Use this rather than argv for a sheet with Japanese labels: PowerShell "
+            "hands native argv through the console codepage and mangles them, and a 16-cell "
+            "command line is unreadable anyway.",
+        )
         ap.add_argument("--out", default="sheet.png")
         ap.add_argument("--cols", type=int, default=4)
         ap.add_argument("--cell-w", type=int, default=None, help="common cell width (default: widest input)")
         ap.add_argument("--title", default="")
         ap.add_argument("--crop", default=None, help="x,y,w,h taken from every cell (e.g. an upper band)")
         a = ap.parse_args()
+        cells = list(a.cells)
+        if a.cells_file:
+            cells += [ln.strip() for ln in Path(a.cells_file).read_text(encoding="utf-8").splitlines() if ln.strip() and not ln.startswith("#")]
+        # rsplit, not split: a label carries `=` far more often than a path does
+        # ("新宿 n=9 (2,2,2,3)"), and splitting on the FIRST one silently cut
+        # every such cell at "n=" and reported the whole tail as a missing file.
         build_sheet(
-            [tuple(c.split("=", 1)) for c in a.cells],
+            [tuple(c.rsplit("=", 1)) for c in cells],
             a.out,
             cols=a.cols,
             cell_w=a.cell_w,
