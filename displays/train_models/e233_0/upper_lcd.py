@@ -2,28 +2,34 @@
 """E233-0 (中央線快速) Upper LCD.
 
 Built element by element against ``docs/wip/WIP_e233_0_display.md`` § 8, which is
-the spec. Only elements whose drill-down has happened are drawn; the rest are
-explicit stubs naming what is still open, so a half-built upper reads as
-half-built rather than as broken.
+the spec. Only elements whose drill-down has happened are drawn.
 
-  drawn   train type (§ 8.4), destination, plate, station name, prefix,
-          clock, station-code badge (§ 8.5)
-  stub    car number
+  drawn       train type (§ 8.4), destination, plate, station name, prefix,
+              clock, station-code badge (§ 8.5)
+  not drawn   car number + 号車 — blocked on § 8.3's open question, which is
+              where the number would COME from rather than how to draw it.
+              There is no stub method for it; the element is simply absent.
 
-MODE HANDLING. v1 is Japanese only: all three ``DisplayMode`` values resolve to
-the SAME ``JapaneseDisplay`` instance (WIP § 4, author 2026-08-23). One instance
-rather than three, so a mode flip cannot re-trigger per-instance animation state.
-The furigana and English renderers drop in later with no structural change.
+MODE HANDLING. KANJI and ENGLISH resolve to the same ``JapaneseDisplay``
+instance — English is still deferred (WIP § 4), so its page is the kanji one.
+FURIGANA has its own ``FuriganaDisplay``, a two-element override of that class
+(the prefix and the station name); everything else it inherits unchanged and
+therefore cannot drift from kanji mode.
+
+Because there are now TWO renderer instances, anything cached per instance is
+built twice. The per-pixel soft box is cached at MODULE level for that reason —
+see ``_SOFT_BOX_CACHE``.
 """
 
 import math
+import time
 
 import pygame
 
 from app_paths import load_json_relative
 from displays.base import DisplayMode, ModeCycler
 from displays.utils import clip, draw_station_code_badge, draw_text_given_width
-from font_atlas import DESTINATIONS, STATION_NAMES, STATION_READINGS, at, lcd_font, lit
+from font_atlas import DESTINATIONS, STATION_NAMES, STATION_READINGS, TRAIN_TYPES, at, lcd_font, lit
 
 from displays.train_models.e233_0 import (
     S_WIDTH,
@@ -191,7 +197,14 @@ def _script_cut(text: str) -> int:
 # `wrap=` does: it does not depend on WHERE `_split_type` puts the break, so
 # changing that rule cannot leave the atlas a case short. A wide declaration
 # costs no atlas area — it says what MAY be drawn, and the bake records what is.
-_TYPE_DRAWS = at("audio/*/route.json:type", "data/train_types.json:*", cuts=True)
+#
+# It DERIVES from `TRAIN_TYPES` rather than re-typing its locations, which is the
+# `STATION_NAMES_EKI` form and the reason those aliases are named at all
+# (`font_atlas.py` § the alias block): a per-module copy of a location list is a
+# copy that drifts, and this one drifts SILENTLY — a new type source added to
+# `TRAIN_TYPES` would render fine in dev on live fonts and raise `KeyError` in a
+# build that ships none.
+_TYPE_DRAWS = at(*TRAIN_TYPES.locations, cuts=True)
 
 
 def _split_type(text: str) -> list:
@@ -472,14 +485,14 @@ _TUNEABLES_DESTINATION = {
 # fmt: on
 
 _DEST_FACE = "ShinGoPr6N-Medium.otf"
-_DEST_SUFFIX = " 行"
+_DEST_SUFFIX = " 行"  # not-drawn: composed, then drawn per character — see _DEST_DRAWS
 # A LOOP LINE HAS NO TERMINUS, so its destination is a direction rather than a
 # bound-for: 品川･東京方面, not 品川･東京行. Same rule and same predicate E235
 # applies (`e235_0/upper_lcd.py` draw_destination — `"方面" if route_name ==
 # "山手線"`), only this model's particle is 行 where E235's is ゆき. Keyed on the
 # route NAME rather than on `circular`, so both models answer it the same way
 # and a route that happens to carry the flag does not silently change wording.
-_DEST_SUFFIX_LOOP = " 方面"
+_DEST_SUFFIX_LOOP = " 方面"  # not-drawn: composed, then drawn per character — see _DEST_DRAWS
 _LOOP_ROUTE = "山手線"
 
 # The row is drawn CHARACTER BY CHARACTER, so what reaches the font is single
@@ -892,12 +905,24 @@ _CLOCK_FACE = "HelveticaNeue-Medium.otf"
 _CLOCK_DRAWS = lit("0123456789:")
 
 
+# The plate and the clock are per-pixel work over a shape that never changes, so
+# each is built once. MODULE-level rather than per-renderer-instance: the manager
+# holds a JapaneseDisplay AND a FuriganaDisplay, furigana inherits both of these
+# draw methods unchanged, and a per-instance cache therefore re-ran the whole
+# pixel loop the first time the mode cycler reached FURIGANA — about four seconds
+# into every drive, for a surface identical by construction. Keyed on the same
+# value tuples the instance attributes used, which is what makes them shareable;
+# nothing draws into the returned surface, it is only ever blitted.
+_SOFT_BOX_CACHE: dict = {}
+
+
 def _build_soft_box(w, h, fx, fy, bw, feather, fill_feather, radius, u_full, u_zero, fill, border) -> tuple:
     """A soft-edged filled box with an optional fading outline, plus its padding.
 
-    Two callers: the station-name plate, which uses the outline and square
-    corners, and the clock, which passes `bw = 0` and a corner radius. Both are
-    measured, not assumed — the plate's left edge sits at x 121.73 from y 37
+    Three callers: the station-name plate, which uses the outline and square
+    corners; the clock, which passes `bw = 0` and a corner radius; and the lower
+    LCD's minute box, which imports it for the same reason the clock exists here.
+    The first two are measured, not assumed — the plate's left edge sits at x 121.73 from y 37
     through y 136 without moving, so it really is square, while the clock's
     walks 556.74 -> 555.59 -> 555.08 -> 554.70 -> 554.50 over four rows. Named for the shape rather than
     for the plate, because the second caller arrived and the first one's name
@@ -1154,18 +1179,10 @@ class JapaneseDisplay:
         self._dest_fonts: dict = {}
         self._dest_rows: dict = {}
         self._name_fonts: dict = {}
-        # The plate is per-pixel work over a static shape, so it is built once
-        # and rebuilt only when a tuneable in its key moves.
-        self._plate_key = None
-        self._plate_img = None
-        self._plate_pad = 0
         self._prefix_fonts: dict = {}
         self._prefix_rows: dict = {}
         self._clock_fonts: dict = {}
         self._clock_rows: dict = {}
-        self._clock_key = None
-        self._clock_img = None
-        self._clock_pad = 0
 
     def _sync_type_font(self) -> None:
         """Drop the cached glyphs when the tuneable size changes.
@@ -1376,11 +1393,11 @@ class JapaneseDisplay:
             )
             + (tuple(t["fill"]), tuple(t["border"]))
         )
-        if self._plate_key != key:
-            self._plate_key = key
-            self._plate_img, self._plate_pad = _build_soft_box(*key)
-        pad = self._plate_pad
-        self.screen.blit(self._plate_img, (ox - pad, oy - pad))
+        got = _SOFT_BOX_CACHE.get(key)
+        if got is None:
+            got = _SOFT_BOX_CACHE[key] = _build_soft_box(*key)
+        img, pad = got
+        self.screen.blit(img, (ox - pad, oy - pad))
 
     def draw_badge(self, sta_code: str, color, code_3: str = "") -> None:
         """The station-code badge, via the shared helper. See the block above.
@@ -1515,13 +1532,6 @@ class JapaneseDisplay:
             self.screen.blit(row, (round(t["x"]) - pad, round(t["y"])))
 
     # -------------------------------------------------------------------------
-    # Not yet specced — one stub per element still awaiting its drill-down
-    # (WIP § 8.1). They are called unconditionally by UpperDisplay.draw so the
-    # call sites exist and the render order is already fixed; each becomes real
-    # in its own session. Do NOT quietly implement one to "fill it in".
-    # -------------------------------------------------------------------------
-
-    # -------------------------------------------------------------------------
     # Clock — WIP § 8.5
     # -------------------------------------------------------------------------
 
@@ -1547,13 +1557,17 @@ class JapaneseDisplay:
             t["corner_r"],
             tuple(t["fill"]),
         )
-        if self._clock_key != key:
-            self._clock_key = key
-            w, h, fx, fy, ff, rad, fill = key
-            # The outline is off (`bw = 0`); this is the plate's builder drawing
-            # only its box, which is all the reference shows here.
-            self._clock_img, self._clock_pad = _build_soft_box(w, h, fx, fy, 0, 0, ff, rad, 0.0, 1.0, fill, fill)
-        self.screen.blit(self._clock_img, (ox - self._clock_pad, oy - self._clock_pad))
+        w, h, fx, fy, ff, rad, fill = key
+        # The outline is off (`bw = 0`); this is the plate's builder drawing only
+        # its box, which is all the reference shows here. Cached on the builder's
+        # own ARGUMENTS, so the key means "this exact box" and sharing one dict
+        # with the plate is a real hit rather than a collision to guard against.
+        args = (w, h, fx, fy, 0, 0, ff, rad, 0.0, 1.0, fill, fill)
+        got = _SOFT_BOX_CACHE.get(args)
+        if got is None:
+            got = _SOFT_BOX_CACHE[args] = _build_soft_box(*args)
+        img, pad = got
+        self.screen.blit(img, (ox - pad, oy - pad))
 
         if not time_text:
             return
@@ -1742,13 +1756,31 @@ class UpperDisplay:
         A name absent from `data/stations.json`, or present without a `code_3`,
         both mean the plain badge, so one `.get` chain covers the whole corpus.
         """
-        if not (self.stops and 0 <= self.curr_stop < len(self.stops)):
-            return ""
-        name = self.stops[self.curr_stop].get("name", "")
-        return self.stations.get(name, {}).get("code_3", "")
+        return self.stations.get(self._current_name(), {}).get("code_3", "")
+
+    def _current_name(self) -> str:
+        """This stop's name, or "" when the index is not in the list.
+
+        Fourth of four accessors sharing one guard. `draw` used to read
+        `self.stops[self.curr_stop]["name"]` inline — a bare index and a bare
+        key, where its three siblings all bounds-check and `.get`. That made it
+        the only element that would raise rather than degrade.
+        """
+        if self.stops and 0 <= self.curr_stop < len(self.stops):
+            return self.stops[self.curr_stop].get("name", "")
+        return ""
 
     def draw(self, current_time_str: str = None) -> None:
         """Draw the upper band: chrome first, then every element in order."""
+        # The no-arg call is a documented entry point (`docs/DISPLAY.md`
+        # § "Adding New Train Model → Usage") and `app.py` uses it for the frame
+        # it presents at boot, before the main loop starts passing the clock in.
+        # Falling through as "" drew the clock's white box with no digits in it,
+        # because `draw_clock` blits the box first and only then returns on empty
+        # text. Default to the wall clock, as e235_1000 does.
+        if current_time_str is None:
+            current_time_str = time.strftime("%H:%M", time.localtime())
+
         display = self.mode_cycler.get_current_display()
 
         # Chrome. State-invariant by CONTRACT (see the package __init__): the
@@ -1771,5 +1803,5 @@ class UpperDisplay:
         display.draw_station_plate()
         display.draw_badge(self._current_sta_code(), self.color, self._current_code_3())
         display.draw_prefix(self.prefix_text)
-        display.draw_station(self.stops[self.curr_stop]["name"] if self.stops else "")
+        display.draw_station(self._current_name())
         display.draw_clock(current_time_str or "")

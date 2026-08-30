@@ -105,10 +105,14 @@ to them on 2026-08-21; the material comes out if they would rather it did not st
 - **All other faces** are commercial font software owned by their respective foundries.
   They are not covered by the MIT license and are not licensed for redistribution by
   this project.
-- **ShinGoPr6N** (Morisawa) is **not** in this repository and is not distributed with
-  the release. The LCD renders it from a pre-rendered raster atlas, so neither the
-  shipped build nor a clone contains the font software. Regenerating that atlas from
-  source requires a licensed copy of the faces, which you must obtain yourself.
+- **Shin Go** (Morisawa) is **not** in this repository and is not distributed with
+  the release — both the `ShinGoPr6N-*` cuts and the `ShinGoPro-*` one the E233-0
+  train type and its placards use. The exemption is a property of the FAMILY, which
+  is why `.gitignore` and `font_atlas.ATLAS_FACES` both key on the `ShinGo` prefix
+  rather than on one naming convention. The LCD renders these from a pre-rendered
+  raster atlas, so neither the shipped build nor a clone contains the font software.
+  Regenerating that atlas from source requires a licensed copy of the faces, which
+  you must obtain yourself.
 
 ## Assets derived from third-party software
 

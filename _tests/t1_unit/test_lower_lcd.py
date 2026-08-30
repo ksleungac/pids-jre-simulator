@@ -2,8 +2,8 @@
 # TIER: T1 — lower LCD: which stations are shown, and when the view changes
 """What the lower LCD guarantees about the stations it is showing you.
 
-Module scope is the FEATURE (`_tests/README.md` § "Module scope"). Three
-decisions across both train models, all pure logic, all about the same question —
+Module scope is the FEATURE (`_tests/README.md` § "Module scope"). Four
+decisions across three train models, all pure logic, all about the same question —
 what is on screen and when does it change:
 
   1. e235_1000 8-STATION WINDOW + FULL-SLOT LOCK — which 8 cells, and when the
@@ -11,6 +11,8 @@ what is on screen and when does it change:
   2. e235_0 5-STATION CONTENT — which stations appear and what each ring shows,
      including a passing station on an out-of-spec route
   3. e235_0 5-STATION BAND FILL — when the sweep restarts
+  4. e233_0 FULL-ROUTE MARKER COLUMN — where the position marker sits along the
+     leg it is crossing, on a route long enough to window
 
 Every method here reads only `self.*` fields plus class constants, so they are
 called UNBOUND against a `SimpleNamespace` stub — no pygame, no fonts, no display,
@@ -38,6 +40,9 @@ from displays.lower_lcd import LowerDisplayBase  # noqa: E402
 from displays.train_models.e235_0.lower_lcd import (  # noqa: E402
     JapaneseFiveStationDisplay,
     LowerDisplay as E0LowerDisplay,
+)
+from displays.train_models.e233_0.lower_lcd import (  # noqa: E402
+    JapaneseFullRouteDisplay as E233FullRoute,
 )
 from displays.train_models.e235_1000.lower_lcd import (  # noqa: E402
     JapaneseEightStationDisplay,
@@ -304,10 +309,126 @@ def check_fill_slot_enter() -> None:
     check(eight._fill_start == 4.0, f"a genuine FULL→EIGHT re-enter must refill at 4.0; got {eight._fill_start}")
 
 
+# ── 4. e233_0 full-route: the marker's row-first test ─────────────────────────
+# Every consumer of the full-route window derives its column the SAME way —
+# `local = di - window_start`, then `local % per_row`. `_slot`, `_draw_bars` and
+# `_row_edges` all do. `_marker_slot` decides whether to push the marker into the
+# middle of the leg it is crossing, and it asked `di % per_row` instead: correct
+# only while the window starts at 0, which is every Chūō frame, so it read as
+# right. On a route long enough to window (Keihin's 46 cells, start 6) it
+# disagreed at 4 of the 40 visible cells — suppressing the offset at two mid-row
+# cells and applying it at both row-first ones, which puts the marker past that
+# row's own wall.
+#
+# The invariant, not the arithmetic: the marker's row-first test must agree with
+# `_slot`'s column for EVERY cell in the window. Restoring `di % per` fails this.
+
+
+def _e233_full_route_stub(n_cells: int, cursor: int):
+    """A `JapaneseFullRouteDisplay` with the REAL window/slot/pitch logic bound.
+
+    Everything `_marker_slot` reaches reads only `self.*` and the module
+    tuneables, so every production method it needs binds straight onto a
+    namespace — `_box_width` included, which is a single dict read and touches no
+    font. Nothing here is substituted, so what is exercised is the real decision.
+
+    `curr` and `cursor` are separate arguments on purpose: `_window()` keys on
+    `_curr()` (the PA target) while `_marker_slot` keys on `_cursor()` (the
+    visual position), and a skip animation is exactly when they disagree.
+    """
+    stub = SimpleNamespace(
+        display_stops=[{"name": f"s{i}", "pa": ["x"]} for i in range(n_cells)],
+        display_offset=0,
+        state=SimpleNamespace(curr_stop=cursor, cursor_pos=cursor, at_station=False),
+    )
+    for name in (
+        "_window",
+        "_per_row",
+        "_rows",
+        "_slot",
+        "_slot0_cx",
+        "_pitch",
+        "_avail",
+        "_row_cy",
+        "_curr",
+        "_cursor",
+        "_box_width",
+    ):
+        setattr(stub, name, getattr(E233FullRoute, name).__get__(stub))
+    return stub
+
+
+def _marker_offset(stub, di: int) -> float:
+    """How far `_marker_slot` pushes the marker off cell `di`'s plain slot centre."""
+    _, marker_cx, _ = E233FullRoute._marker_slot(stub, {})
+    _, slot_cx, _ = stub._slot(di)
+    return abs(marker_cx - slot_cx)
+
+
+def check_e233_marker_column() -> None:
+    # The oracle is WIP § 9.3.6, not the arithmetic: the marker sits in the
+    # middle of the leg it is crossing, EXCEPT at a row's first cell, where the
+    # station behind it is on the other row and there is no leg on this row to
+    # sit in. So `_marker_slot`'s x must equal the plain slot centre at a
+    # row-first cell and be pushed off it everywhere else.
+    #
+    # 46 cells window to (6, 40) — the case that separates the two expressions.
+    # 40 cells window to (0, 40), where `di` and the local column coincide and
+    # the bug is invisible; it is here so a "fix" that breaks Chūō is caught.
+    for n_cells in (46, 40):
+        stub = _e233_full_route_stub(n_cells, cursor=0)
+        for di in range(n_cells):
+            stub.state.curr_stop = stub.state.cursor_pos = di
+            # The window is a function of the cursor, so it must be re-read for
+            # every position rather than sampled once — reading it once is how
+            # this test first reported a failure that was its own bookkeeping.
+            start, count = stub._window()
+            per = stub._per_row()
+            if not (start <= di < start + count):
+                continue
+            # Row-first is read OUT of `_slot`, not restated: column 0 is the
+            # rightmost slot by construction, so a cell whose slot centre IS
+            # `_slot0_cx()` is the one starting its row. Restating the arithmetic
+            # would compare the fix against a copy of itself.
+            _, slot_cx, _ = stub._slot(di)
+            row_first = abs(slot_cx - stub._slot0_cx()) < 1e-9
+            offset = _marker_offset(stub, di)
+            if row_first:
+                check(
+                    offset < 1e-9,
+                    f"e233_0 marker must sit ON the slot at a row-FIRST cell " f"(n={n_cells}, window start={start}, di={di}); offset {offset:.2f}px",
+                )
+            else:
+                check(
+                    offset > 0.0,
+                    f"e233_0 marker must be pushed into the leg at a MID-ROW cell "
+                    f"(n={n_cells}, window start={start}, di={di}, local col "
+                    f"{(di - start) % per}); it sat on the slot centre",
+                )
+
+    # THE SKIP-ANIMATION CELL, which the loop above cannot construct: it pins
+    # curr == cursor, so a 46-cell route never presents window (6,40) with the
+    # cursor ON di 6. In production those two indices come apart — `_window()`
+    # keys on `_curr()` and `_marker_slot` on `_cursor()` — so departing di 6 and
+    # skipping to 7 gives start 6 with the marker still drawn at 6, which is the
+    # row's FIRST cell and must take no offset. Under the old `di % per` it read
+    # `6 % 20 = 6`, mid-row, and the marker went past the row's right wall.
+    skip = _e233_full_route_stub(46, cursor=0)
+    skip.state.curr_stop, skip.state.cursor_pos = 7, 6
+    start, _ = skip._window()
+    check(start == 6, f"precondition: curr_stop 7 on a 46-cell route should window at 6; got {start}")
+    check(
+        _marker_offset(skip, 6) < 1e-9,
+        f"e233_0 marker must sit ON the slot at di=6, the row-first cell of window "
+        f"(6,40), while a skip holds cursor_pos behind curr_stop; offset {_marker_offset(skip, 6):.2f}px",
+    )
+
+
 def main():
     check_eight_window()
     check_five_station_content()
     check_fill_slot_enter()
+    check_e233_marker_column()
 
     if FAILURES:
         print("FAIL: lower LCD")
@@ -315,7 +436,8 @@ def main():
         sys.exit(1)
     print(
         "PASS: lower LCD (8-station window short/sliding/locked + pointer-always-visible + Chūō 新宿 regression + "
-        "e235_0 never-locks #68/#81; 5-station passing empty ring, no time:null crash #66; band fill only on a genuine slot-enter)"
+        "e235_0 never-locks #68/#81; 5-station passing empty ring, no time:null crash #66; band fill only on a genuine slot-enter; "
+        "e233_0 marker row-first column agrees with _slot on a windowed 46-cell route)"
     )
 
 

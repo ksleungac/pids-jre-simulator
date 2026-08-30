@@ -226,7 +226,15 @@ _REGISTRY = {
         # Nudging here re-runs _build_positions via the renderer's
         # _resync_tuneables — see its CONTRACT block in e235_0/lower_lcd.py.
     },
-    # ---- E233-0 (中央線快速) — build in progress, one element at a time ----
+    # ---- E233-0 (中央線快速) ----
+    # Every BUILT element is registered. Only the car number is absent, and it is
+    # absent from the renderer too (WIP § 8.3 — no data source). Registering IS
+    # the wiring step (`docs/DISPLAY.md` § "Specifying a new display" step 6), so
+    # an element that is drawn but unregistered can only be tuned by hand-editing
+    # the module — which is the sandbox drift the editor exists to make
+    # impossible. Six of these seven were left out while the upper band was being
+    # built one element at a time; the renderer half was already done for the
+    # plate, badge and clock, which sync their rects from their dicts each frame.
     "train_type": {
         "model": "e233_0",
         "rect_module": "displays.train_models.e233_0.upper_lcd",
@@ -240,6 +248,55 @@ _REGISTRY = {
         # grab. `font_size` is picked up by the renderer's _sync_type_font,
         # which rebuilds the font when it changes (a size is part of the atlas
         # key, so it cannot just be read per frame).
+    },
+    # One entry per element, matching how the author tunes them — element by
+    # element, so a nudge to the badge does not scroll past the plate's keys.
+    "e233_destination": {
+        "model": "e233_0",
+        "rect_module": "displays.train_models.e233_0.upper_lcd",
+        "rect_attr": "DESTINATION_RECT",
+        "target": "upper",
+        "dicts": [("displays.train_models.e233_0.upper_lcd", "_TUNEABLES_DESTINATION")],
+    },
+    "e233_station_plate": {
+        "model": "e233_0",
+        "rect_module": "displays.train_models.e233_0.upper_lcd",
+        "rect_attr": "STATION_PLATE_RECT",
+        "target": "upper",
+        "dicts": [("displays.train_models.e233_0.upper_lcd", "_TUNEABLES_STATION_PLATE")],
+        # The plate syncs STATION_PLATE_RECT from its own dict every frame, so a
+        # size nudge moves the hit-test with the drawing.
+    },
+    "e233_station_badge": {
+        "model": "e233_0",
+        "rect_module": "displays.train_models.e233_0.upper_lcd",
+        "rect_attr": "BADGE_RECT",
+        "target": "upper",
+        "dicts": [("displays.train_models.e233_0.upper_lcd", "_TUNEABLES_STATION_BADGE")],
+    },
+    "e233_station_name": {
+        "model": "e233_0",
+        "rect_module": "displays.train_models.e233_0.upper_lcd",
+        "rect_attr": "STATION_PLATE_RECT",
+        "target": "upper",
+        "dicts": [("displays.train_models.e233_0.upper_lcd", "_TUNEABLES_STATION_NAME")],
+        # Shares the PLATE's rect deliberately: the name has no box of its own —
+        # it is a span INSIDE the plate (WIP § 8.5), so the plate's bounds are the
+        # region to letterbox the reference into.
+    },
+    "e233_prefix": {
+        "model": "e233_0",
+        "rect_module": "displays.train_models.e233_0.upper_lcd",
+        "rect_attr": "PREFIX_RECT",
+        "target": "upper",
+        "dicts": [("displays.train_models.e233_0.upper_lcd", "_TUNEABLES_PREFIX")],
+    },
+    "e233_clock": {
+        "model": "e233_0",
+        "rect_module": "displays.train_models.e233_0.upper_lcd",
+        "rect_attr": "CLOCK_RECT",
+        "target": "upper",
+        "dicts": [("displays.train_models.e233_0.upper_lcd", "_TUNEABLES_CLOCK")],
     },
     "e233_full_route": {
         "model": "e233_0",

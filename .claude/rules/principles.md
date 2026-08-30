@@ -91,6 +91,18 @@ A defect in the harness itself (`_harness/`, hooks, session scripts, dev tooling
 
 **How to apply:** harness-internal + behaviour-neutral → just fix it. Touches a gate, a commit path, or anything the user would notice → ask.
 
+### Naming something as BLOCKING is a commitment to fix it
+If you tell the user something is blocking them, fix it in the same turn. The only exception is a fix that needs a direction or a design decision from them — then ask that one question, having already done everything around it. Reporting a blocker and stopping hands them a problem plus the work of telling you to solve it.
+
+**Why:** the report reads as progress and is not; the user has to spend a turn converting it into an instruction. Examples:
+- (2026-08-30) Reported that `/build`'s pre-flight was red and could not be cleared without changing a gate, then stopped — correctly by the § "Harness faults" gate exception, and still wrong, because the gate was *blocking a release*. User: *"then what? fix that"*, and after I fixed only that one: *"why not fix what you can fix"*. Six items had been listed for their call; five needed no direction at all.
+
+**How to apply:**
+- This SHARPENS § "Harness faults" rather than contradicting it. A gate change still needs an ask when the gate is merely wrong. A gate that is BLOCKING is not merely wrong — fix it, and say what you changed and why the gate was mis-scoped.
+- Sort the list before presenting it: what you already fixed, what you are about to fix, and the genuinely-theirs remainder. If the remainder is empty, do not present a list.
+- "Needs a direction or design" means the answer changes what gets built — a mark a station should take, which of two layouts to keep. It does not mean "this is a calibrated value" or "this touches a signed-off element"; those are reasons to be careful, not reasons to stop.
+- After widening or narrowing any gate, mutation-prove it still fires (§ "A measurement is a claim until the instrument is calibrated").
+
 ### Announce self-launched multi-step processes
 When kicking off a self-directed multi-step process (a review+fix pass, a coherence sweep, an audit, a subagent fan-out), NAME it explicitly before running — don't slide into it. Self-launching is fine; the unheralded surprise is what reads as off.
 
@@ -599,6 +611,7 @@ Companion bound on the above: the "ships with a test" bar is for the **silent-fa
 - A regression fixture must DISCRIMINATE — fail when the fix is reverted; verify it does. A downstream backstop can mask a naive one (2026-07-21: a `19.1→19` speed-cell passed with AND without the decimal fix because `_rectify_speed(191)=19`; swapped for a rectify-proof `5.3→5`).
 - **Discrimination decays — re-run the mutation after ANY later change to the guarded code, its constants, or the fixture.** Verified-once is not verified. (2026-07-21) A logo-suppression assertion was mutation-proven, then a floor retune (2s→4s) plus a `reveal_slot` semantic change silently made it inert; the review caught it, and the first repair was ALSO inert (it sampled the guard state *after* the stepped frame, so it already held the mutated value).
 - Never read the constant under test into the test — pin the expected value literally. A fixture that imports `FLOOR` scales its own expectations with any mutation of `FLOOR` and stops discriminating.
+- **A stub that COLLAPSES two inputs production keeps separate cannot reach the cases where they differ — and the test still passes, so nothing says so.** A stub is a claim about the state space, and pinning two fields to one value silently deletes a region of it. 2026-08-30: a marker-position test built its stub with `curr_stop == cursor_pos`, which is every state except the one the feature exists for — a skip animation is *defined* by those two disagreeing, and the fix's own comment named that cell as the reachable one. The test discriminated on three other cells, so it looked sound. **List the fields your stub pins, and for each ask which production path makes them diverge**; that path is a case, not an edge case. Sibling of "a parameter the score cannot see is not being fit" — there a free parameter, here a collapsed axis, and both fail by looking green.
 
 ### A fixture is not an observation
 A test case that encodes a domain fact is evidence only if it was SAMPLED from reality. One authored to lock a design's intent is that intent restated — it agrees with the code by construction and proves nothing about the world. Check a fixture's provenance before letting it overrule a change; its comment usually says which it is.

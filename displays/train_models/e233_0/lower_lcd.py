@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: MIT
-"""E233-0 (中央線快速) Lower LCD — full-route view, DRAFT.
+"""E233-0 (中央線快速) Lower LCD — the full-route and 6-station views, plus the
+manager that rotates every slot.
 
-Built against ``docs/wip/WIP_e233_0_display.md`` § 9, which is the spec. This is
-the first of the three lower views; the other two are still explicit stubs.
+Built against ``docs/wip/WIP_e233_0_display.md``, which is the spec: § 9 for the
+full-route view and § 10 for the 6-station one. The manager's other three slots
+render elsewhere in the package — the standalone transfer view (§ 11) in
+``transfer_info.py``, and the two standing notices (§ 12) in ``priority_seat.py``
+and ``manner_mode.py``.
 
 THE DIAGRAM IS THE LINE, NOT THE RUN (author, 2026-08-26). Chūō's full-route
 view always draws 大月 → 東京: **row 1 is always 大月 → 武蔵境, row 2 always
@@ -17,13 +21,16 @@ end. So the diagram's screen order is the reverse of its index order, and
 "behind the train" is to the RIGHT — which is why the grey tail in the reference
 sits right of the marker at 高尾, the run's first stop.
 
-Elements, in the order they draw: the two bars (orange ahead, grey behind) ·
-per-cell marks on the bar (white minute box where the train stops, arrow where
-it passes) · the green triangle at the current stop · vertical station names
-above each bar · the continuity arrows at the wrap.
+FULL-ROUTE ELEMENTS, in ``show_stops``'s own order: the two bars (orange ahead,
+grey behind) · the end treatment at each edge, taper or notch plus its chevrons
+(§ 9.3.4 — these are the BAR's ends, not an element of their own) · per-cell
+marks on the bar (white minute box where the train stops, arrow where it passes)
+· the 分 at each row's outer end · the green PENTAGON at the train, which sits
+between two stations while it is running (§§ 9.3.2, 9.3.6) · vertical station
+names above each bar.
 
 Sibling mapping (``conventions.md`` § "Forking a sibling-model renderer"): the
-elements the author named — minute box, passing arrow, position triangle,
+elements the author named — minute box, passing arrow, position marker,
 continuity arrows — are E235-**1000**'s linear full-route, not E235-0's
 racetrack, so the structural patterns are copied from there. E235-0 supplied the
 two-row-with-a-wrap layout shape (``OpenRouteFullRouteDisplay``) and the
@@ -41,7 +48,7 @@ from app_paths import project_root
 from constants import TIME_SCALE
 from displays.transfer_info import apply_transfer_filter, load_icon, resolve_entry
 from displays.lower_lcd import LowerDisplayBase
-from displays.utils import arrow_points, clip, draw_1col_text, draw_1col_text_plain, draw_aapolygon
+from displays.utils import arrow_points, draw_1col_text, draw_1col_text_plain, draw_aapolygon
 from displays.train_models.e233_0.upper_lcd import _TYPE_SUPERSAMPLE, _build_soft_box, outlined
 from displays.train_models.e233_0.transfer_info import TransferInfoDisplay
 from displays.train_models.e233_0.priority_seat import PrioritySeatDisplay
@@ -54,6 +61,8 @@ from displays.train_models.e233_0 import (
     UPPER_HEIGHT,
     LOWER_BG,
     RULE_GREY,
+    BAR_ORANGE,
+    BAR_BEYOND,
     BORDER_W,
 )
 
@@ -73,6 +82,10 @@ from displays.train_models.e233_0 import (
 # centre x 853.5 in the reference, and 高尾 is the 9th cell from the right of a
 # 20-slot row, whose computed centre is 853.4. The palette is measured the same
 # way — served bar (225,92,18), beyond/behind (134,144,164), marker (51,168,58).
+# The bar's two colours are now READ from the model's palette rather than restated
+# here, so beyond/behind draws `RULE_GREY` (135,145,165): one level per channel off
+# the run detection above, which is capture noise on a grey the divide and the
+# border draw at full strength. One grey, one source.
 #
 # WHAT IS NOT MEASURED, and is a draft until the author refines it: every mark's
 # own shape and size (box, arrow, triangle, continuity), the name font size, and
@@ -166,8 +179,13 @@ _TUNEABLES_FULL_ROUTE = {
                            # Held only while the route FILLS the row; a shorter
                            # one centres instead — `_slot0_cx`
     "slot_pitch":  30.09,  # [measured] ditto — never derived from the bar's width
-    "bar_color":       (225,  92,  18),  # served / ahead
-    "behind_color":    (134, 144, 164),  # beyond service AND behind the train
+    # DERIVED from the model's palette, not re-typed. Both constants live in the
+    # package `__init__` as whole-display facts and had zero readers, while these
+    # two keys restated them — `behind_color` had already drifted a level in every
+    # channel off `RULE_GREY`, which is the same grey the divide and the border
+    # draw. `conventions.md` § Tooling, "Canonical-source duplication".
+    "bar_color":       tuple(BAR_ORANGE),   # served / ahead
+    "behind_color":    tuple(BAR_BEYOND),   # beyond service AND behind the train
 }
 
 _TUNEABLES_FULL_ROUTE_NAMES = {
@@ -291,8 +309,13 @@ _TUNEABLES_FULL_ROUTE_MARKS = {
     # out -0.874 and +0.871, and the shoulders differ by 0.3px — the same
     # near-symmetry E235's pentagon has, and not something to round away.
     "tri_verts":     ((6.56, -11.08), (6.56, 10.65), (0.25, 10.65), (-9.39, -0.41), (-0.06, -11.08)),
-    "tri_h":         22,   # = the bar height; the marker stands proud of nothing
-    "tri_base_dx":    6.56,  # base's offset RIGHT of the slot centre (= verts[0])
+    # `tri_h` and `tri_base_dx` USED TO LIVE HERE and both restated `tri_verts`:
+    # the height was its y-extent and the base offset was literally `verts[0][0]`,
+    # each with a comment admitting it. `tri_verts` is free calibration data the
+    # editor DRAGS, so a nudge moved the drawn marker and left the copies behind —
+    # and `tri_base_dx` feeds the orange/grey boundary, so the bar's split silently
+    # stopped agreeing with the marker sitting on it. The height had no reader at
+    # all. Both are now derived at their use sites from the vertices themselves.
     # THE SHADOW IS DIRECTIONAL — bottom and right only (author, 2026-08-27).
     # The rim is not: it runs all the way round (see `tri_rim` below), so the
     # two are independent and only this one keys on the light.
@@ -602,6 +625,7 @@ class JapaneseFullRouteDisplay:
         self._time_fonts: Dict[int, pygame.font.Font] = {}
         self._box_imgs: Dict[tuple, tuple] = {}
         self._unit_img = None
+        self._unit_key: tuple = ()
 
         # The position marker is one cached surface — see `_marker_image`.
         self._marker_img: Optional[pygame.Surface] = None
@@ -890,7 +914,14 @@ class JapaneseFullRouteDisplay:
         start, count = self._window()
         di = max(start, min(di, start + count - 1))
         row, cx, bar_top = self._slot(di)
-        if not at_station and di % self._per_row() != 0:
+        # The row-first test is on the WINDOW-LOCAL column, not the raw diagram
+        # index — `_slot` above derives its own column the same way (`di - start`,
+        # then `% per`), and so do `_draw_bars` and `_row_edges`. A raw `di % per`
+        # agrees with them only while `start` is 0, which is every Chūō frame and
+        # is why it read as correct: on a route long enough to window (Keihin's 46
+        # cells, `start` 6) it suppresses the offset at a mid-row cell and applies
+        # it at a row-first one, putting the marker past that row's own wall.
+        if not at_station and (di - start) % self._per_row() != 0:
             mins = minutes.get(di)
             half = self._box_width(m, "" if mins is None else str(mins), int(m["time_size"])) / 2.0
             nose = -min(float(vx) for vx, _ in m["tri_verts"])
@@ -898,9 +929,23 @@ class JapaneseFullRouteDisplay:
         return row, cx, bar_top
 
     def _is_passing(self, stop: Dict) -> bool:
-        """A station the train runs through. `pre_stops` carry no `pa` at all,
-        so they are excluded explicitly — they are not passed-through, they are
-        simply off this service's run."""
+        """A station the train runs through — no `pa` and no `pa_at_station`.
+
+        NOTE the predicate does NOT distinguish a `pre_stop`, which carries
+        neither either and so answers True. In the FULL-ROUTE view that is
+        harmless: a `pre_stop` is always behind the cursor, so the index test
+        greys it and marks are only drawn from the cursor forward. In the
+        6-STATION view it is visible — a `pre_stop` is an eligible past cell
+        (WIP § 10.1), so it takes a passing chevron.
+
+        That is DELIBERATE and closed (author, 2026-08-30) — see `TODO.md`
+        § "Closed-off paths", "Giving `pre_stops` a positive identity in the
+        render path". Both models make this inference and it is not worth
+        unpicking until `pre_stops` has to carry more information anyway. Do not
+        re-propose a flag for it; the docstring here used to claim an exclusion
+        the body never performed, and stating the conflation is the fix that was
+        wanted.
+        """
         return not stop.get("pa") and not stop.get("pa_at_station")
 
     # -------------------------------------------------------------------------
@@ -949,7 +994,11 @@ class JapaneseFullRouteDisplay:
 
             if row < marker_row or row > dest_row:
                 continue
-            hi = right if row > marker_row else marker_cx + m["tri_base_dx"]
+            # The boundary is the MARKER'S BASE, read off the vertices rather than
+            # from a copy of them, so dragging the shape in the editor carries the
+            # bar's split with it.
+            base_dx = max(vx for vx, _ in m["tri_verts"])
+            hi = right if row > marker_row else marker_cx + base_dx
             if row < dest_row:
                 lo = left
             else:
@@ -1071,9 +1120,21 @@ class JapaneseFullRouteDisplay:
         pads by a known `ceil(ow)`, so the ink's position inside the finished
         surface is arithmetic rather than a fitted fudge.
         """
-        t = _TUNEABLES_FULL_ROUTE
         m = _TUNEABLES_FULL_ROUTE_MARKS
-        got = self._unit_img
+        # Keyed on everything that SHAPES the glyph, the way `_blit_box` and
+        # `_marker_image` already are. A bare `if got is None` read these
+        # tuneables once per process, so nudging the 分 in the calibration editor
+        # kept re-blitting the pre-edit raster. The 6-station `_draw_unit` had the
+        # same defect against its own colour and text, and is keyed the same way.
+        key = (
+            int(m["unit_size"]),
+            float(m["unit_outline_w"]),
+            float(m["unit_outline_feather"]),
+            tuple(m["unit_color"]),
+            tuple(m["arrow_color"]),
+            m["unit_text"],
+        )
+        got = self._unit_img if self._unit_key == key else None
         if got is None:
             ss = _TYPE_SUPERSAMPLE
             size = int(m["unit_size"])
@@ -1083,7 +1144,7 @@ class JapaneseFullRouteDisplay:
             img = outlined(core, m["unit_outline_w"], m["unit_outline_feather"], tuple(m["arrow_color"]))
             pad = math.ceil(m["unit_outline_w"])
             got = (img, pad + ink.centerx / ss, pad + ink.centery / ss)
-            self._unit_img = got
+            self._unit_img, self._unit_key = got, key
         img, ink_cx, ink_cy = got
 
         for row in range(self._rows()):
@@ -1349,7 +1410,7 @@ class JapaneseFullRouteDisplay:
         """
         return bottom - ((chars - 1) * pitch + font.get_height())
 
-    def _draw_names(self, cursor: int, dest_di: int) -> None:
+    def _draw_names(self, dest_di: int) -> None:
         """Vertical names above each bar, never compressed.
 
         The box is a fixed six characters — the spacing the reference allows,
@@ -1357,7 +1418,6 @@ class JapaneseFullRouteDisplay:
         onto the bar, so a short name hangs from the bar rather than from the
         top of the box.
         """
-        t = _TUNEABLES_FULL_ROUTE
         n = _TUNEABLES_FULL_ROUTE_NAMES
         font = self._name_font(int(n["font_size"]))
         pitch = font.get_height() + int(n["line_gap"])
@@ -1547,7 +1607,7 @@ class JapaneseFullRouteDisplay:
         self._draw_marks(cursor, minutes, dest_di)
         self._draw_units()
         self._draw_position(marker_cx, marker_top)
-        self._draw_names(cursor, dest_di)
+        self._draw_names(dest_di)
 
     def draw(self, current_time: float = 0.0) -> None:
         if self.state is not None:
@@ -1667,7 +1727,7 @@ _TUNEABLES_SIX_STATION = {
     "unit_size_ratio": 0.5,  # of the minute box's height
     "unit_dx":         4.0,  # ink LEFT edge, right of the arrow's base
     "unit_color":  (255, 255, 255),
-    "bar_color":   (225, 92, 18),  # route `color`; the bar never dims
+    "bar_color":   tuple(BAR_ORANGE),  # route `color` default; the bar never dims
 }
 
 # THE MARK SAYS WHAT KIND OF STATION IT IS, and the number is content that may be
@@ -1723,9 +1783,10 @@ _TUNEABLES_SIX_STATION_MARKS = {
     #   right edge  vertical, constant across every row
     #   left edge   two slants meeting at y 318.2, 7.1px proud of the shoulders
     "tri_verts":     ((15.9, -15.3), (15.9, 14.8), (-11.9, 14.8), (-21.3, -0.3), (-14.2, -15.3)),
-    "tri_h":         30,     # [measured] 30.1 — INSET from the 36px bar, unlike
-                             # the full-route marker, which stands its bar's height
-    "tri_base_dx":   15.9,   # base's offset RIGHT of the slot centre (= verts[0])
+    # No `tri_h` / `tri_base_dx` here either — same reason as the full-route dict.
+    # The measured facts they carried are properties of `tri_verts` above: its
+    # y-extent is 30.1, INSET from the 36px bar (unlike the full-route marker,
+    # which stands its bar's full height), and its base sits at x 15.9.
     "tri_light":     (-1.0, -1.0),
     "tri_shadow":      (52, 62, 59),
     "tri_shadow_reach": 3.2,
@@ -2143,12 +2204,17 @@ class JapaneseSixStationDisplay:
         t = _TUNEABLES_SIX_STATION
         m = _TUNEABLES_SIX_STATION_MARKS
         size = max(1, int(round(float(m["box_h"]) * float(t["unit_size_ratio"]))))
+        # Keyed on everything that shapes the glyph, not just the derived size —
+        # `unit_color` and `unit_text` are both editor-registered tuneables, so a
+        # colour nudge on this 分 was re-blitting the pre-edit raster. Same defect
+        # and same fix as the full-route `_draw_units`.
+        key = (size, tuple(t["unit_color"]), t["unit_text"])
         got = self._unit_img
-        if got is None or got[0] != size:
+        if got is None or got[0] != key:
             font = lcd_font(_NAME_FACE, size, draws=lit(t["unit_text"]))
             img = font.render(t["unit_text"], True, tuple(t["unit_color"]))
             ink = img.get_bounding_rect()
-            got = (size, img, float(ink.x), float(ink.y + ink.h))
+            got = (key, img, float(ink.x), float(ink.y + ink.h))
             self._unit_img = got
         _, img, ink_x, ink_bot = got
         # The minute box's bottom is what the label bottoms with, so it is
@@ -2439,12 +2505,27 @@ class JapaneseSixStationDisplay:
             f = lcd_font(
                 _TRANSFER_FACE,
                 size,
-                # `split="（"` admits the head of a parenthetical name; the tail
-                # is drawn WITH its paren, which no field holds, so it is
-                # declared as the literal it is.
+                # `cuts=True` because the paren break is a rule, not a list. The
+                # renderer splits at `（` and draws the tail WITH its paren, a
+                # string no field holds — so an earlier declaration paired
+                # `split="（"` (which yields the head, and a tail stripped of its
+                # paren) with a `lit()` for the one tail Chūō has. `lines.json`
+                # holds TWO full-width-paren names — the split is keyed on `（`,
+                # so the five ASCII-paren names never reach it — and the second,
+                # 京浜東北線（大井町・蒲田方面）, raised the moment Yamanote reached
+                # it at 品川. Enumerating what the
+                # author had seen is `critical_lessons.md` §9: a declaration
+                # cooked from a hand-typed list cannot report the case it omits.
+                # `cuts` takes both halves at every break position, so it does not
+                # depend on where the rule cuts and cannot go a case short as the
+                # data grows.
                 draws=(
-                    at("data/lines.json:*.name_ja", "data/lines.json:*.variants.*.name_ja", wrap="･", split="（"),
-                    lit("（各駅停車）"),
+                    at(
+                        "data/lines.json:*.name_ja",
+                        "data/lines.json:*.variants.*.name_ja",
+                        wrap="･",
+                        cuts=True,
+                    ),
                 ),
             )
             self._name_fonts[-size] = f
@@ -2665,7 +2746,14 @@ class JapaneseSixStationDisplay:
 
 
 class LowerDisplay(LowerDisplayBase):
-    """E233-0 lower LCD manager. Full-route view built; the other two pending."""
+    """E233-0 lower LCD manager — rotates five slots, all of them built.
+
+    Full route (§ 9) and 6-station (§ 10) live in this module; the standalone
+    transfer view (§ 11) and the two standing notices (§ 12) are constructed from
+    their own modules in this package. The notices join the rotation at most one
+    at a time and only every third lap, so a page turns up about every 108s —
+    see `_available_slots`.
+    """
 
     # Stations-from-terminus below which the view locks to the zoomed slot.
     # `slots - 1`, which is E235-1000's own relation (VISIBLE_COUNT 8 ->
