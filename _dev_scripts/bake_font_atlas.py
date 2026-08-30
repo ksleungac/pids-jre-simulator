@@ -335,7 +335,13 @@ def audit_source_literals(sink: dict) -> tuple:
         _CJK = re.compile(r"[぀-ヿ㐀-䶿一-鿿豈-﫿]")
 
     drawn = set()
-    for rec in sink.values():
+    # BOTH sinks. The baker's records only baked faces, so a literal drawn solely
+    # through a face that ships (Noto, Helvetica, Frutiger) could never appear
+    # there — and this gate reported it as never-drawn on every run, for ever.
+    # The placard's `优先座位` is drawn on every sweep and held `/build` red that
+    # way. Unioning `unbaked_record()` makes the gate's predicate ("no swept state
+    # drew it") match its question, without putting a shipping face near the bake.
+    for rec in list(sink.values()) + list(font_atlas.unbaked_record().values()):
         drawn |= set(rec.get("entries", {})) | set(rec.get("sizes", {}))
         for k in rec.get("entries_bg", {}):
             drawn.add(k.split("|", 2)[2])

@@ -250,6 +250,16 @@ rigour and is the thing that makes the blind spot invisible.
   matched the cell, so it would have started cleanly and then classified nothing. Nothing about the
   gate changed; the set it quantified over did. Ask of any promotion: which dormant predicate was
   only true because this set was smaller? (2026-08-10 — resolved by deleting the flag, not the gate.)
+  **The third separator is a resource that never participates in the mechanism at all**, so the
+  predicate is not merely wrong for it — it is unanswerable, permanently. The font atlas records
+  only BAKED faces, and its source-literal audit asked "is this string in the records" to decide
+  "would this KeyError in a build shipping no fonts". For a face that ships (Noto, Helvetica) the
+  answer is structurally no and the records are structurally empty, so `优先座位` — drawn on every
+  sweep of every route — was reported as never-drawn on every run, and held `/build`'s pre-flight
+  red on a string that was fine. Nobody could fix it in the display code, which is the tell: when a
+  gate names a file that is provably correct, suspect the gate's DOMAIN before the file. Fixed by
+  recording unbaked faces into a separate sink the baker never reads, so the predicate spans the
+  same set as the question. (2026-08-30.)
 - A check whose inputs are absent in the deployed frame must be SKIPPED there explicitly, not left to
   compute a degenerate value and compare it. Ask where each check's inputs come from, per frame.
 - Count the frames a suite covers, not the cases. Five gates over one frame is one frame.

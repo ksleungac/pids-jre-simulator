@@ -74,6 +74,9 @@ _cache: Dict[Tuple[str, int, bool, bool], object] = {}
 # id(font) -> identity, for the live Fonts lcd_font hands out. `_cache` keeps
 # every one of them alive for the process lifetime, so the ids stay valid.
 _record: Optional[dict] = None
+# The same, for faces NOT in ATLAS_FACES — see `unbaked_record()`. Separate so a
+# live-loaded face can never be mistaken for something to bake.
+_record_unbaked: Optional[dict] = None
 _suppressed = False
 _walk: Optional[dict] = None
 
@@ -143,7 +146,13 @@ def _code_files() -> list:
     """
     root = project_root()
     files = sorted(root.glob("*.py")) + sorted(root.glob("displays/**/*.py"))
-    return [p for p in files if p.is_file() and not any(s.startswith("_") for s in p.relative_to(root).parts)]
+    # The `_` test is about STAGING DIRECTORIES (`conventions.md` § Naming) —
+    # `_dev_scripts/`, `_harness/`, `__pycache__`. Applying it to the filename as
+    # well silently dropped every `__init__.py`, which is where the model REGISTRY
+    # and each model's canvas + palette live: registering a train model, or moving
+    # a canvas, left the fingerprint identical and a stale atlas loading happily.
+    # Directory parts only, so the staging exclusion is unchanged.
+    return [p for p in files if p.is_file() and not any(s.startswith("_") for s in p.relative_to(root).parts[:-1])]
 
 
 def _shipped_json_files() -> list:
@@ -662,13 +671,22 @@ class RecordingFont:
     is what the app did rather than what a baker guessed it would do.
     """
 
-    def __init__(self, font, ident, sink):
-        self._f, self._id, self._sink = font, ident, sink
+    def __init__(self, font, ident, sink, atlas_backed=True):
+        self._f, self._sink, self._key = font, sink, ident
+        # `_id` is what `ident_of` reads, and it means "this font is ATLAS-BACKED",
+        # not "this font has a name". An unbaked face is recorded for the
+        # source-literal audit only, and must keep answering None — otherwise
+        # `text_parts` sees an ident and files its `parts` under an unbaked key in
+        # the BAKER's sink, which then has no `scalars` and the bake dies with a
+        # bare `KeyError: 'scalars'`. Keep the recording key separate from the
+        # atlas identity; only the latter is a claim about the atlas.
+        if atlas_backed:
+            self._id = ident
 
     def _log(self, table, key, value):
         if _suppressed:
             return
-        self._sink.setdefault(self._id, {}).setdefault(table, {})[key] = value
+        self._sink.setdefault(self._key, {}).setdefault(table, {})[key] = value
 
     def render(self, text, antialias, color, background=None):
         surf = self._f.render(text, antialias, color, background)
@@ -788,9 +806,29 @@ def _suppress(on: bool) -> None:
 
 def start_recording() -> dict:
     """Capture what production draws. Returns the sink the baker reads."""
-    global _record
+    global _record, _record_unbaked
     _record = {}
+    _record_unbaked = {}
     return _record
+
+
+def unbaked_record() -> dict:
+    """What the sweep drew through faces that are NOT baked.
+
+    Same shape as the baker's sink and deliberately kept out of it: nothing here
+    may reach the atlas, because these faces ship with the build and are loaded
+    live in both modes.
+
+    It exists for the source-literal audit. That gate asks "did any swept state
+    draw this string", and answered it from the baker's sink — which records only
+    baked faces, so a literal drawn exclusively through Noto or Helvetica could
+    never appear there and was reported as undrawn for ever. `优先座位` on the
+    priority-seat placard is the case: drawn on every sweep, invisible to the
+    check, and it held `/build`'s pre-flight red. The gate's predicate ("absent
+    from the records") and its question ("would this KeyError in a fontless
+    build") come apart exactly at a non-baked face — `critical_lessons.md` § 10.
+    """
+    return _record_unbaked if _record_unbaked is not None else {}
 
 
 def lcd_font(face: str, size: float, *, bold: bool = False, italic: bool = False, draws=None):
@@ -860,6 +898,12 @@ def lcd_font(face: str, size: float, *, bold: bool = False, italic: bool = False
             known = {d.key() for d in declared}
             declared.extend(d for d in draws if d.key() not in known)
         f = RecordingFont(f, ident, _record)
+    elif not baked and mode() != ATLAS and _record_unbaked is not None:
+        # Recorded too, into a sink the baker never reads. Only the source-literal
+        # audit consumes it — see `unbaked_record()`. `atlas_backed=False` keeps
+        # `ident_of` answering None, so nothing downstream mistakes a shipping
+        # face for something the atlas holds.
+        f = RecordingFont(f, ident, _record_unbaked, atlas_backed=False)
 
     _cache[key] = f
     return f
