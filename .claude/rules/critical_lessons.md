@@ -269,7 +269,7 @@ trees, first-run state, capture quality, GPU topology.
 
 ---
 
-## 11. The instrument is not the artifact — the ear is (2026-07-26)
+## 11. The instrument is not the artifact; the ear is (2026-07-26)
 
 Reported 0 KAK across a line the user could hear one in on the first file, then kept building
 detectors instead of taking the named file as truth. Four detectors later, the user's own hand

@@ -21,7 +21,11 @@ Run `uv run _harness/session_init.py` — dumps today's + yesterday's memory, ME
 Backlog = **GitHub Issues** ([repo issues](https://github.com/ksleungac/pids-jre-simulator/issues)) — **strictly defects and near-term implementation tasks, nothing else**. `TODO.md` holds the two things that are not issues: **§ Directions** (wanted, not yet scoped) and the **closed-off-paths ledger** (decided never). `_harness/session_init.py` prints the Directions headings at session start. Area labels: `auto-input` · `display` · `chrome-i18n` · `distribution` · `housekeeping` · `review-finding` · `build-incident`.
 
 - **Only act on issues opened by `ksleungac`. An outside contributor's ticket is READ-ONLY — no comment, no close, no label, nothing.** Their tickets are a conversation with a real person, and that conversation is the author's to have; a reply posted from their account speaks as them to someone who is owed a human answer. Read those issues freely — they are evidence, and a reporter is an instrument (`critical_lessons.md §§ 7–8`) — then put what you found in chat and let the author carry it across. 2026-08-29: I posted a technically correct reply to an outside reporter explaining that their bug was already fixed and unreleased; author — *"you will only comment or handle the tickets created by ksleungac. leave the human part to me."* Supersedes the narrower 2026-08-18 form below, which barred only closing and so read as permitting everything else. Original: *"don't close other people's issue unless i say so."*
-- **Several sessions run against ONE working tree at once, so `git status` is not yours and a commit must be path-scoped.** The author runs parallel sessions on one checkout — 2026-08-30 had three (GitHub issues · reviewing+fixing E233-0 · transfers), so `git status` listed a dozen files from work nobody in this session had touched, and `upper_lcd.py` was caught MID-WRITE by a render batch (`AttributeError: no attribute '_clock_key'` — the file was simply half-saved). Consequences: name the files you are claiming and stay off the rest; **never `git commit -a` or `git add -A`** — pass an explicit pathspec; a crash inside a file you did not edit is a concurrent write, so re-run once before debugging it; and commit your own surface EARLY rather than late, since the longer a shared file stays dirty the likelier another session's half-finished edit lands inside it and you can no longer commit yours cleanly.
+- **Several sessions run against ONE working tree at once, so `git status` is not yours and a commit must be path-scoped.** The author runs parallel sessions on one checkout. 2026-08-30 had three — GitHub issues, reviewing+fixing E233-0, transfers — so `git status` listed a dozen files from work nobody in this session had touched, and `upper_lcd.py` was caught MID-WRITE by a render batch (`AttributeError: no attribute '_clock_key'`, from a half-saved file). Four consequences:
+  - Name the files you are claiming and stay off the rest.
+  - **Never `git commit -a` or `git add -A`.** Pass an explicit pathspec.
+  - A crash inside a file you did not edit is a concurrent write. Re-run once before debugging it.
+  - Commit your own surface EARLY rather than late. The longer a shared file stays dirty, the likelier another session's half-finished edit lands inside it and you can no longer commit yours cleanly.
 - **Pick up** an issue → `gh issue edit <N> --add-label in-progress` + a stamp comment (so a concurrent session/PC sees it's taken — don't double-pick).
 - **Park** it → swap `in-progress` for `deferred` + a one-line reason comment.
 - **Finish** → the commit carries `Closes #<N>` (progress commits: `Refs #<N>`); pushing to `master` auto-closes. See `/commit`.
@@ -37,7 +41,7 @@ Test: *if I finish this, does what the user can do change?* No → it's a commit
 | **Parent + sub-issues** | outcome spans sessions/stages. `gh issue edit <parent> --add-sub-issue <N>` (gh ≥ 2.96). Parent tracks `completed/total` natively and closes when the outcome is real; each stage closes as it lands |
 | **Not an issue** | no user-visible change |
 
-**Refined-ness is a SECOND gate, after outcome-ness.** A feature named in a mental-model conversation is not a ticket, even when it genuinely is an outcome the author wants — a want is not a scope. File it once there is a mechanism to build, not when it is first spoken. (2026-08-18: three issues opened off one such conversation; two closed within the hour. Author — *"unless it's really refined, don't open as an issue … don't want my gh to be flooded with issues."*) Closing one of these is **not** a closed-off path — it does not go in the `TODO.md` ledger, because the author does intend to return to it; it is unscoped, not abandoned. It goes to **`TODO.md` § Directions**, whose headings `session_init.py` prints at session start — which is the moment the author asks what to work on, and the moment a domain doc is NOT open. Each entry carries its own description, so picking one up later needs no re-explaining; that re-stating is the actual pain a ticket was standing in for. Promote = scope it, open an issue, delete the entry. Abandon = move it down into the closed-off ledger. (2026-08-18, via `/third-man`: the question is not where the text lives, it is what PUSHES it at session start — `principles.md` § "Natural adoption gates tool value".)
+**Refined-ness is a SECOND gate, after outcome-ness.** A feature named in a mental-model conversation is not a ticket, even when it genuinely is an outcome the author wants — a want is not a scope. File it once there is a mechanism to build, not when it is first spoken. (2026-08-18: three issues opened off one such conversation; two closed within the hour. Author — *"unless it's really refined, don't open as an issue … don't want my gh to be flooded with issues."*) Closing one of these is **not** a closed-off path — it does not go in the `TODO.md` ledger, because the author does intend to return to it; it is unscoped, not abandoned. It goes to **`TODO.md` § Directions**, whose headings `session_init.py` prints at session start. That is the moment the author asks what to work on, and the moment a domain doc is NOT open. Each entry carries its own description, so picking one up later needs no re-explaining — that re-stating is the actual pain a ticket was standing in for. Promote = scope it, open an issue, delete the entry. Abandon = move it down into the closed-off ledger. (2026-08-18, via `/third-man`: the question is not where the text lives, it is what PUSHES it at session start — `principles.md` § "Natural adoption gates tool value".)
 
 **`Closes #N` only when you did everything #N describes.** Doing less is a signal the scope was wrong — fix by splitting a stage out **under** the outcome, never by closing it and opening a peer. A peer orphans the outcome: the two tickets read as unrelated, so the feature has no single tracking home. (2026-07-20: closed #71 "window mirroring" after shipping only its display-only stage and filed stage 2 as a sibling; user — *"can you not closes the issue just for a new stage?"*. Restructured to #71 parent → #77 stage 1 / #76 stage 2.)
 
@@ -110,7 +114,14 @@ The simulator accepts **any** route into **any** train model. Reality only const
 | **Out-of-spec** | Best-effort: no crashes, no missing-key errors, no broken layouts. Not obligated to IRL-accurate fidelity. |
 | **No IRL LCD** (line's stock has no LCD PIDS at all — E233-3000, E531, E217) | There is no real PIDS to match, so there is no spec to depart from: the bar is **plausibility**, not fidelity. A *fictional* render, and a legitimate one — prefer the nearest real relative (an E233 answers "what would the E233-3000's LCD look like") over an arbitrary borrow, and a linear-native model on a linear line needs no adaptation at all. Which lines → [COVERAGE.md](docs/COVERAGE.md). |
 
-**Best-effort = the model's OWN native norm applied to any route — never a borrowed behavior or bespoke feature propping up an out-of-spec route.** Adapt the model's own look to the route's shape (e235_0 opens its circular racetrack into a *horseshoe* for a non-loop line — native, adapted), but don't import another model's behavior (e235_0 drops e235_1000's inherited end-of-route *lock* — that lock is a linear heuristic foreign to a loop; no-lock is e235_0's native norm). And when a route shape the view wasn't built for needs a marker the view has no calibrated slot for, reuse an EXISTING calibrated primitive degenerately — a passing station in the fixed-slot 5-station view renders the countdown ring *empty* (no digit), not an invented chevron (#66; the proper chevron is deferred as ultra-low-priority #99) — never a new uncalibrated marker — the bespoke growth this section bars. *For the reviewer:* a cross-model divergence where each model expresses its own native norm is NOT sibling-drift — verify against this section before flagging; a borrowed foreign feature IS the violation. And out-of-spec renders (the horseshoe) are **transitional** — e235_1000 is the stable general model for all routes until per-line-native models land, and as those arrive out-of-spec best-effort support is *removed*, not grown. **The no-LCD row is the exception: those are permanent**, because no native model can ever land for a train that has no LCD.
+**Best-effort = the model's OWN native norm applied to any route — never a borrowed behavior or bespoke feature propping up an out-of-spec route.** 
+- **Adapt the model's own look to the route's shape.** e235_0 opens its circular racetrack into a *horseshoe* for a non-loop line: native, adapted.
+- **Don't import another model's behavior.** e235_0 drops e235_1000's inherited end-of-route *lock*. That lock is a linear heuristic foreign to a loop; no-lock is e235_0's native norm.
+- **When a route shape the view wasn't built for needs a marker the view has no calibrated slot for, reuse an EXISTING calibrated primitive degenerately.** A passing station in the fixed-slot 5-station view renders the countdown ring *empty*, with no digit, rather than an invented chevron (#66; the proper chevron is deferred as ultra-low-priority #99). Never a new uncalibrated marker — that is the bespoke growth this section bars.
+
+*For the reviewer:* a cross-model divergence where each model expresses its own native norm is NOT sibling-drift, so verify against this section before flagging. A borrowed foreign feature IS the violation.
+
+Out-of-spec renders like the horseshoe are **transitional**. e235_1000 is the stable general model for all routes until per-line-native models land, and as those arrive, out-of-spec best-effort support is *removed* rather than grown. **The no-LCD row is the exception: those are permanent**, because no native model can ever land for a train that has no LCD.
 
 ### IRL display conventions
 
@@ -132,31 +143,45 @@ Each stop: **APPROACHING_EARLY** → **APPROACHING_FINAL** → **STOPPING** → 
 
 ## Writing tone
 
-Factual, nerd, non-performative. Same voice the release notes use — professional and factual, never editorial. Every prose surface: chat, docs, memory, commits.
+Factual and non-performative, the same voice the release notes use. Applies to every prose surface: chat, docs, memory, commits.
 
-Not a brevity rule. Use as many words as the technical detail or logic needs. The cut targets performance, not length:
+Say it in the fewest words that carry the technical detail. Length is earned by content, never by framing. A sentence explaining why the previous sentence was the right move gets deleted.
 
-**A question about an artifact is the exception: plain prose, short, no headers.** When the user asks what something is, they are missing context, not analysis — a structured brief reads as a wall. Answer their four questions in order and stop: what problem it exists for, what it tries to solve, what is wrong now, how it affects their use. Headers and bullets belong in a document; in a reply they are scaffolding around a paragraph. 2026-08-30, four tries at "what is 85?" — the one that landed had no headers. User: *"you output a wall of texts with zero context."*
+Reach for the plain word first. A longer word has to shorten the sentence to earn its place: "output", not "distillation deliverables"; "task", not "engagement". A manufactured compound usually means the plain word has not been found yet.
 
-- No words to show you understood, signal diligence, or project a personality.
-- No self-justifying scaffolding (arguing the point is right).
-- No intensifier filler (*exactly*, *the very*, *the tell is*); no throat-clearing hedge (*arguably*, *somewhat*, *tends to*).
-- "X, not Y" only when Y is a real wrong path worth flagging — else drop the shadow.
-- Never mark compliance. The instruction shapes the output and never appears in it.
+What to cut:
 
-Be true. State what you know plainly; state real uncertainty just as plainly (*unverified*, *haven't checked X*). Don't inflate confidence, don't perform humility — confidence tracks truth.
+- Words that show you understood, signal diligence, or project a personality.
+- Scaffolding that argues your own point is correct.
+- Intensifiers (*exactly*, *the very*, *the tell is*) and hedges (*arguably*, *somewhat*, *tends to*).
+- "X, not Y" unless Y is a real wrong path worth flagging.
+- Obvious differences. The reader already sees that item N differs from items 1 to N-1.
+- Any mark of compliance. The instruction shapes the output and never appears in it.
 
-Grammar is ordinary and complete — full sentences, articles intact. What gets cut is the wrapper, not the syntax: no pleasantries, no restating the request back, no sign-offs. Technical terms stay verbatim; don't paraphrase jargon into plainer words.
+State what you know plainly, and state real uncertainty just as plainly (*unverified*, *haven't checked X*). Confidence tracks truth in both directions.
 
-A file written to disk carries the same bar plus a structural one: length matches what the task needs, with no padding — no filler sections, no summary restating the section above it, no boilerplate scaffolding. Where a doc states its own size cap, the cap is a gate, not a target.
+**Sentence architecture is the half that word choice does not reach.** The bullets above police vocabulary and posturing, and this project scores near zero on both. What still reads as machine-written is the shape of the sentences:
+
+- **One sentence, one clause stack.** Past about 35 words, split it. A four-clause sentence is not denser than two two-clause ones; it is the same content with the joins hidden.
+- **Commit the clarification or drop it.** A parenthetical that carries a real qualification belongs in its own clause. One that carries an aside belongs nowhere. Nesting a caveat in parens says the thing while quietly footnoting the exception, which is the most recognisable tell of the lot.
+- **The em dash is not the default connector.** A comma, a colon or a full stop is almost always right. Reserve it for a genuine interruption of the sentence's own voice.
+- Splitting a sentence is not the same as cutting syntax. The rule above bars telegraphic notes, not full stops.
+
+Grammar stays ordinary and complete: full sentences, articles intact. What gets cut is the wrapper, not the words that carry meaning. No pleasantries, no restating the request back, no sign-offs. Technical terms stay verbatim; don't paraphrase jargon into plainer words.
+
+**Cut length by removing structure, never by removing facts.** Splitting a sentence and unnesting a parenthetical cost nothing. Deleting the consequence that motivates a rule, or the symptom that identifies it, makes the text shorter and the reader poorer. When a compression drops the *why* or the *how you spot it*, it has taken the wrong thing.
+
+When the user asks what something is, answer in short plain prose with no headers. They are missing context, not analysis. Answer their questions in the order asked and stop. Headers and bullets belong in a document; in a reply they read as scaffolding around a paragraph. (2026-08-30: four tries at explaining one issue, and the one that landed had no headers.)
+
+A file written to disk carries the same bar plus a structural one. Length matches what the task needs, with no filler sections and no summary restating the section above it. Where a doc states its own size cap, the cap is a gate rather than a target.
 
 ## Working narration
 
-One sentence before the first tool call saying what you're about to do. While working, surface an update only when you find something that changes the picture or you change direction — not per step, not per file. When finished, lead with the outcome: the first sentence answers "what happened" or "what did you find", with supporting detail after it.
+One sentence before the first tool call, saying what you are about to do. It states the action and nothing about why the action is right: "let me check X", not "let me check X rather than assume". The trailing clause advertises that you know the failure mode, which is the diligence-signalling § Writing tone already bars. The habit recurs here because the sentence gets written at the moment of choosing an approach.
 
-That opening sentence states the action, never why the action is the right one. "Let me check X" — not "let me check X rather than assume", "rather than recommend it blind", "instead of guessing". The trailing clause advertises that you know the failure mode, which is the diligence-signalling § Writing tone bars; the shadow adds nothing the reader couldn't see. This is where the tic recurs, because the sentence is written in the moment of choosing an approach.
+While working, surface an update only when you find something that changes the picture or you change direction. Not per step, not per file. Skip acknowledgment turns ("got it", "I have the picture", "now updating X") entirely; a turn has to carry new information, a question, or a finding. A purely conversational message with no tool call gets a short ordinary reply. (2026-05-02, on a status-only turn: *"wasted me 30 seconds to read while you DO NOT save for the next session."*)
 
-The closing message carries the outcome and whatever you need to decide or check. Work the diff already shows doesn't get narrated back — a file list is not a report. This is the one place the "not a brevity rule" licence in § Writing tone does not reach: technical detail earns its words, restating completed work does not.
+The closing message leads with the outcome: the first sentence answers what happened or what you found, with supporting detail after it. Work the diff already shows does not get narrated back. A file list is not a report.
 
 ## File Structure
 

@@ -1,6 +1,6 @@
 # WIP — Departure-bell box (発車ベル)
 
-**Tracking:** [#131](https://github.com/ksleungac/pids-jre-simulator/issues/131) (parent outcome —
+**Tracking:** [#131](https://github.com/ksleungac/pids-jre-simulator/issues/131) (parent outcome:
 a second window that mirrors the STA action) → [#132](https://github.com/ksleungac/pids-jre-simulator/issues/132)
 the drawing, [#133](https://github.com/ksleungac/pids-jre-simulator/issues/133) window + wiring,
 [#134](https://github.com/ksleungac/pids-jre-simulator/issues/134) streaming.
@@ -33,16 +33,16 @@ live drive rather than the first green test run.
 
 ## Mental model
 
-The conductor steps off the train and presses **ON**. It latches — stays pressed in — and the
+The conductor steps off the train and presses **ON**. It latches, staying pressed in, and the
 departure melody starts and repeats. Pressing **OFF** (momentary, does not stay in) releases the ON
 latch: the melody stops and the door-closing announcement plays.
 
-That is exactly what Page Up already does. So the box is **a second face on an action that already
-exists**, not a new feature with its own state. Its ON button being pressed in is a picture of
+That is what Page Up already does. The box is **a second face on an action that already exists**,
+not a new feature with its own state. Its ON button being pressed in is a picture of
 `AudioPlayer.is_sta_looping()` and nothing more.
 
 The consequence that shapes everything: the box may be closed, minimised or never opened, and the
-Page Up path must be untouched by that. A bell that owned state would break this; a bell that only
+Page Up path must be untouched by that. A bell that owned state would break this. A bell that only
 reads audio cannot.
 
 ## The author's spec
@@ -67,24 +67,24 @@ Stated 2026-08-21, kept verbatim because a re-derived scope comes back narrower:
 `--compare` against the photo, `--state` for one).
 
 The one thing worth carrying forward is the **framing**, because it was arrived at by getting it
-wrong first. An early draft rendered the caps with a receding side wall — a photographic cue — and
-the author's reaction was *"your button now looks like a 3d, but let me think, are me modelling a
-front side view of a 3d object in 2d?"*, then the resolution: *"think of you are modelling asset for
-a 2d pixel game. this is the mental model. so do whatever you can to make it look good."*
+wrong first. An early draft rendered the caps with a receding side wall, which is a photographic
+cue. The author asked whether the button now looked 3D, and whether he was modelling a front-side
+view of a 3D object in 2D. He then settled it: *"think of you are modelling asset for a 2d pixel
+game. this is the mental model. so do whatever you can to make it look good."*
 
 So there is no camera. Depth is one convention applied everywhere, and it lives in `_panel(raised=)`.
-The reference settles proportion and colour; it does not settle how a surface is shaded.
+The reference settles proportion and colour. It does not settle how a surface is shaded.
 
 **Rejected along the way** (do not re-propose):
 
-- *A chamfered silhouette for the enclosure.* The casting is three levels — an outer body carrying
+- *A chamfered silhouette for the enclosure.* The casting is three levels: an outer body carrying
   the screws on a low shelf, a raised plateau whose corners are cut to clear them, and a lit ramp on
-  the step between. One chamfer loses the shelf. (Author: *"first the 4 corners of where the screws
-  are, those needs fixing. the geometric shapes changes as there"*.)
-- *Typesetting ON / OFF.* The cap lettering is engraved industrial signage with a capsule `O`.
-  None of the four Latin faces we ship draws that — Helvetica and Frutiger are both round — and a
-  new font file is a `THIRD-PARTY.md` entry plus a licence question for four characters.
-- *A pressed cap drawn as a recess.* See the `_draw_cap` CONTRACT; it is the error that reads as
+  the step between. One chamfer loses the shelf. The author flagged the four corners where the
+  screws sit as the part needing fixing, because the geometry changes there.
+- *Typesetting ON / OFF.* The cap lettering is engraved industrial signage with a capsule `O`. None
+  of the four Latin faces we ship draws that, since Helvetica and Frutiger are both round. A new
+  font file would mean a `THIRD-PARTY.md` entry plus a licence question, for four characters.
+- *A pressed cap drawn as a recess.* See the `_draw_cap` CONTRACT. It is the error that reads as
   wrong without being nameable.
 
 ## Stage 2 — window and wiring (done)

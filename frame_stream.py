@@ -1170,11 +1170,13 @@ class _Handler(BaseHTTPRequestHandler):
             # CONTRACT: this loop must always be able to END. It holds one of MAX_CLIENTS slots,
             # and the only thing that frees a slot is leaving here — so a write that can block
             # forever is a permanent leak, not a slow frame. THREE independent exits, because a
-            # client goes away in three different ways: a clean abort closes the socket (caught by
-            # `_peer_gone` on the next tick); an abandoned-but-open one stops READING, which only
-            # surfaces once the buffer fills and the write times out, ~8.5s; and a newer request
-            # for the same cap evicts this one immediately (`evicted`). The third exists because
-            # the second is far too slow to keep up with someone tapping through views.
+            # client goes away in three different ways:
+            #   1. a clean abort closes the socket, caught by `_peer_gone` on the next tick;
+            #   2. an abandoned-but-open one stops READING, which surfaces only once the
+            #      buffer fills and the write times out, ~8.5s;
+            #   3. a newer request for the same cap evicts this one immediately (`evicted`).
+            # The third exists because the second is far too slow to keep up with someone
+            # tapping through views.
             self.connection.settimeout(STREAM_WRITE_TIMEOUT)
             self.send_response(200)
             self.send_header("Content-Type", f"multipart/x-mixed-replace; boundary={BOUNDARY}")

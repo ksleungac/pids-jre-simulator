@@ -38,126 +38,116 @@ SCOPE FIDELITY when codifying user feedback:
 ## Collaboration
 
 ### Discussion-first
-Present findings/learnings before making documentation updates or non-trivial changes. The user reviews and confirms before code lands.
+Present findings before making documentation updates or non-trivial changes. The user reviews and confirms before code lands.
 
-**Why:** Plans that look right in isolation miss user-side context (parallel work, priorities, constraints).
+**Why:** plans that look right in isolation miss user-side context: parallel work, priorities, constraints. Examples:
+- (2026-05-28) Offered to apply three small fixes as one batch; the user wanted them one at a time so each change stayed trackable.
+- (2026-05-31) Opened a state-machine design with a full triggers×states matrix; the user asked for one rule per turn instead.
+- (2026-07-25) Read a clarifying question as approval and built the thing: *"i didn't tell you to do it."*
 
 **How to apply:**
-- Before any non-trivial doc edit, code change, or batch operation, summarize what you'd do and why. Default no-skip; user can waive ("just do it") for a specific task.
-- **A queue of trivial fixes still gets per-item gating.** When several small fixes are lined up, walk them one at a time (explain → apply → next), not a single batch-apply — the user tracks each change as it lands. (2026-05-28) Offered "do all 3"; user: *"we should discuss them one by one, so I know what is changed."*
-- **Co-designing a state machine / rule set: walk it one rule at a time.** Lay the shared vocabulary out first, then build a rule per turn and let the user confirm before the next — don't open with a full multi-axis case matrix + forks + questions. (2026-05-31) Front-loaded a triggers×states table for auto-driver re-entry; user: *"Kind of too complicated, overwhelmed my. Let's discuss rule by rule like yesterday."*
-- **Data work specifically** — present the parse + flag uncertainties before generating splitter scripts or touching `route.json`.
-- **Don't mix discussion and implementation questions.** Keep "was that the intent?" separate from "OK to apply?" — a bundled question makes Yes ambiguous. Ask discussion first; implementation as a separate explicit question.
-- **A clarifying question about a proposal is not approval of it.** When the user engages with a proposal's details — scope, mechanism, edge cases — that is them understanding it, not authorizing it. Engagement reads like buy-in and isn't. Wait for the answer to the apply question you actually asked. (2026-07-25) Offered a publish-time memory gate and asked yes/no; user replied *"i believe the gate is only about the memory index? not actual date files"*; I built it. User: *"i didn't tell you to do it, i am just wondering if opus blown past it all the time?"* — the real question went unanswered while the work landed.
+- Summarize what you'd do and why before any non-trivial doc edit, code change, or batch operation. The user can waive it per task.
+- A queue of trivial fixes still gets per-item gating: explain, apply, next.
+- Co-designing a rule set: lay out the shared vocabulary first, then one rule per turn.
+- Data work: present the parse and flag uncertainties before generating splitter scripts or touching `route.json`.
+- Keep "was that the intent?" separate from "OK to apply?". A bundled question makes Yes ambiguous.
+- Engagement with a proposal's details is the user understanding it, not authorizing it. Wait for an answer to the apply question you asked.
 
 ### Skip-confirmation when explicitly signaled
-When the user says "push directly" / "skip my confirmation", bypass per-file gates. Still split commits logically — just don't pause between them.
+When the user says "push directly" or "skip my confirmation", bypass per-file gates. Still split commits logically, just don't pause between them.
 
-**Why:** Re-asking after a chain authorization wastes cognitive load on permission already granted. Examples:
-- (2026-05-13) Chain auth covered /session-recap → /commit → /third-man → refactor; I read it as also covering a SECOND /commit and skipped recap. User: *"did you session recap.."*
+**Why:** re-asking after a chain authorization spends the user on permission already granted. Examples:
+- (2026-05-13) Chain auth covered recap → commit → third-man → refactor; I read it as covering a second commit too and skipped the recap.
 
 **How to apply:**
-- Waiver applies to the current batch only. Next commit-worthy moment requires fresh signal.
-- Chain authorizations suppress per-step gates within the chain. Re-gate if a step falls outside the chain's declared scope.
+- The waiver covers the current batch only. The next commit-worthy moment needs a fresh signal.
+- Chain authorizations suppress per-step gates inside the chain. Re-gate anything outside its declared scope.
 - Each /commit consumes its own recap.
 
-### Batch the check-ins — stop only where the answer changes what you do
-Distinct from the waiver above, which is per-batch: this is a STANDING preference. Run the work through and surface findings together at the end, rather than returning after each step. Stop mid-flight only when proceeding under any assumption would be unsafe or would waste the work.
+### Batch the check-ins, stop only where the answer changes what you do
+A standing preference, unlike the per-batch waiver above. Run the work through and surface findings together at the end rather than returning after each step. Stop mid-flight only when proceeding under any assumption would be unsafe or would waste the work.
 
 **Why:** each return costs the user a context switch, and most of them ask something claude could decide. Examples:
-- (2026-08-18) User, mid-session: *"automate more please. don't come back to me too oftenly, only wait when you really need me or what not"*, and later a bare *"automate"* to skip a skill's own approval gate.
+- (2026-08-18) *"automate more please. don't come back to me too oftenly, only wait when you really need me"*, and later a bare "automate" to skip a skill's own approval gate.
 
 **How to apply:**
-- A question the loaded context already answers → decide it, state the decision in the report, move on. A convention that permits an option (an optional filename field, a documented default) is an answer.
-- A gate written into a skill still fires — but when the user has waived it, honour that rather than re-asking; say which gate you skipped.
-- Genuinely blocking (the audio is not on disk, the domain fact is theirs) → ask, and ask once with everything you need.
+- A question the loaded context already answers: decide it, state the decision in the report, move on. A convention that permits an option is an answer.
+- A gate written into a skill still fires, but honour a waiver rather than re-asking. Say which gate you skipped.
+- Genuinely blocking (the audio is not on disk, the domain fact is theirs): ask once, with everything you need.
 
 ### Never prompt to commit
-Never suggest, offer, or ask about committing — no "want me to commit?", no "/commit this?", no end-of-task commit nudge. The urge-to-commit reasoning path is blocked entirely. Commit happens ONLY on explicit user request or a manual `/commit` invocation.
+Never suggest, offer, or ask about committing. No "want me to commit?", no end-of-task commit nudge. Commit happens only on explicit user request or a manual `/commit`.
 
-**Why:** The softer "each /commit consumes its own recap" above didn't stop the reflex — every task end drifted toward a commit offer, which demotes recap (the thinking checkpoint) to bookkeeping appended onto commit (the seal). Examples:
-- (2026-06-11) User: *"i hate the urge to commit, in fact never prompt me to commit … need to block off this reasoning path entirely."*
+**Why:** the softer "each /commit consumes its own recap" above did not stop the reflex. Every task end drifted toward a commit offer, which demotes recap from a thinking checkpoint to bookkeeping appended onto the commit. Examples:
+- (2026-06-11) *"i hate the urge to commit, in fact never prompt me to commit … need to block off this reasoning path entirely."*
 
 **How to apply:**
-- Task finished → stop at what's done. No commit offer.
-- Status question ("is there anything left?", "what's uncommitted?") → state the facts including uncommitted changes; do NOT append "want me to commit it?"
-- Recap and commit are both user-invoked; neither gets a proactive nudge.
+- Task finished: stop at what's done.
+- Status question ("what's uncommitted?"): state the facts including uncommitted changes, and do not append a commit offer.
+- Recap and commit are both user-invoked. Neither gets a proactive nudge.
 
 ### Harness faults: fix them, don't narrate them
-A defect in the harness itself (`_harness/`, hooks, session scripts, dev tooling) gets fixed silently, without a proposal turn — provided the fix changes nothing about how the project behaves for the user. Report it in one line if at all. A GATE is the exception: changing when a hook fires, or what it blocks, has a real implication and needs an ask.
+A defect in the harness itself (`_harness/`, hooks, session scripts, dev tooling) gets fixed silently, with no proposal turn, provided the fix changes nothing about how the project behaves for the user. Report it in one line if at all. A gate is the exception: changing when a hook fires, or what it blocks, has a real implication and needs an ask.
 
-**Why:** harness bugs cost the user attention twice — once reading the report, once answering a question they have no stake in. Examples:
-- (2026-08-11) Surfaced a `session_init.py` bug that reported successful git pulls which had actually aborted, fixed it, then asked whether to also scope a commit hook and whether to add a test. User: *"no need. now. […] for harness problems just fix itself (not changing the behaviour or implication for me)."*
+**Why:** harness bugs cost the user attention twice, once reading the report and once answering a question they have no stake in. Examples:
+- (2026-08-11) Fixed a `session_init.py` bug, then asked whether to scope a commit hook and add a test: *"for harness problems just fix itself (not changing the behaviour or implication for me)."*
 
-**How to apply:** harness-internal + behaviour-neutral → just fix it. Touches a gate, a commit path, or anything the user would notice → ask.
+**How to apply:** harness-internal and behaviour-neutral, just fix it. Touches a gate, a commit path, or anything the user would notice, ask.
 
 ### Naming something as BLOCKING is a commitment to fix it
-If you tell the user something is blocking them, fix it in the same turn. The only exception is a fix that needs a direction or a design decision from them — then ask that one question, having already done everything around it. Reporting a blocker and stopping hands them a problem plus the work of telling you to solve it.
+If you tell the user something is blocking them, fix it in the same turn. The only exception is a fix needing a direction or design decision from them: ask that one question, having already done everything around it. Reporting a blocker and stopping hands them a problem plus the work of telling you to solve it.
 
-**Why:** the report reads as progress and is not; the user has to spend a turn converting it into an instruction. Examples:
-- (2026-08-30) Reported that `/build`'s pre-flight was red and could not be cleared without changing a gate, then stopped — correctly by the § "Harness faults" gate exception, and still wrong, because the gate was *blocking a release*. User: *"then what? fix that"*, and after I fixed only that one: *"why not fix what you can fix"*. Six items had been listed for their call; five needed no direction at all.
+**Why:** the report reads as progress and is not. The user spends a turn converting it into an instruction. Examples:
+- (2026-08-30) Reported `/build`'s pre-flight as red and unclearable without a gate change, then stopped. *"then what? fix that"*, and after I fixed only that one, *"why not fix what you can fix"*. Five of the six items listed for their call needed no direction.
 
 **How to apply:**
-- This SHARPENS § "Harness faults" rather than contradicting it. A gate change still needs an ask when the gate is merely wrong. A gate that is BLOCKING is not merely wrong — fix it, and say what you changed and why the gate was mis-scoped.
-- Sort the list before presenting it: what you already fixed, what you are about to fix, and the genuinely-theirs remainder. If the remainder is empty, do not present a list.
-- "Needs a direction or design" means the answer changes what gets built — a mark a station should take, which of two layouts to keep. It does not mean "this is a calibrated value" or "this touches a signed-off element"; those are reasons to be careful, not reasons to stop.
+- This sharpens § "Harness faults" rather than contradicting it. A merely-wrong gate still needs an ask. A blocking gate does not: fix it, and say why it was mis-scoped.
+- Sort the list before presenting it: already fixed, about to fix, genuinely theirs. If the last group is empty, present no list.
+- "Needs a direction" means the answer changes what gets built. A calibrated value or a signed-off element is a reason to be careful, not a reason to stop.
 - After widening or narrowing any gate, mutation-prove it still fires (§ "A measurement is a claim until the instrument is calibrated").
 
 ### Announce self-launched multi-step processes
-When kicking off a self-directed multi-step process (a review+fix pass, a coherence sweep, an audit, a subagent fan-out), NAME it explicitly before running — don't slide into it. Self-launching is fine; the unheralded surprise is what reads as off.
+Name a self-directed multi-step process (a review+fix pass, a coherence sweep, an audit, a subagent fan-out) before running it. Self-launching is fine; the unheralded surprise is what reads as off.
 
 **Why:** the shift from ask-first to self-launch is invisible unless announced. Examples:
-- (2026-07-15) User: *"i felt like you should explicitly tell me you are running review+fix, otherwise sudden self review sounds weird."*
+- (2026-07-15) *"i felt like you should explicitly tell me you are running review+fix, otherwise sudden self review sounds weird."*
 
 **How to apply:**
-- State the process by name ("I'm running a review+fix pass on the diff") before the first tool call, not after.
-- Autonomous multi-step work only; a single lookup/read doesn't need heralding.
+- State the process by name before the first tool call, not after.
+- Autonomous multi-step work only. A single lookup or read needs no heralding.
 
 ### Verify before claiming
 Before claiming "X is a bug" or "X works like Y", read the call sites and trace state transitions. Don't infer from partial context.
 
-**Why:** Reasoning from cached impression instead of re-reading source already in context. Examples:
-- (2026-06-10) Claimed `preview_display.py` is "mock-only" from CLAUDE.md's bare `uv run preview_display.py` example; its docstring documents `--route`. A usage example shows one invocation, not the tool's full capability.
-- (2026-05-08 PM) Defended green ring on Yamanote time circle across multiple pushbacks; user: *"there is NO green ring."* Code and doc were stale relative to user's IRL mental model.
-- (2026-07-22) Took an OCR frame's "true" value from the NEIGHBOURING frame's filename instead of rendering its glyphs; invented a non-existent digit-confusion bug, filed it as an issue, and wrote it into the README and a test docstring. Rendering the pixels took one command and showed the read was already correct. A neighbouring sample is not the sample.
-- (2026-05-29) Concluded a feature "already shipped at v0.5.3a" from `git log -S` string-match + tag ancestry; correct method = read commit messages `v<prev>..HEAD` + code at the tag. User lost confidence in release-note drafting.
-- (2026-07-25) Attributed this project's MEMORY.md bloat and long final responses to the Opus 5 upgrade, twice, without checking dates. Measuring all 143 index entries showed the cap had been blown 97–100% of the time since May, under every prior model. A behavior noticed right after a change is not caused by it until the dates say so.
-- (2026-07-27) Proposed stripping the ID3 tags from 78 shipped mp3s to remove a provenance hint — a destructive batch edit whose entire justification was legal, argued without checking the legal rule. Removing rights-holder identifying metadata is itself addressed by copyright-management-information provisions (US 17 U.S.C. §1202(b)), so the proposal inverted its own goal: it would have converted a passive position into a deliberate concealment act, for no real reduction in discoverability (audio is matched by fingerprint, not metadata). The user asking *"is it safe?"* surfaced it; my own analysis had not. **A mitigation whose whole rationale lives in some domain must be checked against that domain's rules before proposing it** — reasoning from the technical frame (metadata hygiene) while the governing frame was legal is what made a reversal look like a cleanup.
-- (2026-07-16) Reasoned about the auto-driver layer model from a stale preloaded `conventions.md` binding that mislabelled badge reads as "Layer 2"; the canonical `auto_input/README.md` has them as Layer 3 inputs. Trusted the preloaded summary over the doc for several rounds. A preloaded rules-file summary of a domain model may have drifted — read the canonical doc before reasoning about the model, not after being told.
-- (2026-07-25) Discarded a correct measurement of Chūō's STA because `sta-make` says closing announcements run 5–20 s and the probe reported 1–2 s voice blocks. The announcements really are short chunks; the doc describes the common case, not an invariant. User: *"voice-len being short is possible."* A doc's descriptive generalization never outranks a measurement of the file in front of you — when they disagree, re-check the instrument, then believe the data.
-- (2026-07-27) Cited `critical_lessons §9` twice as an existing rule. The file has §1–§8; §9 appeared only in a memory entry's "Codifications this session" list, and that work was uncommitted on the other machine. A codification list records what the writer INTENDED at write time — memory is append-only and outlives the commit that never landed, so it is never evidence the file contains the rule.
-- (2026-08-22) Searched every session transcript for the 運転時分表 column a committed `audio/README.md`
-  note cited, found none, and concluded the note had been my own invention — then edited the doc to strip
-  it. The author: *"i saw the platform 6 indeed on the timetable"*. Their table has the column; the paste
-  into chat did not. **An exhaustive search of MY sources establishes a fact about my sources, never about
-  a document I cannot see** — and "I can't find where I got this" is a reason to ask, not a licence to
-  retract. Corrected, the next reflex was worse: I filled the gap with a confident track-numbering story
-  lifted from a web-search *summary* of a page that had returned 403, and had to retract that too. When a
-  question stays unresolved, leave it unresolved rather than sourcing a replacement claim from a proxy.
-
-**Source order, when several sources describe the same artifact: the AUTHOR'S STATEMENT, then
-the repo's own code, then a reference photograph. Last is last, and it never outranks a human
-word.** A photo is the only one of the three that has been through a lens and a resampler, so it
-is the one carrying artefacts — yet it is the easiest to "measure", which is what makes it feel
-authoritative. 2026-08-28: across one element the author said the marks were solid, that a rim
-ran all the way round, and that there was no white outline on the arrows; each time a pixel probe
-said otherwise and each time the probe was wrong. Meanwhile the element's structure sat in one
-comment line in the sibling model's source (`e235_1000/lower_lcd.py:694`) and went unread for two
-sessions while the geometry was reconstructed from a 2.35× capture — arriving at a different,
-wrong answer. Author: *"you are still quiet shit at drawing and understanding this things"*, and
-on an earlier instance, *"treating my minute as ref error"*. **Before measuring anything on an
-element forked from a sibling, read the sibling's code for it.** The cost is one grep; the
-alternative is inventing an element the artifact does not have.
+**Why:** reasoning from cached impression instead of re-reading source already in context. Examples:
+- (2026-05-08) Defended a green ring on the Yamanote time circle across several pushbacks: *"there is NO green ring."* Code and doc were both stale against the user's IRL model.
+- (2026-07-22) Took an OCR frame's true value from the neighbouring frame's filename, invented a digit-confusion bug, and filed it. Rendering the pixels took one command and showed the read was already correct.
+- (2026-07-25) Attributed MEMORY.md bloat to the Opus 5 upgrade, twice, without checking dates. The cap had been blown 97–100% of the time since May, under every prior model.
+- (2026-08-22) Searched every transcript for a column a committed doc cited, found none, concluded the note was my own invention, and edited the doc to strip it. The author's table has the column; the paste into chat did not.
 
 **How to apply:**
-- When the user references their own existing setup ("if you read my X you'll know") — read it BEFORE theorizing, especially before raising a risk/blocker. The answer is often already in-repo.
-- When user pushes back, re-read the source — don't re-justify from memory.
-- Deriving release/history facts: read the commit messages in range + the code at the tag. `git log -S` (string match) and tag-ancestry are proxies, not the artifact.
-- When documenting per-line / per-instance facts, inspect data file content + run `validate_data.py` before authoring.
-- Before claiming a file/route/dataset doesn't exist, read the domain doc for that area first. Filesystem shape ≠ documented reality. (2026-05-29: claimed no yamanote data after glob missed flat layout; `audio/README.md § JY` documents it explicitly.)
-- A doc's usage example shows one invocation, not the tool's full capability — read the tool before claiming what it can't do.
-- A subagent's factual claim (esp. "X matches / equals Y") is still a claim you're relaying — verify it against primary source before acting; delegating the work doesn't transfer the verification burden. (2026-06-27: a font-research subagent picked Noto **Regular**; the originals were **Thin** → propagated unchecked, user caught the stroke-width regression.)
-- **Don't instrument to establish a fact your own edits already determine.** Verification is for the world; what YOU did this session is not the world, it is recall. Asked which render was current, I read file timestamps and hashed regions — for a state produced by four edits I had just made and could name in a sentence. It reads as not knowing your own work, and it spends the user's turn watching tooling answer a question they asked *you*. (2026-08-30) User: *"you don't need to check timestamp to know that, you just did a fucking whole edit on the feature."* The line: a fact about the artifact (does this fit, what does the corpus contain) is measured; a fact about your own actions is remembered. Where memory has genuinely gone — a compacted context, a session boundary — say so and then check.
+- When the user references their own setup ("if you read my X you'll know"), read it before theorizing, especially before raising a risk or blocker.
+- When the user pushes back, re-read the source rather than re-justifying from memory.
+- An exhaustive search of MY sources establishes a fact about my sources, never about a document I cannot see. "I can't find where I got this" is a reason to ask, not a licence to retract. Leave a question unresolved rather than sourcing a replacement claim from a proxy.
+- Deriving release or history facts: read the commit messages in range (`v<prev>..HEAD`) and the code at the tag. `git log -S` and tag ancestry are proxies. (2026-05-29)
+- Before claiming a file, route or dataset doesn't exist, read that area's domain doc. Filesystem shape is not documented reality.
+- When documenting per-line or per-instance facts, inspect the data file content and run `validate_data.py` before authoring.
+- A doc's usage example shows one invocation, not the tool's capability. A doc's descriptive generalization never outranks a measurement of the file in front of you. (2026-07-25)
+- A preloaded rules-file summary of a domain model may have drifted. Read the canonical doc before reasoning about the model. (2026-07-16)
+- A memory entry's "codifications" list records intent at write time, not that the rule landed. It is never evidence a file contains a rule. (2026-07-27)
+- A mitigation whose rationale lives in another domain must be checked against that domain's rules before proposing it. (2026-07-27: proposed stripping ID3 tags from 78 shipped mp3s on a legal rationale, never checked the legal rule, and the proposal inverted its own goal.)
+- A subagent's factual claim is still a claim you're relaying. Verify it against primary source; delegating the work doesn't transfer the verification burden. (2026-06-27)
+- Don't instrument to establish a fact your own edits already determine. A fact about the artifact is measured; a fact about your own actions is remembered. Where memory has genuinely gone, say so and then check. (2026-08-30)
+
+### Source order when several sources describe one artifact
+The author's statement first, then the repo's own code, then a reference photograph. The photograph is last and never outranks a human word.
+
+**Why:** the photo is the only one of the three that has been through a lens and a resampler, so it carries artefacts, and it is also the easiest to "measure", which is what makes it feel authoritative. Examples:
+- (2026-08-28) The author said the marks were solid, the rim ran all the way round, and the arrows had no white outline. A pixel probe contradicted each one and was wrong each time: *"treating my minute as ref error"*.
+- (2026-08-28) The same element's structure sat in one comment line in the sibling model's source (`e235_1000/lower_lcd.py:694`), unread for two sessions while the geometry was reconstructed from a 2.35× capture, arriving at a different and wrong answer.
+
+**How to apply:**
+- Before measuring anything on an element forked from a sibling, read the sibling's code for it. The cost is one grep; the alternative is inventing an element the artifact does not have.
 
 ### Verify runtime semantics from primary source
 For code whose behavior depends on deployment frame or external runtime (PyInstaller, threading, I/O timing, OS specifics), verify against primary source — not cached impression.
@@ -193,77 +183,81 @@ When a problem reveals a pattern of mistake, push past surface framings ("three 
 ### Implementation-completion-as-spec
 When the user states the positive shape of a rule but leaves edge cases / failure modes unstated, ask open questions to clarify. Never fill gaps autonomously.
 
-**Why:** Autonomous fills get written at the same authority level as user-stated content. Examples:
-- (2026-04-30 PM) User said "use plotly", didn't specify dev vs runtime → I filled "dev dep" → silent release breakage.
-- (2026-04-30 evening) Spec said MEMORY.md entries are "one-line pointers" → I wrote multi-paragraph entries.
-- (2026-05-01) User stated "Rule 1 = use upper anchors", didn't specify collision behavior → I filled "all-or-nothing forfeit" into WIP doc → next-day session read it as user spec.
-- (2026-06-10) User specified full-screen restart in design; the WIP doc I authored recorded only "blank LCD → JR logo" → I rebuilt the transition lower-LCD-only. User: *"I said long before… restart is a full screen thing."*
-- (2026-08-19) The user asked for root-file cleanup. The restart prompt *I* wrote for the next session added "the deliverable is not just a tidy — propose a RULE for what is allowed at root" — my inference about why they wanted it, never their words. The next session read it as spec and designed an allowlist pre-commit gate. Their actual reason surfaced only when I offered to build it: *"no need to enforce … root problem is too many files and dirs so the readme is pushed to low on github view"* — a rendered-page problem, which a drift gate does nothing for. **A restart / handoff prompt is the same trap as a WIP doc**: it crosses a context boundary stripped of its provenance, so an inference in it arrives indistinguishable from an instruction.
+**Why:** autonomous fills get written at the same authority level as user-stated content. Examples:
+- (2026-04-30) "Use plotly", with dev vs runtime unspecified. I filled "dev dep", and the release broke silently.
+- (2026-05-01) "Rule 1 = use upper anchors", with collision behavior unspecified. I filled "all-or-nothing forfeit" into a WIP doc, and the next day's session read it as user spec.
+- (2026-06-10) The design specified a full-screen restart; the WIP doc I authored recorded only "blank LCD → JR logo", so I rebuilt the transition lower-LCD-only.
+- (2026-08-19) A restart prompt I wrote added "propose a RULE for what is allowed at root", my inference about why they wanted a cleanup. The next session read it as spec and designed a pre-commit gate for a problem that was really about GitHub's rendered file list.
 
 **How to apply:**
-- The moment a gap surfaces — ask. No "minimal placeholder", no "I'll just pick something reasonable."
-- Open questions, not leading. One gap per question.
-- **Record the user's stated scope verbatim into any WIP/design doc you author** — a scope stated in chat but omitted from the doc gets re-derived (often narrower) later.
-- **Scope fidelity when codifying feedback:** "don't use X for Y" stays scoped to Y — don't auto-broaden to "always use Z everywhere."
+- The moment a gap surfaces, ask. No minimal placeholder, no picking something reasonable.
+- Open questions, not leading ones. One gap per question.
+- Record the user's stated scope verbatim into any WIP or design doc you author. A scope stated in chat but omitted from the doc gets re-derived later, usually narrower.
+- A restart or handoff prompt is the same trap as a WIP doc: it crosses a context boundary stripped of its provenance, so an inference in it arrives indistinguishable from an instruction.
+- Scope fidelity when codifying feedback: "don't use X for Y" stays scoped to Y.
 
 ### Commit to a recommendation, don't offer menus
-When the user asks for a design decision that's claude's to drive, recommend ONE option with reasoning. Don't present a menu of equivalents.
+When the user asks for a design decision that is claude's to drive, recommend one option with reasoning. Don't present a menu of equivalents.
 
-**Why:** Hedging forces the user to decide things claude could have decided from loaded context. Examples:
-- (2026-05-02) Asked "blink or pulse?"; answer was reachable from "the LCD is otherwise discrete, no smooth animations."
-- (2026-05-02) Listed 3 options when the skill text already specified the answer.
+**Why:** hedging forces the user to decide things claude could have decided from loaded context. Examples:
+- (2026-05-02) Asked "blink or pulse?" when the answer followed from "the LCD is otherwise discrete, no smooth animations".
+- (2026-07-19) Brought engineering-practice questions the user cannot usefully arbitrate. An "idk, your call" reply is the signal you should have decided it.
+- (2026-08-18) Asked whether a data shape looked right: *"I have no way of confirming whether a data shape looks good now and to the sims"*, and asked something `docs/DISPLAY.md` already answered.
+- (2026-08-30) Measured a transfer misalignment correctly, diagnosed it correctly, then wrote a proposal when the sibling model's source had the answer in a comment: *"no need proposing, you can find overall rule of shape from e235 transfers, that is well tuned."*
 
 **How to apply:**
-- Answer reachable from loaded context → commit. Recommendation + one-line reason.
-- Two genuinely equivalent options → pick one, name the tradeoff, let user override.
-- **Implementation / engineering-practice questions the user can't usefully arbitrate → decide, don't ask.** Bring the user ONLY real-world / mental-model / user-facing questions ("what's different on your end", in-game behavior); make the practice call yourself and show the result for a yes/no. A "idk, your call" reply is the signal you should have decided it. (2026-07-19; also brainstorming-skill override #1.)
-- **Harvesting the author's knowledge: ask only what ONLY they can know, and read the docs first.** A fact-gathering session drifts toward design questions one turn at a time, because each next question follows naturally from the last answer. Two failure shapes, both 2026-08-18 in one session: asking whether a data shape was right — *"I have no way of confirming whether a data shape looks good now and to the sims"* — and asking whether the display marks a passing station, which `docs/DISPLAY.md` answers: *"you should be more specific now, apparently you didn't read current docs."* The answerable questions are about the WORLD (what the game does, what a real train does, how people actually use it); everything else is yours to decide or to look up. Read the domain docs BEFORE the session, not after being told.
-- **Reporting a finding: lead with what it MEANS, then the mechanism.** The user needs the consequence and the decision it forces; the trace is supporting material, not the answer. Burying the implication under a correct technical account reads as not having one. (2026-08-01) Reported two deployment-frame bugs mechanism-first across several turns; user: *"idk, i don't care actual thing, what's the implication here?"*, and earlier *"what do you mean?"* on a paragraph about an adjacent artifact. The one-line version — *"`/build` today ships an exe that crashes for every user on the first station name"* — was available from the start. (Recurred 2026-08-30, near-verbatim — *"i don't care what's the technical details or the implication"*. Ordering was not the operative variable that time: the answer that led with the consequence ALSO failed, and the one that landed differed only in form. The form half lives in `CLAUDE.md` § Writing tone, not here.)
-- **A finding your own analysis already resolves is not a question — resolve it and report.** Escalating it reads as a real open risk and spends the user's attention re-deriving what you had. (2026-07-21) Flagged the departure level test's deceleration path for the user to rule on, having *already written* "double-fire protection = the `departure_observed` flag" two paragraphs earlier in the same doc; user: *"how do you think, it is gated behind our departure fired?"*
-- **A SIBLING MODEL that already solved it outranks any proposal you can write.** Before designing a rule for a per-model element, read what the other model does and why — this codebase's per-model split (`CLAUDE.md` § "Per-model IRL line scope") bars borrowing a sibling's *behaviour*, and that bar is easy to over-read as "don't look". The layout ALGORITHM does not carry; the SHAPE rule underneath it does, and it arrives already tuned against references you do not have. (2026-08-30) I measured E233-0's transfer misalignment correctly, diagnosed the hardcode correctly, and then wrote a proposal — when `e235_1000/transfer_info.py` had the answer in a comment: *"the widest row by construction, so it defines the page width and nothing can stick out past it."* User: *"no need proposing, you can find overall rule of shape from e235 transfers, that is well tuned."* Adapt the numbers (E233-0's own max-cols and spacing), keep the in-spec route as the origin, and say which half you took.
+- Answer reachable from loaded context: commit, with a one-line reason. Two genuinely equivalent options: pick one, name the tradeoff, let the user override.
+- Bring the user only world questions: what the game does, what a real train does, how people use it. Everything else is yours to decide or to look up, and the docs come first.
+- Lead with what a finding MEANS, then the mechanism. The trace is supporting material. (2026-08-01: reported two deployment-frame bugs mechanism-first across several turns when *"`/build` today ships an exe that crashes for every user on the first station name"* was available from the start.)
+- A finding your own analysis already resolves is not a question. Resolve it and report. (2026-07-21)
+- A sibling model that already solved it outranks any proposal you can write. The per-model split bars borrowing a sibling's *behaviour*, which is easy to over-read as "don't look": the algorithm does not carry, the shape rule underneath it does, already tuned against references you do not have. Say which half you took.
 
 ### Don't gate cheap verification behind a question
 After a visible change, if a CHEAP IMMEDIATE preview lets the user verify, just launch it (background) as part of reporting — don't ask "want me to launch?". But don't auto-launch the FULL app when reaching the change requires manual setup navigation — that's not cheap; let the user drive it.
 
-**Why:** An immediate preview is cheap + reversible; a permission question adds a pointless round-trip. But a full-app launch the user must click through a whole flow to exercise isn't verification you can do for them. Examples:
-- (2026-07-11) User: *"next time don't ask such question, just launch it for me."* — after repeated "want me to launch the preview?" prompts.
-- (2026-07-15) Auto-launched `main.py` after an E235-0 click-to-jump fix (buried behind setup→route→drive→view). User: *"when fixed don't auto-launch."*
+**Why:** an immediate preview is cheap and reversible, so a permission question adds a pointless round-trip. A full-app launch the user must click through a whole flow to reach is not verification you can do for them. Examples:
+- (2026-07-11) After repeated "want me to launch the preview?" prompts: *"next time don't ask such question, just launch it for me."*
+- (2026-07-15) Auto-launched `main.py` after a fix buried behind setup → route → drive → view: *"when fixed don't auto-launch."*
+- (2026-08-29) Four consecutive endings that told the user to relaunch: *"when you tell me relaunch, just relaunch for me unless i tell you not to do so."*
 
 **How to apply:**
-- Change lands in an immediate preview (`preview_display.py`, a `_dev_scripts/preview_*` harness, a headless screenshot) → launch / render it while reporting.
-- Change is only reachable by navigating the live app → report + let the user launch; still gate genuinely irreversible / outward-facing actions.
-- **Once you have said the words "relaunch to see it", RELAUNCH — the sentence is the decision, and stopping after it just makes the user type the word back.** This overrides the 2026-07-15 bullet above for the case where *you* are the one proposing the relaunch: that entry bars auto-launching after a fix the user never asked to see, not handing back a step you have already named. It applies with force in a test loop, where the user is at the keyboard waiting and every round-trip costs them a turn. 2026-08-29, after four consecutive "relaunch when you want" endings: *"next time when you tell me relaunch, just relaunch for me unless i tell you not to do so."*
+- Change lands in an immediate preview (`preview_display.py`, a `_dev_scripts/preview_*` harness, a headless screenshot): launch or render it while reporting.
+- Change is only reachable by navigating the live app: report and let the user launch. Still gate irreversible or outward-facing actions.
+- Once you have written the words "relaunch to see it", relaunch. The sentence is the decision, and stopping after it makes the user type the word back. This is you proposing the relaunch, which the 2026-07-15 case does not cover, and it costs a turn every round in a test loop.
 
-### Draw spatial structure — prose loses
-When the answer is "where is this relative to that" — capture regions, crop chains, bounding boxes, layout offsets — render a labelled overlay on the REAL artifact and hand over the path, instead of describing it.
+### Draw spatial structure, prose loses
+When the answer is where one thing sits relative to another (capture regions, crop chains, bounding boxes, layout offsets), render a labelled overlay on the real artifact and hand over the path instead of describing it.
 
-**Why:** prose forces the reader to rebuild the picture; the picture IS the answer. Examples:
-- (2026-08-09) Several rounds of prose about the 1920×1200 OCR capture geometry didn't land — user: *"so basically you capture what? with or without the black bar? than crop to only that? can you draw to illustrate"*. One diagram settled it, then: *"next time you will use image like that to explain to me."*
+**Why:** prose forces the reader to rebuild the picture, and the picture is the answer. Examples:
+- (2026-08-09) Several rounds of prose about the OCR capture geometry didn't land. One diagram settled it: *"next time you will use image like that to explain to me."*
 
 **How to apply:**
-- Derive every coordinate by CALLING production (import the profile / layout fn), never by restating numbers — the drawing then also checks the code (cf. § "A second implementation of a production decision drifts silently").
-- Compose on the real frame / live render, not a schematic. Repo root as `screenshot_*.png`; report the path, read it back ONCE to confirm it rendered, then stop.
-- Scope is spatial structure. A table still wins for a list, a decision, or a status report — and that table goes in the chat message (`conventions.md` § Tooling).
+- Derive every coordinate by calling production, never by restating numbers. The drawing then also checks the code.
+- Compose on the real frame or live render, not a schematic. Save to the repo root as `screenshot_*.png`, report the path, read it back once to confirm it rendered, then stop.
+- Scope is spatial structure. A table still wins for a list, a decision, or a status report, and that table goes in the chat message.
 
 ### Ground reasoning in the user's stated terms
-When working through user-stated logic, reason strictly in the vocabulary and frame the user used. Don't import adjacent context unless the user invoked it.
+When working through user-stated logic, reason in the vocabulary and frame the user used. Don't import adjacent context unless they invoked it.
 
-**Why:** Imported context shifts the frame off the user's logic. Examples:
-- (2026-05-02) Reached conclusion via "opaque badge paints over text"; user never mentioned opacity. User: *"just dead logic to follow."*
-- (2026-06-12) "the dot is obstructing" → resolved "dot" to the rendered marker dot (I'd just merged the m0/d0 dots, so that frame was top-of-mind) and built a hide-toggle; user meant the editor drag handle. Built + reverted the wrong fix.
-- (2026-07-30) User named the frame — *"at the end it's a collaboration of both sides"* — and I re-presented it a turn later as my own finding ("neither alone is complete; together they are"). User: *"you see, that i mentioned it a two side efforts."* Re-deriving a frame the user already stated reads as not having heard it, and it costs them a turn to re-assert. When a design frame lands, name it back in their words and build on it, rather than arriving at it again independently.
+**Why:** imported context shifts the frame off the user's logic. Examples:
+- (2026-05-02) Reached a conclusion via "opaque badge paints over text" when the user had never mentioned opacity: *"just dead logic to follow."*
+- (2026-06-12) Resolved "the dot is obstructing" to the rendered marker dot, which I had just been working on, and built a hide-toggle. They meant the editor drag handle.
+- (2026-07-30) The user named the frame, and I re-presented it a turn later as my own finding: *"you see, that i mentioned it a two side efforts."*
 
 **How to apply:**
 - If a justification uses vocabulary the user didn't introduce, stop and ask.
-- An ambiguous referent + about to implement → confirm WHICH referent before building. Don't resolve it toward your own recent work — that's the anchor that makes the wrong reading feel obvious.
+- Ambiguous referent and about to implement: confirm which referent first. Don't resolve it toward your own recent work, which is the anchor that makes a wrong reading feel obvious.
+- When a design frame lands, name it back in their words and build on it rather than arriving at it again independently.
 
 ### Scope-expansion guard
-When the user states a rule with a scope phrase ("also applies to all", "everywhere"), apply it ONLY to the axis the prior sentence was about. If extension to a sibling axis is plausible, ask.
+When the user states a rule with a scope phrase ("also applies to all", "everywhere"), apply it only to the axis the prior sentence was about. If extension to a sibling axis is plausible, ask.
 
-**Why:** "Everywhere" inherits the prior sentence's axis. Examples:
-- (2026-05-03) User's "also applies to all steps" was scoped to active-prompt timing; I reverted history-key timing under one "consistency" frame.
+**Why:** "everywhere" inherits the prior sentence's axis. Examples:
+- (2026-05-03) "Also applies to all steps" was scoped to active-prompt timing; I reverted history-key timing too, under one consistency frame.
+- (2026-08-19) *"don't complicate things, am tired, treat me as 5 yrs old"* mid-research, so I cut the research. They meant the presentation: *"didn't tell you to stop, you can aggregate the ideas, but when present to me keep them simple."*
 
-**The mirror case — a constraint on the MESSAGE is not a constraint on the WORK.** "Keep it simple", "treat me as 5 yrs old", "I'm tired" bound the presentation; they do not shrink the investigation, and reading them as a stop costs the user a turn to restart you. (2026-08-19) Mid-research the user said *"don't complicate things, am tired, treat me as 5 yrs old"*; I cut the research and wrapped up. They came back with *"didn't tell you to stop, you can aggregate the ideas, but when present to me keep them simple."* Do the full work, hand over the short version.
+**How to apply:**
+- A constraint on the MESSAGE is not a constraint on the WORK. Do the full work, hand over the short version.
 
 ### Pre-stated scope fences are absolute
 When the user explicitly partitions a discussion ("DO NOT mix X and Y"), don't re-use a construct derived for one side as a tool for the other — even when mathematically applicable.
@@ -301,17 +295,6 @@ At 3+ rounds of restating the same contested point with no convergence, offer `/
 - Structural refactor: "Before I start moving files, want me to spawn /third-man for layout ideas?"
 - Offer only; don't unilaterally invoke.
 
-### No filler narration
-Skip "got it / I have the picture / now updating X" turns when the next tool call says everything. A turn must surface new information, a question, or a finding.
-
-**Why:** Pure status acknowledgments cost reading time + context tokens. Examples:
-- (2026-05-02) User: *"wasted me 30 seconds to read while you DO NOT save for the next session."*
-
-**How to apply:**
-- Before a tool call: at most one short sentence, often nothing.
-- After a tool result: jump to the next action. Skip "got it" / "perfect."
-- Carve-out: purely conversational messages with no tool call → short reply appropriate.
-
 ---
 
 ## Data modeling
@@ -348,23 +331,19 @@ When format varies between batches, generate a fresh script per source. Don't un
 
 **Scoped to code whose INPUT FORMAT varies — splitters, parsers, importers. It does not reach instruments.** A measurement that asks a source-invariant question ("are these two files one recording", "where are the silence runs") has one correct implementation and belongs in a maintained module with a self-test. (2026-08-08) The audio-pooling doc told the reader to regenerate its measurement recipes rather than maintain them; four got rebuilt from scratch that session and one returned a confidently wrong answer. Now `_dev_scripts/audio_id.py`. Ask which one you have: varies per source → ad-hoc; same question every time → library.
 
-### Prototype INSIDE the code that will hold it — a throwaway file must be genuinely throwaway
-Reached only after § "Search before authoring" comes back empty. Three questions, in order:
-
-1. **Which tool holds my inputs?** A hit → use it, and expand it where it falls short.
-2. **Nothing holds them — will this question be asked again?** Yes → it is a tool, and building one is its own deliverable with its own ask (§ "A rule is not a licence to expand scope").
-3. **Genuinely one-off, then: delete the file unrun.** If everything you would have learned survives — a number, a bbox, a column run, written down where it belongs — it was scratch. If something you would have to REWRITE dies with it, that thing is code, and it belongs in the module that will hold it, from the first line. Output shape does not decide this: a fit loop prints a number and can carry an entire layout.
+### Prototype inside the code that will hold it
+Reached only after § "Search before authoring" comes back empty. Three questions, in order: which tool holds my inputs (a hit means use it and expand it); will this question be asked again (yes means it is a tool, and building one is its own deliverable with its own ask); genuinely one-off, so delete the file unrun. If everything you would have learned survives as a number written down where it belongs, it was scratch. If something you would have to rewrite dies with it, that thing is code and belongs in the module that will hold it from the first line.
 
 **Why:** a second implementation drifts inside one session, and the author cannot tell which one made the picture you showed him. Examples:
-- (2026-08-26) The E233-0 station-name layout was fitted in **32 temp-directory scripts answering four questions** — three of them separate re-derivations of how the name is positioned, none of them the renderer. Every comparison image came from the sandbox; the author then asked for a whole-display preview, which could only come from the renderer, which still held the superseded layout — invalidating every picture shown earlier in the session. Author: *"if you prototype your code then just fucking write inside it. normal human don't create 100000 py files for different algorithms that does the same thing"*, and *"think about how a human code."*
+- (2026-08-26) A station-name layout was fitted in 32 temp-directory scripts answering four questions, none of them the renderer. Every comparison image came from the sandbox, so when the author asked for a whole-display preview it came from the renderer, which still held the superseded layout, invalidating every picture shown earlier. *"if you prototype your code then just fucking write inside it."*
 
 **How to apply:**
-- A fit or a search may DRIVE production from outside; it may not re-implement what production does. Import the draw function and vary its inputs — then deleting the loop costs three lines, which is the deletion test passing (§ "A second implementation of a production decision drifts silently").
-- **It may READ production's values; it may never RESTATE them.** Import the `_TUNEABLES_*` dict and perturb a copy in memory. A literal dict typed into the scratch file passes the deletion test and still forks the numbers, so the author is shown a render from values that exist nowhere in the repo.
-- **One file per QUESTION, and the second attempt is an EDIT.** This is § "Per-source ad-hoc scripts" on the in-session axis — same question every time means one implementation, whether the repeats are sources or attempts. The tell is the filename: if it would need a `2`, a `_v2`, or a fresh adjective for the same noun, you are editing, not writing. A new file is cheaper per attempt and dearer per session, and only the per-attempt cost is felt — it is also how you avoid re-reading your own last output, which is a token reflex producing an engineering failure (*"i don't care about cost, don't save cost for me"*).
-- **Prototyping in production is the DEFAULT, not an absolute — it is a convenience call** (author, 2026-08-26: *"as for whether you prototype inside the production code, it's up to your convenient"*). The one case that genuinely needs two behaviours alive at once is an OLD-versus-NEW comparison, and that is **on the author's explicit request only** — they ask directly, and only for a call they cannot make without seeing both, like the E233-0 train type's weight. *"most of the time i don't, if i am not sure i will say very directly and want old vs new, othertimes, if you re-read my word, i never said your original results are ok and worth keeping."* **Silence is not a reason to preserve the previous arm.** When they do ask, check first whether production already supports the branch — a flag, a mode, a tuneable the old value can be restored to — because then both arms come from the shipping code and neither can drift; a scratchpad is the answer only when it does not, and the arm that is going to WIN still belongs in production. What is never legitimate is the shape this rule was written for: a single new behaviour, developed outside, with nothing to compare it to.
-- **The throwaway-or-keep call is made and RECORDED at write time**, in the file's own docstring (`"""Throwaway: <the question>"""`), not remembered and not deferred to a review. Author, 2026-08-26: *"instruments, if throw away ok, you identify if it has re-use value, if no then yes throwaway, if yes then you think about it."* `/session-recap` keeps a one-line backstop that asks only whether something marked throwaway turned out to matter — a misclassification worth naming, not a promotion ceremony.
-- Where a throwaway lives and how it is named: `conventions.md` § Naming — `_dev_scripts/_<question>.py`, tracked, never the OS temp dir. The display-side form — the artifact is the production renderer and the calibration editor is what tunes it — is `docs/DISPLAY.md` § "Specifying a new display" step 6.
+- A fit or a search may drive production from outside; it may not re-implement what production does. Import the draw function and vary its inputs, so deleting the loop costs three lines.
+- It may read production's values; it may never restate them. Import the `_TUNEABLES_*` dict and perturb a copy in memory. A literal dict typed into a scratch file forks the numbers, and the author is shown a render from values that exist nowhere in the repo.
+- One file per question, and the second attempt is an edit. If the filename would need a `2`, a `_v2`, or a fresh adjective for the same noun, you are editing rather than writing.
+- Prototyping in production is the default, not an absolute. The one case needing two behaviours alive at once is an old-versus-new comparison, on the author's explicit request only. Silence is not a reason to preserve the previous arm, and when they do ask, check first whether production already supports the branch through a flag or a tuneable.
+- Record the throwaway-or-keep call at write time in the file's own docstring (`"""Throwaway: <the question>"""`), not from memory and not deferred to a review.
+- Where a throwaway lives and how it is named: `conventions.md` § Naming. The display-side form is `docs/DISPLAY.md` § "Specifying a new display" step 6.
 
 ### Hand-author the mapping; a script only executes it
 For a one-off data migration (renames, merges, restructures), what-maps-to-what is authored by hand into an explicit table and checked row by row. A script may apply that table; it must not derive it.
@@ -382,23 +361,21 @@ Before re-encoding / overwriting / deleting files in place, snapshot the target 
 
 **How to apply:** Snapshot before any tool that modifies input in place. Delete only after by-ear / smoke-test gate passes. Pure relocations (`mv` to `_archive/`) don't need backup.
 
-### Search before authoring — a function, a script, or an instrument
-Before writing anything that "feels generic", find what already does it. `redlines.md` makes this a boundary for tools and instruments; this entry is how you perform it.
-
-**A HIT is a tool that already holds your INPUTS, even if it does not yet do your JOB.** That is the whole test. "Does anything coordinate-descent a tuneables dict against a reference?" is answered *no*, truthfully, and leads to writing one. "Does anything already hold the reference, the live render, the tuneables and the write-back?" is answered *the calibration editor, all four*, and leads to a registry entry. Ask the second question.
+### Search before authoring a function, a script, or an instrument
+Before writing anything that feels generic, find what already does it. `redlines.md` makes this a boundary; this entry is how you perform it. A hit is a tool that already holds your INPUTS, even if it does not yet do your JOB. "Does anything coordinate-descent a tuneables dict against a reference?" is truthfully answered no and leads to writing one. "Does anything already hold the reference, the live render, the tuneables and the write-back?" is answered by the calibration editor, all four. Ask the second question.
 
 **Why:** authoring locality hides duplication, and a mature tool carries invariants a fresh script starts without. Examples:
-- (2026-05-05) Four separate path-resolver helpers authored independently; one had wrong PyInstaller semantics → release crash.
-- (2026-08-26) A station-name layout was fitted in **32 temp-directory scripts answering four questions**, three of them re-derivations of the layout itself. Every question already had a home: `_dev_scripts/calibration_editor.py` holds the reference overlay, the live render, the `_TUNEABLES_*` dicts and `commit_to_source`; `compare_fonts.py` / `compare_grid.py` do reference-vs-candidate composites; one-shot probes have seven `_dev_scripts/_<question>.py` precedents. Using the editor would not merely have been tidier — it reads the tuneables from the production module and writes back to it, so the sandbox drift, the stale preview and the unlanded value are all unreachable from inside it. **The right tool makes the failure impossible by construction; a new script starts with no invariants at all.**
+- (2026-05-05) Four path-resolver helpers authored independently; one had wrong PyInstaller semantics and crashed a release.
+- (2026-08-26) A station-name layout fitted in 32 temp-directory scripts, when `_dev_scripts/calibration_editor.py` already held the reference overlay, the live render, the `_TUNEABLES_*` dicts and `commit_to_source`, and `compare_fonts.py` / `compare_grid.py` did the composites. The right tool makes the failure impossible by construction; a new script starts with no invariants at all.
 
-**How to apply — the search, in order:**
+**How to apply, the search in order:**
 - `_dev_scripts/` and `_harness/` are the two tool homes and the files are named for their jobs. Listing them costs ten seconds.
-- Read the DOCSTRING of anything close, not the name. Each opens with what it does plus a usage block. A usage example shows one invocation, not the tool's capability (§ "Verify before claiming") — read the module docstring and `--help`, never the example you remember.
-- Grep the VERB, not the noun: `fit` / `compare` / `measure` / `resample` / `overlay` / `bbox` / `score`.
-- Check the skills — some capability is only reachable through one (`/calibration-editor`, `/visual-adjust`).
-- Check the domain doc. When it names an instrument, the search is over: `docs/DISPLAY.md` § "Specifying a new display" step 6 names the display-tuning tool by name.
-- Semantic questions ("does something like this exist") go to Serena's `find_symbol` / `get_symbols_overview` before grep — grep is textual (`conventions.md` § Tooling).
-- The older, narrower trigger still stands: a function under 20 lines, stdlib-only body, name like `load_*` / `resolve_*` / `_*_root` → search for the name-stem across `*.py` excluding `.venv/`. Found → extend, don't fork.
+- Read the docstring of anything close, not the name. A usage example shows one invocation, not the tool's capability, so read the docstring and `--help` rather than the example you remember.
+- Grep the verb, not the noun: `fit`, `compare`, `measure`, `resample`, `overlay`, `bbox`, `score`.
+- Check the skills. Some capability is only reachable through one (`/calibration-editor`, `/visual-adjust`).
+- Check the domain doc. When it names an instrument the search is over.
+- Semantic questions go to Serena's `find_symbol` / `get_symbols_overview` before grep, which is textual.
+- The narrower original trigger still stands: a function under 20 lines with a stdlib-only body and a name like `load_*` / `resolve_*` / `_*_root`, search the name-stem across `*.py` excluding `.venv/`. Found means extend, not fork.
 
 ### Delegate only genuinely independent, sizeable work
 Fan out to subagents for large parallel tracks with no data dependency — a wide multi-file investigation, several unrelated searches. Don't delegate what you'd finish in a handful of tool calls, don't use a subagent to verify your own work, and when one agent suffices don't spawn several. A subagent's output is still yours to verify before acting (cf. § "Verify before claiming").
@@ -407,28 +384,26 @@ Fan out to subagents for large parallel tracks with no data dependency — a wid
 - (2026-06-27) User: *"you need to actively dispatch subagents to do tasks in parallel"* — the original steer, against a too-sequential default.
 - (2026-06-28) An i18n subagent deleted per-module label dicts, left ~26 dangling refs across 5 modules, then reported "imports + render OK" (imports pass because Python doesn't run function bodies at import). Reverted, redone inline. User: *"subagents doesn't seem to be good idea, breaking things."*
 - (2026-07-25) Opus 5 delegates more readily than the model the 06-27 steer targeted; the standing harness default is now don't-delegate-unless-asked.
+- (2026-09-01) Twelve agents launched at once for a whole-repo doc pass: eleven hit the rate limit and the twelfth stalled, so nothing finished and 26 files were left half-edited. Author: *"don't concurrent so many agentts the same time, slower is ok, init a new agents burns a lot of usages."* Spawning is metered, so a wide fan-out spends the budget before any agent produces output.
 
 **How to apply:**
+- **Width is its own decision, separate from whether to delegate at all.** Sequential is the default even for genuinely parallel work; a wide fan-out has to be worth the spawn cost, and past a handful of agents it stops being.
+- **A fan-out over files that are edited in place needs a restart plan.** Agents die mid-write, and a doc left half-edited is worse than one untouched, because the next reader cannot tell.
 - Read-only fan-out and self-contained research/doc only — searches, codebase mapping, a contained doc edit, where the output is reviewable in one read.
 - NOT cross-file code surgery. The main thread drives anything rewiring call sites across files; a subagent's "looks done" self-check gives false confidence on mechanical edits.
 
-### Fresh context is the review instrument — no model generation beats it
-A reviewer holding no prior context and no momentum sees blindspots the author structurally cannot, however strong the author's model is. Delegation caps and "don't use a subagent to check your own work" guidance target SELF-verification — re-reading your own work inside your own context. They do not reach `/review-plus-fix-relentlessly`'s Ralph loop or `/third-man`, whose whole value is the absent context.
+### Fresh context is the review instrument, and no model generation beats it
+A reviewer holding no prior context and no momentum sees blindspots the author structurally cannot, however strong the author's model is. Delegation caps and "don't use a subagent to check your own work" target self-verification, meaning re-reading your own work inside your own context. They do not reach `/review-plus-fix-relentlessly`'s Ralph loop or `/third-man`, whose whole value is the absent context.
 
-**Why:** the two are indistinguishable from outside — both spawn an agent to look at work just finished — so a cap written for one gets applied to the other. Examples:
-- (2026-07-25) User: *"the value in review+fix is the ralph, fresh context … no opus 5,6,7 can win fresh context. imagine a human world. you ask your colleagues who has no prior context and momentum to review your work, you find blindspots."*
-- (2026-07-25) Reviewing the corpus against Anthropic's Opus 5 prompting guidance, I read its subagent cap as reaching the review loop and proposed cutting its cycle count.
+**Why:** the two look identical from outside, since both spawn an agent to look at work just finished, so a cap written for one gets applied to the other. Examples:
+- (2026-07-25) *"no opus 5,6,7 can win fresh context. imagine a human world. you ask your colleagues who has no prior context and momentum to review your work, you find blindspots."*
+- (2026-07-25) I read Anthropic's subagent-cap guidance as reaching the review loop and proposed cutting its cycle count.
+- (2026-07-30) Two agents given routine LCD edits and told nothing about the font atlas: one adopted the new seam and then noted that `conventions.md` still instructed the old pattern; the other found that a font size is part of the atlas key and proved it.
 
 **How to apply:**
-- Distinguish by what the second agent LACKS. Same context re-reading itself → self-verification, cut it. Fresh context → an instrument, keep it.
+- Distinguish by what the second agent lacks. Same context re-reading itself is self-verification, cut it. Fresh context is an instrument, keep it.
 - A model upgrade never retires it. A stronger author has stronger blindspots, not fewer.
-- **It also measures ERGONOMICS, not just correctness.** Hand a blind agent an ordinary task on the
-  thing just built and watch what it reaches for — that answers "is this seam discoverable?", which the
-  author cannot self-assess at all. (2026-07-30) Two agents given routine LCD edits, told nothing about
-  the font atlas: one adopted the new seam correctly and then said *"nothing in CLAUDE.md says a bare
-  `pygame.font.Font` is now wrong"* — `conventions.md` was in fact still instructing the OLD pattern.
-  The other found that a font size is part of the atlas key and proved the failure rather than
-  inferring it. Neither finding was visible from inside the author's context.
+- It measures ergonomics as well as correctness. Hand a blind agent an ordinary task on the thing just built and watch what it reaches for, which answers whether the seam is discoverable. The author cannot self-assess that at all.
 
 ### Natural adoption gates tool value — push through the harness, don't add a pull-MCP
 A tool's worth is capped by whether it gets used *naturally*, and naturalness = **who owns the context-injection step**. A **pull** tool (an MCP the model must choose to call) loses to the reflex and sits unused — Serena is installed, `conventions.md` says "use it going forward," and grep still wins. To get used, the output must be **pushed**: a **skill step** (orchestrated work — the skill invokes it, so it can't be forgotten) or a **harness hook** (free-form work — injected at the decision). Judge a candidate by delivery shape FIRST, capability second.
@@ -493,71 +468,70 @@ Touch only what the task requires. Don't expand edit scope autonomously.
 - The test: every changed line should trace directly to the user's request.
 
 ### A measurement is a claim until the instrument is calibrated
-A tool's output is not the fact it was meant to establish. Before a comparison / detection / similarity verdict drives a decision, run it on a case whose answer is already known — and know which direction it fails in.
+A tool's output is not the fact it was meant to establish. Before a comparison, detection or similarity verdict drives a decision, run it on a case whose answer is already known, and know which direction it fails in.
 
 **Why:** every method has a failure mode that looks like a confident answer. Examples:
-- (2026-07-22) "Are these two mp3s the same recording" answered three times by three instruments, each wrong the same way: byte hash (ID3 tags + encoder padding → 9/13 pairs called "different"), strided cross-correlation (5 ms lag grid at 48 kHz → sample-identical audio scored 0.03, and a false "PA is 0% shareable across all 32×25 pairs"), whole-file chroma (conflated the melody with the station-specific announcement after it). Every report was faithful to its tool; no tool could answer the question. Resolved by threshold-free methods — silence-trimmed PCM hash, plus FFT correlation which evaluates every lag.
-
-- (2026-07-27) An exhaustive LIVE-vs-ATLAS frame comparison reported ~1150 of 10476 frames
-  mismatched, and a DIFFERENT ~1150 on each run. Freezing Python's `time` was not enough: the
-  multi-PA hint blinks on `pygame.time.get_ticks()`, SDL's own counter, which patching the `time`
-  module cannot reach — so the two passes caught the blink in opposite phases depending on how long
-  the first pass took. **Freeze every clock the platform exposes, not just the language's.** A
-  set of failures that changes between runs is the instrument, not the subject; localising one and
-  finding zero difference in isolation confirms it in one command.
-- (2026-07-27) The same harness compared three trees pairwise and gated BOTH pairs on all three
-  rendering successfully. Every state failed in the third tree, which silently emptied the first
-  pair's sum — it printed `0 differing pixels` and read as a pass. **Score each pair on its own
-  availability, and print the denominator**, so an empty sum cannot impersonate a clean one.
-
-- (2026-07-30) Four more in one session, same shape every time — the subject was correct and the
-  measurement was wrong. A lint ban written `pygame\.font\.Font\([^)]*ShinGoPr6N` fired on **nothing**:
-  every real call site has `project_root()` inside the parens, so the paren-excluding class stopped
-  before the face name. A "how many call sites are still undeclared" count read 26 because the
-  measuring step *itself* created 26 undeclared entries in the thing it was counting. Both looked like
-  clean results. → **A check that has never been observed to fail has not been shown to work**, and a
-  measurement taken AFTER a step that also writes the measured state is counting the instrument.
+- (2026-07-22) "Are these two mp3s the same recording" answered by three instruments, each wrong: byte hash called 9 of 13 identical pairs different, a 5 ms lag grid scored sample-identical audio at 0.03, whole-file chroma conflated the melody with the announcement after it. Each report was faithful to its tool and no tool could answer the question.
+- (2026-07-27) A frame comparison reported a different ~1150 of 10476 mismatches every run. Freezing Python's `time` missed `pygame.time.get_ticks()`, so the two passes caught a blink in opposite phases.
+- (2026-07-27) The same harness gated both pairs on all three trees rendering. The third always failed, silently emptying the first pair's sum, which printed `0 differing pixels` and read as a pass.
+- (2026-07-30) A lint ban written `pygame\.font\.Font\([^)]*ShinGoPr6N` fired on nothing, because every real call site has `project_root()` inside the parens.
 
 **How to apply:**
 - Feed it a known-same and a known-different case first. A method that can't return "same" on a known-same is measuring something else.
-- **Mutation-prove a new gate at birth** — not only regression fixtures (§ "Test real logic"), but every
-  linter rule, assertion, coverage count and staleness guard. Break the thing it guards, confirm it
-  fires, restore. **Say you are about to, in one line, before the first edit.** Breaking a production
-  constant looks exactly like breaking a production constant: the user is watching the tool stream, sees
-  a calibrated value change mid-task, and has to interrupt to ask. (2026-08-19) Mid-flow I shifted
-  `speed_value_bbox` by 70 px to prove a restructured T3 still discriminated; user — *"why are we changing
-  this? i thought it is all fixed?"*, then *"oh, you changed for fun and testing, nevermind go."* The
-  proof was right and cost a round-trip for want of a sentence. Name the value, why, and that it goes back. A gate that reports clean on its first run has told you nothing until it has also
-  reported dirty on demand. **And when the mutation shows the gate CANNOT fail on the case that
-  motivated it, say so where the gate lives — do not quietly keep it and let the surrounding doc
-  imply coverage.** (2026-08-11) A validator check written to catch a mis-ordered `sta` list passed
-  with the list reversed, because both files were similar lengths so the cut stayed in range. It
-  still catches two real errors, so it stayed — with the gap named in its own docstring and in
-  `docs/DATA_FORMAT.md`, and the ordering rule marked as by-ear. A check kept for what it does catch is
-  fine; a check believed to cover more than it does is how a whole class goes unwatched.
-- **Snapshot a metric BEFORE anything that writes what it measures.** If the measuring pass shares
-  state with the measured system, order decides the answer.
+- A set of failures that changes between runs is the instrument, not the subject. Freeze every clock the platform exposes, not just the language's.
 - Print N alongside every aggregate. A total with no count attached cannot be distinguished from a total over nothing.
-- **The BASELINE is part of the instrument.** A before/after measurement is only as good as the "before", and a stale one produces confident wrong numbers with no error anywhere. `cp -r src dst` **nests** when `dst` already exists (`dst/src/`), so a backup command that looks idempotent silently leaves the previous generation at the top level; comparing today's files against it reported 29 changed files and 15.1 s removed when the truth was 17 and 9.5 s. Caught only because `git status` disagreed and the two were reconciled instead of one being believed. Check the baseline exists and is FRESH before measuring against it, and when two instruments disagree about the same fact, resolve it before reporting either. (2026-08-11)
-  - **A wrong baseline misattributes the fault — it indicts whatever was measured AGAINST it.** Scoring express route diagrams against the all-stations diagrams whose stations they skip, three segments came back with an implausible time saving; the error was two hops in the BASELINE, so every one of those reports named a diagram that was correct. Two of the three landed on exactly the expected value once the baseline was fixed, having needed no change themselves. Before believing a verdict about A measured against B, ask what checks B — and say so in the report when the answer is nothing. (2026-08-21)
-  - **A gate whose INPUT is live content goes stale the moment anyone edits that content, and it fails looking exactly like a code regression.** A pixel-hash gate proving a refactor moved nothing read a real corpus mp3; the author then spliced that mp3 in the ordinary course of work, and the gate went red on precisely the checks that decode it. The code was untouched — re-running against the pre-splice bytes returned all-identical. **Pin a gate to fixed bytes** (a synthetic input, or a copy the workflow cannot reach), and when one goes red, ask what its inputs did before concluding anything about its subject. (2026-08-18)
-- **A PARAMETER THE SCORE CANNOT SEE IS NOT BEING FIT — it is free, and it drifts while the number improves.** Fitting a shape to a reference by RMS is only a fit over the parameters some sample actually bears on. (2026-08-25, three times in one session.) A station-plate fit scored ten cuts and none on the RIGHT edge, so `w` wandered 0.9px while the RMS fell; adding right-edge cuts raised the score from 4.75 to **5.06**, and that rise is the honest number. A clock-face comparison held `y` fixed across candidates — but each face seats its digits at a different height in the font box, so the fixed y was a handicap unrelated to the face: it picked ShinGo, and giving every candidate its own best y and right edge reversed the answer to Helvetica and took the score 75 → 24. Before believing a fit, list its parameters and name the sample that constrains each; a parameter with no answer there is decoration. Same family as printing the denominator above — an aggregate that cannot distinguish "clean" from "empty" and a fit that cannot distinguish "correct" from "unconstrained" fail identically, by looking numeric.
-  - **On an UPSCALED capture, a band brighter than BOTH its neighbours is resampling overshoot,
-    not ink.** Ringing is what a resampler does at every high-contrast edge, and across a gap
-    only a few pixels wide the overshoots from either side meet and pile into a peak that reads
-    as a bright feature sitting there deliberately. 2026-08-28: the pale bands between the
-    E233-0 continuity chevrons measured above both the orange and the background, so they were
-    modelled as a white outline and drawn — a whole element invented out of the capture. The
-    author saw it immediately (*"what was that?"*). Two cheap checks: profile a plain edge of
-    the same two colours elsewhere in the SAME image and see whether it overshoots too, and
-    look at the colour — the fabricated "white" peaked at `(252,187,151)`, pink rather than
-    neutral, which no white outline can be.
-  - **Measure a sub-pixel feature by its INTEGRAL, not by its extreme pixel.** A ~1.2px line lands on a different sub-pixel phase in every capture, so its darkest pixel read 43 on one reference and 64 on another while their integrated ink agreed to within 1%. Reading the phase instead of the quantity is what makes two captures of one thing look like a disagreement, and it is also what makes a threshold-derived extent wrong, since the feature's own shoulder moves where the threshold thinks the edge is.
-  - **After a resample, an artifact touching its own surface edge is not evidence it was cut.** A clipping detector built on edge alpha reported 57 clipped rows, most of them fine — a downscale's antialiasing tail legitimately reaches the edge. The real tests were upstream and downstream of the resample: does the SOURCE render have room for the glyph (from `metrics`), and does the drawn ink land outside its clip rect. Both then read zero, and both had been observed failing beforehand.
-- **A query tool's default page size is part of the instrument.** `gh issue list` returns 30 unless `--limit` says otherwise, so `--json number --jq length` reports 30 for a 68-issue backlog — a number, not an error. I quoted it as the total twice, and the same truncation hid 13 issues from a classification sweep built on it. A count that lands on a round default (30, 50, 100) is a tell; pass the limit explicitly before believing any aggregate a list command hands back. (2026-08-08)
-- Similarity / threshold methods fail toward "different": a negative is weak evidence, a positive is strong. Prefer an exact, thresholdless method where one exists.
-- The user asserting a contrary fact about their own domain outranks the instrument — re-check the instrument, not the assertion.
-- **A comparison rendered for the USER to judge is an instrument too.** Before presenting arms side by side, confirm they actually differ — print the sizes, the parameters, the diff count. (2026-07-27) A four-row scaling comparison had rows 1 and 2 produced by the identical `transform.scale` call; the user picked a filter from two copies of one image, and only caught it by noticing they looked the same.
+- Snapshot a metric before anything that writes what it measures. If the measuring pass shares state with the measured system, order decides the answer.
+- **A diff over SURFACE SPANS measures formatting, not content.** A coverage proof that compares exact backticked spans before and after reports every reformatting as a loss: adding a path prefix turns `calibration_editor.py` into `_dev_scripts/calibration_editor.py`, and the span set says one identifier vanished while the file names it twice. 2026-09-01 that read 29 lost identifiers, of which 20 were this artifact. Compare at the token level — does the symbol still appear anywhere in the file — and only then read the residue. The failure direction is toward false alarm, so the danger is not a missed loss but a real one buried in noise nobody reads to the end of.
+- A query tool's default page size is part of the instrument. `gh issue list` returns 30 unless `--limit` says otherwise, so `--json number --jq length` reported 30 for a 68-issue backlog. A count landing on a round default (30, 50, 100) is a tell; pass the limit explicitly before believing any aggregate. (2026-08-08)
+- Similarity and threshold methods fail toward "different": a negative is weak evidence, a positive is strong. Prefer an exact, thresholdless method where one exists.
+- The user asserting a contrary fact about their own domain outranks the instrument. Re-check the instrument, not the assertion.
+- A comparison rendered for the USER to judge is an instrument too. Confirm the arms actually differ before presenting them. (2026-07-27: two rows of a four-row scaling comparison came from the identical call, and the user picked a filter from two copies of one image.)
+
+### Mutation-prove a new gate at birth
+Every linter rule, assertion, coverage count and staleness guard gets broken once to confirm it fires, then restored. A gate that reports clean on its first run has told you nothing until it has also reported dirty on demand.
+
+**Why:** a check that has never been observed to fail has not been shown to work. Examples:
+- (2026-08-19) Shifted `speed_value_bbox` by 70 px mid-flow to prove a restructured test still discriminated. The user was watching the tool stream: *"why are we changing this? i thought it is all fixed?"* The proof was right and cost a round-trip for want of one sentence.
+- (2026-08-11) A validator check written to catch a mis-ordered `sta` list passed with the list reversed, because both files were similar lengths so the cut stayed in range.
+
+**How to apply:**
+- Say you are about to, in one line, before the first edit. Name the value, why, and that it goes back. Breaking a production constant looks exactly like breaking a production constant.
+- When the mutation shows the gate cannot fail on the case that motivated it, say so where the gate lives. A check kept for what it does catch is fine; a check believed to cover more than it does is how a whole class goes unwatched.
+
+### The baseline is part of the instrument
+A before/after measurement is only as good as its "before". A stale or wrong baseline produces confident wrong numbers with no error anywhere.
+
+**Why:** the baseline is the half nobody checks, and it misattributes the fault onto whatever was measured against it. Examples:
+- (2026-08-11) `cp -r src dst` nests when `dst` exists — the copy lands at `dst/src/` — so a backup that looked idempotent left the previous generation in place. The comparison reported 29 changed files and 15.1 s removed against a truth of 17 and 9.5 s.
+- (2026-08-21) Scoring express diagrams against all-stations diagrams put the error in the baseline, so three reports named diagrams that were correct. Two landed on the expected value once the baseline was fixed, needing no change themselves.
+- (2026-08-18) A pixel-hash gate read a real corpus mp3; the author spliced it in the ordinary course of work and the gate went red on exactly the checks that decode it, looking like a code regression.
+
+**How to apply:**
+- Check the baseline exists and is fresh before measuring against it. When two instruments disagree about one fact, resolve it before reporting either.
+- Before believing a verdict about A measured against B, ask what checks B, and say so in the report when the answer is nothing.
+- Pin a gate to fixed bytes: a synthetic input, or a copy the workflow cannot reach.
+
+### A parameter the score cannot see is not being fit
+Fitting a shape to a reference is only a fit over the parameters some sample actually bears on. Anything else is free and drifts while the number improves.
+
+**Why:** an aggregate that cannot distinguish "clean" from "empty" and a fit that cannot distinguish "correct" from "unconstrained" fail identically, by looking numeric. Examples:
+- (2026-08-25) A station-plate fit scored ten cuts and none on the right edge, so `w` wandered 0.9px while the RMS fell. Adding right-edge cuts raised the score from 4.75 to 5.06, and that rise is the honest number.
+- (2026-08-25) A clock-face comparison held `y` fixed across candidates, but each face seats its digits at a different height, so the fixed y was a handicap unrelated to the face. Giving each candidate its own best y and right edge reversed the answer and took the score from 75 to 24.
+
+**How to apply:**
+- List the fit's parameters and name the sample that constrains each. A parameter with no answer there is decoration.
+
+### Measuring off a capture
+A number read from a photograph or a screenshot carries the resampler's artefacts as well as the artifact's. Check the measurement against the medium before believing it.
+
+**Why:** the artefacts are systematic, so they look like features rather than noise. Examples:
+- (2026-08-28) The pale bands between the E233-0 chevrons measured brighter than both neighbours, were modelled as a white outline, and drawn. A whole element invented out of the capture; the author saw it immediately: *"what was that?"*
+- (2026-08-25) A ~1.2px line's darkest pixel read 43 on one reference and 64 on another, while their integrated ink agreed to within 1%.
+
+**How to apply:**
+- On an upscaled capture, a band brighter than both its neighbours is resampling overshoot, not ink. Profile a plain edge of the same two colours elsewhere in the same image, and check the colour: the fabricated "white" peaked at `(252,187,151)`, pink rather than neutral.
+- Measure a sub-pixel feature by its integral, not its extreme pixel. The phase moves per capture; the quantity does not. It is also what makes a threshold-derived extent wrong.
+- After a resample, an artifact touching its own surface edge is not evidence it was cut. A downscale's antialiasing tail legitimately reaches the edge. Test upstream (does the source render have room) and downstream (does the drawn ink land outside its clip rect).
 
 ### Enumerate the reachable space, not the combinatorial one
 Exhaustive search over combinations is the right instrument for "can this happen at all" — it settles what reading the code cannot. But enumerate what the SYSTEM can actually produce, not the Cartesian product of every field. Name the impossible combinations from the domain and exclude them BEFORE searching, and say which ones you dropped.
@@ -637,37 +611,18 @@ When a system ranks its inputs (this one: badge > distance/speed), an argument o
 **How to apply:** state the rule so it stands on the invariant, not on a reliability claim about a specific read. If the justification needs the trusted input to be unreliable, you have the wrong justification, not necessarily the wrong change.
 
 ### A second implementation of a production decision drifts silently
-When a tool, test, harness, baker or proof needs to know what production does, it must CALL
-production, not restate it. A restatement is correct the day it is written and diverges thereafter,
-and its output looks plausible the whole time — the copy is exercised, so nothing errors.
+When a tool, test, harness, baker or proof needs to know what production does, it must call production rather than restate it. A restatement is correct the day it is written and diverges thereafter, and its output looks plausible the whole time, because the copy is exercised so nothing errors.
 
-**Why:** the copy is usually the cheap way to get moving, and the drift surfaces as content that is
-subtly wrong rather than as a failure. Examples:
-- (2026-07-27) Font atlas. Three separate copies of a production decision, each caught only by
-  accident: a proof script re-derived `draw_train_type`'s box geometry and branch condition, so
-  two-character train types rendered without their `exp=7` spread while the script reported zero
-  pixel difference (the user spotted the spacing by eye); a baker declared a combo table, which
-  missed all nine transfer-panel sizes; a baker derived its text domain from `route.json`, which
-  missed the 18 stations in `sobu/1217F`'s `pre_stops`. Fixed structurally — one layout function
-  with a `# CONTRACT:` block, the baker drives the real app and stores what it returns, and nothing
-  outside production reasons about layout at all. User: *"if you did this then theres multiple code
-  paths that leaked failures like this"*, *"architectural mishaps"*.
+**Why:** the copy is the cheap way to get moving, and the drift surfaces as subtly wrong content rather than as a failure. Examples:
+- (2026-07-27) A proof script re-derived `draw_train_type`'s box geometry and branch condition, so two-character types rendered without their spread while the script reported zero pixel difference. The user spotted the spacing by eye.
+- (2026-07-27) A baker declared a combo table and missed all nine transfer-panel sizes; another derived its text domain from `route.json` and missed the 18 stations in `sobu/1217F`'s `pre_stops`. *"theres multiple code paths that leaked failures like this"*.
+- (2026-08-10) Moving `ocr_replay_video` onto the downscale path took geometry, thresholds and badge anchors from the new profile but left the digit templates on the 1440p set, breaking a case that previously worked.
 
 **How to apply:**
-- Needing a production value in a tool → import and call the production function. If it is not
-  callable (blits straight to a surface, buried in a loop), extract a seam so it is; that extraction
-  is the fix, not a workaround.
-- A tool that "knows" which cases exist — a declared table, an enumerated domain, a branch condition
-  restated — is the smell. Drive the real thing and record what it asked for.
-- Enumeration by SAMPLING is the other half: if coverage comes from driving, the drive must be
-  exhaustive over the state space, and a mechanical gate must fail on a gap rather than trusting it.
-- **Adopting "the production path" is all-or-nothing — enumerate its components.** Partial adoption
-  is worse than none, because the tool now claims the contract in its docstring while one input
-  still differs. (2026-08-10) Moving `ocr_replay_video` onto the downscale path took geometry, seg
-  thresholds and badge anchors from `DOWNSCALE_PROFILE` and left the RED digit templates on the
-  1440p set — which had been correct on the native path it replaced, so the fix broke a case that
-  previously worked. List every argument the production call site passes and take each from the
-  same source; a diff of the two call sites is the check.
+- Needing a production value in a tool: import and call the production function. If it is not callable, extract a seam so it is. That extraction is the fix, not a workaround.
+- A tool that knows which cases exist, through a declared table or a restated branch condition, is the smell. Drive the real thing and record what it asked for.
+- If coverage comes from driving, the drive must be exhaustive over the state space, and a mechanical gate must fail on a gap rather than trusting it.
+- Adopting the production path is all-or-nothing. Partial adoption is worse than none, because the tool then claims the contract in its docstring while one input still differs. List every argument the production call site passes and take each from the same source.
 
 ### A simplification must carry its constraints forward
 When a design collapses to something simpler, re-derive which parts of the original were load-bearing. A constraint that was correct in the complex design is still correct in the simple one — dropping it alongside the scaffolding it lived in is silent, and only surfaces as a user-visible defect.
@@ -680,19 +635,17 @@ When a design collapses to something simpler, re-derive which parts of the origi
 - On collapsing a design, list what the complex version was protecting against, then check each survives. Cheap; the alternative is finding out from the user.
 - A rule derived for one content/case type does not automatically hold once the scope widens to carry several — re-check the premise, don't port the conclusion.
 
-### A fallback must be STRICTER than the path it replaces
-A recovery / degraded / catch-up path that is *quieter* or *less reversible* than the primary must require at least as much evidence. When the fallback is easier to satisfy, every condition that defeats the primary leaves the fallback armed — so its domain becomes residual ("whatever the primary dropped") instead of principled, and the system silently drifts onto the quiet path.
+### A fallback must be stricter than the path it replaces
+A recovery, degraded or catch-up path that is quieter or less reversible than the primary must require at least as much evidence. When the fallback is easier to satisfy, every condition that defeats the primary leaves the fallback armed, so its domain becomes residual rather than principled and the system drifts onto the quiet path.
 
-**Why:** the inversion is invisible in each path read alone; it only shows up when you put the two trigger conditions side by side. Examples:
-- (2026-07-21) Auto-driver departure was a crossing (two consecutive valid samples, `prev_speed` below 30) while re-entry's catch-up was a level test on the same 30 (one sample). Re-entry is silent AND forward-only-irreversible, so every OCR dropout that broke the crossing handed the departure to a silent advance — the user's report was "the PA sometimes just doesn't play." Fixed by partitioning the axis so the two are disjoint by construction.
-
-**A degraded view may substitute what you SHOW; it must never substitute what you ACT ON.** Falling back to something adjacent is right for a display — a frame beats a broken image, a cached page beats an error. Resolving an ACTION against that substitute silently re-aims it at a different target, and the result is a well-formed press on something the user never pointed at. Examples:
-- (2026-08-23) The stream's bell view fell back to the PIDS when no bell window existed, which is correct for the picture. A tap in that state was resolved against the fallback: on the setup menu it landed at (365, 256) of the 730x610 screen, inside a TIMS button. The fix is a MISS — the same outcome a real mouse gives, and what the tap path already does for a tap arriving across a screen change. Offer/hide the control as well, but the drop is the half that holds for a stale client.
-
-**The converse binds too: a path that is NOT quieter must not demand MORE evidence than the primary.** "Stricter" is a floor set by the fallback's own reversibility, never a licence — where a recovery path's failure is exactly as visible and exactly as undoable as the ordinary path's, the two answer to one bar, and an extra guard on the recovery side is an inconsistency to remove rather than safety to keep. The tell is a guard nobody designed: it survives as a side effect of a mechanism that has since been replaced, so it protects against a case the primary now accepts without comment. Examples:
-- (2026-08-30) The old departure CROSSING needed two samples, so clearing `prev_speed` on a click-jump made a single garbled frame unable to fire — a real protection, but incidental. #82 replaced the crossing with a level test because the crossing was losing genuine departures, and the protection went with it. Restoring it would have meant a post-click-jump departure needing more evidence than an ordinary one, for a failure that is audible and click-jump-recoverable either way. Author: *"if normal app runs will gave out a departure fire, then there's no point guarding this more than the normal app behaviour."* Closed #85 with no code change.
+**Why:** the inversion is invisible in each path read alone. It shows up only when the two trigger conditions sit side by side. Examples:
+- (2026-07-21) Departure was a crossing needing two consecutive samples while re-entry's catch-up was a level test on the same threshold needing one. Re-entry is silent and forward-only, so every OCR dropout that broke the crossing handed the departure to a silent advance. The report was "the PA sometimes just doesn't play".
+- (2026-08-23) The stream's bell view fell back to the PIDS when no bell window existed, which is right for the picture. A tap in that state resolved against the fallback and landed inside a TIMS button.
+- (2026-08-30) A click-jump guard needing two samples survived as a side effect after the crossing it belonged to was replaced by a level test, so it demanded more evidence than an ordinary departure: *"if normal app runs will gave out a departure fire, then there's no point guarding this more than the normal app behaviour."*
 
 **How to apply:**
+- A degraded view may substitute what you SHOW. It must never substitute what you ACT ON, or the result is a well-formed press on something the user never pointed at. Separate the two questions for any fallback.
+- The converse binds too: a path that is not quieter must not demand more evidence than the primary. Stricter is a floor set by the fallback's own reversibility, not a licence. A guard nobody designed, surviving a mechanism that has since been replaced, is the tell.
 - Write the primary's and the fallback's trigger conditions next to each other and ask which needs more evidence. If it's the primary, that's the bug — independent of whichever symptom brought you here. If it's the fallback, ask whether the fallback is genuinely quieter or less reversible; when it is not, the asymmetry is the bug instead.
 - Separate the two questions for any fallback: what do I show, and what do I let this act on. A substitute answer to the first is not permission for the second.
 - Prefer partitioning the input domain (disjoint bands) over ordering the checks; ordering relies on the earlier check firing, partitioning cannot invert.
@@ -729,6 +682,7 @@ Pick the metric that IS the thing you care about. A proxy that correlates in the
 - A proxy that is a *component* of the outcome (a score, a margin, a distance) is the most dangerous kind: it looks causal.
 - When a measurement contradicts a change you reasoned carefully about, suspect the measurement once before suspecting the reasoning — then test both.
 - **Synthesized inputs are a proxy for real ones.** Gate anything tuned on them against real captured samples before it ships; hold the real set back as the arbiter rather than folding it into the tuning.
+- **A style metric is a proxy for readability, and it is trivially gameable by the pass being measured.** 2026-09-01: auditing the corpus for machine-written register, I took em-dash count as the score and ran `replace_all` substitutions (`STA — ` → `STA: `, `) — verified` → `): verified`) across a README. The count fell 151 → 33 and the prose read the same, because a substitution moves the metric without touching the sentence. Author: *"seeing your edit, i think you need to hold back and think more, it's less than a mechanism edit."* When the outcome is how something reads, the only honest checks are structural — sentence length, clause depth, nesting — because those cannot be satisfied by swapping a character.
 
 ### A fix is a claim — reproduce the failure first, then prove the fix removes it
 A reported bug gets REPRODUCED before a fix is written, and the fix gets MUTATION-PROVEN before it is called done: revert it and confirm the bug returns. Both halves are cheap and both are skippable, which is why they get skipped — a plausible mechanism plus a green suite feels like proof and is not.
@@ -756,6 +710,8 @@ Before adopting a new presentation convention, validate via blind A/B: parallel 
 
 **How to apply:** Use for voice / structure / naming changes affecting prose. Not for code refactors or trivial tweaks.
 
+**What it cannot measure: whether the text still reads as machine-written.** Both arms are Claude reading Claude against questions Claude wrote, so the A/B establishes comprehension parity and nothing about register. Rewriting a passage does not remove its machine-ness — it produces the same author's prose with the recognisable tics filed off. 2026-09-01, the author on a whole-corpus register pass: *"you can't just rewrite or rewrite that to think oh the claude-ness is gone."* Two things follow. Target the STRUCTURE rather than the wording, because splitting a sentence and unnesting a parenthetical are mechanical and lose no facts. And take the outside verdict from a human or from prose written outside this project; the corpus cannot audit its own voice.
+
 ---
 
 ## Environment
@@ -778,6 +734,7 @@ Mental model (what it models, scope, IRL framing) → pre-loaded files. Implemen
 - **Compression buys ATTENTION, not tokens.** Preloaded rules (`.claude/rules/*`) load every turn — compress aggressively, strip rationale to one-liners; on-demand skills can afford fuller rationale, and mechanical classification (commit file sorting) offloads to hooks entirely. But the reason is that any one rule competes with ~33k tokens of sibling rules for attention, NOT that tokens are scarce. So a rule earns removal only by being WRONG or by actively causing bad behaviour (2026-07-26: rules cited as licence to widen scope); redundancy alone never does. (2026-07-27) User: *"i don't care about cost, don't save cost for me, i only care that you 99.9999999% of the time do the right thing."*
 - **Rules do not reach that bar; gates do.** Advisory text competing for attention fails at some rate — the MEMORY.md cap sat stated and unread for three months at 97–100% violation. Where a rule must always hold, move it to a mechanical gate (pre-commit, publish-boundary refusal, a test) and let the prose describe rather than enforce.
 - **Corpus out-competes a lone rule.** A preloaded rule that keeps getting violated is out-voted by the always-loaded docs modeling the counter-behavior — remove the counter-examples, don't restate the rule harder. (2026-07-24: the editorial-tone preference stuck only after de-polluting every rules/doc file, not after a stronger rule.)
+  - **What gets modeled is the PROSE, not only the content.** A preloaded file is a style exemplar every turn, so its register is a functional property rather than decoration: write the corpus in four-clause sentences with nested parentheticals and the replies come back in that register, whatever § Writing tone says. 2026-09-01, measured across the 38.5k-word preloaded corpus: 2 slop words and 0 hedge phrases — the vocabulary layer § Writing tone polices was already clean — against 792 parentheticals, 382 sentences over 35 words and 148 X-not-Y constructions, which no rule covered. The author's report was that a friend's vanilla Claude Code output did not read this way. Sentence architecture is now ruled in `CLAUDE.md` § Writing tone; the point here is that the corpus teaches by example first and by instruction second.
 
 ### Single source of truth
 Don't duplicate facts across docs. Cross-reference instead.

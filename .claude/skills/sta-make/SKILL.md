@@ -421,7 +421,7 @@ On keihin's 大宮 melody the transition reads unambiguously — music stops dea
 
 **Calibrate on a known-positive before trusting any of it.** Ask the user which file has an audible KAK, probe THAT file at 5 ms resolution, and print the profile (amplitude, `hf`, `lf`, ratio) so the transient is *visible* rather than inferred. Even with the ratio + energy gate, separating melody / voice / click across a whole corpus stayed unreliable — treat the output as a **candidate list for the by-ear verifier**, not as input to an automatic splice.
 
-**A user-named file outranks the detector — no exceptions, no second opinion.** When the user says "this file has a KAK," that file IS ground truth: the detector's job is now to REPRODUCE it, and a detector that reports clean on it is disqualified, not "mostly right." Do not build another detector to adjudicate — probe that one file at 5 ms and read the numbers. (2026-05-09 JY29_SMB, 2026-07-26 JK47_OMY-south @ 11.51 — same error, same correction, both times after claude had reported zero KAK.)
+**A user-named file outranks the detector — no exceptions, no second opinion.** When the user says "this file has a KAK," that file IS ground truth. The detector's job is now to REPRODUCE it, and a detector that reports clean on it is disqualified, not "mostly right." Do not build another detector to adjudicate: probe that one file at 5 ms and read the numbers. (2026-05-09 JY29_SMB, 2026-07-26 JK47_OMY-south @ 11.51 — same error, same correction, both times after claude had reported zero KAK.)
 
 **Detector windows run ~4× tighter than a hand cut.** A burst walk stops at its threshold; a human cuts where the artifact stops being *audible*, which is further out (keihin: hand 388 ms vs detector 87 ms on STA; 0.9–2.0 s deeper on PA). Treat the detected window as the INNER bound and widen before proposing — a splice a little too wide runs into silence and is inaudible, one a little too tight leaves the click.
 
@@ -547,7 +547,7 @@ sta_cut = round(max(music_end, voice_start - 0.5), 1)
 
 (Sits 0.5 s pre-voice when the gap allows; falls back to `voice_start` when the gap is too narrow.)
 
-**Print the per-file structure once and read it — do not build a classifier.** A route is ~20 files; dumping each one's activity/silence timeline (start, end, duration, peak dB, with the current `sta_cut` marked) and reading it is faster and more reliable than any heuristic, and it yields the whole proposal table in one pass. Iterating detectors against files you have not looked at burns rounds and produces confident wrong numbers. (2026-07-25: three successive classifiers, all wrong, before the raw timeline made the structure obvious in one read.)
+**Print the per-file structure once and read it — do not build a classifier.** A route is ~20 files. Dumping each one's activity/silence timeline (start, end, duration, peak dB, with the current `sta_cut` marked) and reading it is faster and more reliable than any heuristic, and it yields the whole proposal table in one pass. Iterating detectors against files you have not looked at burns rounds and produces confident wrong numbers. (2026-07-25: three successive classifiers, all wrong, before the raw timeline made the structure obvious in one read.)
 
 **Identifying the music→voice gap is where this goes wrong.** Two heuristics that look obvious and both fail:
 

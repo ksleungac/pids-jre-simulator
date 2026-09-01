@@ -1,37 +1,37 @@
 # SPDX-License-Identifier: MIT
-"""E233-0 (中央線快速) Lower LCD — the full-route and 6-station views, plus the
+"""E233-0 (中央線快速) Lower LCD: the full-route and 6-station views, plus the
 manager that rotates every slot.
 
-Built against ``docs/wip/WIP_e233_0_display.md``, which is the spec: § 9 for the
-full-route view and § 10 for the 6-station one. The manager's other three slots
-render elsewhere in the package — the standalone transfer view (§ 11) in
+Built against ``docs/wip/WIP_e233_0_display.md``, which is the spec. § 9 covers
+the full-route view and § 10 the 6-station one. The manager's other three slots
+render elsewhere in the package: the standalone transfer view (§ 11) in
 ``transfer_info.py``, and the two standing notices (§ 12) in ``priority_seat.py``
 and ``manner_mode.py``.
 
-THE DIAGRAM IS THE LINE, NOT THE RUN (author, 2026-08-26). Chūō's full-route
-view always draws 大月 → 東京: **row 1 is always 大月 → 武蔵境, row 2 always
-三鷹 → 東京**, twenty stations each, whatever service is loaded. The eight west
-of 高尾 are not on any diagram we run, so they arrive as ``pre_stops`` — the
-existing display-only mechanism (``docs/DATA_FORMAT.md`` § pre_stops), reused
-here for a line that extends beyond its origin rather than for a through
-service. Both cases render identically: always-passed cells.
+The diagram is the line, not the run (author, 2026-08-26). Chūō's full-route
+view always draws 大月 → 東京. Row 1 is always 大月 → 武蔵境 and row 2 always
+三鷹 → 東京, twenty stations each, whatever service is loaded. The eight
+stations west of 高尾 are not on any diagram we run, so they arrive as
+``pre_stops``, the display-only mechanism documented in ``docs/DATA_FORMAT.md``
+§ pre_stops. Here it carries a line that extends beyond its origin rather than a
+through service. Both cases render identically, as always-passed cells.
 
-READS RIGHT TO LEFT on both rows, wrapping row 1's left end to row 2's right
-end. So the diagram's screen order is the reverse of its index order, and
-"behind the train" is to the RIGHT — which is why the grey tail in the reference
+Both rows read right to left, wrapping row 1's left end to row 2's right end.
+The diagram's screen order is therefore the reverse of its index order, and
+"behind the train" is to the right. That is why the grey tail in the reference
 sits right of the marker at 高尾, the run's first stop.
 
-FULL-ROUTE ELEMENTS, in ``show_stops``'s own order: the two bars (orange ahead,
-grey behind) · the end treatment at each edge, taper or notch plus its chevrons
-(§ 9.3.4 — these are the BAR's ends, not an element of their own) · per-cell
-marks on the bar (white minute box where the train stops, arrow where it passes)
-· the 分 at each row's outer end · the green PENTAGON at the train, which sits
-between two stations while it is running (§§ 9.3.2, 9.3.6) · vertical station
-names above each bar.
+Full-route elements, in ``show_stops``'s own order: the two bars (orange ahead,
+grey behind); the end treatment at each edge, taper or notch plus its chevrons
+(§ 9.3.4; these belong to the bar rather than being an element of their own);
+per-cell marks on the bar (white minute box where the train stops, arrow where
+it passes); the 分 at each row's outer end; the green pentagon at the train,
+which sits between two stations while it is running (§§ 9.3.2, 9.3.6); vertical
+station names above each bar.
 
 Sibling mapping (``conventions.md`` § "Forking a sibling-model renderer"): the
-elements the author named — minute box, passing arrow, position marker,
-continuity arrows — are E235-**1000**'s linear full-route, not E235-0's
+elements the author named (minute box, passing arrow, position marker,
+continuity arrows) come from E235-1000's linear full-route, not E235-0's
 racetrack, so the structural patterns are copied from there. E235-0 supplied the
 two-row-with-a-wrap layout shape (``OpenRouteFullRouteDisplay``) and the
 uncompressed vertical name stack.
@@ -67,9 +67,9 @@ from displays.train_models.e233_0 import (
 )
 
 # =============================================================================
-# Full-route view — WIP § 9
+# Full-route view (WIP § 9)
 #
-# GEOMETRY IS MEASURED off `full-takao-stopping-ja.png` by colour-run detection
+# Geometry is measured off `full-takao-stopping-ja.png` by colour-run detection
 # (`_dev_scripts/_e233_lower_geometry.py`), as ratios against the reference's own
 # 1502 x 1124, then taken onto the 640 x 480 canvas:
 #
@@ -78,66 +78,68 @@ from displays.train_models.e233_0 import (
 #   bar extent    x/W 0.0353 .. 0.9627                -> x 23, w 593
 #   slot pitch    that extent / 20                    -> 29.65
 #
-# THE SLOT COUNT IS CONFIRMED, not assumed: the green marker at 高尾 measures
-# centre x 853.5 in the reference, and 高尾 is the 9th cell from the right of a
-# 20-slot row, whose computed centre is 853.4. The palette is measured the same
-# way — served bar (225,92,18), beyond/behind (134,144,164), marker (51,168,58).
-# The bar's two colours are now READ from the model's palette rather than restated
-# here, so beyond/behind draws `RULE_GREY` (135,145,165): one level per channel off
-# the run detection above, which is capture noise on a grey the divide and the
-# border draw at full strength. One grey, one source.
+# The slot count is confirmed rather than assumed. The green marker at 高尾
+# measures centre x 853.5 in the reference, and 高尾 is the 9th cell from the
+# right of a 20-slot row, whose computed centre is 853.4. The palette is measured
+# the same way: served bar (225,92,18), beyond/behind (134,144,164), marker
+# (51,168,58). The bar's two colours are read from the model's palette rather
+# than restated here, so beyond/behind draws `RULE_GREY` (135,145,165). That is
+# one level per channel off the run detection above, which is capture noise on
+# the same grey the divide and the border draw at full strength.
 #
-# WHAT IS NOT MEASURED, and is a draft until the author refines it: every mark's
-# own shape and size (box, arrow, triangle, continuity), the name font size, and
-# the gaps. Those are the per-element refinement passes.
+# Not measured, and a draft until the author refines it: every mark's own shape
+# and size (box, arrow, triangle, continuity), the name font size, and the gaps.
+# Those are the per-element refinement passes.
 # =============================================================================
 # fmt: off
 _TUNEABLES_FULL_ROUTE = {
-    # THE TWO ENDS ARE PADDED DIFFERENTLY, and the reference says so. Measured at
-    # rows clear of the 分, on the two ends that terminate SQUARE — row 2's left,
-    # which is the terminus, and row 1's right, which is the line's origin end.
-    # The other two ends carry the wrap's chevrons at every row, so a bar edge
-    # cannot be separated from a chevron arm there at all.
+    # The two ends are padded differently, and the reference shows it. Measured
+    # at rows clear of the 分, on the two ends that terminate square: row 2's
+    # left, which is the terminus, and row 1's right, which is the line's origin
+    # end. The other two ends carry the wrap's chevrons at every row, so a bar
+    # edge cannot be separated from a chevron arm there.
     #
     #   left  5.16, against slot 19's centre at 33.59  -> pad 28.43
     #   right 616.3, against slot 0's centre at 605.3  -> pad 11.00
     #
-    # The left pad decomposes exactly, which is what confirms it: the box's half
-    # width 12.05 + a 1.1 gap + the 分's 11.7 + 3.6 to the edge = 28.45. The bar
-    # is extended leftward to CARRY the unit label (author, 2026-08-28: "the end
-    # of route color bar should be longer") — the same 分-area extension E235
-    # makes at its row ends.
+    # The left pad decomposes exactly: the box's half width 12.05 + a 1.1 gap +
+    # the 分's 11.7 + 3.6 to the edge = 28.45. The bar is extended leftward to
+    # carry the unit label (author, 2026-08-28: "the end of route color bar
+    # should be longer"), the same 分-area extension E235 makes at its row ends.
     #
-    # The right pad is the reference's 11.0 plus 3, because 11.0 is narrower than
-    # a minute box's own half-width and the reference never has to hold one
-    # there: its outermost marks are narrow passing ARROWS, and on row 1 slot 0
-    # is a `pre_stop` that is always grey. On an all-stations service that slot
+    # The right pad is the reference's 11.0 plus 3. 11.0 is narrower than a
+    # minute box's own half-width, and the reference never has to hold one there:
+    # its outermost marks are narrow passing arrows, and on row 1 slot 0 is a
+    # `pre_stop` that is always grey. On an all-stations service that slot
     # carries a 24px box, which then hangs off the end of the bar it sits on
     # (author, 2026-08-27: "the route color bar itself should be longer since the
     # white box is quiet big"). 14 gives it the same 1.95 clearance it already
     # has above and below.
     #
-    # The slot geometry does NOT move — `slot0_cx` and `slot_pitch` are fitted to
+    # The slot geometry does not move. `slot0_cx` and `slot_pitch` are fitted to
     # the reference's name columns and the stations stay where they are; only the
     # drawn bar grows under them.
-    # THE 分 EXTENSION IS PER-END, because only the ends without chevrons have
+    #
+    # The 分 extension is per-end, because only the ends without chevrons have
     # room for it (author, 2026-08-28: "the route bar extension for 分 should not
     # break continuity arrow ... the color background is not a 分 feature, it's a
-    # route bar feature"). Row 2's left is the TERMINUS — nothing else is there,
-    # so the bar runs out to 5.2 and the label sits on it. Row 1's left is the
-    # WRAP, where the chevrons have to fit between the bar and the screen border;
-    # extending the bar there leaves them nowhere to go, and the reference does
-    # not extend it either — its 分 straddles the bar and the chevrons, all of
-    # which is route-bar orange.
-    # THE BAR EDGES ARE WHOLE PIXELS, because the wrap group is anchored on them
-    # and every shape in it inherits their sub-pixel phase — see
-    # `cont_chev_pitch`. Measured 5.16 and 615.3; rounded.
-    # THE WALLS ARE PADS FROM THE OUTERMOST SLOT, not absolute x. Written as
-    # absolutes they described the screen; written as pads they describe the BAR,
-    # so a route that does not fill the row shortens and re-centres without any
-    # of them moving (author, 2026-08-28: "for lines that has less than 40
+    # route bar feature"). Row 2's left is the terminus and nothing else is
+    # there, so the bar runs out to 5.2 and the label sits on it. Row 1's left is
+    # the wrap, where the chevrons have to fit between the bar and the screen
+    # border; extending the bar there leaves them nowhere to go. The reference
+    # does not extend it either: its 分 straddles the bar and the chevrons, all
+    # of which is route-bar orange.
+    #
+    # The bar edges are whole pixels, because the wrap group is anchored on them
+    # and every shape in it inherits their sub-pixel phase (see
+    # `cont_chev_pitch`). Measured 5.16 and 615.3, then rounded.
+    #
+    # The walls are pads from the outermost slot rather than absolute x. Written
+    # as absolutes they describe the screen; written as pads they describe the
+    # bar, so a route that does not fill the row shortens and re-centres without
+    # any of them moving (author, 2026-08-28: "for lines that has less than 40
     # stations, we should shorten the route bar and centers the route bar"). On
-    # Chūō the four reproduce the measured absolutes exactly — 33.59 - 28.59 = 5,
+    # Chūō the four reproduce the measured absolutes exactly: 33.59 - 28.59 = 5,
     # 33.59 - 9.59 = 24, 605.3 + 9.70 = 615, 605.3 + 22.70 = 628.
     "pad_end_left":  28.59,  # [measured] a SQUARE left end — the terminus. The
                              # decomposition that confirms it: box half-width
@@ -157,13 +159,14 @@ _TUNEABLES_FULL_ROUTE = {
                            # 410..431, i.e. 22 rows about the row centre
     "row1_cy":      278,   # row 1 bar centre       (measured y/H 0.5783)
     "row2_cy":      421,   # row 2 bar centre       (measured y/H 0.8768)
-    # A ROUTE THAT FITS ON ONE ROW GETS ONE ROW (author, 2026-08-29). Splitting
-    # 17 cells into 9 + 8 draws a wrap that the diagram does not have, and the
-    # end treatment then claims a continuation where the line simply runs on to
-    # its terminus. The single row sits midway between the two, which is where a
-    # lone bar reads as belonging to the area rather than as the top half of a
-    # layout missing its other half. No reference — E233-0 has no line short
-    # enough for one — so this is authored, like the rest of the out-of-spec path
+    # A route that fits on one row gets one row (author, 2026-08-29). Splitting
+    # 17 cells into 9 + 8 draws a wrap the diagram does not have, and the end
+    # treatment then claims a continuation where the line simply runs on to its
+    # terminus. The single row sits midway between the two, so a lone bar reads
+    # as belonging to the area rather than as the top half of a layout missing
+    # its other half. There is no reference for it, since E233-0 has no line
+    # short enough, so this value is authored like the rest of the out-of-spec
+    # path.
     "row_single_cy": 350,
     "slots_per_row": 20,   # 大月..武蔵境 / 三鷹..東京 (author) — a fact of the LINE
     # THE SLOTS ARE FITTED, NOT DERIVED FROM THE BAR. Deriving the pitch as

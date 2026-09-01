@@ -10,37 +10,37 @@ Help turn ideas into fully formed designs and specs through natural collaborativ
 Start by understanding the current project context, then ask questions one at a time to refine the idea. Once you understand what you're building, present the design and get user approval.
 
 <HARD-GATE>
-Do NOT invoke any implementation skill, write any code, scaffold any project, or take any implementation action until you have presented a design and the user has approved it. This applies to EVERY project regardless of perceived simplicity.
+Do NOT invoke any implementation skill, write any code, scaffold any project, or take any implementation action until you have presented a design and the user has approved it. This applies to every project, however simple it looks.
 </HARD-GATE>
 
 ## Project overrides (pids_jre_simulator)
 
-These local preferences take precedence over the generic instructions below. They exist because this is an established single-maintainer codebase, not a greenfield project.
+These local preferences take precedence over the generic instructions below. This is an established single-maintainer codebase, not a greenfield project.
 
-1. **Ask the user only about the real world — decide implementation yourself.** Bring the user questions about their mental model, real-world / in-game behavior, user-facing outcomes, and "what's different on my end." Make ALL implementation and engineering-practice decisions yourself and commit to a single recommendation — do not present an implementation menu, and do not ask "which approach do you prefer?" for a call reachable from loaded context. If you catch yourself about to say "idk, your call" on a practice question, that is the signal to decide it and show the result in the design for a yes/no. The user does not have strong views on engineering practice and does not want to arbitrate it.
-2. **Scale the questioning to the decision, not to the checklist.** A clarifying question earns its place only when the answer changes what gets built AND is genuinely the user's to make (a real-world fact or preference). Skip questions whose answer you can derive; fold those decisions into the design instead.
-3. **Spec location = the project's own doc conventions, NOT `docs/superpowers/specs/`.** Follow the placement table in `.claude/skills/session-recap/SKILL.md` and the `WIP_<topic>.md` pattern. For a small change, a short design summarised in chat and approved is sufficient — no spec file is mandatory.
-4. **Never auto-commit — hard project redline.** The "commit the design document" step does not apply. Do not suggest, offer, or nudge committing at any point. Committing happens only on the user's explicit request.
-5. **Terminal step is normal implementation, not `writing-plans`.** That skill is not installed. After the user approves the design, implement directly — still honouring the HARD-GATE (no code before approval).
-6. **The visual companion is unavailable** — its server scripts were intentionally not installed. Do not offer it; keep the discussion in the terminal. Ignore the Visual Companion section below.
+1. **Ask the user only about the real world. Decide implementation yourself.** Bring the user questions about their mental model, real-world and in-game behavior, user-facing outcomes, and "what's different on my end." Make every implementation and engineering-practice decision yourself, and commit to a single recommendation. Do not present an implementation menu, and do not ask "which approach do you prefer?" for a call reachable from loaded context. If you catch yourself about to say "idk, your call" on a practice question, decide it and show the result in the design for a yes/no. The user does not have strong views on engineering practice and does not want to arbitrate it.
+2. **Scale the questioning to the decision, not to the checklist.** A clarifying question earns its place only when the answer changes what gets built and is genuinely the user's to make: a real-world fact or a preference. Skip questions whose answer you can derive, and fold those decisions into the design instead.
+3. **Spec location follows the project's own doc conventions, not `docs/superpowers/specs/`.** Use the placement table in `.claude/skills/session-recap/SKILL.md` and the `WIP_<topic>.md` pattern. For a small change, a short design summarised in chat and approved is enough. No spec file is mandatory.
+4. **Never auto-commit. This is a hard project redline.** The "commit the design document" step does not apply. Do not suggest, offer, or nudge committing at any point. Committing happens only on the user's explicit request.
+5. **The terminal step is normal implementation, not `writing-plans`.** That skill is not installed. After the user approves the design, implement directly, still honouring the HARD-GATE: no code before approval.
+6. **The visual companion is unavailable.** Its server scripts were intentionally not installed. Do not offer it, and keep the discussion in the terminal. Ignore the Visual Companion section below.
 
 ## Anti-Pattern: "This Is Too Simple To Need A Design"
 
-Every project goes through this process. A todo list, a single-function utility, a config change — all of them. "Simple" projects are where unexamined assumptions cause the most wasted work. The design can be short (a few sentences for truly simple projects), but you MUST present it and get approval.
+Every project goes through this process: a todo list, a single-function utility, a config change. Simple projects are where unexamined assumptions cause the most wasted work. The design can be short, a few sentences for a truly simple project, but you MUST present it and get approval.
 
 ## Checklist
 
 You MUST create a task for each of these items and complete them in order:
 
-1. **Explore project context** — check files, docs, recent commits
-2. **Offer the visual companion just-in-time** — NOT upfront. The first time a question would genuinely be clearer shown than described, offer it then (its own message); on approval its browser tab opens for you. If no visual question ever arises, never offer it. See the Visual Companion section below.
-3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
-4. **Propose 2-3 approaches** — with trade-offs and your recommendation
-5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
-7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-8. **User reviews written spec** — ask user to review the spec file before proceeding
-9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+1. **Explore project context**: check files, docs, recent commits
+2. **Offer the visual companion just-in-time**, not upfront. Offer it the first time a question would genuinely be clearer shown than described, in its own message. On approval its browser tab opens for you. If no visual question ever arises, never offer it. See the Visual Companion section below.
+3. **Ask clarifying questions**: one at a time, covering purpose, constraints and success criteria
+4. **Propose 2-3 approaches**, with trade-offs and your recommendation
+5. **Present design** in sections scaled to their complexity, and get user approval after each section
+6. **Write design doc**: save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
+7. **Spec self-review**: check inline for placeholders, contradictions, ambiguity and scope (see below)
+8. **User reviews written spec**: ask the user to review the spec file before proceeding
+9. **Transition to implementation**: invoke the writing-plans skill to create an implementation plan
 
 ## Process Flow
 
@@ -69,7 +69,7 @@ digraph brainstorming {
 }
 ```
 
-**The terminal state is invoking writing-plans.** Do NOT invoke frontend-design, mcp-builder, or any other implementation skill. The ONLY skill you invoke after brainstorming is writing-plans.
+**The terminal state is invoking writing-plans.** Do NOT invoke frontend-design, mcp-builder, or any other implementation skill. The only skill you invoke after brainstorming is writing-plans.
 
 ## The Process
 
@@ -80,7 +80,7 @@ digraph brainstorming {
 - If the project is too large for a single spec, help the user decompose into sub-projects: what are the independent pieces, how do they relate, what order should they be built? Then brainstorm the first sub-project through the normal design flow. Each sub-project gets its own spec → plan → implementation cycle.
 - For appropriately-scoped projects, ask questions one at a time to refine the idea
 - Prefer multiple choice questions when possible, but open-ended is fine too
-- Only one question per message - if a topic needs more exploration, break it into multiple questions
+- Only one question per message. If a topic needs more exploration, break it into multiple questions
 - Focus on understanding: purpose, constraints, success criteria
 
 **Exploring approaches:**
@@ -102,12 +102,12 @@ digraph brainstorming {
 - Break the system into smaller units that each have one clear purpose, communicate through well-defined interfaces, and can be understood and tested independently
 - For each unit, you should be able to answer: what does it do, how do you use it, and what does it depend on?
 - Can someone understand what a unit does without reading its internals? Can you change the internals without breaking consumers? If not, the boundaries need work.
-- Smaller, well-bounded units are also easier for you to work with - you reason better about code you can hold in context at once, and your edits are more reliable when files are focused. When a file grows large, that's often a signal that it's doing too much.
+- Smaller, well-bounded units are also easier to work with. When a file grows large, that is often a signal it is doing too much.
 
 **Working in existing codebases:**
 
 - Explore the current structure before proposing changes. Follow existing patterns.
-- Where existing code has problems that affect the work (e.g., a file that's grown too large, unclear boundaries, tangled responsibilities), include targeted improvements as part of the design - the way a good developer improves code they're working in.
+- Where existing code has problems that affect the work (a file that has grown too large, unclear boundaries, tangled responsibilities), include targeted improvements as part of the design.
 - Don't propose unrelated refactoring. Stay focused on what serves the current goal.
 
 ## After the Design
@@ -127,7 +127,7 @@ After writing the spec document, look at it with fresh eyes:
 3. **Scope check:** Is this focused enough for a single implementation plan, or does it need decomposition?
 4. **Ambiguity check:** Could any requirement be interpreted two different ways? If so, pick one and make it explicit.
 
-Fix any issues inline. No need to re-review — just fix and move on.
+Fix any issues inline. No need to re-review; fix and move on.
 
 **User Review Gate:**
 After the spec review loop passes, ask the user to review the written spec before proceeding:
@@ -143,28 +143,28 @@ Wait for the user's response. If they request changes, make them and re-run the 
 
 ## Key Principles
 
-- **One question at a time** - Don't overwhelm with multiple questions
-- **Multiple choice preferred** - Easier to answer than open-ended when possible
-- **YAGNI ruthlessly** - Remove unnecessary features from all designs
-- **Explore alternatives** - Always propose 2-3 approaches before settling
-- **Incremental validation** - Present design, get approval before moving on
-- **Be flexible** - Go back and clarify when something doesn't make sense
+- **One question at a time.** Don't overwhelm with multiple questions.
+- **Multiple choice preferred.** Easier to answer than open-ended when possible.
+- **YAGNI ruthlessly.** Remove unnecessary features from all designs.
+- **Explore alternatives.** Always propose 2-3 approaches before settling.
+- **Incremental validation.** Present the design, get approval before moving on.
+- **Be flexible.** Go back and clarify when something doesn't make sense.
 
 ## Visual Companion
 
-A browser-based companion for showing mockups, diagrams, and visual options during brainstorming. Available as a tool — not a mode. Accepting the companion means it's available for questions that benefit from visual treatment; it does NOT mean every question goes through the browser.
+A browser-based companion for showing mockups, diagrams, and visual options during brainstorming. It is a tool, not a mode. Accepting the companion makes it available for questions that benefit from visual treatment. It does not mean every question goes through the browser.
 
-**Offering the companion (just-in-time):** Do NOT offer it upfront. Wait until a question would genuinely be clearer shown than told — a real mockup / layout / diagram question, not merely a UI *topic*. The first time that happens, offer it then, as its own message:
+**Offering the companion (just-in-time):** Do NOT offer it upfront. Wait until a question would genuinely be clearer shown than told: a real mockup, layout or diagram question, not merely a UI *topic*. The first time that happens, offer it as its own message:
 > "This next part might be easier if I show you — I can put together mockups, diagrams, and comparisons in a browser tab as we go. It's still new and can be token-intensive. Want me to? I'll open it for you."
 
-**This offer MUST be its own message.** Only the offer — no clarifying question, summary, or other content. Wait for the user's response. If they accept, start the server with `--open` so their browser opens to the first screen automatically. If they decline, continue text-only and don't offer again unless they raise it.
+**This offer MUST be its own message.** Only the offer: no clarifying question, no summary, no other content. Wait for the user's response. If they accept, start the server with `--open` so their browser opens to the first screen automatically. If they decline, continue text-only and don't offer again unless they raise it.
 
-**Per-question decision:** Even after the user accepts, decide FOR EACH QUESTION whether to use the browser or the terminal. The test: **would the user understand this better by seeing it than reading it?**
+**Per-question decision:** Even after the user accepts, decide for each question whether to use the browser or the terminal. The test: **would the user understand this better by seeing it than reading it?**
 
-- **Use the browser** for content that IS visual — mockups, wireframes, layout comparisons, architecture diagrams, side-by-side visual designs
-- **Use the terminal** for content that is text — requirements questions, conceptual choices, tradeoff lists, A/B/C/D text options, scope decisions
+- **Use the browser** for content that is visual: mockups, wireframes, layout comparisons, architecture diagrams, side-by-side visual designs
+- **Use the terminal** for content that is text: requirements questions, conceptual choices, tradeoff lists, A/B/C/D text options, scope decisions
 
-A question about a UI topic is not automatically a visual question. "What does personality mean in this context?" is a conceptual question — use the terminal. "Which wizard layout works better?" is a visual question — use the browser.
+A question about a UI topic is not automatically a visual question. "What does personality mean in this context?" is a conceptual question, so use the terminal. "Which wizard layout works better?" is a visual question, so use the browser.
 
 If they agree to the companion, read the detailed guide before proceeding:
 `skills/brainstorming/visual-companion.md`

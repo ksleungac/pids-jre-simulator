@@ -25,7 +25,7 @@ The user points at a working folder like `audio_src_<line>_workflow/` containing
 
 ## Source folder layout
 
-Per line/diagram, working files live at the project root in their own folder. Splitter scripts stay with the source files — they document how that diagram was sliced.
+Per line/diagram, working files live at the project root in their own folder. Splitter scripts stay with the source files. They document how that diagram was sliced.
 
 ```
 audio_src_sobu_workflow/
@@ -41,29 +41,29 @@ audio_src_sobu_workflow/
 
 ### Step 1 — Inspect
 
-`ls` the source folder. Read each timestamps file. Identify which format applies (PA or STA, see below). If existing `split_pa.py` / `split_sta.py` are present, read them — the user may have customized.
+`ls` the source folder. Read each timestamps file. Identify which format applies (PA or STA, see below). If existing `split_pa.py` / `split_sta.py` are present, read them, since the user may have customized them.
 
 ### Step 2 — Parse + discuss BEFORE acting
 
 Before generating any script or touching route.json, surface to the user:
 
 - **Total segment count**
-- **Per-station segment count** (especially for PA — don't assume "everyone has 2 timestamps")
-- **Suspicious gaps** — very short (<10s) or very long (>30s within an active stretch) deserve a flag. Could be back-to-back PAs, jingle/voice splits, or non-PA filler in the source.
+- **Per-station segment count** (especially for PA; don't assume "everyone has 2 timestamps")
+- **Suspicious gaps.** Very short (<10s) or very long (>30s within an active stretch) deserve a flag. Could be back-to-back PAs, jingle/voice splits, or non-PA filler in the source.
 - **For STA**: platform mapping per station (`(N)` notation), any song names provided
-- **Any 1-timestamp stations** — for PA, those typically use `{prev}-dep` (announcement covers "we just left X"). Confirm.
+- **Any 1-timestamp stations.** For PA, those typically use `{prev}-dep` (announcement covers "we just left X"). Confirm.
 
 Wait for the user's confirmation on the parse before generating.
 
 ### Step 3 — Generate splitter script (per-source, ad-hoc)
 
-**Splitters are per-source artifacts, not a maintained library.** The format of the timestamps file varies between sources — one batch may use 3 timestamps per line (start/cut/end), another may use 2 (start/cut, end implicit). Each source gets its own script reflecting its specific format. Don't try to make one splitter that handles "the format" — there isn't one.
+**Splitters are per-source artifacts, not a maintained library.** The format of the timestamps file varies between sources: one batch may use 3 timestamps per line (start/cut/end), another may use 2 (start/cut, end implicit). Each source gets its own script reflecting its specific format. Don't try to make one splitter that handles "the format". There isn't one.
 
 Naming: `split_{type}_{describer}.py` if multiple sources for the same line (e.g., `split_sta_tokyo.py` + `split_sta_higashichiba.py`); plain `split_{pa,sta}.py` if it's the only one. The script lives in the source folder so the audit trail of "how this batch was split" stays with the data.
 
-Two common patterns to start from — copy the one that matches the format and adapt:
+Two common patterns to start from. Copy the one that matches the format and adapt:
 
-**PA splitter** — each timestamp = start of one segment, ending at next chronological timestamp; last runs to EOF:
+**PA splitter.** Each timestamp = start of one segment, ending at the next chronological timestamp. The last runs to EOF.
 
 ```python
 """Split src.mp3 into N PA segments for audio/<line>/pa/."""
@@ -102,7 +102,7 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-**STA splitter — explicit-end format** (3 timestamps per line: start/cut/end). Add an `op` / `archive` dest tag per segment so re-runs route operational vs unused recordings to the right folder automatically:
+**STA splitter, explicit-end format** (3 timestamps per line: start/cut/end). Add an `op` / `archive` dest tag per segment so re-runs route operational vs unused recordings to the right folder automatically:
 
 ```python
 PROJECT = Path(__file__).resolve().parents[1]
@@ -129,7 +129,7 @@ for start, cut, end, name, dest in SEGMENTS:
     subprocess.run(cmd, check=True)
 ```
 
-**STA splitter — implicit-end format** (2 timestamps per line: start/cut, end = next start, last = EOF):
+**STA splitter, implicit-end format** (2 timestamps per line: start/cut, end = next start, last = EOF):
 
 ```python
 EOF = "5:18"  # known from `ffmpeg -i src.mp3 2>&1 | grep -i duration`
@@ -165,10 +165,10 @@ Run the splitter. Verify file count matches expected segment count. List the out
 Replace placeholder `pa` arrays (numbered `["1", "2", ...]`) with descriptive basenames; replace `sta_cut: 9` placeholders with the computed values; replace placeholder `sta` refs with the new descriptive basenames.
 
 - **Termini**: omit `sta` and `sta_cut` fields (no departure melody at end of route). Keep `time`.
-- **Stations IRL with no departure melody** (e.g. 千葉 on the Sobu line): same treatment — omit `sta` and `sta_cut`.
-- **Passing stations** (`pa: []`): keep them passing — no `sta`, no `sta_cut`, no `time`.
+- **Stations IRL with no departure melody** (e.g. 千葉 on the Sobu line): same treatment, omit `sta` and `sta_cut`.
+- **Passing stations** (`pa: []`): keep them passing, with no `sta`, no `sta_cut` and no `time`.
 
-**Archive routing is handled by the splitter's per-segment `dest` tag in Step 3** — operational files land in `audio/<line>/sta/`, `"archive"`-tagged files land in `audio/_archive/<line>/<diagram>/sta/` (mirror layout under `_archive/`, no route.json there). The `_` prefix marks "preserved but not shipped" — `_archive/` and `_mock/` both follow this convention.
+**Archive routing is handled by the splitter's per-segment `dest` tag in Step 3.** Operational files land in `audio/<line>/sta/`; `"archive"`-tagged files land in `audio/_archive/<line>/<diagram>/sta/` (mirror layout under `_archive/`, no route.json there). The `_` prefix marks "preserved but not shipped", a convention `_archive/` and `_mock/` both follow.
 
 ### Step 6 — Sanity check
 
@@ -189,13 +189,13 @@ for label, dirpath, key in [('pa', pa_dir, 'pa'), ('sta', sta_dir, 'sta')]:
 "
 ```
 
-Report any unmatched references. **Expected unused on disk: none after Step 5** — unused recordings should already have been moved to `audio/_archive/`. If a file appears in "unused" here, it's a leftover that needs to be relocated.
+Report any unmatched references. **Expected unused on disk: none after Step 5.** Unused recordings should already have been moved to `audio/_archive/`. If a file appears in "unused" here, it's a leftover that needs to be relocated.
 
 ## Conventions (the rules to apply)
 
 ### Timestamps file format
 
-**PA (`timestamps.txt`)** — each line is one station, with 1 or 2 timestamps:
+**PA (`timestamps.txt`)**: each line is one station, with 1 or 2 timestamps.
 ```
 新日本橋 12:22
 錦糸町 13:31
@@ -207,7 +207,7 @@ Report any unmatched references. **Expected unused on disk: none after Step 5** 
 - 2 timestamps = first is `{prev}-dep`, second is `{this}-arr`
 - Each timestamp = start of one segment; ends at the next chronological timestamp; last runs to EOF
 
-**STA (`sta_timestamps.txt`)** — each line is one segment with explicit boundaries:
+**STA (`sta_timestamps.txt`)**: each line is one segment with explicit boundaries.
 ```
 0:12 1:08(cut) to 1:18 都賀(2) gota del viento
 2:41 3:01 3:06 物井(1) gota del viento
@@ -234,18 +234,18 @@ Report any unmatched references. **Expected unused on disk: none after Step 5** 
 
 - **Station first** (easier to scan when listing files), then platform, then song.
 - **Underscore between fields**, **hyphens within a field**.
-- Only `station` is required. `platform` and `song-id` are optional — drop along with the separator:
-  - `narita_3_soyokaze.mp3` — all three known
-  - `narita_3.mp3` — song unknown
-  - `shisui_gota-del-vient.mp3` — no platform recorded (rare)
-  - `shisui.mp3` — only station known
+- Only `station` is required. `platform` and `song-id` are optional; drop each along with its separator:
+  - `narita_3_soyokaze.mp3`: all three known
+  - `narita_3.mp3`: song unknown
+  - `shisui_gota-del-vient.mp3`: no platform recorded (rare)
+  - `shisui.mp3`: only station known
 - Re-use surfaces as a glob on the trailing field: `ls *_gota-del-vient.mp3` shows every station that plays that song
 - **No metadata sidecar.** The filename is the store. When a song is identified later, rename the file + update its `sta` ref in route.json in the same pass.
-- **Variants are out of scope.** Two recordings of "the same song with slight differences" each get their own song-id slug. Door-chime differences across platforms/routes are not captured — `tsuga_2_gota-del-vient` and `monoi_1_gota-del-vient` share song identity, NOT recording identity.
+- **Variants are out of scope.** Two recordings of "the same song with slight differences" each get their own song-id slug. Door-chime differences across platforms/routes are not captured: `tsuga_2_gota-del-vient` and `monoi_1_gota-del-vient` share song identity, not recording identity.
 
 ### Japanese → ASCII slug rules
 
-Hepburn romanization, macrons stripped, lowercase, hyphens for word boundaries — same rule already used for station name slugs throughout the repo.
+Hepburn romanization, macrons stripped, lowercase, hyphens for word boundaries. This is the same rule already used for station name slugs throughout the repo.
 
 | Source | Slug |
 |---|---|
@@ -260,7 +260,7 @@ For non-Japanese names: lowercase, spaces → hyphens, strip apostrophes/most pu
 
 ### `sta_cut` field
 
-**Seconds from the START of the file** where melody stops and door chime begins. Computed at split time as `cut_timestamp - start_timestamp`. Old docs may have said "from end" — that was wrong.
+**Seconds from the START of the file** where melody stops and door chime begins. Computed at split time as `cut_timestamp - start_timestamp`. Old docs may have said "from end"; that was wrong.
 
 ### route.json field rules at split output
 
@@ -268,37 +268,37 @@ For non-Japanese names: lowercase, spaces → hyphens, strip apostrophes/most pu
 - `sta`: list of basenames. Often one entry; can have multiple variants.
 - `sta_cut`: integer, seconds from start.
 - **Terminus**: omit `sta` and `sta_cut` (no departure from end-of-line). Keep `time`.
-- **Passing stations** (`pa: []`): omit `sta`, `sta_cut`, AND `time` — train doesn't stop, countdown comes from the next PA station's `time`.
-- **`time` after a skip run**: the stop FOLLOWING passing stations carries the whole run — it is never the all-stations diagram's next hop, which is how Chūō `916H` came to claim 三鷹→中野 in 2 minutes across five stations. `time = Σ(all-stations hops over the same stations) − 1 per passing station`; the game's 運転時分 table wins where you have it. Full rule → [DATA_FORMAT § Skipping Stations](../../../docs/DATA_FORMAT.md).
+- **Passing stations** (`pa: []`): omit all three of `sta`, `sta_cut` and `time`. The train doesn't stop, so the countdown comes from the next PA station's `time`.
+- **`time` after a skip run**: the stop following passing stations carries the whole run. It is never the all-stations diagram's next hop; Chūō `916H` claimed 三鷹→中野 in 2 minutes across five stations that way. `time = Σ(all-stations hops over the same stations) − 1 per passing station`, and the game's 運転時分 table wins where you have it. Full rule → [DATA_FORMAT § Skipping Stations](../../../docs/DATA_FORMAT.md).
 
 ## Gotchas
 
 - **Discussion-first.** Don't generate the splitter or update route.json until the user confirms the timestamp parse. Especially for PA, where per-station segment count varies (1 vs 2) and surprises are common.
-- **CWD persists across Bash calls in this harness.** Use absolute paths in verification scripts, not relative ones — `Path('audio/...')` will resolve from wherever the last `cd` left you.
+- **CWD persists across Bash calls in this harness.** Use absolute paths in verification scripts, not relative ones. `Path('audio/...')` will resolve from wherever the last `cd` left you.
 - **First N minutes of a PA source mp3 may be non-PA filler** (silence, intro). The splitter starts at the first real timestamp; everything before is discarded.
 - **6-second gaps between two PA segments are real.** Sometimes JR back-to-backs two announcements. Don't "fix" by merging without asking.
-- **Unused-platform STA recordings** (other-platform takes for the train you're routing) belong in `audio/_archive/<line>/<diagram>/sta/`, NOT in the operational `sta/`. Tag them `"archive"` in the splitter's SEGMENTS so the script routes them automatically — don't mv them after the fact. The audio file is the atomic unit; route.json refs are the operational subset for THIS train.
-- **Trailing-chime gap < ~5s is suspicious** — the door chime portion of an STA (between `cut` and `end`) usually runs 5–20s. If you see only 2–3s of chime in the timestamps, double-check `end` against the source — likely a typo / off-by-a-few-seconds. Exception: known recurring tight-loop pattern at that station (rare, document if confirmed).
+- **Unused-platform STA recordings** (other-platform takes for the train you're routing) belong in `audio/_archive/<line>/<diagram>/sta/`, **not** in the operational `sta/`. Tag them `"archive"` in the splitter's SEGMENTS so the script routes them automatically; don't `mv` them after the fact. The audio file is the atomic unit, and route.json refs are the operational subset for this train.
+- **Trailing-chime gap < ~5s is suspicious.** The door chime portion of an STA (between `cut` and `end`) usually runs 5–20s. If you see only 2–3s of chime in the timestamps, double-check `end` against the source; it is likely a typo or an off-by-a-few-seconds. Exception: a known recurring tight-loop pattern at that station (rare, document if confirmed).
 - **Don't assume per-station PA count.** The timestamps file is ground truth. Count actual entries before sizing route.json `pa` arrays.
 - **Splitter scripts stay with their source folder** (`audio_src_<line>_workflow/`), not in a shared workflow folder. They document how that batch was split.
-- **Formats vary between sources** — even within the same line/diagram, two STA recordings may use different timestamp conventions (3 timestamps vs 2 timestamps per line, etc.). Don't try to unify into "the splitter"; each source gets its own script reflecting its own format. Multiple sources in the same folder → name them `split_{type}_{describer}.py` (e.g., `split_sta_tokyo.py`, `split_sta_higashichiba.py`).
-- **Trailing digits in station romanization** (e.g., `airport-terminal-2`) are part of the station name, not platform. Filename position-parsing has no parser, so this is human-readable ambiguity only — not a bug to fix.
-- **Don't create a metadata JSON sidecar** for STA. The filename IS the metadata store. If `sta_meta.json` shows up, that's a previous experiment that should be removed.
-- **Front-half placeholders are fine.** When STA source covers only part of a route (e.g., from-某-station-onward), the unsplit stops keep their placeholder `sta` refs (e.g., `JO19_TYO`, `JO20`) until the rest arrives. They'll fail `validate_data.py`'s file-existence check until then — that's expected.
+- **Formats vary between sources.** Even within the same line/diagram, two STA recordings may use different timestamp conventions (3 timestamps vs 2 timestamps per line, etc.). Don't try to unify into "the splitter"; each source gets its own script reflecting its own format. Multiple sources in the same folder → name them `split_{type}_{describer}.py` (e.g., `split_sta_tokyo.py`, `split_sta_higashichiba.py`).
+- **Trailing digits in station romanization** (e.g., `airport-terminal-2`) are part of the station name, not platform. Filename position-parsing has no parser, so this is human-readable ambiguity only, not a bug to fix.
+- **Don't create a metadata JSON sidecar** for STA. The filename is the metadata store. If `sta_meta.json` shows up, that's a previous experiment that should be removed.
+- **Front-half placeholders are fine.** When STA source covers only part of a route (e.g., from-某-station-onward), the unsplit stops keep their placeholder `sta` refs (e.g., `JO19_TYO`, `JO20`) until the rest arrives. They'll fail `validate_data.py`'s file-existence check until then, which is expected.
 
 ## Documentation hook
 
-After split + route.json update lands: if this work surfaced anything line-specific not already in [audio/README.md](../../../audio/README.md) — new diagram for existing line, IRL service quirk, filename-convention deviation, schema-corner-case usage — propose an entry. Decline if work was routine split-and-go.
+After split + route.json update lands, propose an entry in [audio/README.md](../../../audio/README.md) if this work surfaced anything line-specific not already there: a new diagram for an existing line, an IRL service quirk, a filename-convention deviation, a schema-corner-case usage. Decline if work was routine split-and-go.
 
 ## Out of scope
 
-- **Variant / arrangement modeling** — current scheme captures song identity, not recording identity. If/when fidelity matters, extend the convention or add a sidecar then. Don't pre-build for it.
-- **Cross-route audio sharing** (e.g., 東京 STA used on Sobu AND Tokaido) — for now, duplicate the file. If it becomes painful, factor out an `audio/_shared/` later.
-- **Nothing** — numeric slugs were retired on every shipped line by the 2026-08-08 pooling. They survive only under `audio/_joban/` and `audio/_mock/`.
-- **Audio normalization / loudness leveling** — out of this skill. The simulator does -15 LUFS at runtime.
+- **Variant / arrangement modeling.** The current scheme captures song identity, not recording identity. If fidelity matters later, extend the convention or add a sidecar then. Don't pre-build for it.
+- **Cross-route audio sharing** (e.g., 東京 STA used on Sobu and Tokaido). For now, duplicate the file. If it becomes painful, factor out an `audio/_shared/` later.
+- **Nothing.** Numeric slugs were retired on every shipped line by the 2026-08-08 pooling. They survive only under `audio/_joban/` and `audio/_mock/`.
+- **Audio normalization / loudness leveling.** Out of this skill. The simulator does -15 LUFS at runtime.
 
 ## Related
 
-- `audio/README.md` — per-line IRL + sim quirks catalog (write-gate target above)
-- `docs/DATA_FORMAT.md` — route.json schema reference (field meanings, validation rules)
-- `validate_data.py` — checks audio files referenced by routes exist on disk
+- `audio/README.md`: per-line IRL + sim quirks catalog (write-gate target above)
+- `docs/DATA_FORMAT.md`: route.json schema reference (field meanings, validation rules)
+- `validate_data.py`: checks audio files referenced by routes exist on disk

@@ -176,7 +176,10 @@ Recognize these patterns and don't flag them:
 3. **Don't refactor while distilling.** This skill removes / merges; it does not restructure. If a doc's structure is genuinely wrong, flag it as a structural note in the wrap report and let the user decide whether to address it separately.
 4. **Respect dormant scaffolding.** If a "Future: X" section has a clear known-future trigger (e.g. ENGLISH lower-LCD eventual implementation that's already an open GitHub issue), propose filing a GitHub issue for the reference rather than deleting outright. Same logic as `/vibe-check`'s dormant-scaffolding carve-out for code.
 5. **Don't expand scope mid-pass.** This skill audits the three named domain docs. If you notice bloat in CLAUDE.md / a skill / an inline contract during the pass, note it in the wrap report; don't pull it into the current proposal.
-6. **Removal-only, no rephrasing.** Don't rewrite sentences "while you're there." Each rewrite is an opportunity to introduce drift; this skill's discipline is to remove what shouldn't be there, not to improve what stays.
+6. **Removal-only, no rephrasing — by default.** Don't rewrite sentences "while you're there." Each rewrite is an opportunity to introduce drift; this skill's discipline is to remove what shouldn't be there, not to improve what stays.
+   - **The one exception is an explicit REGISTER pass**, which the user asks for by name. Bloat is about what a doc says; register is about how it reads, and a doc can be free of bloat and still be written in a style that teaches the model to write badly. The two cannot be fixed by the same operation, so a register pass rephrases everything and removes nothing.
+   - A register pass is only allowed with a **mechanical coverage proof**: diff the set of backticked identifiers and the set of dates, before against after, and account for every drop. Headings are cross-referenced by exact text (`§ "..."`), so treat any heading change as a rename that must be applied at every citing site. Without that proof it is not a register pass, it is undocumented drift, and Rule 6's default applies. Both checks have instrument traps — a span-level identifier diff false-alarms on reformatting, and an unscoped citation grep buries the real breaks. `/distill-rules` Rule 4 carries the calibrated form; use it here too.
+   - What a register pass cuts: em-dash-as-default-connector, SHOUTING CAPS for emphasis, self-justifying scaffolding, sibling cross-reference tails, intensifiers and hedges. What it never cuts: a fact, a number, a threshold, an invariant, or the force of an imperative.
 
 ## Scope
 
@@ -185,6 +188,6 @@ Recognize these patterns and don't flag them:
 - **Does** propose removals item-by-item, ask before non-trivial deletions, record before/after line counts.
 - **Does not** autofix without discussion.
 - **Does not** restructure (move sections around, rename headings). Removal-only.
-- **Does not** rewrite prose. If a sentence reads poorly but isn't bloat-shaped, leave it.
+- **Does not** rewrite prose in a normal pass. If a sentence reads poorly but isn't bloat-shaped, leave it — unless the user has asked for a register pass, which is the Rule 6 exception and carries its own coverage proof.
 - **Does not** audit CLAUDE.md, skills, inline contracts, memory logs — out of scope.
 - **Does not** auto-commit. User runs `/commit` themselves.

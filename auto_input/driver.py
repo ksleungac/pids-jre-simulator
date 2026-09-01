@@ -151,10 +151,10 @@ DISTANCE_GUARD_SLACK_M = 50.0
 #   PASSING→PASSING  cleared one passed-through station, re-targets the next one
 #   PASSING→MOVING   cleared the LAST passed-through station, re-targets the stopping station
 # Everything else is the same target getting nearer: ordinary travel. In particular
-# STOPPED→MOVING carries NO re-point — the dwell refresh happens only after the badge reads
-# STOPPED (author-stated 2026-08-11), so by the departure edge the anchor already holds the next
-# station's distance and the departure's own motion is ~3.75 m (a train's quickest ~3 km/h/s over
-# one 3 s sample) against a ~162 m allowance.
+# STOPPED→MOVING carries NO re-point. The dwell refresh happens only after the badge reads
+# STOPPED (author-stated 2026-08-11), so by the departure edge the anchor already holds the
+# next station's distance. The departure's own motion is ~3.75 m — a train's quickest
+# ~3 km/h/s over one 3 s sample — against a ~162 m allowance.
 #
 # The set is decided by what is PHYSICALLY possible, never by sampling timing. A coarse
 # SAMPLE_INTERVAL_S can make the refresh first *observed* on a MOVING→STOPPED pair (no sample
@@ -1288,11 +1288,12 @@ class AutoDriver:
         if inferred in (Layer3State.UNKNOWN, Layer3State.IDLE, Layer3State.STOPPED):
             return None  # OCR fail / first cycle / game parked — no desync
         # Game in transit while app parked at 1C. Disambiguate via the guarded
-        # badge (prev_badge, post cross-reject) + raw speed/distance —
-        # inferred_state can't tell 3B from 3C (both read DEPARTING cold), so the
-        # DEPARTURE_STALE_KMH gate is what separates "the departure PA is still
-        # worth playing" (below it — the normal LEVEL test already fired it with
-        # audio) from "long into the segment, announcement stale" (at or above).
+        # badge (prev_badge, post cross-reject) plus raw speed/distance.
+        # inferred_state can't tell 3B from 3C — both read DEPARTING cold — so
+        # the DEPARTURE_STALE_KMH gate is what separates the two cases. Below it,
+        # the departure PA is still worth playing and the normal LEVEL test has
+        # already fired it with audio. At or above it, we are long into the
+        # segment and the announcement is stale.
         badge = self._detector.prev_badge
         if badge == "MOVING" and distance is not None and distance <= self._detector.arrival_lead_m:
             # pa=1 segments have NO distinct 1B — cnt_pa = len(pa)-1 = 0 makes

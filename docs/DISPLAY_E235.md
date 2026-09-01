@@ -1,6 +1,6 @@
 # E235 Series — Display Doc
 
-Per-series renderers for the E235 train family. Two sub-series ship today: **E235-1000** (Yokosuka Line, Sōbu Rapid + through-service) and **E235-0** (Yamanote Line). Cross-model infrastructure (DisplayMode, ModeCycler, Unified State Machine, Adding-New-Train-Model recipe, Lower-LCD interface contract) lives in [DISPLAY.md](DISPLAY.md). Train-family scope and per-model IRL line scope live in [CLAUDE.md](../CLAUDE.md) "Mental Model" (preloaded — should already be in head).
+Per-series renderers for the E235 train family. Two sub-series ship today: **E235-1000** (Yokosuka Line, Sōbu Rapid + through-service) and **E235-0** (Yamanote Line). Cross-model infrastructure (DisplayMode, ModeCycler, Unified State Machine, Adding-New-Train-Model recipe, Lower-LCD interface contract) lives in [DISPLAY.md](DISPLAY.md). Train-family scope and per-model IRL line scope live in [CLAUDE.md](../CLAUDE.md) "Mental Model", which is preloaded and should already be in head.
 
 > **EDIT-CONTRACT** — what this doc holds, what it refuses.
 >
@@ -36,58 +36,62 @@ Per [CLAUDE.md](../CLAUDE.md) "Mental Model → Per-model IRL line scope": each 
 
 ### Destination Behavior
 
-Convention (always-kanji / "Bound for" English / `&` compound separator) lives in [CLAUDE.md](../CLAUDE.md) "Mental Model → IRL display conventions"; JSON encoding + sticky-override closure in [DATA_FORMAT.md § Stop-Level Destination Override](DATA_FORMAT.md). The renderer reads `stops[curr_stop]["dest"]` directly — the loader (`route_loader.finalize_route`) has already filled it on every stop at load time.
+Convention (always-kanji / "Bound for" English / `&` compound separator) lives in [CLAUDE.md](../CLAUDE.md) "Mental Model → IRL display conventions"; JSON encoding + sticky-override closure in [DATA_FORMAT.md § Stop-Level Destination Override](DATA_FORMAT.md). The renderer reads `stops[curr_stop]["dest"]` directly. The loader (`route_loader.finalize_route`) has already filled it on every stop at load time.
 
 ### English Station Name
 
-- Font: `fonts/HelveticaNeue-Bold.otf` @ 75pt (the `.ttf` cut had macron artifacts at large sizes — gone).
+- Font: `fonts/HelveticaNeue-Bold.otf` @ 75pt (the `.ttf` cut had macron artifacts at large sizes and is gone).
 - Position: `name_x = int(S_WIDTH * 0.40) + 10` (10 px right of the Japanese position to give breathing room from the JO/JY badge); `name_y = UPPER_HEIGHT - name_h` (2 px lower than Japanese to match reference).
-- Each mode's `draw_station` owns a `DARK_BG` clear rect that covers its glyph box plus ~10 px below for descender overflow. **Extend the rect downward only** — extending it upward into the prefix/clock band erases the clock.
-- JR PIDS uses uniform horizontal smoothscale (current `collapse=True` path) for long names — they do NOT swap to a separate condensed font cut. Don't introduce one.
+- Each mode's `draw_station` owns a `DARK_BG` clear rect that covers its glyph box plus ~10 px below for descender overflow. **Extend the rect downward only.** Extending it upward into the prefix/clock band erases the clock.
+- JR PIDS uses uniform horizontal smoothscale (current `collapse=True` path) for long names. It does not swap to a separate condensed font cut. Don't introduce one.
 
 Both sub-series share the same English-station-name treatment.
 
 ### Station Code Badge
 
-`_draw_station_code_badge()` reads `sta_code` (per-stop, from `route.json`) → renders the framed JY/03 square. Body is a thin wrapper that calls `displays.utils.draw_station_code_badge` with upper-LCD-specific params (badge_x=222, badge_w=68, badge_h=68, ring 7+7, sizes 18/22pt, etc.) and the optional `code_3` band. **`draw_station_code_badge` is the single badge renderer** — reused by the 8-station view's per-cell mini badges (smaller box, no `code_3` band, no black ring) and the **E235-0 5-station stopping view** (`JapaneseFiveStationDisplay._draw_jy_badge` — no-black-ring variation like the mini badges, scales the upper-LCD params by `b/54`, i.e. 68px minus the 2×7px black ring, so the color ring/interior/text fill the removed ring's space; no `code_3`). The **typeface is fixed** inside the helper (Frutiger / `NeueFrutigerWorld-Bold`) — callers pass point sizes, never a font face (see conventions.md). The Wikipedia `Template:JRSN` is a simplified CSS rendering (flat colored border, generic browser font) — *lower* fidelity than this helper, not a source to mimic; it was only useful for confirming proportions.
+`_draw_station_code_badge()` reads `sta_code` (per-stop, from `route.json`) and renders the framed JY/03 square. The body is a thin wrapper that calls `displays.utils.draw_station_code_badge` with upper-LCD-specific params (badge_x=222, badge_w=68, badge_h=68, ring 7+7, sizes 18/22pt, etc.) and the optional `code_3` band.
+
+**`draw_station_code_badge` is the single badge renderer.** The 8-station view's per-cell mini badges reuse it with a smaller box, no `code_3` band and no black ring. The **E235-0 5-station stopping view** reuses it as well (`JapaneseFiveStationDisplay._draw_jy_badge`): a no-black-ring variation like the mini badges, scaling the upper-LCD params by `b/54`, i.e. 68px minus the 2×7px black ring, so the color ring, interior and text fill the removed ring's space. No `code_3` there either.
+
+The **typeface is fixed** inside the helper (Frutiger / `NeueFrutigerWorld-Bold`). Callers pass point sizes, never a font face (see conventions.md). The Wikipedia `Template:JRSN` is a simplified CSS rendering (flat colored border, generic browser font) of *lower* fidelity than this helper, not a source to mimic. It was only useful for confirming proportions.
 
 If the Japanese station name has a `code_3` entry in `data/stations.json`, the outer black rect extends UPWARD into a top band showing the 3-letter Roman code (white text, e.g. AKB/TYO).
 
 All layout knobs live in the params block at the top of the method: `code_3_band_h`, `code_3_x_offset`, `code_3_y_offset`, and the point sizes `prefix_size` / `num_size` / `code_3_size` (the face is fixed in the helper, not loaded here).
 
-**Draw order:** badge draws **last** in `UpperDisplay.draw()` (after prefix/station) so the extended top band is not clipped. The prefix `DARK_BG` rect and the badge share `x=222` — earlier ordering painted over the top of the extension.
+**Draw order:** the badge draws **last** in `UpperDisplay.draw()` (after prefix/station) so the extended top band is not clipped. The prefix `DARK_BG` rect and the badge share `x=222`, and earlier ordering painted over the top of the extension.
 
 JSON-side details (`stations.json` keying, the 22-station catalog rule) are in [DATA_FORMAT.md](DATA_FORMAT.md). Real-world rationale is in [CLAUDE.md](../CLAUDE.md) "Mental Model → IRL display conventions".
 
 ### Element confinement (clip-enforced)
 
-Every upper-LCD region has a declared rect — manifest at the top of `displays/train_models/{model}/upper_lcd.py` (`TRAIN_TYPE_RECT` for E235-1000 only, `DEST_RECT`, `PREFIX_RECT`, `STATION_RECT`, `CLOCK_RECT`, `BADGE_RECT`, `PA_HINT_RECT`). Each region's draw method wraps its body in `with clip(self.screen, RECT):` (helper at `displays/utils.py:clip`). Pixels drawn outside the rect are dropped at the pygame layer — bleed into a neighbour's territory is structurally impossible, no eyeball check needed.
+Every upper-LCD region has a declared rect. The manifest sits at the top of `displays/train_models/{model}/upper_lcd.py` (`TRAIN_TYPE_RECT` for E235-1000 only, `DEST_RECT`, `PREFIX_RECT`, `STATION_RECT`, `CLOCK_RECT`, `BADGE_RECT`, `PA_HINT_RECT`). Each region's draw method wraps its body in `with clip(self.screen, RECT):` (helper at `displays/utils.py:clip`). Pixels drawn outside the rect are dropped at the pygame layer, so bleed into a neighbour's territory is structurally impossible and needs no eyeball check.
 
-**Tuning a region's bounds** — change the rect at module top. The clip wrap, the bg fill, and the debug-grid tint all read from the same constant.
+**Tuning a region's bounds:** change the rect at module top. The clip wrap, the bg fill, and the debug-grid tint all read from the same constant.
 
-**Debug-grid mode** — `uv run preview_display.py --debug-grid` swaps each region's bg to a unique tint via `_bg("<region>")` returning its `_DEBUG_COLORS` entry. Useful for verifying a NEW region's manifest entry covers the intended footprint; not load-bearing for catching bleed (clip handles that).
+**Debug-grid mode:** `uv run preview_display.py --debug-grid` swaps each region's bg to a unique tint via `_bg("<region>")` returning its `_DEBUG_COLORS` entry. Useful for verifying that a new region's manifest entry covers the intended footprint. It is not load-bearing for catching bleed; clip handles that.
 
-**Cross-mode parity** — all three mode renderers (Japanese / Furigana / English) share the same confinement per element. Internal content layout can differ; the boundary doesn't.
+**Cross-mode parity:** all three mode renderers (Japanese / Furigana / English) share the same confinement per element. Internal content layout can differ; the boundary doesn't.
 
-**Region map** — bounds + drawn-by + debug color for every region live as a comment block at the top of `displays/train_models/{model}/upper_lcd.py`, alongside `_DEBUG_COLORS`. Per-train-model — stays with the code, not in this doc.
+**Region map:** bounds, drawn-by and debug color for every region live as a comment block at the top of `displays/train_models/{model}/upper_lcd.py`, alongside `_DEBUG_COLORS`. It is per-train-model and stays with the code, not in this doc.
 
 **Pygame rendering gotchas:**
 
-- **Transparent leading does NOT clobber.** `font.render(text, True, color)` (no bg arg) returns an SRCALPHA surface; transparent pixels don't overwrite the destination on blit. A glyph surface whose top lands above its region's clip rect is safe — clip drops the transparent strip, the underlying bg survives.
-- **`font.get_height()` is ~`pt_size × 0.92`** for HelveticaNeue-Medium and ShinGoPr6N-Medium, NOT `pt_size × 1.2`. Probed examples: 24pt → 22, 78pt → 78.
-- **Vertically centering text in a shape: center the INK, not the render surface.** `img.get_rect(center=...)` centers the full line-height surface; the font's ascent gap above a digit exceeds its descent gap below, so the visible glyph parks low (~1.5px at a 30pt digit, scaling with size). Place by baseline + glyph metrics instead: `top = cy + (maxy + miny) / 2 - font.get_ascent()` where `maxy/miny` come from `font.metrics(s)` (ink extent above/below baseline). Exact across sizes. First bit the 5-station countdown circles (`JapaneseFiveStationDisplay._draw_numbered_circle`, 2026-06-12).
+- **Transparent leading does not clobber.** `font.render(text, True, color)` (no bg arg) returns an SRCALPHA surface, and transparent pixels don't overwrite the destination on blit. A glyph surface whose top lands above its region's clip rect is safe: clip drops the transparent strip and the underlying bg survives.
+- **`font.get_height()` is ~`pt_size × 0.92`** for HelveticaNeue-Medium and ShinGoPr6N-Medium, not `pt_size × 1.2`. Probed examples: 24pt → 22, 78pt → 78.
+- **Vertically centering text in a shape: center the ink, not the render surface.** `img.get_rect(center=...)` centers the full line-height surface. The font's ascent gap above a digit exceeds its descent gap below, so the visible glyph parks low (~1.5px at a 30pt digit, scaling with size). Place by baseline plus glyph metrics instead: `top = cy + (maxy + miny) / 2 - font.get_ascent()`, where `maxy/miny` come from `font.metrics(s)` (ink extent above/below baseline). This holds across sizes. First bit the 5-station countdown circles (`JapaneseFiveStationDisplay._draw_numbered_circle`, 2026-06-12).
 - **When passing a bg arg to `font.render()` inside a region**, use `_bg("<same region>")` not `DARK_BG` directly. Both render the same in normal mode, but `DARK_BG` punches solid-DARK_BG holes through the region's tint when debug-grid is on, defeating the visualization.
 
 ### E235-0 vs E235-1000 — diff
 
-**Removed in E235-0:** train-type cell (`TRAIN_TYPE_RECT = pygame.Rect(15, 8, 150, 31)`). Yamanote runs a single service type IRL, so the PIDS doesn't render one. Other elements do not reflow — the 150×31 top-left area becomes plain `DARK_BG`.
+**Removed in E235-0:** train-type cell (`TRAIN_TYPE_RECT = pygame.Rect(15, 8, 150, 31)`). Yamanote runs a single service type IRL, so the PIDS doesn't render one. Other elements do not reflow. The 150×31 top-left area becomes plain `DARK_BG`.
 
 Concrete code-level deltas in [`displays/train_models/e235_0/upper_lcd.py`](../displays/train_models/e235_0/upper_lcd.py) vs the E235-1000 sibling:
 
 - `TRAIN_TYPE_RECT` constant absent
 - `JapaneseDisplay.draw_train_type` + `EnglishDisplay.draw_train_type` methods absent
 - `_DEBUG_COLORS` dict has no `train_type` entry
-- `_bg(region)` simplified — no `default=` kwarg (all regions clear to `DARK_BG`)
+- `_bg(region)` simplified: no `default=` kwarg (all regions clear to `DARK_BG`)
 - `UpperDisplay.__init__` does not load `self.train_type`, `self.type_color`, or `self.train_types`
 - `_get_train_type_display` method absent
 - `UpperDisplay.draw` does not call `display.draw_train_type` between `_bg("upper_bg")` fill and `draw_destination`
@@ -105,43 +109,43 @@ Synced 2026-05-07 across both `e235_0/upper_lcd.py` and `e235_1000/upper_lcd.py`
 
 ### Sub-series selection (preview)
 
-`uv run preview_display.py --model e235_0` selects the E235-0 model for the preview entry point. The main app (`uv run main.py`) stays on E235-1000 — its `app.py` import is unchanged. Selection is rebind-time: preview-side patches `app.UpperDisplay / LowerDisplay / S_WIDTH / S_HEIGHT` before instantiating `PASimulator`.
+`uv run preview_display.py --model e235_0` selects the E235-0 model for the preview entry point. The main app (`uv run main.py`) stays on E235-1000; its `app.py` import is unchanged. Selection is rebind-time: the preview side patches `app.UpperDisplay / LowerDisplay / S_WIDTH / S_HEIGHT` before instantiating `PASimulator`.
 
-When a per-route or per-line model selection becomes desirable (e.g. `route.json` carrying a `train_model` field), that's a separate plumbing change — not blocked by anything here.
+When a per-route or per-line model selection becomes desirable (e.g. `route.json` carrying a `train_model` field), that is a separate plumbing change. Nothing here blocks it.
 
 ---
 
 ## Lower LCD
 
-The lower LCD's manager (`LowerDisplay`) and per-frame state contract (state injection, station-skip semantics, `cursor_pos` derivation, terminus handling) are cross-model — see [DISPLAY.md § Lower LCD — Cross-Model Interface](DISPLAY.md). This section covers per-sub-series renderers.
+The lower LCD's manager (`LowerDisplay`) and per-frame state contract (state injection, station-skip semantics, `cursor_pos` derivation, terminus handling) are cross-model; see [DISPLAY.md § Lower LCD — Cross-Model Interface](DISPLAY.md). This section covers per-sub-series renderers.
 
 ### Mode renderer architecture (per sub-series)
 
 Each sub-series's `lower_lcd.py` declares its own renderer set:
 
 **E235-1000** (`displays/train_models/e235_1000/lower_lcd.py`):
-- **JapaneseDisplay** — full route-map renderer (linear bar). Owns layout calc, marks, pointer, times.
-- **JapaneseEightStationDisplay** — 8-station zoomed view (alternates with the full-route view via the slot cycler).
-- **EnglishDisplay** — linear full-route display. Renders Romaji station names rotated 45 degrees counter-clockwise using HelveticaNeue-Bold at 17 pt. Employs 4x supersampling with bilinear downscaling (via `rotozoom`) to eliminate pixelation and applies a horizontal squeeze compression on long station names (exceeding 110px in 1x scale) before rotation. Draws "min" instead of "分" for minute markers.
+- **JapaneseDisplay**: full route-map renderer (linear bar). Owns layout calc, marks, pointer, times.
+- **JapaneseEightStationDisplay**: 8-station zoomed view (alternates with the full-route view via the slot cycler).
+- **EnglishDisplay**: linear full-route display. Renders Romaji station names rotated 45 degrees counter-clockwise using HelveticaNeue-Bold at 17 pt. Uses 4x supersampling with bilinear downscaling (via `rotozoom`) to remove pixelation, and applies a horizontal squeeze compression to long station names (exceeding 110px in 1x scale) before rotation. Draws "min" instead of "分" for minute markers.
 
 **E235-0** (`displays/train_models/e235_0/lower_lcd.py`):
-- **CircularFullRouteDisplay** — Yamanote-only circular racetrack. Drives the FULL slot when `route_data["route"] == "山手線"`.
-- **OpenRouteFullRouteDisplay** — the FULL slot for every **non-Yamanote** route: `CircularFullRouteDisplay` opened into a horseshoe (one end cap dropped). Subclasses it, reusing its marker primitives and overriding only the JY-keyed pieces to be stop-index keyed + linear. Replaces the old E235-1000 linear fallback; both Japanese and English modes use the same instance (kanji-only, like the circular). See [§ E235-0 — open-horseshoe full-route](#e235-0--open-horseshoe-full-route-non-yamanote).
-- **JapaneseFiveStationDisplay** — owns the EIGHT slot universally (E235-0 has no 8-station view). The 5-station stopping view: hand-drawn green band + five station markers + an inline transfer panel down the left column. Same instance is wired for ENGLISH (kanji-only regardless of mode).
-- **Horizontal transfer slot** — inherited unchanged from E235-1000 (the `transfer_display` concrete; distinct from the 5-station view's inline panel).
+- **CircularFullRouteDisplay**: Yamanote-only circular racetrack. Drives the FULL slot when `route_data["route"] == "山手線"`.
+- **OpenRouteFullRouteDisplay**: the FULL slot for every **non-Yamanote** route. It is `CircularFullRouteDisplay` opened into a horseshoe (one end cap dropped), subclassing it, reusing its marker primitives and overriding only the JY-keyed pieces to be stop-index keyed and linear. Replaces the old E235-1000 linear fallback. Both Japanese and English modes use the same instance (kanji-only, like the circular). See [§ E235-0 — open-horseshoe full-route](#e235-0--open-horseshoe-full-route-non-yamanote).
+- **JapaneseFiveStationDisplay**: owns the EIGHT slot universally (E235-0 has no 8-station view). The 5-station stopping view is a hand-drawn green band, five station markers, and an inline transfer panel down the left column. The same instance is wired for ENGLISH (kanji-only regardless of mode).
+- **Horizontal transfer slot**: inherited unchanged from E235-1000 (the `transfer_display` concrete, which is not the 5-station view's inline panel).
 
 **JapaneseDisplay (E235-1000) methods:**
 
-- `_calculate_layout()` — derives `per_line`, `x` (centered to actual cell count), `y`, `h_line`, `top_pad`, `circular`, `continuity` from `len(stops)`.
-- `_get_line(i)` — line 1 vs line 2 for global index `i`.
-- `_get_stops_list_disp(curr_stop)` — returns `(global_index, stop)` pairs in the current visible window. For long routes (> `STOPS_QUANTITY`), slides the window forward as the train approaches the end.
-- `_find_dest_index(f_stops)` — global index of the destination within the visible window.
-- `draw_marks(f_stops, dest_idx, cursor_pos, curr_stop)` — circles / passing-station arrows; the inner red dot at `curr_stop` marks the actual PA target.
-- `draw_ptr(f_stops, dest_idx, cursor_pos, curr_stop)` — red triangle pointer at `cursor_pos`.
-- `draw_times(...)` — cumulative travel times with floor-division countdown.
-- `show_stops(state, current_time)` — entry point. Reads from passed-in AppState; **does not mutate**.
+- `_calculate_layout()`: derives `per_line`, `x` (centered to actual cell count), `y`, `h_line`, `top_pad`, `circular`, `continuity` from `len(stops)`.
+- `_get_line(i)`: line 1 vs line 2 for global index `i`.
+- `_get_stops_list_disp(curr_stop)`: returns `(global_index, stop)` pairs in the current visible window. For long routes (> `STOPS_QUANTITY`), slides the window forward as the train approaches the end.
+- `_find_dest_index(f_stops)`: global index of the destination within the visible window.
+- `draw_marks(f_stops, dest_idx, cursor_pos, curr_stop)`: circles and passing-station arrows. The inner red dot at `curr_stop` marks the PA target.
+- `draw_ptr(f_stops, dest_idx, cursor_pos, curr_stop)`: red triangle pointer at `cursor_pos`.
+- `draw_times(...)`: cumulative travel times with floor-division countdown.
+- `show_stops(state, current_time)`: entry point. Reads from the passed-in AppState and **does not mutate** it.
 
-Lower-LCD fonts load in `JapaneseDisplay.__init__` via `font_atlas.lcd_font` (see DISPLAY.md § Code Style Conventions). Sizes live in `constants.py` (`FONT_STOPS_SIZE`, `FONT_TIME_SIZE`, `FONT_STOPS_MINUTE_SIZE`). **Not because the mode renderers share them** — `EnglishDisplay` hardcodes its own Helvetica `17`, so `FONT_STOPS_SIZE` has exactly one consumer and by the `constants.py` rule below it is misfiled. Left in place rather than moved; noted so the next reader doesn't infer a sharing that isn't there. Per-display-module sizes go inline; `constants.py` is for values genuinely shared across modules.
+Lower-LCD fonts load in `JapaneseDisplay.__init__` via `font_atlas.lcd_font` (see DISPLAY.md § Code Style Conventions). Sizes live in `constants.py` (`FONT_STOPS_SIZE`, `FONT_TIME_SIZE`, `FONT_STOPS_MINUTE_SIZE`), but not because the mode renderers share them. `EnglishDisplay` hardcodes its own Helvetica `17`, so `FONT_STOPS_SIZE` has one consumer and is misfiled under the `constants.py` rule below. It was left in place rather than moved, and is noted here so the next reader doesn't infer a sharing that isn't there. Per-display-module sizes go inline; `constants.py` is for values genuinely shared across modules.
 
 ---
 
@@ -317,7 +321,11 @@ Live in [`displays/train_models/e235_0/lower_lcd.py`](../displays/train_models/e
 
 Live in [`displays/train_models/e235_0/lower_lcd.py`](../displays/train_models/e235_0/lower_lcd.py) `JapaneseFiveStationDisplay`. Owns the **EIGHT slot** universally on E235-0 (the manager swaps it in for every route — E235-0 has no 8-station view). The view: the green band, five station markers along it, and an inline transfer panel down the left column.
 
-**Band — Tier-2 mask PNG.** Shape is hand-drawn white-on-transparent (`data/e235_0/five_station_band.png`, pixel-precise, not parametric), baked once with the route line color at `__init__` (`_bake_band` — alpha-stencil tint: near-white fill → line color, the grey edge outline left as-drawn, alpha untouched). A green fill animation (`_BAND_FILL_DURATION`) replays on each slot-enter (restarted by the manager's `on_slot_enter` hook — fired from `LowerDisplay._on_slot_entered` off `apply_slot`, the scheduler's single slot-commit funnel; the renderer never self-detects re-entry, so a draw stall or a stopped→moving marker flip does NOT refill), sweeping bottom → top **along the band's curved centerline** with the leading front cut perpendicular to the local tangent (so it stays diagonal to the curve) and feathered smooth (`_BAND_FILL_FEATHER`) rather than a hard cut. The centerline is derived DIRECTLY from the mask's own geometry — the per-row horizontal centroid of the fill, ordered bottom → top (`_extract_band_centerline`, precomputed in `_build_fill_centerline`); the mask is a single contiguous band per row, so the centroid is a faithful medial line. No parametric waypoints, no Catmull-Rom — the earlier arc-spline path (p0..p6 + `_build_catmull_rom_centerline`) was retired together with the shape when the mask replaced it.
+**Band — Tier-2 mask PNG.** Shape is hand-drawn white-on-transparent at `data/e235_0/five_station_band.png`, pixel-precise rather than parametric. It is baked once with the route line color at `__init__` by `_bake_band`, an alpha-stencil tint: the near-white fill becomes the line color, the grey edge outline is left as-drawn, and alpha is untouched.
+
+A green fill animation (`_BAND_FILL_DURATION`) replays on each slot-enter, restarted by the manager's `on_slot_enter` hook. That hook fires from `LowerDisplay._on_slot_entered` off `apply_slot`, the scheduler's single slot-commit funnel; the renderer never self-detects re-entry, so a draw stall or a stopped→moving marker flip does NOT refill. The fill sweeps bottom → top **along the band's curved centerline**, with the leading front cut perpendicular to the local tangent so it stays diagonal to the curve, and feathered smooth (`_BAND_FILL_FEATHER`) rather than a hard cut.
+
+The centerline is derived DIRECTLY from the mask's own geometry: the per-row horizontal centroid of the fill, ordered bottom → top (`_extract_band_centerline`, precomputed in `_build_fill_centerline`). The mask is a single contiguous band per row, so the centroid is a faithful medial line. No parametric waypoints and no Catmull-Rom — the earlier arc-spline path (p0..p6 plus `_build_catmull_rom_centerline`) was retired together with the shape when the mask replaced it.
 
 **Five markers** (positions in `_TUNEABLES_FIVE_STATION`, calibration-editor tuneable): m0 = current stop at the bottom, m1..m4 = next four going up. The next-stop walk (`_visible_stop_indices`) wraps past the doubled loop terminal with name-dedup on a **circular** route (`stops[0].name == stops[-1].name`), so approaching 大崎 the view keeps extending around the loop (大崎 → 品川 → …) instead of dead-ending; linear routes stop at the last stop. m0 is a **free-polygon** red pentagon (five hand-placed vertices v0..v4 — fixed slot + orientation, so no parametric shape model; the white dot rides m0/`m0_dr`) when STOPPING; an approaching-circle + countdown digit + animated sweep arrow (`a0_*`) when APPROACHING. m1..m4 are numbered countdown circles. Minute values = the E235-1000 `draw_times` cumulative chain (`_ahead_minutes` / `_first_stop_minutes`); the chain restarts from 0 when STOPPED (the curr→curr+1 leg is already travelled) vs seeds from the remaining-to-curr time when APPROACHING.
 
@@ -369,7 +377,10 @@ Computed in `_get_window(cursor_pos)`. **Every regime keys on `cursor_pos`** (th
 
 `LOCK_THRESHOLD = VISIBLE_COUNT - 1 = 7`. Lock kicks in when the VISUAL position leaves `remaining ≤ 7` so the locked window has 1 already-passed cell + 7 ahead = 8 visible, terminus (`n-1`) always included.
 
-**Why every regime keys on `cursor_pos` — the pointer-visibility invariant.** A position-locked view MUST always show the train pointer (see [DISPLAY.md § Position-locked views always show the pointer](DISPLAY.md)). Keying any regime on `curr_stop` breaks this: a departure that skips passing stations jumps `curr_stop` several cells ahead while the cursor is still animating across them, so a curr_stop-keyed window snaps to the tail *before* the visible cursor arrives — pushing the cursor off the window's left edge (`local_disp < 0` → `draw_ptr` suppresses the pointer). The same jump makes the manager's `_should_lock_to_eight` drop the FULL slot early. Keying both on `cursor_pos` keeps the cursor at local index 1 (sliding) or ≥ 1 (locked) at all times, and the locked window `[n-8 .. n-1]` still always contains the terminus — dest stays visible too, so there is **no tradeoff**.
+**Why every regime keys on `cursor_pos` — the pointer-visibility invariant.** A position-locked view MUST always show the train pointer (see [DISPLAY.md § Position-locked views always show the pointer](DISPLAY.md)). 
+Keying any regime on `curr_stop` breaks this. A departure that skips passing stations jumps `curr_stop` several cells ahead while the cursor is still animating across them, so a curr_stop-keyed window snaps to the tail *before* the visible cursor arrives. That pushes the cursor off the window's left edge (`local_disp < 0`, so `draw_ptr` suppresses the pointer). The same jump makes the manager's `_should_lock_to_eight` drop the FULL slot early.
+
+Keying both on `cursor_pos` keeps the cursor at local index 1 (sliding) or ≥ 1 (locked) at all times, and the locked window `[n-8 .. n-1]` still always contains the terminus. Dest stays visible too, so there is **no tradeoff**.
 
 #### View cycler (`LowerDisplay`)
 
@@ -484,9 +495,21 @@ E235-0 inherits the E235-1000 transfer-info renderer unchanged for its horizonta
 3. **Blueprint widening** — `effective_margin_x = max(margin_x, h_narrowest)` where `h_narrowest = min over rows of (W − Σ_row) / (n_row + 1)`. Inert when no row is narrower than default margin.
 4. **Real-render placement (per row)** — Rule 1 (column-align if N ≤ M; asymmetric predecessor-intrusion check) → Rule 2 (head + tail + leftmost-fit; tracks `predecessor_clean_seen` for Case A vs B) → Rule 3 (Case A only: canvas-right tail) → Rule 4 (equal-spacing + track-back of earlier rows). Anchor row uses **column-aware** placement when `slack ≥ 0`; falls back to geometric `head/tail/distribute` when `slack < 0` (品川, 横浜).
 
-**Column-aware gate vs spacing use different widths — deliberately.** The `slack ≥ 0` *gate* packs on `col_max_widths` = max width per column across non-shinkansen rows, and that conservative form is what drops 品川 / 横浜 to the geometric path; relaxing it pulls them onto the column path and their rows come out markedly less even (JO 横浜 row 0 gaps 38·39·38 → 16·83·16, measured 2026-08-21). Once the gate passes, columns are *spaced* on `col_spacing_widths`, which counts a column-k entry only when its row also has an entry at k+1 — a row's trailing entry may overhang the next column, since Rule 1's intrusion check is asymmetric and nothing in that row sits there to be intruded on. Reserving for a trailing entry punches a hole into every row that does continue past that column: at 大宮 `JU_utsunomiya`, row 2's tail ニューシャトル (214) widened column 1 against 高崎線 (122), leaving anchor-row gaps 7·98·7 (now 23·23·23). Spacing widths are never wider than gate widths, so a layout that cleared the gate still fits. Corpus effect: 31 of 38 column-aware stations keep byte-identical widths; of the 7 relaxed, those with `M = 2` are unmoved (the last column is pinned to the right margin, absorbing the slack).
+**Column-aware gate vs spacing use different widths — deliberately.** The `slack ≥ 0` *gate* packs on `col_max_widths`, the max width per column across non-shinkansen rows. That conservative form is what drops 品川 / 横浜 to the geometric path; relaxing it pulls them onto the column path and their rows come out markedly less even (JO 横浜 row 0 gaps 38·39·38 → 16·83·16, measured 2026-08-21).
 
-**Overhang trim (`anchor_overhang_trim`).** Column slack is shared equally by the `M − 1` boundaries, and spending all of it lands the last column flush on `W − effective_margin_x`. Justifying is correct while the anchor row is the TOP row — it is then the widest row by construction, so it defines the page width and nothing can stick out past it. The defect appears only when the anchor has a row ABOVE it, which happens solely under a **lone shinkansen** (the one layout whose top row cannot seed the columns). That top row is a single wide item that cannot stretch, so a justified anchor row juts past it: at 大宮 `JU_takasaki` the shinkansen ends at 575 and the anchor row ran to 668 with nothing above or below it out there. The trim pulls the columns in toward the row above's right edge — sized by the actual overhang rather than a flat ratio, so it vanishes where there is none — floored at `min_inter_gap` so columns never crowd tighter than the cascade's own spacing floor and a deep overhang is *reduced*, not erased. The left margin is untouched and lower rows take their x from these columns, so column alignment follows them in. Row grouping is decided upstream and is unaffected. Scope: the 9 panels whose row 0 is a lone shinkansen (品川 ×3, 上野 ×4, 大宮 ×2); the rest of the route corpus is untouched by it, and an assertion that every row keeps its rule and every aligned row's x-set stays a subset of the row above passes with 0 violations. The floor clamp is applied MONOTONE — `min(per_gap, max(per_gap - overhang/(M-1), min_inter_gap))` — because where the natural gap is already below the floor a bare `max` would RAISE it and push the columns right, the opposite of a trim. 上野 `JK_south` at 22pt is that case: natural gap 8.7px against a floor of 19, so the re-clamp correctly leaves it alone. Without it the anchor row ran to 717 past a 686 right edge, the row below could no longer place its tail on the last column, and it fell out of Rule 1 into Rule 4 equal-spacing — losing column alignment entirely.
+Once the gate passes, columns are *spaced* on `col_spacing_widths`, which counts a column-k entry only when its row also has an entry at k+1. A row's trailing entry may overhang the next column, since Rule 1's intrusion check is asymmetric and nothing in that row sits there to be intruded on. Reserving for a trailing entry punches a hole into every row that does continue past that column: at 大宮 `JU_utsunomiya`, row 2's tail ニューシャトル (214) widened column 1 against 高崎線 (122), leaving anchor-row gaps 7·98·7, now 23·23·23.
+
+Spacing widths are never wider than gate widths, so a layout that cleared the gate still fits. Corpus effect: 31 of 38 column-aware stations keep byte-identical widths, and of the 7 relaxed, those with `M = 2` are unmoved — the last column is pinned to the right margin, absorbing the slack.
+
+**Overhang trim (`anchor_overhang_trim`).** Column slack is shared equally by the `M − 1` boundaries, and spending all of it lands the last column flush on `W − effective_margin_x`. Justifying is correct while the anchor row is the TOP row: it is then the widest row by construction, so it defines the page width and nothing can stick out past it.
+
+The defect appears only when the anchor has a row ABOVE it, which happens solely under a **lone shinkansen** — the one layout whose top row cannot seed the columns. That top row is a single wide item that cannot stretch, so a justified anchor row juts past it. At 大宮 `JU_takasaki` the shinkansen ends at 575 and the anchor row ran to 668, with nothing above or below it out there.
+
+The trim pulls the columns in toward the row above's right edge. It is sized by the actual overhang rather than a flat ratio, so it vanishes where there is none, and floored at `min_inter_gap` so columns never crowd tighter than the cascade's own spacing floor and a deep overhang is *reduced* rather than erased. The left margin is untouched, and lower rows take their x from these columns, so column alignment follows them in. Row grouping is decided upstream and is unaffected.
+
+Scope: the 9 panels whose row 0 is a lone shinkansen (品川 ×3, 上野 ×4, 大宮 ×2). The rest of the route corpus is untouched by it, and an assertion that every row keeps its rule and every aligned row's x-set stays a subset of the row above passes with 0 violations.
+
+The floor clamp is applied MONOTONE — `min(per_gap, max(per_gap - overhang/(M-1), min_inter_gap))` — because where the natural gap is already below the floor, a bare `max` would RAISE it and push the columns right, the opposite of a trim. 上野 `JK_south` at 22pt is that case: natural gap 8.7px against a floor of 19, so the re-clamp correctly leaves it alone. Without it the anchor row ran to 717 past a 686 right edge, the row below could no longer place its tail on the last column, and it fell out of Rule 1 into Rule 4 equal-spacing, losing column alignment entirely.
 
 5. **Horizontal centring** — after placement, the whole block is shifted uniformly so the left and right gutters match. The sibling of the vertical `top_gap`. Every row starts at `effective_margin_x` and a justified row also ends on the right margin, so this is a **no-op wherever a row justifies**: 90 of the 100 station panels the route corpus reaches shift by 0. It matters where a row was deliberately not justified — the overhang trim above — which would otherwise leave the block sitting left with the reclaimed space pooled on the right (大宮 `JU_takasaki`: 62 left / 139 right → 100 / 101). Being a uniform translation it preserves every relative position, so column alignment is untouched. It also corrects panels that were already off-centre for unrelated reasons: 渋谷 `JA_north` 86/24 → 55/55, and 小山 `JU_utsunomiya` 149/89 → 119/119. 上野 `JK_south`'s former −38px canvas overflow is retired by shrink-to-fit rather than by centring: it re-lays at 22pt with 44/44 gutters and a centring shift of 0.
 
@@ -560,7 +583,9 @@ The Case A / Case B dispatch in Rule 3 is the subtlest decision in the pipeline.
 
 Pre-implementation reference set for validating the row-grouping pipeline. `N` computed from `data/stations.json` (own-line filter + `transfers_by_view` drops). IRL groupings sourced from station LCD reference photos. **22/22 in-spec ✓** as of 2026-05-05; 武蔵小杉 JN is out-of-spec (E233-8000, not E235) and kept as a best-effort comparison point only.
 
-**What this corpus locks is the ROW GROUPING — not the within-row spacing.** The IRL column is a partition (`(3,3,2)`), and that is what each row of the table was checked against. Within-row gaps were compared only at the major, transfer-dense stations, and there for **column alignment** — whether an entry's icon sits under the one above it — not for the size of the gaps. So a change that moves gaps while preserving grouping and alignment is not contradicting this table, and the ✓ marks must not be read as authority over spacing. (Author, 2026-08-21: *"IRL verified is only the row grouping … even if it is verified, i am only looking at the alignment."*) The mechanical counterpart is in [`_tests/README.md`](../_tests/README.md) § "Rendering is excluded from the TIERS": snapshot the whole corpus's geometry before and after, and require every moved panel to be explained.
+**What this corpus locks is the ROW GROUPING, not the within-row spacing.** The IRL column is a partition (`(3,3,2)`), and that is what each row of the table was checked against. Within-row gaps were compared only at the major, transfer-dense stations, and there for **column alignment** — whether an entry's icon sits under the one above it — not for the size of the gaps.
+
+So a change that moves gaps while preserving grouping and alignment is not contradicting this table, and the ✓ marks must not be read as authority over spacing. (Author, 2026-08-21: *"IRL verified is only the row grouping … even if it is verified, i am only looking at the alignment."*) The mechanical counterpart is in [`_tests/README.md`](../_tests/README.md) § "Rendering is excluded from the TIERS": snapshot the whole corpus's geometry before and after, and require every moved panel to be explained.
 
 | # | Station | Line | View | N | IRL | Current algo | Path | Notes |
 |---|---|---|---|---|---|---|---|---|

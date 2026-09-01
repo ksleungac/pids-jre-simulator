@@ -10,7 +10,7 @@ triggers:
 
 ## Purpose
 
-Reproduce the PyInstaller build locally: produce a one-file exe with version metadata embedded, stage the distribution folder (`dist-release/JRE-PA-Simulator/`), and stop there. Zipping and GitHub release are separate, opt-in steps — `/release` picks up from the artifacts this skill stages (the old all-in-one `release.ps1` was retired in `9bfe431`); this skill is the "just build and let me test" path.
+Reproduce the PyInstaller build locally: produce a one-file exe with version metadata embedded, stage the distribution folder (`dist-release/JRE-PA-Simulator/`), and stop there. Zipping and the GitHub release are separate, opt-in steps. `/release` picks up from the artifacts this skill stages (the old all-in-one `release.ps1` was retired in `9bfe431`). This skill is the "just build and let me test" path.
 
 ## Required input
 
@@ -336,7 +336,13 @@ Compress-Archive -Path "dist-release\JRE-PA-Simulator" -DestinationPath "dist-re
 
 The `_*` exclusion is critical: `_archive/` (working backups, Sobu reference recordings, etc.) and `_mock/` (preview-only test catalog) must never reach end users — those are repo-internal scaffolding.
 
-**Smoke-test self-pollution — strip the whole class before zip, not just `settings.json`.** The exe resolves `project_root()` to `Path(sys.executable).parent` = the staged folder, so *everything* it writes at runtime lands there during the Step 2e smoke launch, after Step 2d staging finished. Known writers: `i18n.py` → `settings.json` (`{"language": …, "oobe_completed": true}` — if zipped, end users skip the first-run picker and inherit the tester's locale); the OCR Report button → `drive_*.html`; a recorded drive → `_recordings/*.jsonl`. The generic sweep above is keyed on the invariant "the only legit staged-root entries are the exe + the shipped asset dirs" rather than a hardcoded filename, so a *new* runtime writer (a log, a cache, a crash dump) is caught the first time it appears instead of silently shipping. Data-bearing artifacts (drive recordings) are moved to the gitignored repo `_recordings/`, not deleted — a real replay drive is worth keeping. (2026-07-23: the first v0.6.2 zip shipped a 4.9 MB drive Report `.html` + a `_recordings/` JSONL because only `settings.json` was stripped; generalized in the same session.)
+**Smoke-test self-pollution — strip the whole class before zip, not just `settings.json`.** The exe resolves `project_root()` to `Path(sys.executable).parent`, the staged folder, so *everything* it writes at runtime lands there during the Step 2e smoke launch, after Step 2d staging finished. Known writers:
+
+- `i18n.py` → `settings.json` (`{"language": …, "oobe_completed": true}`). If zipped, end users skip the first-run picker and inherit the tester's locale.
+- The OCR Report button → `drive_*.html`.
+- A recorded drive → `_recordings/*.jsonl`.
+
+The generic sweep above is keyed on the invariant "the only legit staged-root entries are the exe plus the shipped asset dirs" rather than a hardcoded filename, so a *new* runtime writer — a log, a cache, a crash dump — is caught the first time it appears instead of silently shipping. Data-bearing artifacts (drive recordings) are moved to the gitignored repo `_recordings/`, not deleted: a real replay drive is worth keeping. (2026-07-23: the first v0.6.2 zip shipped a 4.9 MB drive Report `.html` + a `_recordings/` JSONL because only `settings.json` was stripped; generalized in the same session.)
 
 **Never** use `Remove-Item -Recurse -Force $audioJunction` — `Remove-Item` with `-Recurse` on a junction follows the reparse point and deletes the real audio directory. Use `[System.IO.Directory]::Delete(path, false)` instead, which removes only the junction entry.
 
