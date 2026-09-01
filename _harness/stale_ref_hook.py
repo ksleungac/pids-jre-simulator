@@ -45,6 +45,13 @@ def _identifiers(text: str) -> set[str]:
 
 
 def main() -> None:
+    # Windows pipes default to cp1252; matched lines carry em-dashes and Japanese,
+    # which render as mojibake without this. See conventions.md § Tooling.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, OSError):
+        pass
+
     raw = sys.stdin.read()
     try:
         data = json.loads(raw)
@@ -71,6 +78,11 @@ def main() -> None:
             ["git", "grep", "-n", "--", symbol],
             capture_output=True,
             text=True,
+            # Without this, text=True decodes git's UTF-8 output using the Windows
+            # locale codepage (cp1252), so every em-dash and kanji in a matched line
+            # comes back as mojibake. See conventions.md § Tooling.
+            encoding="utf-8",
+            errors="replace",
             cwd=root,
         )
         lines = [l for l in result.stdout.splitlines() if not l.startswith("Binary file")]
