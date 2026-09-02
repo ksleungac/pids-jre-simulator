@@ -2261,9 +2261,13 @@ within 0.1px of each other, where the endpoint reading separated them by 6.7.
 
 - `[measured]` — **the active service IS drawn heavier**, settled by coverage integral rather than by
   a threshold (`--thick`). An ordinary line integrates to 2.02 canvas px and the loaded train's own
-  service to 4.82, on the same cut. What the integral also shows is that the two rows disagree: the
-  active line measures 4.82 on the lower row and 3.0-ish on the upper, so `line_h_active` is a
-  per-row pair. OPEN — why. One reference cannot say whether that is the design or the capture.
+  service to 4.82, on the same cut. **By the same amount on both rows** — the integral disagrees,
+  reading 4.83 on the lower band against 3.31 on the upper, and that split was carried as a per-row
+  pair and left open until the author closed it (2026-09-02: *"i don't understand by if the current
+  pattern has a bolder line, but this happens only on the lower line not upper line, think this is a
+  reference error"*). The highlight is a property of the SERVICE, so a band cannot hold its own
+  opinion about it; § "Source order" puts the author above the photograph. `line_h_active` is one
+  scalar, 5, the lower row's figure.
 - `[measured]` — **stop markers**, slot by slot (`--overview`). The pass tests each slot centre for a
   near-white core, with the window clamped to sit wholly on the line so a row end cannot read the
   pale background as a mark. Two slots are author-supplied because nothing is drawn there to
@@ -2276,6 +2280,49 @@ within 0.1px of each other, where the endpoint reading separated them by 6.7.
   it now refuses any slot named in `junctions[]`. **日野, on 快速 only** — the junction spur's
   outermost stub ends at x 453.4 against that slot's centre at 452.1, so it sits on the orange line
   there while the other services' stubs converge above their own slots.
+- `[author]` — **the marker is a GENERIC box, in no service's colour** (2026-09-02: *"it's just a
+  generic box no need to be in that pattern's color, also the center of the box gray … the box
+  should be bigger, think almost just smaller than the width of the red pattern line"*). An RGB walk
+  across one confirms it: a dark neutral rim around a light neutral interior, both distinct from the
+  bluish background — `(200,222,255)` outside, a rim floor of `(121,140,169)`, and `(201,206,208)`
+  flat over six reference px in the middle. Overall 5.5 × 4.7 canvas px with a ~1.3px rim, drawn as
+  5 × 5 at rim 1. Sizing it to sit INSIDE the 5px active line was the wrong reading of "almost just
+  smaller": the same box has to read on the 2px ordinary line, which it overhangs, and the reference
+  overhangs there too. The interior is the same grey on the greyed upper row and on the black lower
+  row, so it is not state-carrying.
+- `[author]` — **the legend label centres on the highlight box, and it was reading too heavy**
+  (2026-09-02: *"reconsider font weight, seems bolder, and the highlight or the text, they should
+  match, text vertically centered on the box"*). Two separate causes. The weight was FreeType
+  grid-fitting the outline onto the pixel grid at size 11, which thickens every stem; drawn through
+  the upper LCD's `_render_cells` it renders at a whole multiple and resolves down, recovering the
+  true ~0.95-of-em proportions. That shrank the ink to 10.0 against the reference's 11.08, so the
+  size went 11 → 12 and now measures 11.0 × 54.0 against 11.08 × 54.11. The centring takes the box's
+  already-snapped `centery` rather than the float the box derives from, so the two cannot round a
+  pixel apart. The old `leg_text_dy` of −3.8 was a fit to that same rounding and is gone.
+- `[measured]` — **the name pitch is 15.38 on ink of 14.20**, re-fitted 2026-09-02 after the author
+  saw the names overlapping. Stepping character to character down three reference columns reads
+  15.77 15.13 15.34 15.55 15.34 15.13, so there is a clear 1.2px between characters. The earlier
+  pair, 14.4 on a size-16 glyph, came from dividing a whole name's span by its character count and
+  checking the glyph on WIDTH — two errors that cancelled into numbers that looked right, and the
+  render overlapped itself by 1.6px. Ink comes down through the same resolve-down as the legend, so
+  a size 15 gives 14.25 rather than the 16.0 grid-fitting produces at 16. `name_lift` follows the
+  size: the column is anchored by its surface foot, so a smaller descent carried the ink 1.7px up
+  and the lift went 9.1 → 7.4. Every character boundary now lands within a pixel of the reference's.
+- `[author]` — **the two 方面 spur labels take ShinGoPr6N-Heavy** (2026-09-02: *"the tachikawa spur
+  font bold, can be more bold"*). The author named the 立川 one; 千葉方面 takes it too, being the
+  same element class at the same size on the opposite corner. The run length is unaffected — 164.00
+  against the reference's 163.20 — so the existing 0.66 tracking still holds with the wider face.
+  **Heavy is measured, not assumed.** `--ink` now reports `cover`, the ink integral over the bbox,
+  which is a size-normalised weight: the same face set larger covers the same fraction of its own
+  box, so two runs at different sizes compare where a threshold count cannot. On the spur's own text
+  the reference reads 0.477 and ours 0.479. The author asked whether it should simply match the
+  legend (*"same boldness as the pattern text? or was it just too small so it looks like less
+  bold"*) — it should not: the reference's own legend text reads 0.409 on 中央特快 against that 0.477,
+  so the two labels genuinely carry different weights and the size was not the illusion.
+- `[author]` — **`leg_box_w` 69.5 → 65.7, DERIVED rather than measured** (2026-09-02: *"highlight
+  block has too much space on the right"*). It is the width leaving the same 3.85px either side of
+  the cell run. The reference's own box is asymmetric, 5.5px left of its ink against 9.8 right, so
+  this is a departure from it on the author's eye.
 
 ### 14.4 What one reference cannot say
 
@@ -2285,6 +2332,23 @@ is still two rows; whether the legend is still each service's terminus; whether 
 or drawn out. Two sheets disagreeing on any of those is the generalisation question answering
 itself.
 
+- OPEN — **the 11px text should be DeBold and currently ships Heavy.** `--ink` now reports `cover`,
+  the ink integral over the bbox, which separates weight from size; the control is the spur's own
+  text read on both images, agreeing to 0.002. Bracketing the same strings in both cuts this
+  checkout holds: on 中央特快 Medium reads 0.340 and Heavy 0.493 against the reference's 0.409, and on
+  快速, 0.186 and 0.267 against 0.243. On the spur, Heavy runs 7% over the reference.
+  **The measurement alone does NOT settle this, and reading it as if it did was an error.** A
+  resampled capture loses coverage at every edge, because the bleed grows the bbox faster than it
+  grows the mass, so a reference figure is a floor rather than an estimate — recorded in
+  `upper_lcd.py`'s destination-face block since that element was fitted, and not consulted here.
+  Correct for it and the reference's true weight could reach Heavy. What decides it is the author's
+  eye (*"i think currently too bold, anything less than heavy?"*), which § "Source order" puts above
+  both the photograph and the instrument. DeBold is the only cut lighter than Heavy and heavier than
+  Medium, and it is already this model's small-text face.
+  `_SMALL_FACE` therefore names **Heavy, as a marked placeholder**: `ShinGoPro-DeBold.otf` is on
+  neither of the author's machines and in no baked atlas, and naming it makes the whole E233-0 lower
+  LCD unrenderable, so the view cannot be worked on at all. One line to flip on a machine that has
+  the file. The station names stay on Medium — set at 15, never in question.
 - OPEN — **direction.** The author expects the sheet differs by direction, and only one direction is
   modelled for now, so 上り is what gets authored. Unconfirmed.
 - OPEN — **day type.** 通勤特快 and 通勤快速 are weekday-only services, so a weekend sheet may drop

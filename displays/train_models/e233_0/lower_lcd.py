@@ -49,7 +49,7 @@ from constants import TIME_SCALE
 from displays.transfer_info import apply_transfer_filter, load_icon, resolve_entry
 from displays.lower_lcd import LowerDisplayBase
 from displays.utils import arrow_points, column_width, draw_1col_text, draw_1col_text_plain, draw_aapolygon
-from displays.train_models.e233_0.upper_lcd import _TYPE_SUPERSAMPLE, _build_soft_box, outlined
+from displays.train_models.e233_0.upper_lcd import _TYPE_SUPERSAMPLE, _build_soft_box, _cell_scale, _render_cells, outlined
 from displays.train_models.e233_0.transfer_info import TransferInfoDisplay
 from displays.train_models.e233_0.priority_seat import PrioritySeatDisplay
 from displays.train_models.e233_0.manner_mode import MannerModeDisplay
@@ -490,6 +490,22 @@ _NAME_FACE = "ShinGoPr6N-Medium.otf"
 _TIME_FACE = "HelveticaNeue-Bold.otf"
 # The transfer band only — see `_transfer_font`.
 _TRANSFER_FACE = "ShinGoPro-DeBold.otf"
+# The patterns-overview's SMALL TEXT — the two 方面 spur labels and the legend's
+# service types. Not Medium, which the ink integral puts 20-26% under the
+# reference, and not Heavy, which puts it 7% over and which the author read
+# straight off the render (2026-09-02: "the tachikawa spur font bold, can be
+# more bold", then "i think currently too bold, anything less than heavy?").
+# DeBold is the only cut between them, and it is already this model's small-text
+# face — the transfer band uses it. The station names stay on Medium: they are
+# set at 15 rather than 11 and were never in question.
+#
+# PLACEHOLDER — the answer is `_TRANSFER_FACE`, and this says Heavy.
+# `ShinGoPro-DeBold.otf` is on neither of the author's machines right now, and it
+# is in no baked atlas either, so naming it here makes the whole E233-0 lower LCD
+# unrenderable and the view cannot be worked on at all. Heavy is one weight step
+# too bold and it renders. Flip this line to `_TRANSFER_FACE` on a machine that
+# has the file; nothing else changes. Tracked in WIP_e233_0_display.md § 14.4.
+_SMALL_FACE = "ShinGoPr6N-Heavy.otf"
 
 # The position marker is composited at this scale and resolved by one
 # downscale — see `_marker_image`. Same construction as the upper LCD's
@@ -2815,38 +2831,62 @@ _TUNEABLES_OVERVIEW = {
     # admits more of its skirt and calls it thicker. Integrating settles it —
     # every ordinary line measures 2.1-2.3 across both rows and every colour.
     "line_h":           2,
-    # The ACTIVE service is drawn heavier, and by DIFFERENT amounts per row:
-    # 通勤特快 measures 3.31 on the upper band and 4.83 on the lower, steady
-    # along the whole row at four sampled x. Indexed by DATA row, so [0] is the
-    # screen's lower band.
-    #
-    # OPEN — why the two rows differ is not known. The reference is one capture
-    # of one active service, so "the active line is heavier" and "the lower band
-    # is heavier" cannot be told apart; a capture with a different service
-    # highlighted separates them.
-    "line_h_active":   (5, 3),
+    # The ACTIVE service is drawn heavier, and by the SAME amount on both rows.
+    # The reference does not show that: 通勤特快 integrates to 4.83 on the lower
+    # band and 3.31 on the upper, steady along each row at four sampled x, which
+    # was carried as a per-row pair and left OPEN. The author ruled it a capture
+    # fault (2026-09-02: "i don't understand by if the current pattern has a
+    # bolder line, but this happens only on the lower line not upper line, think
+    # this is a reference error") — the highlight is a property of the SERVICE,
+    # so a band cannot have its own opinion about it. `principles.md` § "Source
+    # order": the author outranks the photograph. The lower row's 4.83 is the
+    # figure kept, being the one the capture renders at full strength.
+    "line_h_active":      5,
     "pad":              8.0,   # line overhang past a slot centre at a WRAP end
     "pad_terminus":    12.0,   # and at the axis's own last station (高尾), which
                                # the reference pads half again as far — the same
                                # wrap-versus-terminus split section 9.3.4 measured
                                # on the full-route bar
 
-    "mark_w":           4,     # stop marker, white with a rim in the line colour.
-    "mark_h":           4,     # The reference's white CORE measures 1.6-2.4
-    "mark_rim":         1,     # canvas px across, so a 4px marker with a 1px rim
-                               # leaves the 2 it wants; at 5 the core was 3
+    # Stop marker. GENERIC — the same box on every service, in no service's
+    # colour (author, 2026-09-02: "it's just a generic box no need to be in that
+    # pattern's color, also the center of the box gray ... the box should be
+    # bigger, think almost just smaller than the width of the red pattern line").
+    # An RGB walk across one on the reference reads a dark neutral rim around a
+    # light neutral interior, both distinct from the bluish background it sits
+    # in: (200,222,255) outside, (121,140,169) at the rim's floor, (201,206,208)
+    # flat across the middle. The box measures 5.5 x 4.7 canvas px overall with a
+    # ~1.3px rim, so 5 x 5 at rim 1 is the integral form of it. It reads on the
+    # 2px ordinary line and the 5px active line alike, which a marker sized to
+    # sit INSIDE the active line could not.
+    "mark_w":           5,
+    "mark_h":           5,
+    "mark_rim":         1,
+    "mark_edge_color": (118, 122, 128),   # the rim's floor is the sub-pixel
+                                          # integral, so the true ink is at or
+                                          # below the 122 the capture shows
+    "mark_color":      (201, 206, 209),   # flat over 6 reference px, so this one
+                                          # is read straight off
 
-    "name_size":       16,     # fitted on ink WIDTH: the reference's characters
-                               # measure 14.9 canvas px across
-    "name_pitch":      14.4,   # and they are stacked TIGHTER than they are wide —
-                               # 阿佐ケ谷's four characters span 57.5, so the cell
-                               # is 14.38 against a 14.9 glyph. Deriving the pitch
-                               # from `get_height()` gave 17.25 and pushed every
-                               # name a fifth of its own height too low
-    "name_lift":        9.1,   # from the row's first line up to the name's foot.
+    # Both re-fitted 2026-09-02 on the ADJACENT-CHARACTER STEP, which is what the
+    # earlier pair got wrong: it derived the cell from a whole name's span and a
+    # glyph width, so the two errors could cancel and the numbers still looked
+    # right. Stepping character to character over three columns of the reference
+    # reads 15.77 15.13 15.34 15.55 15.34 15.13, mean 15.38, on ink averaging
+    # 14.20 tall — a clear 1.2px between characters. Ours was 16.00 of ink on a
+    # 14.4 pitch, so every name OVERLAPPED itself by 1.6px (author: "station
+    # names have some vertical overlapping").
+    "name_size":       15,     # ink 14.25 through the resolve-down in
+                               # `_draw_names`; grid-fitted at this size it would
+                               # be 15.0 and the gap would close to 0.38
+    "name_pitch":     15.38,
+    "name_lift":        7.4,   # from the row's first line up to the name's foot.
                                # Measured on the ink, not on the fit that set the
                                # pitch — that one checked width only, and the whole
-                               # band sat 3.1px low on both rows
+                               # band sat 3.1px low on both rows. Re-fitted with
+                               # the size: the column is anchored by its SURFACE
+                               # foot, so the font's descent shrank with the glyph
+                               # and carried the ink 1.7px up with it
     "name_color":      (20,  20,  20),
     "name_dim":        (150, 155, 168),
 
@@ -2876,13 +2916,15 @@ _TUNEABLES_OVERVIEW = {
                                # underline and the slant's head sit: measured
                                # y 329 on a row centred 322, and y 350 on one
                                # centred 344
-    "leg_size":        11,     # fitted on ink HEIGHT, not width: the run's width
+    "leg_size":        12,     # fitted on ink HEIGHT, not width: the run's width
                                # is set by the four-cell pitch and barely moves
                                # with the size, so it cannot discriminate. The
-                               # reference's label ink is 11.08 tall; size 13
-                               # rendered 14.0
-    "leg_text_dy":     -3.8,   # the label rides ABOVE the row's centre — ink
-                               # centre 428.2 on a row centred 432
+                               # reference's label ink is 11.08 tall. 11 was the
+                               # fit while the glyph was rendered AT this size
+                               # and grid-fitted to ~1.0 of the em; drawn through
+                               # `_render_cells` it resolves down to its true
+                               # ~0.95, which measured 10.0 and cost the size a
+                               # step back up
 
     # A row is FOUR separate marks, not one block. The active service does not
     # fill its whole row — traced by colour, `y` 317-329 carries the vertical
@@ -2895,7 +2937,12 @@ _TUNEABLES_OVERVIEW = {
     "leg_swatch_h":    14.8,   # measured at native resolution on 青梅特快's, the
     "leg_swatch_dy":   -1.4,   # one row where nothing else shares its colour
     "leg_box_x":       11.1,   # the label box, on the active row only
-    "leg_box_w":       69.5,
+    "leg_box_w":       65.7,   # DERIVED, not measured: the cell run spans
+                               # 14.95..72.95, so this is the width that leaves
+                               # the same 3.85px either side of it. The reference
+                               # runs to 80.5 and is asymmetric — 5.5px left of
+                               # its ink against 9.8 right — and the author read
+                               # that as "too much space on the right" (2026-09-02)
     "leg_box_h":       12.7,   # sized so its foot clears the underline by ONE
     "leg_box_dy":      -1.5,   # pixel — the reference's box ends y 327 and its
                                # underline starts 329, and that gap is visible
@@ -2946,7 +2993,12 @@ _TUNEABLES_OVERVIEW = {
     "spur_top_x":     168.3,   # where it meets the line, y 434
     "spur_label_x":   103.1,   # the reference's ink edge. NOT the stub's centre,
                                # which sits 2.1px left of where the label starts
-    "spur_label_dy":    5.6,   # ink lands y 446.1..457.6 on the reference
+    "spur_label_dy":   10.7,   # down from the stub to the run's CENTRE. Ink lands
+                               # y 446.1..457.6 on the reference, centre 451.88,
+                               # against a stub at 441.3. Was 5.6 plus a
+                               # `get_height() / 2` at the call site, which made
+                               # the placement a function of the face — swapping
+                               # the cut moved the label
     "spur_label_size": 11,     # ink 11.50 tall on the reference, which is an 11
                                # plus the downscale's fringe — a 12 renders 12.9
     # Both 方面 labels are LETTER-SPACED, and by the same amount: 千葉方面 runs
@@ -3081,7 +3133,7 @@ class JapanesePatternsOverviewDisplay:
         """
         t = _TUNEABLES_OVERVIEW
         rows, services = sheet.get("rows", []), sheet.get("services", [])
-        max_rows = min(len(t["row_r_cx"]), len(t["row_pitch"]), len(t["row_cy0"]), len(t["line_h_active"]))
+        max_rows = min(len(t["row_r_cx"]), len(t["row_pitch"]), len(t["row_cy0"]))
         problems = []
         if len(rows) > max_rows:
             problems.append(f"{len(rows)} rows against {max_rows} fitted")
@@ -3098,6 +3150,15 @@ class JapanesePatternsOverviewDisplay:
                 problems.append(f"{label} folds from the legend but is service {i}, past {len(t['fold_foot_x'])} fitted feet")
             if junctions & set(svc.get("stops") or ()) and i >= len(t["jspur_foot_x"]):
                 problems.append(f"{label} serves a junction but is service {i}, past {len(t['jspur_foot_x'])} fitted spur feet")
+            # The type spreads across the legend's fixed cell run as SPACES, so
+            # its characters have to land on whole cells. Chūō's types are 2 and
+            # 4 long and both divide the 3 gaps; a 3-character type would want
+            # half-cells, which the run cannot express. Refusing beats laying it
+            # out wrong, and the rounding would look deliberate.
+            n = len(svc.get("type") or "")
+            cells = int(t["leg_cells"])
+            if n > cells or (n > 1 and (cells - 1) % (n - 1)):
+                problems.append(f"{label} is {n} characters, which does not spread over the legend's {cells} cells")
         # The legend is stacked, not fitted per service, so it bounds the count
         # on its own — and it is the bound that catches a service needing neither
         # foot, which the two tests above are both silent about.
@@ -3128,6 +3189,34 @@ class JapanesePatternsOverviewDisplay:
         if f is None:
             f = lcd_font(_NAME_FACE, size, draws=_OVERVIEW_DRAWS)
             self._name_fonts[size] = f
+        return f
+
+    def _small_font(self, size: int):
+        """The page's 11px text: both 方面 spur labels and the legend's types.
+
+        One face for all three, because they are one class — the smallest text on
+        the page, and the weight question the author raised about the spur is the
+        same one the legend answers. The author named only 立川; 千葉方面 takes it
+        as its opposite number, and the legend because the ink integral puts
+        Medium 20-26% under the reference on its own strings.
+
+        Negative cache key: same dict, different face role. A side table keyed on
+        the font would misattribute after a cache clear, which is why identity
+        travels on the object here (`conventions.md` § "Never key a side table on
+        `id(obj)`").
+        """
+        f = self._name_fonts.get(-size)
+        if f is None:
+            f = lcd_font(
+                _SMALL_FACE,
+                size,
+                draws=(
+                    at("audio/*/system.json:junctions[].spur"),
+                    at("audio/*/system.json:services[].spur"),
+                    at("audio/*/system.json:services[].type"),
+                ),
+            )
+            self._name_fonts[-size] = f
         return f
 
     def _span(self, service) -> Tuple[int, int]:
@@ -3226,7 +3315,7 @@ class JapanesePatternsOverviewDisplay:
         t = _TUNEABLES_OVERVIEW
         active = self.route_data.get("type")
         for r, row, i, service, base, lo, hi, cy, color in self._bands():
-            h = t["line_h_active"][r] if service["type"] == active else t["line_h"]
+            h = t["line_h_active"] if service["type"] == active else t["line_h"]
             # At the axis ORIGIN the line begins where its slant's FOOT is —
             # the point the stroke stops being thin. Reading it from
             # `_fold_ends` means the thickness change and the join are one
@@ -3264,15 +3353,15 @@ class JapanesePatternsOverviewDisplay:
         missing. Do not reorder these calls on the strength of that reading.
         """
         t = _TUNEABLES_OVERVIEW
-        for r, row, _i, service, base, lo, hi, cy, color in self._bands():
+        for r, row, _i, service, base, lo, hi, cy, _color in self._bands():
             stops = set(service["stops"])
             for j in range(lo - base, hi - base + 1):
                 if row[j] not in stops:
                     continue
                 outer = pygame.Rect(0, 0, t["mark_w"], t["mark_h"])
                 outer.center = (round(self._slot_cx(r, j)), round(cy))
-                pygame.draw.rect(self.screen, color, outer)
-                pygame.draw.rect(self.screen, (255, 255, 255), outer.inflate(-2 * t["mark_rim"], -2 * t["mark_rim"]))
+                pygame.draw.rect(self.screen, t["mark_edge_color"], outer)
+                pygame.draw.rect(self.screen, t["mark_color"], outer.inflate(-2 * t["mark_rim"], -2 * t["mark_rim"]))
 
     def _draw_names(self) -> None:
         """Vertical station names, bottom-aligned onto each row's first line.
@@ -3282,13 +3371,22 @@ class JapanesePatternsOverviewDisplay:
         on the same data.
         """
         t = _TUNEABLES_OVERVIEW
-        font = self._name_font(int(t["name_size"]))
+        size = int(t["name_size"])
+        # Laid out at a whole multiple and resolved down, the same way the legend
+        # and the upper LCD's cells are. Two things follow, and this element
+        # needs both. The glyph gets its true ~0.95-of-em ink instead of the 1.0
+        # FreeType grid-fits it to at this size, which is what made the names
+        # overlap; and the PITCH is rounded at the scaled size, so the effective
+        # step lands within 1/scale of the 15.38 measured rather than on a whole
+        # canvas pixel.
+        scale = _cell_scale(size)
+        font = self._name_font(size * scale)
         # `draw_1col_text_plain` steps by `get_height() + line_gap`, so a cell
         # tighter than the glyph is a NEGATIVE gap. Derived from the authored
         # pitch rather than the other way round, so the pitch stays the number
         # that was measured and does not move when the size is retuned.
-        gap = int(round(t["name_pitch"] - font.get_height()))
-        pitch = font.get_height() + gap
+        pitch = round(t["name_pitch"] * scale)
+        gap = pitch - font.get_height()
         # A junction carries no axis name. Its pill's own white text IS the name,
         # and the reference leaves the slot above the pill empty — drawing both
         # puts a second 立川 in the band, since the pill starts below the name.
@@ -3301,21 +3399,23 @@ class JapanesePatternsOverviewDisplay:
                 text = name.replace(" ", "")  # a space is the data's line break;
                 # this element has one column, so it is dropped rather than drawn
                 color = t["name_dim"] if self._dim(name) else t["name_color"]
-                cx = self._slot_cx(r, j)
                 # Centre on the COLUMN, which `draw_1col_text_plain` sizes to the
                 # widest glyph and treats `x` as the left edge of. Measuring the
                 # first glyph instead is right only while it happens to be the
                 # widest, which every full-width name on this axis is.
                 col_w = column_width(font, text)
-                draw_1col_text_plain(
-                    font,
-                    text,
-                    int(round(cx - col_w / 2.0)),
-                    int(round(bottom - ((len(text) - 1) * pitch + font.get_height()))),
-                    color,
-                    self.screen,
-                    line_gap=gap,
-                )
+                col_h = (len(text) - 1) * pitch + font.get_height()
+                # Pre-filled with the INK colour at zero alpha: `smoothscale`
+                # averages RGB and alpha separately, so any other fill would rim
+                # every glyph with it. `conventions.md` § UI code style.
+                col = pygame.Surface((max(1, col_w), max(1, col_h)), pygame.SRCALPHA, 32)
+                col.fill((*color, 0))
+                draw_1col_text_plain(font, text, 0, 0, color, col, line_gap=gap)
+                w, h = max(1, round(col_w / scale)), max(1, round(col_h / scale))
+                if scale > 1:
+                    col = pygame.transform.smoothscale(col, (w, h))
+                cx = self._slot_cx(r, j)
+                self.screen.blit(col, (round(cx - w / 2.0), round(bottom - h)))
 
     def _draw_junction_spurs(self) -> None:
         """The branch leaving a junction: a slant per service, then one stub each.
@@ -3353,7 +3453,8 @@ class JapanesePatternsOverviewDisplay:
                         ),
                     )
                 self._draw_tracked(
-                    self._name_font(int(t["jspur_label_size"])),
+                    self._small_font,
+                    int(t["jspur_label_size"]),
                     junction["spur"],
                     t["jspur_label_x"],
                     t["jspur_label_cy"],
@@ -3405,7 +3506,6 @@ class JapanesePatternsOverviewDisplay:
         service it is not.
         """
         t = _TUNEABLES_OVERVIEW
-        font = self._name_font(int(t["leg_size"]))
         active = self.route_data.get("type")
         for i, service in enumerate(self._sheet["services"]):
             color = tuple(service["color"])
@@ -3439,6 +3539,18 @@ class JapanesePatternsOverviewDisplay:
                 ),
             )
 
+            # The box's geometry is computed on EVERY row even though only the
+            # active one draws it, because the label centres on the box's own
+            # snapped centre line. Deriving the text's y from the float would let
+            # the two round apart by a pixel, which is the whole complaint the
+            # centring answers.
+            box = pygame.Rect(
+                round(t["leg_box_x"]),
+                round(cy + t["leg_box_dy"] - t["leg_box_h"] / 2),
+                round(t["leg_box_w"]),
+                round(t["leg_box_h"]),
+            )
+
             # Only the box and the reversed ink mark the active service. It does
             # NOT fill the row: the rectangle and the underline are the same on
             # every row, and the gap at x 8.1-11.1 is what keeps them separate
@@ -3446,39 +3558,49 @@ class JapanesePatternsOverviewDisplay:
             ink = t["name_color"]
             if service["type"] == active:
                 ink = (255, 255, 255)
-                pygame.draw.rect(
-                    self.screen,
-                    color,
-                    pygame.Rect(
-                        round(t["leg_box_x"]),
-                        round(cy + t["leg_box_dy"] - t["leg_box_h"] / 2),
-                        round(t["leg_box_w"]),
-                        round(t["leg_box_h"]),
-                    ),
-                )
-            self._draw_type_cells(font, service["type"], cy, ink)
+                pygame.draw.rect(self.screen, color, box)
+            self._draw_type_cells(service["type"], box.centery, ink)
 
-    def _draw_type_cells(self, font, text: str, cy: float, ink) -> None:
+    def _draw_type_cells(self, text: str, box_cy: int, ink) -> None:
         """A service type on the legend's fixed four-cell run.
 
         Four characters fill the run one per cell. A shorter type SPREADS to the
         run's ends rather than setting tight from the left, so 快速 lands in
         cells 1 and 4 — which is what the reference measures, its two characters
-        sitting exactly where 各駅停車's first and last do.
+        sitting exactly where 各駅停車's first and last do. The spread is spelled
+        as SPACES inside the run, so `_render_cells` places every character on
+        the same constant advance and this method owns no placement maths.
+
+        Drawn through the upper LCD's `_render_cells` rather than a per-glyph
+        `font.render`. At size 11 FreeType grid-fits the outline onto the pixel
+        grid, which thickens every stem; the label read heavier than the
+        reference for exactly that reason (author, 2026-09-02: "reconsider font
+        weight, seems bolder"). `_render_cells` renders at a whole multiple above
+        `_CELL_MIN_RENDER` and resolves down, so the glyph keeps its true
+        proportions and the downscale supplies real antialiasing. Same mechanism
+        the destination and station name already use — `conventions.md` § UI code
+        style.
+
+        Vertically the run's INK centres on `box_cy`, the highlight box's own
+        SNAPPED centre, rather than on the row centre it derives from. The box
+        is what the eye reads the label against (author: "text vertically
+        centered on the box"), and taking the already-rounded value means the
+        two cannot land a pixel apart. Ink rather than surface, because the
+        surface carries the font's leading and centring that seats the text low
+        by the descent.
         """
         t = _TUNEABLES_OVERVIEW
-        n = len(text)
+        cell = float(t["leg_cell"])
         last = int(t["leg_cells"]) - 1
-        for i, ch in enumerate(text):
-            # One character centres on the run; more spread evenly across it, so
-            # the first and last always land on the outer cells.
-            slot = last / 2.0 if n == 1 else i * last / (n - 1)
-            cx = t["leg_cell_cx0"] + slot * t["leg_cell"]
-            g = font.render(ch, True, ink)
-            self.screen.blit(
-                g,
-                (round(cx - g.get_width() / 2), round(cy + t["leg_text_dy"] - g.get_height() / 2)),
-            )
+        n = len(text)
+        # `_assert_shape` has already refused a type whose characters cannot sit
+        # on whole cells, so the step is exact here rather than rounded.
+        run = (" " * (last // (n - 1) - 1)).join(text) if n > 1 else text
+        img, pad = _render_cells(self._small_font, int(t["leg_size"]), run, cell, cell, ink)
+        # Cell 0's LEFT edge. A single character owns the middle of the run
+        # instead, which is where the spread would have put it.
+        left = t["leg_cell_cx0"] - cell / 2 + (last / 2.0 * cell if n == 1 else 0.0)
+        self.screen.blit(img, (round(left) - pad, box_cy - img.get_bounding_rect().centery))
 
     def _draw_folds(self) -> None:
         """Each chip's line running out to meet its service on the lower row.
@@ -3519,12 +3641,12 @@ class JapanesePatternsOverviewDisplay:
                     max(1, round(w)),
                 ),
             )
-            font = self._name_font(int(t["spur_label_size"]))
             self._draw_tracked(
-                font,
+                self._small_font,
+                int(t["spur_label_size"]),
                 service["spur"],
                 t["spur_label_x"],
-                t["spur_y"] + t["spur_label_dy"] + font.get_height() / 2,
+                t["spur_y"] + t["spur_label_dy"],
                 t["name_color"],
             )
 
@@ -3543,23 +3665,46 @@ class JapanesePatternsOverviewDisplay:
             (foot, t["row_cy0"][0] + i * t["line_pitch"]),
         )
 
-    def _draw_tracked(self, font, text: str, x: float, cy: float, ink) -> float:
+    def _draw_tracked(self, font_for, size: int, text: str, x: float, cy: float, ink) -> float:
         """A letter-spaced run, drawn left to right. Returns its right edge.
 
         Per character rather than one `render`, because pygame has no tracking
         and the reference's 方面 labels carry two thirds of a pixel between every
         glyph — which over the 立川 label's thirteen gaps is 9px, enough to end
         the line in the wrong place.
+
+        Composed at a whole multiple and resolved down as ONE surface, which is
+        what makes the run sit steady. Rendered glyph by glyph at 11px, FreeType
+        grid-fits each character to the pixel grid on its own, so its ink lands
+        at a different sub-pixel height and the run visibly walks (author,
+        2026-09-02: *"at this small size, font type is unstable, sometimes higher
+        sometimes lower, the placement"*). At 4× every glyph shares one grid and
+        a single downscale carries them all the same way. Two more things follow:
+        the tracking stops being quantised to whole pixels by `round(cx)`, and
+        the stems lose the weight grid-fitting had rounded onto them.
         """
-        track = _TUNEABLES_OVERVIEW["label_track"]
-        cx = x
-        for ch in text:
-            g = font.render(ch, True, ink)
-            self.screen.blit(g, (round(cx), round(cy - g.get_height() / 2)))
-            cx += font.size(ch)[0] + track
-        # The right edge. No caller consumes it — it is what a measurement pass
+        t = _TUNEABLES_OVERVIEW
+        scale = _cell_scale(size)
+        font = font_for(size * scale)
+        track = t["label_track"] * scale
+        advances = [font.size(ch)[0] + track for ch in text]
+        run = sum(advances) - track
+        w, h = max(1, math.ceil(run)), font.get_height()
+        # Pre-filled with the INK at zero alpha — `smoothscale` averages RGB and
+        # alpha separately, so any other fill rims every glyph with it.
+        surf = pygame.Surface((w, h), pygame.SRCALPHA, 32)
+        surf.fill((*ink, 0))
+        cx = 0.0
+        for ch, adv in zip(text, advances):
+            surf.blit(font.render(ch, True, ink), (round(cx), 0))
+            cx += adv
+        if scale > 1:
+            surf = pygame.transform.smoothscale(surf, (max(1, round(w / scale)), max(1, round(h / scale))))
+        self.screen.blit(surf, (round(x), round(cy - surf.get_height() / 2)))
+        # The right edge, from the ADVANCES rather than the surface, which carries
+        # a rounding pad. No caller consumes it — it is what a measurement pass
         # reads back, and the 立川 label's 156.80px run was fitted against it.
-        return cx - track
+        return x + run / scale
 
     def _stroke(self, color, x0, y0, x1, y1, w) -> None:
         """A straight stroke of constant HORIZONTAL width between two points.

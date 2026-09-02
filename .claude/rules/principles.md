@@ -254,6 +254,7 @@ When the user states a rule with a scope phrase ("also applies to all", "everywh
 
 **Why:** "everywhere" inherits the prior sentence's axis. Examples:
 - (2026-05-03) "Also applies to all steps" was scoped to active-prompt timing; I reverted history-key timing too, under one consistency frame.
+- (2026-09-02) "render the whole screen on different states" arrived after an hour on one view, and I read "states" across every axis the app has — views × modes × PA phases × notices, three diagrams, twenty frames. They meant the element we were working on: *"i only care about the overview under different states"*, then *"don't change anything outside your overview scope"*. A plural noun inherits the subject under discussion, not the app's full state space.
 - (2026-08-19) *"don't complicate things, am tired, treat me as 5 yrs old"* mid-research, so I cut the research. They meant the presentation: *"didn't tell you to stop, you can aggregate the ideas, but when present to me keep them simple."*
 
 **How to apply:**
@@ -533,6 +534,7 @@ A number read from a photograph or a screenshot carries the resampler's artefact
 - On an upscaled capture, a band brighter than both its neighbours is resampling overshoot, not ink. Profile a plain edge of the same two colours elsewhere in the same image, and check the colour: the fabricated "white" peaked at `(252,187,151)`, pink rather than neutral.
 - Measure a sub-pixel feature by its integral, not its extreme pixel. The phase moves per capture; the quantity does not. It is also what makes a threshold-derived extent wrong.
 - After a resample, an artifact touching its own surface edge is not evidence it was cut. A downscale's antialiasing tail legitimately reaches the edge. Test upstream (does the source render have room) and downstream (does the drawn ink land outside its clip rect).
+- **A property that varies along an axis the DESIGN cannot vary along is the capture.** The E233-0 overview draws the loaded train's own service heavier, and the integral read that highlight at 4.83 on one row against 3.31 on the other. It was carried as a per-row pair for want of a second reference. The author threw it out in a line: *"i don't understand by if the current pattern has a bolder line, but this happens only on the lower line not upper line, think this is a reference error"* — the highlight belongs to the SERVICE, so a band cannot hold an opinion about it. Before encoding an asymmetry one capture shows, name what in the design could produce it. Nothing can means the capture did.
 
 ### Enumerate the reachable space, not the combinatorial one
 Exhaustive search over combinations is the right instrument for "can this happen at all" — it settles what reading the code cannot. But enumerate what the SYSTEM can actually produce, not the Cartesian product of every field. Name the impossible combinations from the domain and exclude them BEFORE searching, and say which ones you dropped.
@@ -698,6 +700,17 @@ A reported bug gets REPRODUCED before a fix is written, and the fix gets MUTATIO
 - **A guard whose new term is implied by an existing one is inert** — the shape to check for whenever a fix reads as "add a condition". Ask which input makes the new term decide, and construct it.
 - Reproduce with the cheapest instrument that touches the real code path — a standalone server and a raw socket, not the whole app.
 - Once analysis and observation have disagreed across 2+ rounds, stop and read the next section instead.
+
+### An unverifiable change also costs the next iteration
+Before applying a change you cannot exercise, ask what else stops working. "Unverified" is the obvious cost and usually the smaller one; the change can also take the surface offline, so neither you nor the author can keep working on it.
+
+**Why:** the verification gap gets stated and the knock-on does not, so it arrives as a surprise on the next request. Examples:
+- (2026-09-02) Named a font that exists on no machine here as the E233-0 overview's face. That was flagged as unverified and applied anyway — and it made the whole lower LCD raise on load, so the render sheet the author asked for next was impossible, on top of the view being unworkable. It came back as *"oh.. this machine does not have debold...ah damn..."*.
+
+**How to apply:**
+- Prefer a marked placeholder that keeps the loop alive, with the real answer named at the site and in the doc. A comment saying "flip this one line" survives; a broken import blocks.
+- Check the fallbacks before assuming one exists. Here the baked atlas could have supplied the face and did not carry it, which took one command to establish.
+- This does not license shipping the wrong thing quietly. The placeholder is loud, the correct value is written beside it, and it stays an OPEN until it lands.
 
 ### Construction-proof model beats the next repro theory
 When static analysis keeps contradicting a reproducible observation across 2+ rounds — your trace says the bug can't happen, the user keeps seeing it — stop generating repro theories. Either instrument for ground truth, or redesign the invariant so the whole bug CLASS is impossible by construction. The Nth theory has diminishing value once analysis and observation disagree.

@@ -291,25 +291,39 @@ def report_ink(path, cx, cy, cw, ch, thr=110):
     The counterpart to `report_map`: the map says what is there, this says
     exactly where. Both take canvas coordinates so the reference and our render
     answer with numbers that can be subtracted.
+
+    Also prints `cover`, the ink INTEGRAL over the bbox — every pixel's position
+    along the background-to-ink axis, summed, over the bbox's area. That is a
+    WEIGHT measure and it is size-normalised: the same face set larger covers the
+    same fraction of its own bbox, so two runs at different sizes are comparable
+    where a threshold count is not. It answers "is this face heavier" without
+    asking "is this glyph bigger", which the extents above already answer.
     """
     pygame.init()
     s = pygame.image.load(path)
     W, H = s.get_size()
     scale = W / 640.0
-    xs, ys = [], []
-    for y in range(max(0, int(cy * scale)), min(H, int((cy + ch) * scale))):
-        for x in range(max(0, int(cx * scale)), min(W, int((cx + cw) * scale))):
-            if max(s.get_at((x, y))[:3]) < thr:
-                xs.append(x)
-                ys.append(y)
+    x0, x1 = max(0, int(cx * scale)), min(W, int((cx + cw) * scale))
+    y0, y1 = max(0, int(cy * scale)), min(H, int((cy + ch) * scale))
+    lum = {(x, y): sum(s.get_at((x, y))[:3]) / 3.0 for y in range(y0, y1) for x in range(x0, x1)}
+    xs = [x for (x, y), v in lum.items() if v < thr]
+    ys = [y for (x, y), v in lum.items() if v < thr]
     if not xs:
         print(f"   {path}: no ink under {thr} in {cx},{cy} {cw}x{ch}")
         return
+    # The axis is the window's own extremes rather than assumed black-on-white,
+    # so a grey label on a tinted panel measures on the same scale as a black one
+    # on white. Guarded against a flat window, where the axis has no length.
+    hi, lo = max(lum.values()), min(lum.values())
+    span = max(1.0, hi - lo)
+    bx0, bx1, by0, by1 = min(xs), max(xs) + 1, min(ys), max(ys) + 1
+    mass = sum((hi - lum[(x, y)]) / span for y in range(by0, by1) for x in range(bx0, bx1))
     print(
-        f"   {path}: ink x {min(xs) / scale:.2f}..{(max(xs) + 1) / scale:.2f} "
-        f"({(max(xs) + 1 - min(xs)) / scale:.2f} wide, centre {(min(xs) + max(xs) + 1) / 2 / scale:.2f})  "
-        f"y {min(ys) / scale:.2f}..{(max(ys) + 1) / scale:.2f} "
-        f"({(max(ys) + 1 - min(ys)) / scale:.2f} tall, centre {(min(ys) + max(ys) + 1) / 2 / scale:.2f})"
+        f"   {path}: ink x {bx0 / scale:.2f}..{bx1 / scale:.2f} "
+        f"({(bx1 - bx0) / scale:.2f} wide, centre {(bx0 + bx1) / 2 / scale:.2f})  "
+        f"y {by0 / scale:.2f}..{by1 / scale:.2f} "
+        f"({(by1 - by0) / scale:.2f} tall, centre {(by0 + by1) / 2 / scale:.2f})  "
+        f"cover {mass / ((bx1 - bx0) * (by1 - by0)):.3f}"
     )
 
 
