@@ -33,10 +33,12 @@ Interactive controls (forwarded to PASimulator._handle_input_preview):
 --route accepts: a path to route.json, a directory containing one, or a
 shorthand like 'yamanote/1208G' / 'chuo/916H' (resolved under audio/).
 
---lower-view {full,eight,cycle} forces the lower LCD into a fixed view.
-Default 'cycle' alternates full ↔ 8-station every 12s. 'eight' or 'full'
-freeze the cycler on one view — handy for screenshots where you want a
-deterministic frame regardless of how long the preview has been running.
+--lower-view {full,eight,transfer,overview,cycle} forces the lower LCD into a
+fixed view. Default 'cycle' alternates on the scheduler's own cadence; naming a
+view freezes the cycler on it, which is what a screenshot wants so the frame is
+deterministic regardless of how long the preview has been running. A view the
+model does not carry, and 'overview' on a line with no <audio_root>/system.json,
+both exit rather than substituting a different view.
 """
 
 import argparse
@@ -128,9 +130,14 @@ def parse_args():
     parser.add_argument(
         "--lower-view",
         type=str,
-        choices=("full", "eight", "transfer", "cycle"),
+        choices=("full", "eight", "transfer", "overview", "cycle"),
         default="cycle",
-        help="Force lower-LCD view: 'full' = full-route, 'eight' = 8-station zoom, 'transfer' = transfer-info panel (requires station with transfers + at_station=True), 'cycle' = normal alternation (default).",
+        help="Force lower-LCD view: 'full' = full-route, 'eight' = 8-station zoom, 'transfer' = transfer-info panel (requires station with transfers + at_station=True), 'overview' = service-pattern sheet (e233_0 only, needs the line's system.json), 'cycle' = normal alternation (default).",
+    )
+    parser.add_argument(
+        "--no-upper",
+        action="store_true",
+        help="Draw the lower LCD only, with --screenshot or --edit. For a checkout missing one of the licensed faces the upper band draws — the fonts are gitignored, so a machine can hold some and not others, and one absent face otherwise takes the whole model's preview down. The plain interactive run is the app's own loop and cannot honour it.",
     )
     parser.add_argument(
         "--edit",
@@ -189,18 +196,40 @@ def apply_state(sim, *, stop=0, pa=None, mode=None, lower_view="cycle", skip=Non
             "full": sim.lower._SLOT_FULL,
             "eight": sim.lower._SLOT_EIGHT,
             "transfer": sim.lower._SLOT_TRANSFER,
+            # Per-model: only e233_0 carries an overview slot, so this is None
+            # elsewhere and the pin fails loud rather than silently landing on
+            # FULL and looking like the flag was honoured.
+            "overview": getattr(sim.lower, "_SLOT_OVERVIEW", None),
         }
+        if slot_map[lower_view] is None:
+            raise SystemExit(f"--lower-view {lower_view}: not a view on model {sim._train_model.key}")
+        # The MODEL having the slot is half the question; the ROUTE having the
+        # data is the other half. The overview renderer returns immediately on a
+        # line with no system.json, so the pin succeeds and the preview shows an
+        # empty band — a substitute picture presented as the one that was asked
+        # for, which is what the check above exists to stop.
+        if lower_view == "overview" and not (sim.route_data or {}).get("system"):
+            raise SystemExit("--lower-view overview: this line has no <audio_root>/system.json, so the page has nothing to draw")
         sim.lower._current_slot = slot_map[lower_view]
         # Lock: the scheduler owns every discrete change, so disabling it
         # freezes the slot AND the language flip in one switch.
         sim.scheduler.enabled = False
 
 
-def render_frame(sim, timestamp=None):
-    """Draw one complete frame — both LCDs — into sim.screen."""
+def render_frame(sim, timestamp=None, upper=True):
+    """Draw one complete frame — both LCDs — into sim.screen.
+
+    ``upper=False`` draws the lower half only. Its use is a checkout that lacks
+    one of the licensed faces the upper band draws: the fonts are gitignored, so
+    a machine can hold some and not others, and one missing face otherwise takes
+    the whole model's preview down with a `FileNotFoundError`. The lower band is
+    then still tunable against its reference, which is what the per-element loop
+    needs. It is NOT a way to skip a slow draw — the upper band is cheap.
+    """
     timestamp = time.time() if timestamp is None else timestamp
     sim.scheduler.tick(timestamp, sim.state)
-    sim.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
+    if upper:
+        sim.upper.draw(time.strftime("%H:%M", time.localtime(timestamp)))
     # current_time=0.0 freezes the lower-LCD countdown at full values for a
     # readable static snapshot.
     sim.lower.draw(0.0)
@@ -231,7 +260,7 @@ def main():
     apply_state(sim, stop=args.stop, pa=args.pa, mode=args.mode, lower_view=args.lower_view, skip=args.skip)
 
     if args.screenshot:
-        render_frame(sim)
+        render_frame(sim, upper=not args.no_upper)
         pygame.display.flip()
         pygame.image.save(sim.screen, args.screenshot)
         print(f"Screenshot saved to {args.screenshot}")
@@ -255,15 +284,23 @@ def main():
             print(f"        Models with elements: {', '.join(editable) or 'none'}.")
             print("        Register one in _dev_scripts/calibration_editor.py's _REGISTRY.")
             sys.exit(1)
-        _run_edit_loop(sim, overlay_path=args.overlay, lower_view=args.lower_view)
+        _run_edit_loop(sim, overlay_path=args.overlay, lower_view=args.lower_view, upper=not args.no_upper)
         sim.cleanup()
         sys.exit()
+
+    if args.no_upper:
+        # sim.run() is the app's own loop and draws both bands. Silently
+        # ignoring the flag here is worse than refusing it: the reason to pass
+        # it is a missing face, so the run dies on the first frame anyway and
+        # the traceback reads as a broken checkout rather than a wrong mode.
+        print("[error] --no-upper needs --screenshot or --edit; the interactive run draws both LCDs.")
+        sys.exit(1)
 
     sim.run()
     sys.exit()
 
 
-def _run_edit_loop(sim, overlay_path: Optional[str] = None, lower_view: str = "cycle") -> None:
+def _run_edit_loop(sim, overlay_path: Optional[str] = None, lower_view: str = "cycle", upper: bool = True) -> None:
     """Frozen-frame main loop for `--edit` mode. Sim state does NOT advance.
 
     Loads `_dev_scripts/calibration_editor.py` via sys.path hack (it's a
@@ -345,10 +382,13 @@ def _run_edit_loop(sim, overlay_path: Optional[str] = None, lower_view: str = "c
 
     def _set_lower_screens(screen):
         sim.lower.screen = screen
-        sim.lower.japanese_display.screen = screen
-        sim.lower.japanese_eight_display.screen = screen
-        sim.lower.english_display.screen = screen
-        sim.lower.transfer_display.screen = screen
+        # Every renderer the manager HOLDS, not a list typed here. A model joins
+        # by constructing its view; the hardcoded four missed `overview_display`
+        # and both notice pages, which then drew to the surface they were built
+        # with while the editor showed an unchanged left half.
+        for name, obj in vars(sim.lower).items():
+            if name.endswith("_display") and hasattr(obj, "screen"):
+                obj.screen = screen
 
     _set_upper_screens(lcd_a)
     _set_lower_screens(lcd_a)
@@ -363,11 +403,26 @@ def _run_edit_loop(sim, overlay_path: Optional[str] = None, lower_view: str = "c
         "eight": sim.lower._SLOT_EIGHT,
         "transfer": sim.lower._SLOT_TRANSFER,
     }
+    if hasattr(sim.lower, "_SLOT_OVERVIEW"):
+        _SLOT_FOR_VIEW["overview"] = sim.lower._SLOT_OVERVIEW
     # Registry entries are per-model; bind BEFORE seeding the view, because
     # which lower views exist is itself filtered by the active model.
     calibration_editor.set_active_model(sim._train_model.key)
     if lower_view != "cycle":
         calibration_editor.set_active_lower_view(lower_view)
+        # The editor REJECTS a view with no `_REGISTRY` entry and keeps whatever
+        # it had, and the re-pin below then overwrites the slot every frame — so
+        # `--lower-view overview` silently showed the 6-station view. A
+        # substitute picture presented as the one that was asked for is the
+        # shape `principles.md` section "A fallback must be stricter than the
+        # path it replaces" bars. Say so and stop.
+        active = calibration_editor.get_active_lower_view()
+        if active != lower_view:
+            print(f"[error] --edit cannot show --lower-view {lower_view}: the editor fell back to {active!r}.")
+            print(f"        {sim._train_model.key} has no _REGISTRY entry for that view.")
+            print("        Register its elements in _dev_scripts/calibration_editor.py's _REGISTRY,")
+            print("        or drop --edit and use --screenshot to render it.")
+            sys.exit(1)
     sim.scheduler.enabled = False
 
     calibration_editor.enter_edit_mode(sim)
@@ -388,8 +443,13 @@ def _run_edit_loop(sim, overlay_path: Optional[str] = None, lower_view: str = "c
             # Left half = full LCD A (upper + lower); lower LCD is the target.
             _set_upper_screens(lcd_a)
             _set_lower_screens(lcd_a)
-            sim.upper.draw(time_text)
+            if upper:
+                sim.upper.draw(time_text)
             sim.lower.draw(0.0)
+        elif not upper:
+            # target=upper with the upper band suppressed has nothing to draw,
+            # and the checkout that needs --no-upper is one that CANNOT draw it.
+            window.fill((0, 0, 0), pygame.Rect(0, 0, S_WIDTH, S_HEIGHT))
         else:
             # Left half = active mode stacked above a locked-ENGLISH copy.
             # Clear the column first so the gap + below-stack area stay black

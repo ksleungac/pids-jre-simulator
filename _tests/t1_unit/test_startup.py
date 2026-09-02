@@ -9,6 +9,7 @@ interactive step, and no dependence on what happens to be on this machine.
   1. WHICH LANGUAGE      — i18n.resolve_language
   2. WHERE THE AUDIO IS  — route_loader.resolve_audio_root
   3. WHICH STARTS ARE ON OFFER — route_select._start_station_labels
+  4. WHETHER THE LINE HAS A SHEET — route_loader.finalize_route's "system" key
 
 They share a failure mode as well as a shape: each was, or could be, wrong only
 on a machine unlike this one — a clean install (§1, `critical_lessons §6`), a
@@ -21,6 +22,7 @@ mutation of it and stops discriminating (`principles.md` § "Test real logic").
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -263,10 +265,60 @@ def check_start_stations() -> None:
     check(got == ["long", "ends-at-ueno"], f"a shared mid-route stop offers both diagrams; got {got}")
 
 
+def check_system_sheet() -> None:
+    """§4 — `route_data["system"]` is present on every finalize, sheet or not.
+
+    The attach lives in `finalize_route`, not in `load_route_from_dir`, so the
+    key is present on EVERY finalize whatever the entry point. `route_data=` is
+    still a supported constructor argument and must not produce a different
+    shape. While the attach sat on the reading function and the TIMS flow parsed
+    `route.json` itself, the key was set in preview, the tutorial and the
+    validator and never in a drive — the view was verified exclusively in the
+    frame where it worked (`critical_lessons.md` §10). Both halves are fixed, so
+    this pins the invariant rather than the incident.
+    """
+    from route_loader import finalize_route
+
+    # The one check in this module that reads the corpus, because the fact under
+    # test IS that the sheet resolves on the pooled path. Anchored on the repo
+    # root rather than the cwd: `run_all.py` runs each test in a subprocess and
+    # inherits whatever directory the caller was in.
+    root = Path(__file__).resolve().parents[2]
+
+    def _finalize(work_dir):
+        wd = root / work_dir
+        with open(wd / "route.json", encoding="utf-8") as f:
+            return finalize_route(json.load(f), {}, work_dir=wd)
+
+    # `.get`, not `[...]`: the failure this locks is the key being ABSENT, and a
+    # KeyError here would report as a crash rather than as the assertion it is.
+    sheet = _finalize("audio/chuo/1654T").get("system")
+    check(isinstance(sheet, dict), "a line WITH a system.json must resolve it through finalize_route")
+    if not isinstance(sheet, dict):
+        return
+    check(bool(sheet.get("rows")) and bool(sheet.get("services")), "the resolved sheet must carry rows and services")
+
+    # A pooled sheet is shared by every diagram on the line, so a second diagram
+    # must find the same one — reading it per diagram folder would find none.
+    check(_finalize("audio/chuo/602H").get("system") == sheet, "every diagram on the line must resolve the SAME pooled sheet")
+
+    # A line with no sheet gets the key anyway, as None. Absent-vs-None is the
+    # difference between a renderer's `.get` and direct access.
+    other = _finalize("audio/yamanote/1208G")
+    check("system" in other, "a line WITHOUT a sheet must still carry the key")
+    check(other["system"] is None, f"a line without a sheet must resolve None, got {type(other['system'])}")
+
+    # No work_dir at all — the key is still present rather than missing.
+    with open(root / "audio/chuo/1654T/route.json", encoding="utf-8") as f:
+        bare = finalize_route(json.load(f), {})
+    check("system" in bare and bare["system"] is None, "finalize_route with no work_dir must set the key to None, not omit it")
+
+
 def main() -> int:
     check_language()
     check_audio_root()
     check_start_stations()
+    check_system_sheet()
 
     if FAILURES:
         print("FAIL: launch resolution")
@@ -274,7 +326,8 @@ def main() -> int:
         return 1
     print(
         f"PASS: launch resolution (language x{len(i18n.SUPPORTED_LANGS)} + corrupt-to-OS-default, "
-        "audio root single-answer no-fallback, start grid excludes the terminus and unions every diagram's starts)"
+        "audio root single-answer no-fallback, start grid excludes the terminus and unions every diagram's starts, "
+        "system sheet attached by finalize_route so the app path gets it and the key is never absent)"
     )
     return 0
 

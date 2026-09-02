@@ -18,9 +18,6 @@ Preview:   uv run _dev_scripts/preview_setup_tims.py --screen pa   (L = cycle lo
 Static:    uv run _dev_scripts/preview_setup_tims.py --screen pa --screenshot pa_setting.png
 """
 
-import json
-import os
-
 import pygame
 
 import i18n
@@ -150,15 +147,21 @@ def _build_config(result, ocr=False):
     `ocr=True` (OCR自動報站起動) merges the auto_input launch fields (auto_input=True + lead_m /
     interval_s from the 自動放送設定 page); default = MANUAL (auto_input False)."""
     route = result["route"]
-    with open(os.path.join(route["path"], "route.json"), encoding="utf-8") as f:
-        route_data = json.load(f)
+    # route_data stays None ON PURPOSE: PASimulator loads it through
+    # route_loader.load_route_from_dir, which is the only reader that also
+    # attaches the line's system.json sheet. Reading route.json here instead
+    # was a second implementation of that decision, and it silently dropped the
+    # sheet on the one path a real user takes — preview and the tutorial go
+    # through the loader, so the overview view rendered everywhere but the app.
+    # See principles.md § "A second implementation of a production decision
+    # drifts silently".
     stops = route.get("stops", [])
     start_name = result.get("start_name") or ""
     start_idx = stops.index(start_name) if start_name in stops else 0
     cfg = {
         "action": "select",
         "work_dir": route["path"],
-        "route_data": route_data,
+        "route_data": None,
         "model": _model_override or route["model"],
         "auto_input": False,
         "start_idx": start_idx,

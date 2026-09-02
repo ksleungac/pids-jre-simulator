@@ -718,6 +718,48 @@ When a station has no STA melody, **omit field entirely** rather than setting `[
 
 ---
 
+## system.json Format (Service-Pattern Sheet)
+
+The sheet a line's whole SERVICE NETWORK is drawn from: every service that line runs, its colour and
+its stopping pattern, over one shared station axis. It feeds the E233-0 patterns-overview view, which
+is the only view needing data about services other than the one being driven.
+
+**Location.** `<audio_root>/system.json`, resolved through `route_loader.resolve_audio_root` — so the
+per-line pool for every shipped line, and the diagram folder for a route declaring `audio_root: "."`.
+Every diagram on a line draws the same sheet. `route_loader.finalize_route` attaches it as
+`route_data["system"]`, or `None` when the line has none; the key is always present.
+
+**Authored, never derived.** A line's diagrams cover only the services this repo holds recordings for
+— Chūō ships 3 of 6 — so the sheet cannot be inferred from `route.json`, and its axis carries stations
+no diagram on that line stops at. Copy the axis from a diagram's `stops` rather than retyping it, so
+the join cannot fail on an invisible character (§ "Data Validation", and `conventions.md` § Data layout).
+
+**Coverage is all-or-nothing.** A service missing from the sheet is invisible on screen: five lines
+where six exist looks like a complete diagram. No check can see it — only a reference can.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `system` | string | The network's name, e.g. `中央線`. Diagnostic only |
+| `rows` | array of arrays | The station axis, split into the rows the view wraps onto. Reading order is left-to-right within a row, and `rows[0]` is the row the view draws FIRST. No station may repeat |
+| `junctions[].station` | string | A station on the axis that carries a branch. Drawn as a pill covering its whole slot |
+| `junctions[].spur` | string | The branch's destination label. A junction with no `spur` draws no branch |
+| `services[].type` | string | Matches a diagram's `type` where one exists, which is what lets the colour be cross-checked |
+| `services[].color` | `[R,G,B]` | The line's colour. Equal to that type's `type_color` on the same line when a diagram of that type exists |
+| `services[].from` / `.to` | string | The service's span as two axis stations, inclusive. `from` must come BEFORE `to` on the axis — reversed, the service draws nothing |
+| `services[].stops` | array | Where it stops, each on the axis and inside its own span |
+| `services[].spur` | string | Optional. A service leaving the axis at its terminus, e.g. 各駅停車's `千葉方面` |
+
+**Author-supplied stops.** A marker the reference cannot show is authored rather than measured, and
+the file records which and why — a junction pill covers its whole slot, and a spur stub can lie on
+the line beneath it.
+
+**Validated by** `validate_data.check_system_sheets` (axis / junction / span membership and ordering,
+no duplicate axis entry, every axis name in `translations.json`, every key the renderer dereferences
+present) and `check_sheet_colors` (each colour against that line's own diagrams). Both are full-scan
+only; `--route` has no sibling diagram to witness against.
+
+---
+
 ## Supported Lines
 
 All lines share central `data/translations.json` (display text) and `data/stations.json` (operational metadata).

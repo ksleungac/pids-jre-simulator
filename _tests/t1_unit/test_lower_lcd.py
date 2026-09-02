@@ -13,6 +13,8 @@ what is on screen and when does it change:
   3. e235_0 5-STATION BAND FILL — when the sweep restarts
   4. e233_0 FULL-ROUTE MARKER COLUMN — where the position marker sits along the
      leg it is crossing, on a route long enough to window
+  5. e233_0 PATTERNS-OVERVIEW CONTENT — which axis stations grey, where a slot
+     sits on each row, and which slice of the axis a service spans
 
 Every method here reads only `self.*` fields plus class constants, so they are
 called UNBOUND against a `SimpleNamespace` stub — no pygame, no fonts, no display,
@@ -43,6 +45,8 @@ from displays.train_models.e235_0.lower_lcd import (  # noqa: E402
 )
 from displays.train_models.e233_0.lower_lcd import (  # noqa: E402
     JapaneseFullRouteDisplay as E233FullRoute,
+    JapanesePatternsOverviewDisplay as E233Overview,
+    _TUNEABLES_OVERVIEW as OVERVIEW_T,
 )
 from displays.train_models.e235_1000.lower_lcd import (  # noqa: E402
     JapaneseEightStationDisplay,
@@ -424,11 +428,168 @@ def check_e233_marker_column() -> None:
     )
 
 
+def _e233_overview_stub(rows, stops, curr):
+    """A `JapanesePatternsOverviewDisplay` with the real content logic bound.
+
+    `_dim`, `_span` and `_slot_cx` read only `self.*` plus the module tuneables,
+    so they bind straight onto a namespace. The derived fields come from
+    production's own `_bind_sheet` rather than being rebuilt here, so a change to
+    what it derives cannot leave this fixture agreeing with the old shape.
+    """
+    stub = SimpleNamespace(stops=stops, _state=None if curr is None else SimpleNamespace(curr_stop=curr))
+    for name in ("_bind_sheet", "_assert_shape", "_dim", "_span", "_slot_cx"):
+        attr = E233Overview.__dict__[name]
+        setattr(stub, name, attr.__func__ if isinstance(attr, staticmethod) else attr.__get__(stub))
+    stub._bind_sheet({"rows": rows, "services": [], "junctions": []}, stops)
+    return stub
+
+
+def check_overview_content() -> None:
+    """§5 — the overview's three content decisions.
+
+    The greying stub deliberately puts `curr_stop` in the MIDDLE of the route.
+    Pinning it at 0 would let `di < curr` decide nothing and `is_passing_stop`
+    never run, so the passing case would pass without being reached — the
+    collapsed-axis trap in `principles.md` § "Test real logic, not ceremony".
+    """
+    rows = [["A", "B", "C"], ["D", "E", "F", "G"]]
+    # A is a route ORIGIN: `pa` is empty because there is no announcement for the
+    # station you are already sitting in. It carries no `pa_at_station` either, so
+    # `is_passing_stop(A)` is True and ONLY the `di == curr` branch keeps it black
+    # — which is what makes the origin case below discriminate that branch. C is a
+    # genuine run-through station. E announces only at-station, the case a
+    # `pa`-only test cannot see.
+    stops = [
+        {"name": "A", "pa": []},
+        {"name": "B", "pa": ["2"]},
+        {"name": "C", "pa": [], "pa_at_station": []},
+        {"name": "D", "pa": ["3"]},
+        {"name": "E", "pa": [], "pa_at_station": ["4"]},
+    ]
+    v = _e233_overview_stub(rows, stops, curr=1)
+    check(v._dim("A") is True, "overview: a station already passed must grey")
+    check(v._dim("C") is True, "overview: a run-through station ahead must grey")
+    # A carries no `pa`, so it would grey either way — the case that isolates the
+    # index half is a STOPPING station behind the train. Without this, `di < curr`
+    # can be deleted with the whole module green, and greying everything behind
+    # the train is the bulk of what the view does on a real drive.
+    check(
+        _e233_overview_stub(rows, stops, curr=2)._dim("B") is True,
+        "overview: a station the train has already CALLED at must grey — only the index test can decide that one",
+    )
+    check(v._dim("D") is False, "overview: a stopping station ahead must stay black")
+    check(
+        v._dim("E") is False,
+        "overview: a station announcing only at-station is a STOP, not a run-through — "
+        "`is_passing_stop` needs both keys, and a `pa`-only test greys it wrongly",
+    )
+    check(v._dim("G") is True, "overview: an axis station this run never reaches must grey")
+
+    # The two cases the `di == curr` early return decides, and the only two: a
+    # station the rest of the rule would grey, standing at it. Both fail if that
+    # branch is deleted — an origin with a non-empty `pa` would not, which is how
+    # this pair read as covered while proving nothing.
+    check(
+        _e233_overview_stub(rows, stops, curr=0)._dim("A") is False,
+        "overview: the route ORIGIN carries pa:[] and must not grey while standing at it",
+    )
+    check(
+        _e233_overview_stub(rows, stops, curr=2)._dim("C") is False,
+        "overview: a run-through station must not grey while the train is AT it",
+    )
+
+    check(_e233_overview_stub(rows, stops, curr=None)._dim("C") is False, "overview: no state yet — nothing greys")
+
+    # A CIRCULAR route names its origin twice (Yamanote's stops[0] and stops[29]
+    # are both 大崎). First-occurrence-wins is what `route_loader._resolve_frames`
+    # does; last-wins pins the station to the terminus so `di < curr` never fires
+    # and it stays black for the whole loop. No sheet-carrying line has a
+    # duplicate today, which is why only a test can hold the two maps together.
+    loop_stops = [{"name": "A", "pa": []}, {"name": "B", "pa": ["1"]}, {"name": "A", "pa": ["2"]}]
+    loop = _e233_overview_stub([["A", "B"]], loop_stops, curr=1)
+    check(loop._route_idx["A"] == 0, f"overview: a repeated stop name must resolve to its FIRST index; got {loop._route_idx['A']}")
+    check(loop._dim("A") is True, "overview: a loop origin already departed must grey — last-occurrence-wins keeps it black all lap")
+
+    axis = [[f"a{i}" for i in range(4)], [f"b{i}" for i in range(4)]]
+
+    def sheet(n_services=2, rows=None, origin_idx=None, junction_idx=None):
+        """`origin_idx` folds that service out of the legend; `junction_idx`
+        makes it serve the spurred junction. Every other service starts mid-axis
+        and touches no junction, so it needs neither fitted foot."""
+        rows = axis if rows is None else rows
+        flat = [n for r in rows for n in r]
+        svcs = []
+        for i in range(n_services):
+            svcs.append(
+                {
+                    "type": f"t{i}",
+                    "color": [1, 2, 3],
+                    "from": flat[0] if i == origin_idx else flat[1],
+                    "to": flat[-1],
+                    "stops": [flat[1], "J"] if i == junction_idx else [flat[1]],
+                }
+            )
+        return {"system": "S", "rows": rows, "services": svcs, "junctions": [{"station": "J", "spur": "x"}]}
+
+    def refuses(label, **kw):
+        try:
+            E233Overview._assert_shape(sheet(**kw))
+            check(False, f"overview shape gate: {label} must be refused, but passed")
+        except ValueError:
+            check(True, "")
+
+    check_ok = sheet()
+    try:
+        E233Overview._assert_shape(check_ok)
+    except ValueError as e:
+        check(False, f"overview shape gate: a 2-row 2-service sheet must pass; raised {e}")
+
+    refuses("a third row", rows=axis + [["c0"]])
+    # Service 5 (0-based) folds from the axis origin: past the 5 fitted feet.
+    refuses("a 6th service folding from the origin", n_services=6, origin_idx=5)
+    refuses("a 6th service serving a spurred junction", n_services=6, junction_idx=5)
+    # Enough services to push the last legend chip off the 480px canvas.
+    refuses("a service count that overruns the legend", n_services=9)
+
+    # Spans are inclusive indices into the FLATTENED axis, so a service starting
+    # mid-row still lands on absolute positions.
+    check(v._span({"from": "B", "to": "F"}) == (1, 5), f"overview: span B..F over a 3+4 axis; got {v._span({'from': 'B', 'to': 'F'})}")
+
+    # Slots are RIGHT-anchored per row, and the two rows have their own anchor
+    # and pitch — one shared grid cannot express them (see _TUNEABLES_OVERVIEW).
+    #
+    # Asserting `_slot_cx(r, last) == row_r_cx[r]` would be a tautology: that IS
+    # the formula with the offset term zeroed, and it reads the constant under
+    # test out of the dict the code reads. What right-anchoring actually MEANS is
+    # that row length does not move the right edge — only the left one — so vary
+    # the length and check which end holds. A left-anchored rewrite passes the
+    # tautology and fails this.
+    short = _e233_overview_stub([rows[0][:2], rows[1][:2]], stops, curr=1)
+    for r, row in enumerate(rows):
+        check(
+            abs(v._slot_cx(r, len(row) - 1) - short._slot_cx(r, 1)) < 1e-9,
+            f"overview: row {r} is RIGHT-anchored, so its last slot must not move when the row is shorter",
+        )
+        check(
+            short._slot_cx(r, 0) > v._slot_cx(r, 0) + 1.0,
+            f"overview: row {r}'s FIRST slot must move right when the row is shorter — that is the end which gives",
+        )
+        check(
+            abs((v._slot_cx(r, len(row) - 1) - v._slot_cx(r, 0)) - (len(row) - 1) * OVERVIEW_T["row_pitch"][r]) < 1e-9,
+            f"overview: row {r} must step by its own pitch, not the other row's",
+        )
+    check(
+        v._slot_cx(0, len(rows[0]) - 1) != v._slot_cx(1, len(rows[1]) - 1),
+        "overview: the two rows are anchored SEPARATELY — equal right edges mean the anchors were collapsed",
+    )
+
+
 def main():
     check_eight_window()
     check_five_station_content()
     check_fill_slot_enter()
     check_e233_marker_column()
+    check_overview_content()
 
     if FAILURES:
         print("FAIL: lower LCD")
@@ -437,7 +598,9 @@ def main():
     print(
         "PASS: lower LCD (8-station window short/sliding/locked + pointer-always-visible + Chūō 新宿 regression + "
         "e235_0 never-locks #68/#81; 5-station passing empty ring, no time:null crash #66; band fill only on a genuine slot-enter; "
-        "e233_0 marker row-first column agrees with _slot on a windowed 46-cell route)"
+        "e233_0 marker row-first column agrees with _slot on a windowed 46-cell route; "
+        "overview greys passed / run-through / off-route and keeps the origin and an at-station-only stop black, "
+        "spans index the flattened axis, rows keep separate anchors and pitches)"
     )
 
 

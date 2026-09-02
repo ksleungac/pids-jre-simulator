@@ -956,6 +956,152 @@ def _hop_sequence(stops: list):
     return out
 
 
+def _audio_rel(path: Path) -> str:
+    """A display path for something under `audio/`, absolute or not.
+
+    `resolve_audio_root` returns a RESOLVED absolute path while `AUDIO_ROOT` is
+    the relative `audio`, so a plain `relative_to` raises on it.
+    """
+    for base in (AUDIO_ROOT, AUDIO_ROOT.resolve()):
+        try:
+            return path.relative_to(base).as_posix()
+        except ValueError:
+            continue
+    return path.as_posix()
+
+
+def _sheet_paths(route_paths: list) -> list:
+    """Every `system.json` PRODUCTION would resolve, one per audio root.
+
+    Not a glob. `route_loader._load_system_sheet` reads
+    `resolve_audio_root(work_dir, route_data) / "system.json"`, which is the
+    per-line pool for every shipped route and the DIAGRAM folder for a route
+    declaring `audio_root: "."` — so `audio/*/system.json` is one shape out of
+    two, and it would also pick up a fixture's sheet that must not gate the
+    release. Walking the same resolver over the same route list the caller
+    already filtered gets both right for free (`principles.md` § "A second
+    implementation of a production decision drifts silently").
+    """
+    from route_loader import resolve_audio_root
+
+    roots = {}
+    for route_path in route_paths:
+        root = resolve_audio_root(route_path.parent, load(route_path))
+        sheet = root / "system.json"
+        if sheet.exists():
+            roots[sheet.resolve()] = sheet
+    return sorted(roots.values())
+
+
+def check_system_sheets(route_paths: list, translations: dict, issues: list) -> None:
+    """`<audio_root>/system.json`: the service-pattern sheet the overview draws.
+
+    The sheet is authored network data in the per-line pool, never derived from
+    route.json, so nothing else cross-checks it. Every failure it can carry is
+    SILENT on screen: a mistyped station in `services[].stops` draws no marker, a
+    junction off the axis draws no pill, a duplicate axis entry resolves the
+    wrong slot, and endpoints stated backwards drop a whole service line. That is
+    the class `conventions.md` § Data layout names — a cross-file key differing by
+    an invisible character, the 市ケ谷 / 市ヶ谷 trap — and it is why the join is
+    asserted by count here rather than read by eye.
+
+    WHAT THIS CANNOT CATCH: whether the sheet is COMPLETE. Coverage per system is
+    all-or-nothing and a missing service looks like a finished diagram, so no
+    check can see it. Only a reference can.
+    """
+    for path in _sheet_paths(route_paths):
+        rel = _audio_rel(path)
+        sheet = load(path)
+        rows = sheet.get("rows") or []
+        axis = [n for r in rows for n in r]
+        if not axis:
+            issues.append((rel, "rows: empty — the sheet has no axis to draw against"))
+            continue
+        dupes = sorted({n for n in axis if axis.count(n) > 1})
+        if dupes:
+            issues.append((rel, f"rows: {', '.join(dupes)} appears twice — a slot lookup resolves the first"))
+        for name in axis:
+            if name not in translations:
+                issues.append((rel, f"rows: {name} is not in data/translations.json"))
+        on_axis = set(axis)
+        # PRESENCE, not just shape. The renderer dereferences these directly —
+        # `_draw_lines` reads service["color"] and service["type"], `_draw_marks`
+        # reads service["stops"], `_bind_sheet` reads sheet["rows"] — so a missing
+        # key is a KeyError at construction, i.e. the app does not start for that
+        # line. Loud rather than silent, but still uncaught, and this gate is the
+        # only cross-check the sheet has.
+        if not (sheet.get("services") or []):
+            issues.append((rel, "services: missing or empty — the page would draw an axis and no lines"))
+        for svc in sheet.get("services") or []:
+            # `not` rather than `is None`: none of these five may legitimately be
+            # falsy, and an EMPTY `stops` is the interesting case — it passes an
+            # identity test, draws no marker for that service, and reports
+            # nothing, which is the silent shape this whole check exists for.
+            for key in ("type", "color", "stops", "from", "to"):
+                if not svc.get(key):
+                    issues.append((rel, f"services[{svc.get('type', '?')}]: no {key} — the renderer reads it by direct access"))
+        for j in sheet.get("junctions") or []:
+            if j.get("station") not in on_axis:
+                issues.append((rel, f"junctions: {j.get('station')} is not on the axis — its pill would not draw"))
+        for svc in sheet.get("services") or []:
+            label = svc.get("type", "?")
+            _check_color(rel, f"services[{label}].color", svc.get("color"), issues)
+            for field in ("from", "to"):
+                if svc.get(field) not in on_axis:
+                    issues.append((rel, f"services[{label}].{field}={svc.get(field)} is not on the axis"))
+            if svc.get("from") in on_axis and svc.get("to") in on_axis:
+                # ORDER, not just membership. The renderer spans `axis.index(from)
+                # .. axis.index(to)` inclusive and skips any row where lo > hi, so
+                # endpoints stated backwards draw NOTHING for that service — five
+                # lines where six exist, which reads as a finished diagram.
+                a, b = axis.index(svc["from"]), axis.index(svc["to"])
+                if a > b:
+                    issues.append((rel, f"services[{label}]: from={svc['from']} comes AFTER to={svc['to']} on the axis — the line would not draw"))
+                else:
+                    outside = [n for n in svc.get("stops") or [] if n in on_axis and not a <= axis.index(n) <= b]
+                    if outside:
+                        issues.append(
+                            (rel, f"services[{label}].stops: {', '.join(outside)} sits outside its own from..to span — no marker would draw")
+                        )
+            for name in svc.get("stops") or []:
+                if name not in on_axis:
+                    issues.append((rel, f"services[{label}].stops: {name} is not on the axis — no marker would draw"))
+
+
+def check_sheet_colors(route_paths: list, issues: list) -> None:
+    """A service's sheet colour must equal the `type_color` of a diagram of that
+    type on the same line, where one exists.
+
+    Three of Chūō's six services have a diagram and three do not, which is why
+    the sheet states all six rather than looking any of them up. The three that
+    CAN be cross-checked are, so the sheet and the diagrams cannot drift apart
+    silently while the page draws a colour no route uses.
+    """
+    from route_loader import resolve_audio_root
+
+    # A SET per (root, type), not the first diagram found. Two diagrams of one
+    # type on one line disagreeing about `type_color` is the drift closest to
+    # what this check is for, and keeping only the first silently scores the
+    # sheet against whichever path sorted earlier (`critical_lessons.md` § 9).
+    by_root: dict = {}
+    for route_path in route_paths:
+        data = load(route_path)
+        color = data.get("type_color")
+        if isinstance(color, list) and len(color) == 3:
+            root = resolve_audio_root(route_path.parent, data).resolve()
+            by_root.setdefault(root, {}).setdefault(data.get("type", ""), set()).add(tuple(color))
+    for path in _sheet_paths(route_paths):
+        rel = _audio_rel(path)
+        for svc in load(path).get("services") or []:
+            colors = by_root.get(path.parent.resolve(), {}).get(svc.get("type")) or set()
+            if len(colors) > 1:
+                issues.append((rel, f"services[{svc.get('type')}]: that line's own diagrams disagree on type_color: {sorted(colors)}"))
+                continue
+            authored = next(iter(colors), None)
+            if authored is not None and tuple(svc.get("color") or ()) != authored:
+                issues.append((rel, f"services[{svc.get('type')}].color={svc.get('color')} != that line's own type_color {list(authored)}"))
+
+
 def check_hop_agreement(route_paths: list, issues: list) -> None:
     """Two diagrams running an identical STRETCH must agree on every hop in it.
 
@@ -1067,14 +1213,19 @@ def main():
     scan = [route_arg] if route_arg else [p for p in route_paths if not is_fixture(p.parent.relative_to(AUDIO_ROOT).as_posix())]
     check_pool_sta_cut_sync(scan, issues)
     check_sta_last_is_melody(scan, issues)
+    check_system_sheets(scan, translations, issues)
 
     # Cross-DIAGRAM checks: they compare a route against its siblings, so a single
     # --route scan has no witness and would pass silently. Say so instead.
+    # check_sheet_colors is one of them — it pins a sheet's colours against the
+    # type_color of a diagram of that type on the same line, so one route can
+    # witness at most its own service and silently pass the other five.
     if route_arg is None:
+        check_sheet_colors(scan, issues)
         check_time_across_skips(scan, issues)
         check_hop_agreement(scan, issues)
     elif not quiet:
-        print("skipped (needs a full scan, no sibling diagram to compare): time-across-skips, hop-agreement")
+        print("skipped (needs a full scan, no sibling diagram to compare): sheet-colors, time-across-skips, hop-agreement")
 
     if not issues:
         if not quiet and route_arg is None:

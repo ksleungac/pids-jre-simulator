@@ -19,10 +19,16 @@ of one instrument is what makes the numbers comparable at all.
 """
 
 import math
+import os
 import sys
 from collections import Counter
 
 import pygame
+
+# The repo root, so the probes can READ production's own tuneables and data
+# rather than restating them. `_dev_scripts` importing production is the
+# sanctioned direction; the ban in `conventions.md` is on the other one.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -1152,6 +1158,455 @@ def report_figures(path, cy, ch, split=SPLIT, min_cells=40):
         prev = c
 
 
+def report_overview(path, min_ink=0.13, gap=20, white=190, half=8, split=SPLIT):
+    """The patterns-overview sheet read as stacked service lines.
+
+    A row belongs to a service line when its most common saturated colour covers
+    more than `min_ink` of the width. Counting INK rather than the longest run is
+    what makes the busy services visible at all: a stop marker interrupts the
+    colour, so the two services that stop nearly everywhere are chopped into
+    fragments and a longest-run gate drops them silently while the sparse ones
+    report cleanly. The same threshold still excludes the legend chips, which are
+    the same colours and heights but cover about a tenth of the width.
+
+    Per band it prints the colour, the extent of that colour, and the pale runs
+    inside the extent, which are that service's per-station stop markers. It does
+    NOT fit a pitch to those marks — a service skips stations, so consecutive
+    marks are not consecutive slots. The slot axis comes from the name columns
+    (`--columns`), the same separation the full-route view needed.
+    """
+    pygame.init()
+    s = pygame.image.load(path)
+    W, H = s.get_size()
+    top = int(H * split)
+    lim = W * min_ink
+
+    def sat(c):
+        return max(c[:3]) - min(c[:3]) > 55
+
+    def key(c):
+        return tuple(v // 40 for v in c[:3])
+
+    rows = {}
+    for y in range(top, H):
+        row = [s.get_at((x, y))[:3] for x in range(W)]
+        cnt = Counter(key(c) for c in row if sat(c))
+        if cnt and cnt.most_common(1)[0][1] >= lim:
+            rows[y] = cnt.most_common(1)[0][0]
+
+    bands = []
+    for y in sorted(rows):
+        if bands and y == bands[-1][1] + 1:
+            bands[-1][1] = y
+        else:
+            bands.append([y, y])
+
+    # Six services on the upper band then six on the lower, in that y order, so
+    # a band's grid follows from which row it is in.
+    #
+    # The rows are anchored SEPARATELY. Their right edges differ by 11.4px and
+    # their pitches by 0.85, which a shared right-anchored grid cannot express.
+    # The upper figures are the name-column fit over 17 clean columns; the lower
+    # ones are fitted to 各駅停車's own markers, which ARE that row's slots since
+    # it stops everywhere, and they then predict 東京's measured name column to
+    # 0.06px. Assuming one grid put the lower row 10px out and silently lost
+    # every stop right of 新宿.
+    # Scaled by W, so the SAME command runs over the 1502-wide reference and our
+    # 640-wide render and the two answers are comparable — which is the whole
+    # design of this file (see its docstring).
+    #
+    # READ off production, never restated. A copy of the anchors here is correct
+    # the day it is typed and then checks our render against numbers nobody
+    # moved, which is the failure `principles.md` section "Prototype inside the
+    # code that will hold it" names: it may read production's values, it may
+    # never restate them. The dict is in CANVAS px (640 wide), so scale by
+    # W/640 for whichever image is loaded.
+    from displays.train_models.e233_0.lower_lcd import _TUNEABLES_OVERVIEW as _T
+
+    k = W / 640.0
+    _rows = _sheet_rows()
+    # The band count per row is the SHEET's service count, not a literal 6. The
+    # rows were de-restated a moment ago and this was the same restatement one
+    # field over: a sheet with a different service count would silently assign
+    # every band to the wrong row grid.
+    n_svc = len(_sheet()["services"])
+    row_grid = [(len(_rows[1]), _T["row_r_cx"][1] * k, _T["row_pitch"][1] * k)] * n_svc + [
+        (len(_rows[0]), _T["row_r_cx"][0] * k, _T["row_pitch"][0] * k)
+    ] * n_svc
+    bands_seen = []
+
+    print(f"\n== {path} {W}x{H}: {len(bands)} service-line bands below y {top} ==")
+    for a, b in bands:
+        cy = (a + b) // 2
+        h = b - a + 1
+        # `ckey`, not `k` — `k` three lines up is the canvas-to-image SCALE, and
+        # a colour key sharing its name reads as one the moment either use moves.
+        ckey = rows[cy]
+        row = [s.get_at((x, cy))[:3] for x in range(W)]
+        xs = [x for x, c in enumerate(row) if sat(c) and key(c) == ckey]
+        lo, hi = xs[0], xs[-1]
+        mean = tuple(round(sum(row[x][i] for x in xs) / len(xs)) for i in range(3))
+        print(
+            f"\n   band y {a}..{b}  h {h} ({h / H:.4f})  centre/H {(a + b) / 2 / H:.4f}  {mean}"
+            f"\n      extent x {lo}..{hi} ({hi - lo + 1}px)  x/W {lo / W:.4f}..{(hi + 1) / W:.4f}"
+        )
+        # Intervals, not just min..max. A legend chip is the SAME colour as its
+        # line and sits in the same rows, so min..max silently swallows the gap
+        # between them and reports a service as starting at the screen edge. The
+        # gap threshold has to clear a stop marker and not a fold, which is why
+        # it is an argument.
+        occ = [False] * W
+        for x in xs:
+            occ[x] = True
+        parts = _groups(occ, min_gap=gap)
+        if len(parts) > 1:
+            print(f"      {len(parts)} intervals (gap >= {gap}px):")
+            for u, v in parts:
+                print(f"        x {u:4d}..{v:4d} ({v - u + 1:4d}px)  x/W {u / W:.4f}..{(v + 1) / W:.4f}")
+        # Stops, asked SLOT BY SLOT rather than by run-length encoding the row.
+        # A marker is a near-WHITE square on the line, so testing whiteness at a
+        # known slot centre is immune to the two things that defeat a gap scan:
+        # the 立川 pill is grey and reads as a gap, and the legend chip shares
+        # the line's own colour so the fold between them reads as one too. The
+        # grid comes from the name-column fit, so this also cross-checks it — a
+        # wrong pitch shows up as stops on stations the service cannot serve.
+        n, r_slot0, r_pitch = row_grid[len(bands_seen)] if len(bands_seen) < len(row_grid) else (0, 0, 1)
+        if n:
+            # A junction slot carries a grey pill with the station name reversed
+            # out of it in WHITE, and the pill is drawn OVER every line. So the
+            # whiteness test reads that kanji's strokes as marker cores: at 立川
+            # it reported a stop on four of the six services and missed the fifth
+            # purely because 快速's row falls in the gap between 立 and 川. Nothing
+            # under a pill can be measured at all, so refuse the slot rather than
+            # answer for it — the stops there are author-supplied.
+            row_names = _rows[1] if len(bands_seen) < n_svc else _rows[0]
+            pilled = {j["station"] for j in _sheet().get("junctions", ())}
+            blind = {row_names.index(nm) for nm in pilled if nm in row_names}
+            hits = []
+            for j in range(n):
+                if j in blind:
+                    continue
+                cx = r_slot0 - (n - 1 - j) * r_pitch
+                px = int(round(cx))
+                if not lo + half <= px <= hi - half:
+                    continue  # the window must sit wholly ON the line. The pale
+                    # page background reads as white, so a window hanging off
+                    # either end reports a stop at a station the service does
+                    # not reach — which it did, at every row's outermost slot
+                win = [s.get_at((x, y))[:3] for x in range(max(0, px - half), min(W, px + half + 1)) for y in range(max(0, cy - 1), min(H, cy + 2))]
+                if any(min(c) > white for c in win):
+                    hits.append(j)
+            note = f"  (slots {sorted(blind)} sit under a junction pill — unmeasurable)" if blind else ""
+            print(f"      stops at slots (0 = leftmost of the row): {hits}{note}")
+        bands_seen.append((a, b))
+
+
+def _sheet():
+    """`audio/chuo/system.json`, which owns the axis and the service list.
+
+    Read rather than restated for the same reason the row grid is: the six
+    service names and their order live in the sheet now, and a copy here would
+    keep answering for a sheet that had changed under it.
+    """
+    import json
+
+    from app_paths import project_root
+
+    with open(project_root() / "audio" / "chuo" / "system.json", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _sheet_rows():
+    return _sheet()["rows"]
+
+
+def _legend_colors():
+    """(type, measured line colour) per service, in the sheet's own order.
+
+    The COLOURS are measured off the reference and stay here: they are what this
+    file is for, and they differ from the sheet's authored `color` for three of
+    the six (see the session note). The NAMES come from the sheet.
+    """
+    measured = {
+        "通勤特快": (165, 20, 6),
+        "青梅特快": (14, 100, 38),
+        "中央特快": (12, 64, 149),
+        "通勤快速": (15, 34, 112),
+        "快速": (203, 95, 43),
+        "各駅停車": (224, 202, 33),
+    }
+    out = []
+    for s in _sheet()["services"]:
+        if s["type"] not in measured:
+            # Loud, because the silent fallback would swap a measured colour for
+            # the authored one and answer for a service nobody measured.
+            raise KeyError(f"no measured line colour for {s['type']} — add it to _legend_colors, or re-measure the sheet")
+        out.append((s["type"], measured[s["type"]]))
+    return tuple(out)
+
+
+def report_legend_rows(path, x_hi=105.0, tol=45, step=0.4):
+    """Per service: the vertical rectangle, the underline, and the slant head.
+
+    One row at a time, keyed on that service's OWN colour, so the six never
+    contaminate each other — which is what defeated the earlier whole-window
+    scan, since a chip and its line share a colour and a y band.
+
+    Native-resolution steps. Reading these off the 2.35x upscale at whole canvas
+    rows undersamples a 1px rule badly enough to report it as 2px, which is how
+    the underline got drawn too heavy.
+    """
+    pygame.init()
+    s = pygame.image.load(path)
+    W, H = s.get_size()
+    scale = W / 640.0
+    x_stop = min(W, int(x_hi * scale))
+
+    print(f"\n== {path} {W}x{H}: legend rows, native steps, tol {tol} ==")
+    for name, rgb in _legend_colors():
+
+        def near_c(c, _t=rgb):
+            return max(abs(int(c[i]) - _t[i]) for i in range(3)) <= tol
+
+        rows = {}
+        y = 300.0
+        while y < 460.0:
+            py = int(round(y * scale))
+            if 0 <= py < H:
+                xs = [x for x in range(x_stop) if near_c(s.get_at((x, py))[:3])]
+                if xs:
+                    rows[round(y, 2)] = xs
+            y += step
+        if not rows:
+            print(f"\n   {name}: nothing")
+            continue
+
+        # Both the underline and the row's own service LINE reach far right, so
+        # "furthest right" alone picks the line. The underline is the only one
+        # that ALSO starts at the rectangle, which is the discriminator.
+        anchored = {y: xs for y, xs in rows.items() if xs[0] / scale < 12.0}
+        if not anchored:
+            print(f"\n   {name}: no anchored row")
+            continue
+        rule_y = max(anchored, key=lambda y: anchored[y][-1])
+        rule = anchored[rule_y]
+        below = [y for y in rows if y > rule_y + 0.5]
+        head = rows[min(below)] if below else []
+        left = {y: xs for y, xs in anchored.items() if xs[-1] / scale < 12.0}
+        if left:
+            ys = sorted(left)
+            xs_all = [x for y in ys for x in left[y] if x / scale < 12.0]
+            print(
+                f"\n   {name}  rect  x {min(xs_all) / scale:6.2f}..{(max(xs_all) + 1) / scale:6.2f}"
+                f" (w {(max(xs_all) + 1 - min(xs_all)) / scale:4.2f})"
+                f"  y {ys[0]:7.2f}..{ys[-1]:7.2f} (h {ys[-1] - ys[0] + step:5.2f})"
+            )
+        print(
+            f"      rule  y {rule_y:7.2f}  x {rule[0] / scale:6.2f}..{(rule[-1] + 1) / scale:6.2f}"
+            f"   head  y {min(below) if below else 0:7.2f}"
+            f"  x {(head[0] / scale) if head else 0:6.2f}..{((head[-1] + 1) / scale) if head else 0:6.2f}"
+        )
+
+
+def report_legend(path, x0=0.0, x1=0.13, y0=0.62, y1=0.95, split=SPLIT):
+    """The legend column: one chip per service, its swatch, and its label ink.
+
+    Scoped to an x WINDOW rather than the whole row, because a chip is the same
+    colour and the same rows as the service line it belongs to — the full-width
+    scan `--overview` uses cannot separate them, which is why this is its own
+    probe rather than another column in that report.
+
+    Per chip it prints the coloured extent (the swatch, or the whole chip when
+    that service is the active one) and the DARK-or-WHITE ink bbox beside it,
+    which is the label. The label's own width is what says whether the type is
+    set on a fixed cell run.
+    """
+    pygame.init()
+    s = pygame.image.load(path)
+    W, H = s.get_size()
+    xa, xb = int(W * x0), int(W * x1)
+    ya, yb = int(H * y0), int(H * y1)
+
+    def sat(c):
+        return max(c[:3]) - min(c[:3]) > 55
+
+    rows = {}
+    for y in range(ya, yb):
+        xs = [x for x in range(xa, xb) if sat(s.get_at((x, y))[:3])]
+        if len(xs) >= 6:
+            rows[y] = xs
+
+    bands = []
+    for y in sorted(rows):
+        if bands and y == bands[-1][1] + 1:
+            bands[-1][1] = y
+        else:
+            bands.append([y, y])
+
+    print(f"\n== {path} {W}x{H}: {len(bands)} legend chips in x/W {x0}..{x1} ==")
+    prev = None
+    for a, b in bands:
+        cy = (a + b) // 2
+        xs = rows[cy]
+        h = b - a + 1
+        c = tuple(s.get_at((xs[len(xs) // 2], cy))[:3])
+        step = f"  pitch {((a + b) / 2 - prev):.1f}" if prev is not None else ""
+        print(
+            f"\n   chip y {a}..{b}  h {h} ({h / H:.4f})  centre/H {(a + b) / 2 / H:.4f}{step}"
+            f"\n      colour x {xs[0]}..{xs[-1]} ({xs[-1] - xs[0] + 1}px)  x/W {xs[0] / W:.4f}..{(xs[-1] + 1) / W:.4f}  {c}"
+        )
+        prev = (a + b) / 2
+        # Label ink: anything clearly darker OR clearly lighter than the page,
+        # so a reversed white label on a filled chip is found by the same pass
+        # as a black one beside a swatch.
+        ink = []
+        for x in range(xa, min(W, xb + int(W * 0.02))):
+            col = [s.get_at((x, y))[:3] for y in range(a, b + 1)]
+            if any(max(v) < 110 or min(v) > 235 for v in col):
+                ink.append(x)
+        if ink:
+            groups = []
+            for x in ink:
+                if groups and x == groups[-1][1] + 1:
+                    groups[-1][1] = x
+                else:
+                    groups.append([x, x])
+            wide = [g for g in groups if g[1] - g[0] >= 2]
+            if wide:
+                print(
+                    f"      label ink x {wide[0][0]}..{wide[-1][1]} ({wide[-1][1] - wide[0][0] + 1}px)"
+                    f"  x/W {wide[0][0] / W:.4f}..{(wide[-1][1] + 1) / W:.4f}  in {len(wide)} runs"
+                )
+                print("        runs: " + " ".join(f"{g[0]}..{g[1]}" for g in wide))
+
+
+def report_thickness(path, cx, cy, half, r, g, b, bg=(213, 223, 239), span=8.0):
+    """A stroke's thickness by COVERAGE INTEGRAL along a vertical cut.
+
+    A tolerance test cannot compare two colours: a saturated ink sits further
+    from the page than a muted one, so the same tolerance admits more of its
+    antialiased skirt and reports it thicker. Integrating each pixel's position
+    along the background-to-ink axis is scale-free, so red and green become
+    comparable — and on an upscaled reference it also returns the true width
+    rather than whichever side of a threshold the resampling happened to land.
+
+    Same idea as the coverage field the placard tracer uses, one dimension down.
+    """
+    pygame.init()
+    s = pygame.image.load(path)
+    W, H = s.get_size()
+    scale = W / 640.0
+    denom = max(abs(int(r) - bg[0]), abs(int(g) - bg[1]), abs(int(b) - bg[2])) or 1
+
+    def cov(c):
+        # Project onto the background->ink axis, clamped, so an unrelated colour
+        # crossing the cut contributes near zero rather than a spurious slab.
+        num = max(abs(int(c[0]) - bg[0]), abs(int(c[1]) - bg[1]), abs(int(c[2]) - bg[2]))
+        near = max(abs(int(c[i]) - (r, g, b)[i]) for i in range(3))
+        return 0.0 if near > denom else min(1.0, num / denom)
+
+    total, n = 0.0, 0
+    for dx in range(-int(half), int(half) + 1):
+        px = int(round(cx * scale)) + dx
+        if not 0 <= px < W:
+            continue
+        acc = 0.0
+        y = cy - span / 2
+        while y < cy + span / 2:
+            py = int(round(y * scale))
+            if 0 <= py < H:
+                acc += cov(s.get_at((px, py))[:3])
+            y += 1.0 / scale  # one SOURCE pixel per step
+        total += acc / scale  # source px -> canvas px
+        n += 1
+    print(f"   {path.split('/')[-1][:14]:<15} x~{cx:6.1f} y~{cy:6.1f} rgb{(r, g, b)}  thickness {total / max(n, 1):5.2f} canvas px")
+
+
+def report_slants(path, tol=32, step=0.42):
+    """Every legend slant as a fitted line: head, foot and slope.
+
+    A least-squares fit over the stroke's own run centres, rather than reading
+    two endpoints. Endpoints are where the stroke MEETS something — the underline
+    above, the service line below — so both are exactly where the measurement is
+    contaminated, and a slope taken from them is the one number the trace can
+    give wrong. The fit uses only the clear middle and extrapolates.
+    """
+    pygame.init()
+    s = pygame.image.load(path)
+    W, H = s.get_size()
+    scale = W / 640.0
+    # Row i's underline sits at `head_y`, its service line at `line_y`.
+    rows = [(name, rgb, 328.5 + 22.0 * i, 396.7 + 7.65 * i) for i, (name, rgb) in enumerate(_legend_colors()[:5])]
+
+    print(f"\n== {path} {W}x{H}: legend slants, fitted ==")
+    for name, rgb, head_y, line_y in rows:
+
+        def near_c(c, _t=rgb):
+            return max(abs(int(c[i]) - _t[i]) for i in range(3)) <= tol
+
+        pts = []
+        y = head_y + 2.0  # clear of the underline
+        while y < line_y - 2.0:  # and of the line
+            py = int(round(y * scale))
+            xs = [x for x in range(int(70 * scale), min(W, int(105 * scale))) if near_c(s.get_at((x, py))[:3])]
+            if xs and (xs[-1] - xs[0]) / scale < 6.0:
+                pts.append((y, (xs[0] + xs[-1] + 1) / 2 / scale))
+            y += step
+        if len(pts) < 8:
+            print(f"   {name}: only {len(pts)} clean rows")
+            continue
+        n = len(pts)
+        my = sum(p[0] for p in pts) / n
+        mx = sum(p[1] for p in pts) / n
+        den = sum((p[0] - my) ** 2 for p in pts)
+        slope = sum((p[0] - my) * (p[1] - mx) for p in pts) / den
+        at = lambda yy: mx + slope * (yy - my)  # noqa: E731
+        print(
+            f"   {name:<5} n={n:3d}  slope {slope:5.3f}" f"   head({head_y:6.1f}) x {at(head_y):6.2f}" f"   foot({line_y:6.1f}) x {at(line_y):6.2f}"
+        )
+
+
+def report_color_runs(path, cx, cy, cw, ch, r, g, b, tol=60, step=1.0):
+    """Per-row x-runs of ONE colour inside a canvas rect — a shape, as numbers.
+
+    Written for the legend fold, where the question is what SHAPE a coloured
+    stroke takes: a run whose x holds constant is a vertical, one that walks a
+    fixed amount per row is a straight diagonal, and one whose walk accelerates
+    is a curve. Reading that off a 2.35x upscale by eye gives a different answer
+    every time, which is what `conventions.md` bars.
+
+    Canvas units in and out, so the same call describes the reference and our
+    own render and the two are directly comparable.
+    """
+    pygame.init()
+    s = pygame.image.load(path)
+    W, H = s.get_size()
+    scale = W / 640.0
+    target = (r, g, b)
+
+    def near_c(c):
+        return max(abs(int(c[i]) - target[i]) for i in range(3)) <= tol
+
+    print(f"\n== {path}: {target} +-{tol} in canvas {cx},{cy} {cw}x{ch} ==")
+    y = cy
+    while y < cy + ch:
+        py = int(round(y * scale))
+        if not 0 <= py < H:
+            y += step
+            continue
+        xs = [x for x in range(int(cx * scale), min(W, int((cx + cw) * scale))) if near_c(s.get_at((x, py))[:3])]
+        if xs:
+            groups = []
+            for x in xs:
+                if groups and x - groups[-1][1] <= 2:
+                    groups[-1][1] = x
+                else:
+                    groups.append([x, x])
+            cells = "  ".join(f"{u / scale:6.2f}..{(v + 1) / scale:6.2f}" for u, v in groups)
+            print(f"   y {y:7.2f} | {cells}")
+        y += step
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--transfer":
         # `--transfer <image> [cy] [ch]` — the transfer view's banner + rows.
@@ -1237,6 +1692,47 @@ if __name__ == "__main__":
     elif len(sys.argv) > 4 and sys.argv[1] == "--figures":
         # `--figures <image> <y> <h>` — blue pictogram components + x-clusters.
         report_figures(sys.argv[2], float(sys.argv[3]), float(sys.argv[4]))
+    elif len(sys.argv) > 2 and sys.argv[1] == "--overview":
+        # `--overview <image> [min_ink/W] [gap_px]` — the patterns sheet's
+        # service lines, their intervals, and the stop markers on each.
+        report_overview(
+            sys.argv[2],
+            min_ink=float(sys.argv[3]) if len(sys.argv) > 3 else 0.13,
+            gap=int(sys.argv[4]) if len(sys.argv) > 4 else 20,
+        )
+    elif len(sys.argv) > 8 and sys.argv[1] == "--crun":
+        # `--crun <image> <x> <y> <w> <h> <r> <g> <b> [tol] [step]` — per-row
+        # x-runs of one colour in a canvas rect. A stroke's shape as numbers.
+        report_color_runs(
+            sys.argv[2],
+            *[float(v) for v in sys.argv[3:7]],
+            *[int(v) for v in sys.argv[7:10]],
+            tol=int(sys.argv[10]) if len(sys.argv) > 10 else 60,
+            step=float(sys.argv[11]) if len(sys.argv) > 11 else 1.0,
+        )
+    elif len(sys.argv) > 8 and sys.argv[1] == "--thick":
+        # `--thick <image> <x> <y> <half> <r> <g> <b> [span]` — stroke thickness
+        # by coverage integral on a vertical cut, in canvas px.
+        report_thickness(
+            sys.argv[2],
+            *[float(v) for v in sys.argv[3:6]],
+            *[int(v) for v in sys.argv[6:9]],
+            span=float(sys.argv[9]) if len(sys.argv) > 9 else 8.0,
+        )
+    elif len(sys.argv) > 2 and sys.argv[1] == "--slants":
+        # `--slants <image> [tol]` — every legend slant fitted, head/foot/slope.
+        report_slants(sys.argv[2], tol=int(sys.argv[3]) if len(sys.argv) > 3 else 32)
+    elif len(sys.argv) > 2 and sys.argv[1] == "--legrows":
+        # `--legrows <image> [x_hi] [tol]` — per service: rectangle, underline,
+        # slant head. Native-resolution steps.
+        report_legend_rows(
+            sys.argv[2],
+            x_hi=float(sys.argv[3]) if len(sys.argv) > 3 else 105.0,
+            tol=int(sys.argv[4]) if len(sys.argv) > 4 else 45,
+        )
+    elif len(sys.argv) > 2 and sys.argv[1] == "--legend":
+        # `--legend <image> [x0/W x1/W y0/H y1/H]` — the legend chips and labels.
+        report_legend(sys.argv[2], *[float(v) for v in sys.argv[3:7]])
     elif len(sys.argv) > 2 and sys.argv[1] == "--columns":
         # `--columns <image> <y_lo/H> <y_hi/H> [thr]` — the name band of one row.
         report_columns(

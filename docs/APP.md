@@ -46,9 +46,9 @@ The dict `tims.setup.run()` returns:
 
 | Key | Meaning |
 |---|---|
-| `action` | `"select"` (drive) / `"run_tutorial"` (classic replay) |
+| `action` | always `"select"` (drive). The classic flow's `"run_tutorial"` went with it on 2026-07-30 |
 | `work_dir` | route folder (`audio/<line>/<diagram>/`) |
-| `route_data` | finalized route closure (`route_loader`) |
+| `route_data` | always `None` — `PASimulator` loads it via `route_loader.load_route_from_dir`, which is the only reader that also attaches the line's `system.json` sheet. The TIMS flow used to parse `route.json` itself here, and that second read silently dropped the sheet on the one path a real user takes |
 | `model` | train-model key (override > route default > global default) |
 | `start_idx` | start-station stop index (tims setup only; classic has none) |
 | `auto_input` | OCR Auto-PA armed (adds `lead_m` / `interval_s`) |

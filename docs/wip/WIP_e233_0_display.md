@@ -1,7 +1,10 @@
 # WIP — E233-0 display (中央線快速)
 
 Spec-first build of the E233-0 LCD. This doc is the **spec**; code follows it, not the
-other way round. Nothing is implemented yet.
+other way round. Built so far: the upper band's chrome and its first element, and four
+lower views — full-route (§ 9), 6-station (§ 10), the two notices (§§ 11–12) and the
+patterns overview (§ 14). The overview is Chūō-only and sits outside the slot rotation.
+Graduation is not due: § 14.4 is open, and no Chūō diagram declares `model: e233_0` yet.
 
 **EDIT-CONTRACT.** A value that came from a script says `[measured]`; a value read off a
 reference by eye says `[observed]` and is not to be trusted until a script measures it. An
@@ -156,7 +159,7 @@ so this table grows before building starts.
 | 3 | **Transfer info** | Connecting lines per station | **BUILT**, § 11 — inline band (§ 10.3.4) and standalone view |
 | 3a | **優先席** | Priority-seat placard, static | **BUILT** 2026-08-29 · `priority_seat.py` · reference `priority-seats.png` |
 | 3b | **マナーモード** | Mobile-phone notice, static | **BUILT** 2026-08-29 · `manner_mode.py` · reference `manner-mode.png` |
-| 4 | **Patterns overview** | All six Chūō service patterns as parallel coloured lines with per-station stop markers | noted, **not scoped** |
+| 4 | **Patterns overview** | All six Chūō service patterns as parallel coloured lines with per-station stop markers | **BUILT** 2026-09-01, § 14 — Chūō only, outside the rotation |
 | … | *further views* | author collecting references | pending |
 
 **Transfer info — deferred to its own session, and not an E233-0 distinctive.** In the
@@ -190,9 +193,10 @@ follows is three, on the existing beat schedule and the existing `at_station` fo
   kanji renderer in both the upper and lower managers, so the cycler ticks through a third
   identical page. Same shape of work as furigana: an override per element that differs, not a
   second renderer. Nothing structural blocks it.
-- The patterns-overview view (§ 3 row 4). It is the only view needing data about services
-  *other than the one being driven*, which nothing in the app models today — that, not the
-  drawing, is what makes it expensive.
+- **The patterns-overview view — BUILT 2026-09-01, § 14.** It is the only view needing data about
+  services *other than the one being driven*, which nothing else in the app models. That is what
+  makes it expensive, and the drill-down settled the data model before any drawing. What remains is
+  generalisation, not drawing: the geometry is still fitted to Chūō's shape.
 - Ōme, and the -1000 / -5000 / -7000 / -8000 re-skins that inherit this work.
 
 **Out of scope:**
@@ -2120,3 +2124,192 @@ stays put.
 - OPEN — a multi-badge entry (`湘南新宿ライン` draws `JT`+`JU` in the inline band). No capture shows
   one in this view, and the author has separately said that reference is wrong on it — it should be
   `JS` (2026-08-29).
+
+---
+
+## 14. Lower LCD, patterns-overview view — BUILT, Chūō only
+
+**Drill-down held 2026-09-01.** § 14.1 is the author's. § 14.2 is the data model that session
+settled, and it is most of what the drill-down produced: this view's hard part is its data, not its
+drawing. § 14.3 is measured. § 14.4 is what one reference cannot say.
+
+**Built the same day**, six elements against the single reference: the service lines, their stop
+markers, the station names, the 立川 junction pill, the two spurs and the legend. Reachable as
+`preview_display.py --lower-view overview`; `_SLOT_OVERVIEW` is deliberately outside
+`_available_slots`, so it never rotates into a drive while § 14.4 is open.
+
+**The geometry is NOT yet derived from the axis, which § 14.2 requires.** The row split, the slot
+pitch, the per-service stack spacing and the legend's placement are fitted literals in
+`_TUNEABLES_OVERVIEW`, held as per-row and per-service tuples — so their LENGTHS carry Chūō's 2 rows
+and 6 services even though no station or service NAME appears in the renderer.
+`JapanesePatternsOverviewDisplay._assert_shape` refuses a differently-shaped sheet rather than
+letting the drawing pretend to be general. Deriving them is the work § 14.2 describes and it waits
+on the further references § 14.4 names.
+
+### 14.1 What the view is
+
+All six Chūō service patterns as parallel coloured lines over one shared station axis, on the same
+two-row wrap the full-route view uses, with a legend at the bottom left where the active service is
+highlighted.
+
+**The axis is the whole 中央線 SYSTEM, not the JC line** (author). It carries the 各駅停車
+stations — 水道橋 · 飯田橋 · 市ヶ谷 · 信濃町 · 千駄ヶ谷 · 代々木 · 大久保 · 東中野 — which are JB
+rather than JC.
+
+**It is `1654T`'s `stops`, reversed** `[measured]`. Read 東京-first that list is the overview axis
+exactly: 32 stations, same order, split 15 | 17 at 高円寺 | 阿佐ヶ谷. So the axis is COPIED rather
+than retyped, which also joins cleanly on the small-ヶ forms that `conventions.md` § "Data layout"
+warns about. NOT `pre_stops + stops`: that diagram's 8 `pre_stops` (大月 … 相模湖) are off this
+sheet and including them yields 40. This paragraph is the recipe a later session would re-run to
+extend the join, so the two were checked mechanically rather than read.
+
+It is still not DERIVABLE, and `602H` is the proof: its own list runs 青梅 → 立川 → 東京, the Ōme
+branch plus the trunk, so "the axis" taken from whichever diagram is loaded is a different axis per
+diagram. Reading direction differs too — this view reads left to right with the screen's LOWER band
+first, where the full-route view reads right to left. So nothing of § 9's slot model carries over
+except the two-row wrap itself.
+
+**This page is Chūō's.** Other routes have overview pages of their own, in other formats with
+similar drawings (author). It is route-specific in a way no other view on this model is.
+
+**Coverage per system is all-or-nothing.** Every service the real sheet shows must be drawn,
+including the ones we hold no route data for (author). Chūō ships three diagrams of six, and the
+other three are as required as those. A missing service is invisible on screen, because five lines
+where six exist looks exactly like a complete diagram. It can also shorten the axis, since the axis
+is the union of what all services touch.
+
+**The service set is whatever the real sheet shows** (author). Per system, copy the set from that
+system's own display. 特急 is excluded on Chūō because the sheet excludes it; あずさ and かいじ run
+the line and are absent from it.
+
+### 14.2 The data model — SETTLED
+
+Three statements, and the view follows from them (author): **data is as it is, display matches IRL,
+out-of-spec works only when it has data.**
+
+- **The data is a separate house on the route, never inferred from `route.json`** (author). It is
+  higher-level than a run: it describes the network rather than a journey. Deriving it from the
+  shipped diagrams was considered and rejected. The corpus covers services by which audio was
+  recorded, and the missing 各駅停車 is the one contributing the extra stations, so the axis would
+  come out short with nothing reporting it — `critical_lessons.md` § 9 exactly. Comparing a shipped
+  diagram's stop list against its service entry survives as a validator cross-check between two
+  independent statements, not as a source.
+- **Nothing Chūō-shaped lives in `e233_0`** (author). That reaches past the data file. A number
+  fitted against this reference is Chūō living in the renderer, even inside a `_TUNEABLES_*` dict,
+  so the row split, the slot pitch, the stack spacing for N services and the legend's placement have
+  to derive from the axis they are handed. Bar thickness, colours, fonts and marker size stay
+  constants, because those are the drawing's own idiom rather than this network's.
+- **The gate is data presence, not spec.** No sheet for the system, no slot. The rotation is already
+  variable-length, so a shorter cycle is the whole failure mode. One predicate covers 青梅, in spec
+  with no sheet, and JT/JU/JS, out of spec.
+- **There is no second gate.** A sheet exists only because someone looked at that network and
+  decided it could be drawn this way, and that call is made once, at authoring time, by eye. An
+  earlier attempt to state the drawing's capability as a testable predicate was over-specified off a
+  single reference and dropped.
+- **Three service colours are already authored** as `type_color` in the shipped diagrams — 通勤特快
+  `(212,3,5)`, 中央特快 `(45,0,255)`, 快速 `(233,91,31)` — and they are the reference's line colours.
+  The catalogue must not restate them.
+
+**Out-of-spec is for fun, and never a fidelity claim** (author): an out-of-spec route has no way of
+matching its own IRL display, so there is nothing to be faithful to. The value case is the no-LCD
+tier — E233-3000 on JT, JU and JS, shipped and drivable with nothing native ever coming.
+
+**That tier does not get this page from this drawing.** JT/JU/JS is not one trunk. 上野東京ライン and
+湘南新宿ライン are two paths through overlapping stations, and drawing them would need many special
+supports, which stops being best-effort (author). `CLAUDE.md` § "Per-model IRL line scope" bars
+exactly that: a bespoke feature propping up an out-of-spec route. The no-LCD tier's bar is
+plausibility, meaning what an E233 would show, and the special-casing is what breaks that claim.
+
+**Build Chūō only, without foreclosing generalisation** (author).
+
+### 14.3 Geometry `[measured]`
+
+Off `overview-tokao-different-patterns-stopping-ja.png` by per-row ink counting
+(`_dev_scripts/_e233_lower_geometry.py --overview`), as ratios against the reference's own
+1502 × 1124.
+
+**Twelve line bands — six services on each of two rows.** Counted mechanically rather than by eye.
+Top-to-bottom order is identical on both rows and matches the legend's: 通勤特快 · 青梅特快 ·
+中央特快 · 通勤快速 · 快速 · 各駅停車.
+
+| service | colour | row 1 centre `y/H` | row 2 centre `y/H` |
+|---|---|---|---|
+| 通勤特快 | `(165, 20, 6)` | 0.5343 | 0.8265 |
+| 青梅特快 | `(14, 100, 38)` | 0.5489 | 0.8434 |
+| 中央特快 | `(12, 64, 149)` | 0.5663 | 0.8585 |
+| 通勤快速 | `(15, 34, 112)` | 0.5814 | 0.8741 |
+| 快速 | `(203, 95, 43)` | 0.5956 | 0.8888 |
+| 各駅停車 | `(224, 202, 33)` | 0.6139 | 0.9061 |
+
+Line-to-line pitch runs 16.5–20.5 px on row 1 and 16.5–19.5 px on row 2, mean ≈ 17.8 on both. The
+two rows are 0.292 `H` apart, centre to centre.
+
+**Row 1 extents.** Five services span `x/W` 0.054 … 0.939, the full row. 各駅停車 stops at
+0.057 … 0.293, which is its terminus at 三鷹.
+
+**Row 2 extents.** All six reach 0.939 at the right. Their left ends form a staircase, which is the
+lines folding into the legend chips at different depths.
+
+**SUPERSEDED, kept because the numbers still get quoted:** reading those left ends off the band
+EXTENTS gave 快速 0.1365 · 中央特快 0.1418 · 青梅特快 0.1458 · 通勤快速 0.1471 · 通勤特快 0.1498
+(canvas 87.4 / 90.8 / 93.3 / 94.1 / 95.9). That reading is contaminated at both ends — a slant meets
+its underline above and its line below, so the extreme pixel is a join rather than the stroke — and
+通勤快速 came out 94.2 against a fitted 88.3, which was the visible error. `fold_foot_x` ships
+`(95.3, 92.0, 90.4, 88.3, 88.3)` from a least-squares fit over each slant's run CENTRES, skipping
+the contaminated rows (`--slants`). 通勤快速 and 快速 genuinely share 88.3 there: the fit puts them
+within 0.1px of each other, where the endpoint reading separated them by 6.7.
+
+- `[measured]` — **the active service IS drawn heavier**, settled by coverage integral rather than by
+  a threshold (`--thick`). An ordinary line integrates to 2.02 canvas px and the loaded train's own
+  service to 4.82, on the same cut. What the integral also shows is that the two rows disagree: the
+  active line measures 4.82 on the lower row and 3.0-ish on the upper, so `line_h_active` is a
+  per-row pair. OPEN — why. One reference cannot say whether that is the design or the capture.
+- `[measured]` — **stop markers**, slot by slot (`--overview`). The pass tests each slot centre for a
+  near-white core, with the window clamped to sit wholly on the line so a row end cannot read the
+  pale background as a mark. Two slots are author-supplied because nothing is drawn there to
+  measure. **立川, on all five rapid services** — the pill covers the whole slot, and sampling inside
+  it (canvas x 412–424, y 252–296) finds none of the six service colours. The probe first reported
+  four of the five as measured, which was it reading the pill's own white 立川 kanji: the strokes
+  cross four of the six line rows and 快速's row falls in the gap between 立 and 川, so exactly one
+  came back missing and the split read as a finding rather than as an artefact. The window is
+  clamped against the pale background and had no defence against white text drawn over the line;
+  it now refuses any slot named in `junctions[]`. **日野, on 快速 only** — the junction spur's
+  outermost stub ends at x 453.4 against that slot's centre at 452.1, so it sits on the orange line
+  there while the other services' stubs converge above their own slots.
+
+### 14.4 What one reference cannot say
+
+The author is collecting further overview references. What each will settle: how many services it
+stacks and whether the band grew to take them; whether the axis is still a single trunk; whether it
+is still two rows; whether the legend is still each service's terminus; whether branches are stubs
+or drawn out. Two sheets disagreeing on any of those is the generalisation question answering
+itself.
+
+- OPEN — **direction.** The author expects the sheet differs by direction, and only one direction is
+  modelled for now, so 上り is what gets authored. Unconfirmed.
+- OPEN — **day type.** 通勤特快 and 通勤快速 are weekday-only services, so a weekend sheet may drop
+  them. No capture.
+- OPEN — **what "generalise" means.** E233-0 drawing another system's sheet, or the -1000 / -5000 /
+  -7000 / -8000 re-skins inheriting this drawing for their own systems. Different work, not settled.
+- OPEN — **whether a second sheet gets authored at all.** If it does, the data house has to be
+  pleasant to write by hand, which is a real constraint on its shape.
+- OPEN — **the slot's place in the rotation.** A peer of FULL / EIGHT / TRANSFER, or rarer like the
+  two standing notices (§ 12).
+- OPEN — **where the data house file sits.** A line folder serves while no live case shares one
+  system across several folders. JT/JU/JS was that case and it is out on topology.
+- OPEN — **station-name black and grey.** Built as the § 9.1 rule, this train's own stopping pattern,
+  and the reference does not agree with it. Measured 2026-09-01: the reference's train is a 通勤特快
+  at 高尾, and its five LOWER-row stops (東京 神田 御茶ノ水 四ツ谷 新宿) are black while every UPPER-row
+  station is grey — including 国分寺, 立川, 八王子 and 高尾, which that service stops at, and which its
+  own red line carries markers for. 国分寺 has no ink under a threshold of 100 in the reference. No
+  ahead/behind rule reproduces that, and no rule keyed on the stopping pattern does either, since the
+  markers and the names then disagree within one picture. Needs the author, or a second reference at
+  a different instant.
+- OPEN — **three of the six line colours disagree with the diagrams' `type_color`.** 青梅特快
+  (14,100,38), 通勤快速 (15,34,112) and 各駅停車 (224,202,33) sample EXACTLY as authored, on both rows,
+  which is what says the capture carries no global shift. 通勤特快 reads (166,19,5) against (212,3,5)
+  and 中央特快 (12,64,150) against (45,0,255); 快速 lands 185–203 against (233,91,31) and is too thin
+  a band to pin. The legend swatches, which are solid blocks, give a THIRD set again — (172,15,5),
+  (6,67,171), (234,88,15) — so two methods on one capture disagree and neither can be believed
+  (`principles.md` § "Measuring off a capture"). `system.json` keeps the authored values and
+  `validate_data.check_sheet_colors` pins them to the diagrams, so any change is deliberate.

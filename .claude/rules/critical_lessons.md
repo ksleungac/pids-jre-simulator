@@ -209,6 +209,13 @@ must not be a hand-typed description of what production supports.
   rather than reachable states cannot be short a case, because there is no case list to be short of.
 - Make the failure loud where it CAN be seen: the shipped build has no font files, so `--verify` now
   runs with the baked faces unreadable. The dev tree has every face, so nothing else surfaces it.
+- **A gate that STAGES its own inputs holds a second copy of "what ships", and that copy is an
+  enumeration too.** `--verify-shipped` staged `audio/**/route.json` while `/build` stages every
+  tracked JSON under `audio/`. Adding `system.json` therefore left the gate driving a route whose
+  sheet resolved to `None`, and it reported clean: staged fingerprint `0de4f187…` over 22 files
+  against the bake's `f338b038…` over 23. Derive the staging list from the function production
+  itself ships with, here `font_atlas.shipped_json_files()`, never from a glob typed into the gate.
+  (2026-09-02.)
 - Ask of any new gate: what class of defect is this structurally unable to detect? Write the answer down.
 
 **Scope:** any bake / codegen / fixture-generation with a paired verifier; asset pipelines; snapshot
@@ -260,6 +267,12 @@ rigour and is the thing that makes the blind spot invisible.
   gate names a file that is provably correct, suspect the gate's DOMAIN before the file. Fixed by
   recording unbaked faces into a separate sink the baker never reads, so the predicate spans the
   same set as the question. (2026-08-30.)
+- **A bound written as an OFFSET from a fitted list states a fact about the SET, not about the
+  member.** The overview's shape gate read `len(services) <= len(fold_foot_x) + 1`, true only
+  because the one service lacking a fitted fold also happened to need no junction spur. The `+ 1`
+  reads as a documented allowance and was a coincidence of the current sheet, so a second sheet
+  would have drawn a spur off the end of its tuple. Ask per member which fitted value it needs and
+  bound each independently; a global count cannot express a per-member fact. (2026-09-02.)
 - A check whose inputs are absent in the deployed frame must be SKIPPED there explicitly, not left to
   compute a degenerate value and compare it. Ask where each check's inputs come from, per frame.
 - Count the frames a suite covers, not the cases. Five gates over one frame is one frame.

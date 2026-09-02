@@ -486,6 +486,7 @@ A tool's output is not the fact it was meant to establish. Before a comparison, 
 - Similarity and threshold methods fail toward "different": a negative is weak evidence, a positive is strong. Prefer an exact, thresholdless method where one exists.
 - The user asserting a contrary fact about their own domain outranks the instrument. Re-check the instrument, not the assertion.
 - A comparison rendered for the USER to judge is an instrument too. Confirm the arms actually differ before presenting them. (2026-07-27: two rows of a four-row scaling comparison came from the identical call, and the user picked a filter from two copies of one image.)
+- **A probe reads whatever is on top, so an occluding element makes it measure the occluder.** A whiteness probe over the 立川 slot was asking whether the reference draws stop markers under the junction pill. The pill carries white kanji, and four of the six line rows cross a stroke, so the probe returned four marker cores. 快速's row fell in the gap between 立 and 川, and that one miss is what made the artefact read as a finding rather than as noise. Name everything else occupying the pixels before believing a probe over a composited region. (2026-09-02.)
 
 ### Mutation-prove a new gate at birth
 Every linter rule, assertion, coverage count and staleness guard gets broken once to confirm it fires, then restored. A gate that reports clean on its first run has told you nothing until it has also reported dirty on demand.

@@ -155,7 +155,7 @@ def _code_files() -> list:
     return [p for p in files if p.is_file() and not any(s.startswith("_") for s in p.relative_to(root).parts[:-1])]
 
 
-def _shipped_json_files() -> list:
+def shipped_json_files() -> list:
     """Every shipped JSON file, resolved once, as (path, rel) pairs.
 
     `walk_shipped_json` reads these for the text domain; `data_fingerprint` hashes
@@ -167,7 +167,7 @@ def _shipped_json_files() -> list:
     """
     root = project_root()
     out = []
-    for p in sorted(root.glob("data/*.json")) + sorted(root.glob("audio/**/route.json")):
+    for p in sorted(root.glob("data/*.json")) + sorted(root.glob("audio/**/route.json")) + sorted(root.glob("audio/**/system.json")):
         rel = p.relative_to(root).as_posix()
         if any(seg.startswith("_") for seg in rel.split("/")):
             continue  # staging, not shipped, so it cannot reach a shipped render
@@ -225,10 +225,10 @@ def data_fingerprint() -> str:
     """Hash of every file whose contents can introduce new text to render.
 
     The baker stamps this into the manifest; loading compares. The file set comes
-    from `_shipped_json_files`, shared with the baker's text domain, so the domain
+    from `shipped_json_files`, shared with the baker's text domain, so the domain
     and the staleness check cannot disagree about what counts as a text source.
     """
-    parts = [f"{rel}:{hashlib.sha256(p.read_bytes()).hexdigest()}" for p, rel in _shipped_json_files()]
+    parts = [f"{rel}:{hashlib.sha256(p.read_bytes()).hexdigest()}" for p, rel in shipped_json_files()]
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
 
 
@@ -361,8 +361,13 @@ def _norm_file(rel: str) -> str:
     Every `route.json` has the same SHAPE, so a location must mean the same thing
     on all of them; per-route locations would make a declaration per-route and
     reintroduce the coverage-by-reachability this exists to remove.
+
+    The BASENAME is kept, because `audio/` now holds two shapes: a diagram's
+    `route.json` and a line's `system.json`. Collapsing both to one name would
+    let a declaration written against one silently match the other.
     """
-    return "audio/*/route.json" if rel.split("/")[0] == "audio" else rel
+    parts = rel.split("/")
+    return f"audio/*/{parts[-1]}" if parts[0] == "audio" else rel
 
 
 def walk_shipped_json() -> dict:
@@ -376,7 +381,7 @@ def walk_shipped_json() -> dict:
     Returns `{string: {location, ...}}`, a location being
     `audio/*/route.json:pre_stops[].name` — list indices collapsed to `[]` so
     every member of an array shares one location. Cached; the file set comes from
-    `_shipped_json_files`, shared with `data_fingerprint`, so the domain and the
+    `shipped_json_files`, shared with `data_fingerprint`, so the domain and the
     staleness check cannot disagree about what counts as a text source.
     """
     global _walk
@@ -394,10 +399,24 @@ def walk_shipped_json() -> dict:
             for v in node:
                 rec(v, loc + "[]")
 
-    for p, rel in _shipped_json_files():
+    for p, rel in shipped_json_files():
         rec(json.loads(p.read_text(encoding="utf-8")), _norm_file(rel) + ":")
     _walk = out
     return out
+
+
+def _loc_pattern(pattern: str) -> str:
+    """A location pattern with `[` escaped, so `*` is the only wildcard.
+
+    A location writes an array index as `[]`, and fnmatch reads `[` as the start
+    of a character class. One `[]` survives by accident — the scan finds no
+    closing `]` and falls back to a literal — but a NESTED array writes `[][]`,
+    which parses as the class {']','['} followed by a literal `]` and matches a
+    two-character run that never occurs. `rows[][]` is the tree's only nested
+    location and it silently resolved to nothing, so the sheet's axis was covered
+    only because another declaration happened to reach the same names.
+    """
+    return pattern.replace("[", "[[]")
 
 
 def resolve(source: Source, walk: Optional[dict] = None) -> set:
@@ -405,7 +424,7 @@ def resolve(source: Source, walk: Optional[dict] = None) -> set:
     if walk is None:
         walk = walk_shipped_json()
     out = set(source.literals)
-    for pattern in source.locations:
+    for pattern in (_loc_pattern(p) for p in source.locations):
         for text, locs in walk.items():
             if any(fnmatch.fnmatchcase(loc, pattern) for loc in locs):
                 out.add(text)

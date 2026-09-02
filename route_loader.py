@@ -13,11 +13,42 @@ from pathlib import Path
 
 
 def load_route_from_dir(work_dir, station_db: dict) -> dict:
-    """Read ``<work_dir>/route.json`` from disk and finalize."""
+    """Read ``<work_dir>/route.json`` from disk and finalize.
+
+    Also attaches the line's service-pattern sheet as ``route_data["system"]``,
+    or ``None`` when the line has none. The sheet lives in the PER-LINE POOL
+    beside ``pa/`` and ``sta/``, because every diagram on a line draws the same
+    one; it is authored network data and is never derived from ``route.json``.
+    See ``docs/wip/WIP_e233_0_display.md`` section 14.
+
+    The key is always present, so a renderer does direct key access and a line
+    without a sheet is a ``None`` the view tests once, not a ``.get`` at every
+    call site (``principles.md`` section "JSON is input grammar"). The attach
+    lives in ``finalize_route``, not here, so the key is present on every
+    finalize whatever the entry point. No in-tree caller hands ``PASimulator`` a
+    pre-parsed dict today, but the argument is supported and must not yield a
+    different shape — and while one DID (the TIMS flow parsed ``route.json``
+    itself), putting the attach on this function alone left the sheet unattached
+    on the one path a real user takes.
+    """
     path = Path(work_dir) / "route.json"
     with open(path, encoding="utf-8") as f:
         route_data = json.load(f)
-    return finalize_route(route_data, station_db)
+    return finalize_route(route_data, station_db, work_dir=work_dir)
+
+
+def _load_system_sheet(work_dir, route_data: dict):
+    """``<audio_root>/system.json`` if the line has one, else ``None``.
+
+    Resolved off the same root as the audio pool rather than off ``work_dir``,
+    so the two fixtures that keep audio beside their ``route.json`` look for the
+    sheet in the same place they look for their tracks.
+    """
+    path = resolve_audio_root(work_dir, route_data) / "system.json"
+    if not path.exists():
+        return None
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
 
 
 def resolve_audio_root(work_dir, route_data: dict) -> Path:
@@ -43,13 +74,19 @@ def resolve_audio_root(work_dir, route_data: dict) -> Path:
     return (Path(work_dir) / route_data.get("audio_root", "..")).resolve()
 
 
-def finalize_route(route_data: dict, station_db: dict) -> dict:
+def finalize_route(route_data: dict, station_db: dict, work_dir=None) -> dict:
     """Apply loader-time computations to a parsed route_data dict.
 
     Mutates the dict in place and returns the same reference. Adding
     further loader-time computations (e.g. is_first / is_passing /
     is_terminus precomputation) lands here.
+
+    ``work_dir`` is what the line's ``system.json`` is resolved against. Without
+    it the sheet cannot be found, so ``route_data["system"]`` is set to ``None``
+    rather than left absent: the key is present either way, and a caller that
+    cannot supply a directory gets the same shape as a line that has no sheet.
     """
+    route_data["system"] = _load_system_sheet(work_dir, route_data) if work_dir else None
     _fill_dest_closure(route_data)
     _merge_station_translations(route_data, station_db)
     _resolve_dest_furigana(route_data, station_db)

@@ -215,7 +215,7 @@ fidelity, never coverage) one level up. → `critical_lessons.md § 10`.
 
 Two smaller things fixed alongside, same family — a hand-maintained list standing in for what
 production reads: `data_fingerprint` and `walk_shipped_json` each re-spelled the shipped-JSON glob
-with a comment asserting they agreed (now one `_shipped_json_files`), and `code_fingerprint` omitted
+with a comment asserting they agreed (now one `shipped_json_files`), and `code_fingerprint` omitted
 `route_loader.py`, which *transforms* drawn text (`_fill_dest_closure` decides each stop's rendered
 destination).
 

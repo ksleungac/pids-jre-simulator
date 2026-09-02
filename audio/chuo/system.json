@@ -1,0 +1,94 @@
+{
+  "_comment": [
+    "The 中央線 SYSTEM's service-pattern sheet — the source for the E233-0",
+    "patterns-overview view. Spec: docs/wip/WIP_e233_0_display.md section 14.",
+    "",
+    "This is network data, not run data. It describes every service the real",
+    "sheet shows, including the three this repo holds no diagram for, and it is",
+    "never inferred from route.json. It lives in the per-line pool rather than in",
+    "a diagram folder because all three Chuo diagrams draw the same sheet.",
+    "",
+    "The axis is 1654T's stops, REVERSED — 32 names, split 15 | 17 at 高円寺 |",
+    "阿佐ヶ谷 — so they are copied rather than retyped and join cleanly on the",
+    "small-ヶ forms. Not pre_stops + stops: that diagram's 8 pre_stops (大月 …",
+    "相模湖) are off this sheet, and including them yields 40. It is NOT derivable",
+    "from whichever diagram is loaded: 602H's own list runs 青梅 to 立川 to 東京, a",
+    "different axis entirely.",
+    "",
+    "COVERAGE IS ALL-OR-NOTHING. A service missing here is invisible on screen,",
+    "because five lines where six exist looks like a complete diagram.",
+    "",
+    "Colours: 通勤特快 / 中央特快 / 快速 are the type_color their own diagrams",
+    "authored (602H / 916H / 1654T). The other three have no diagram, which is why",
+    "all six are stated here rather than looked up — a lookup could not answer for",
+    "half the sheet. validate_data.check_sheet_colors asserts the three that CAN be",
+    "cross-checked, and check_system_sheets asserts every station name here is on",
+    "the axis and in translations.json. Three of the six do NOT match the colours",
+    "measured off the reference — see WIP § 14.4, which records why that reading is",
+    "not trusted enough to overwrite authored data.",
+    "",
+    "Stops were MEASURED off the reference, slot by slot, by testing each slot",
+    "centre for a near-white marker (_e233_lower_geometry.py --overview). Two",
+    "slots are AUTHOR-SUPPLIED because nothing is drawn there to measure:",
+    "  立川, on all five rapid services — the junction pill covers the whole slot.",
+    "    Sampled inside it (canvas x 412..424, y 252..296) not one of the six",
+    "    service colours appears. The probe first reported four of the five as",
+    "    measured, which was it reading the pill's own white 立川 kanji as marker",
+    "    cores: the strokes cross four of the six line rows and 快速's row falls",
+    "    in the gap between 立 and 川, so the split looked like a finding. The",
+    "    probe now refuses any slot named in junctions[].",
+    "  日野, on 快速 only — the junction spur's outermost stub runs to x 453.4 and",
+    "    that slot's centre is 452.1, so the stub sits on the orange line there.",
+    "    The other services' stubs converge above it and leave their slots clear.",
+    "The stops themselves are right; it was the provenance that was wrong."
+  ],
+
+  "system": "中央線",
+
+  "rows": [
+    ["東京", "神田", "御茶ノ水", "水道橋", "飯田橋", "市ヶ谷", "四ツ谷", "信濃町", "千駄ヶ谷", "代々木", "新宿", "大久保", "東中野", "中野", "高円寺"],
+    ["阿佐ヶ谷", "荻窪", "西荻窪", "吉祥寺", "三鷹", "武蔵境", "東小金井", "武蔵小金井", "国分寺", "西国分寺", "国立", "立川", "日野", "豊田", "八王子", "西八王子", "高尾"]
+  ],
+
+  "junctions": [
+    {"station": "立川", "spur": "青梅･武蔵五日市･高麗川 方面"}
+  ],
+
+  "services": [
+    {
+      "type": "通勤特快", "color": [212, 3, 5], "from": "東京", "to": "高尾",
+      "stops": ["東京", "神田", "御茶ノ水", "四ツ谷", "新宿",
+                "国分寺", "立川", "八王子", "高尾"]
+    },
+    {
+      "type": "青梅特快", "color": [14, 100, 38], "from": "東京", "to": "高尾",
+      "stops": ["東京", "神田", "御茶ノ水", "四ツ谷", "新宿", "中野",
+                "三鷹", "国分寺", "立川"]
+    },
+    {
+      "type": "中央特快", "color": [45, 0, 255], "from": "東京", "to": "高尾",
+      "stops": ["東京", "神田", "御茶ノ水", "四ツ谷", "新宿", "中野",
+                "三鷹", "国分寺", "立川", "日野", "豊田", "八王子", "西八王子", "高尾"]
+    },
+    {
+      "type": "通勤快速", "color": [15, 34, 112], "from": "東京", "to": "高尾",
+      "stops": ["東京", "神田", "御茶ノ水", "四ツ谷", "新宿", "中野",
+                "荻窪", "吉祥寺", "三鷹", "国分寺", "立川", "日野", "豊田",
+                "八王子", "西八王子", "高尾"]
+    },
+    {
+      "type": "快速", "color": [233, 91, 31], "from": "東京", "to": "高尾",
+      "stops": ["東京", "神田", "御茶ノ水", "四ツ谷", "新宿", "中野",
+                "荻窪", "吉祥寺", "三鷹", "武蔵境", "東小金井", "武蔵小金井",
+                "国分寺", "西国分寺", "国立", "立川", "日野", "豊田",
+                "八王子", "西八王子", "高尾"]
+    },
+    {
+      "type": "各駅停車", "color": [224, 202, 33], "from": "御茶ノ水", "to": "三鷹",
+      "spur": "千葉方面",
+      "stops": ["御茶ノ水", "水道橋", "飯田橋", "市ヶ谷", "四ツ谷", "信濃町",
+                "千駄ヶ谷", "代々木", "新宿", "大久保", "東中野", "中野", "高円寺",
+                "阿佐ヶ谷", "荻窪", "西荻窪", "吉祥寺", "三鷹"]
+    }
+  ]
+}

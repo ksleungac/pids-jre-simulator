@@ -48,7 +48,7 @@ from app_paths import project_root
 from constants import TIME_SCALE
 from displays.transfer_info import apply_transfer_filter, load_icon, resolve_entry
 from displays.lower_lcd import LowerDisplayBase
-from displays.utils import arrow_points, draw_1col_text, draw_1col_text_plain, draw_aapolygon
+from displays.utils import arrow_points, column_width, draw_1col_text, draw_1col_text_plain, draw_aapolygon
 from displays.train_models.e233_0.upper_lcd import _TYPE_SUPERSAMPLE, _build_soft_box, outlined
 from displays.train_models.e233_0.transfer_info import TransferInfoDisplay
 from displays.train_models.e233_0.priority_seat import PrioritySeatDisplay
@@ -606,6 +606,22 @@ def _offset_polygon(verts, pad, facing=None):
     return out
 
 
+def is_passing_stop(stop: Dict) -> bool:
+    """A station the train runs through — no `pa` and no `pa_at_station`.
+
+    Module level because three views ask it and a second wording of it drifts
+    silently: the overview's greying test carried only the `pa` half for a while,
+    which is right on every shipped route and wrong the moment a line whose
+    origin announces only at-station gets a sheet. `principles.md` section "A
+    second implementation of a production decision drifts silently".
+
+    NOTE the predicate does NOT distinguish a `pre_stop`, which carries neither
+    either and so answers True — see `JapaneseFullRouteDisplay._is_passing` for
+    why that conflation is deliberate and closed.
+    """
+    return not stop.get("pa") and not stop.get("pa_at_station")
+
+
 class JapaneseFullRouteDisplay:
     """The full line on two right-to-left rows. See the module docstring."""
 
@@ -949,7 +965,7 @@ class JapaneseFullRouteDisplay:
         the body never performed, and stating the conflation is the fix that was
         wanted.
         """
-        return not stop.get("pa") and not stop.get("pa_at_station")
+        return is_passing_stop(stop)
 
     # -------------------------------------------------------------------------
     # Elements
@@ -2748,6 +2764,812 @@ class JapaneseSixStationDisplay:
         return di - self.display_offset
 
 
+# =============================================================================
+# Patterns-overview view (WIP § 14).
+#
+# Every service the 中央線 system runs, drawn as parallel coloured lines over one
+# shared 32-station axis on the same two-row wrap the full-route view uses. The
+# axis and the service set come from `audio/chuo/system.json`, attached by
+# `route_loader` as `route_data["system"]`. Nothing about Chūō is stated here.
+#
+# Reading order is the opposite of the full-route view's: LEFT to RIGHT on both
+# rows, and the screen's LOWER band comes FIRST (東京 … 高円寺), wrapping into the
+# upper band (阿佐ヶ谷 … 高尾). Geometry off
+# `overview-tokao-different-patterns-stopping-ja.png` by per-row ink counting
+# (`_e233_lower_geometry.py --overview`), against the reference's 1502 x 1124:
+#
+#   name columns   fit centre(k) = 1381.52 - 80.156k, k from the RIGHT, both rows
+#   line 0 centre  y/H 0.8265 (lower band) and 0.5343 (upper band)
+#   line pitch     17.8px, mean of both rows, uniform within a pixel
+#
+# Twelve bands were counted mechanically rather than read off the picture: six
+# services on each of two rows, in the legend's own order. Only 各駅停車 stops
+# short — at 三鷹 above and 御茶ノ水 below — and the five rapid services each span
+# the whole line. That last fact contradicts § 7's parked note that a service's
+# line ends where the service terminates, which was tagged `[observed]`.
+#
+# Six elements are drawn, in this order: the service lines, their stop markers,
+# the station names, the 立川 junction pill, the two spurs (立川's branch and
+# 各駅停車's 千葉方面), and the legend the lines fold into. Order matters twice —
+# the marks go under the pill, and so does 立川's axis name, because on the
+# reference the pill's own white text IS that station's name.
+# =============================================================================
+# fmt: off
+_TUNEABLES_OVERVIEW = {
+    # The two rows are anchored SEPARATELY, indexed by DATA row: row 0 is
+    # 東京 … 高円寺 and draws on the screen's LOWER band; row 1 is 阿佐ヶ谷 … 高尾
+    # and draws on the upper one. Their right edges differ by 11.4 reference px
+    # and their pitches by 0.85, which one shared grid cannot express — assuming
+    # one put the lower row 10px out and lost every stop right of 新宿.
+    #
+    # Row 1 is the name-column fit over 17 clean columns. Row 0 is fitted to
+    # 各駅停車's own markers, which ARE that row's slots since it stops
+    # everywhere, and it then predicts 東京's measured name column to 0.06px.
+    "row_r_cx":     (593.4, 588.7),   # rightmost slot centre, per data row
+    "row_pitch":    ( 34.51,  34.15),
+    "row_cy0":      (396.7,  256.5),  # that row's FIRST service line
+
+    "line_pitch":       7.65,  # service to service, within a band
+    # Thickness by COVERAGE INTEGRAL (`--thick`), not by a tolerance test: a
+    # saturated ink sits further from the page than a muted one, so one threshold
+    # admits more of its skirt and calls it thicker. Integrating settles it —
+    # every ordinary line measures 2.1-2.3 across both rows and every colour.
+    "line_h":           2,
+    # The ACTIVE service is drawn heavier, and by DIFFERENT amounts per row:
+    # 通勤特快 measures 3.31 on the upper band and 4.83 on the lower, steady
+    # along the whole row at four sampled x. Indexed by DATA row, so [0] is the
+    # screen's lower band.
+    #
+    # OPEN — why the two rows differ is not known. The reference is one capture
+    # of one active service, so "the active line is heavier" and "the lower band
+    # is heavier" cannot be told apart; a capture with a different service
+    # highlighted separates them.
+    "line_h_active":   (5, 3),
+    "pad":              8.0,   # line overhang past a slot centre at a WRAP end
+    "pad_terminus":    12.0,   # and at the axis's own last station (高尾), which
+                               # the reference pads half again as far — the same
+                               # wrap-versus-terminus split section 9.3.4 measured
+                               # on the full-route bar
+
+    "mark_w":           4,     # stop marker, white with a rim in the line colour.
+    "mark_h":           4,     # The reference's white CORE measures 1.6-2.4
+    "mark_rim":         1,     # canvas px across, so a 4px marker with a 1px rim
+                               # leaves the 2 it wants; at 5 the core was 3
+
+    "name_size":       16,     # fitted on ink WIDTH: the reference's characters
+                               # measure 14.9 canvas px across
+    "name_pitch":      14.4,   # and they are stacked TIGHTER than they are wide —
+                               # 阿佐ケ谷's four characters span 57.5, so the cell
+                               # is 14.38 against a 14.9 glyph. Deriving the pitch
+                               # from `get_height()` gave 17.25 and pushed every
+                               # name a fifth of its own height too low
+    "name_lift":        9.1,   # from the row's first line up to the name's foot.
+                               # Measured on the ink, not on the fit that set the
+                               # pitch — that one checked width only, and the whole
+                               # band sat 3.1px low on both rows
+    "name_color":      (20,  20,  20),
+    "name_dim":        (150, 155, 168),
+
+    "pill_w":          17.9,   # 立川's junction pill: left edge 409.05 measured,
+    "pill_top":       238.0,   # against the slot's own centre at 418.0
+    "pill_h":          63.0,
+    "pill_r":           8.0,
+    "pill_color":     (116, 116, 116),  # sampled, not assumed — it is not 128
+    "pill_ink":       (255, 255, 255),
+    "pill_size":       14,     # the reference's 立 is 12.4 canvas px across and
+                               # 13 tall, against 10 x 11 at size 12. Bigger than
+                               # the axis names it replaces, which is the point
+    "pill_line_gap":   -1,     # ink tops 14 apart on the reference; get_height()
+                               # at 14 is 15, and the axis names are stacked
+                               # tighter than their glyph for the same reason
+    "pill_text_dy":    -2.5,   # ink block y 254..281, against a pill of 238..301.
+                               # Re-fitted when the block height became exact:
+                               # the old expression overstated it by `gap`, so
+                               # half of that was living in this number
+
+    # Legend, measured by `_e233_lower_geometry.py --legend`. The chip pitch is
+    # 51.5 reference px and the chips are NOT on the service lines' own pitch —
+    # they are half again as far apart, which is what gives the fold its slope.
+    "leg_cy0":        322.0,   # first row centre, y/H 0.6708
+    "leg_pitch":       22.0,
+    "leg_h":           13.0,   # the row's own height. Its HALF is where the
+                               # underline and the slant's head sit: measured
+                               # y 329 on a row centred 322, and y 350 on one
+                               # centred 344
+    "leg_size":        11,     # fitted on ink HEIGHT, not width: the run's width
+                               # is set by the four-cell pitch and barely moves
+                               # with the size, so it cannot discriminate. The
+                               # reference's label ink is 11.08 tall; size 13
+                               # rendered 14.0
+    "leg_text_dy":     -3.8,   # the label rides ABOVE the row's centre — ink
+                               # centre 428.2 on a row centred 432
+
+    # A row is FOUR separate marks, not one block. The active service does not
+    # fill its whole row — traced by colour, `y` 317-329 carries the vertical
+    # rectangle at x 3.8-8.1, `y` 314-327 the label box at x 11.1-80.5, and
+    # `y` 329 an underline running the whole way from the rectangle out to the
+    # slant's head. The gap at x 8.1-11.1 is what says the rectangle and the box
+    # are two marks; filling one rect across both is what swallowed it.
+    "leg_swatch_x":     3.8,   # the vertical rectangle, on EVERY row
+    "leg_swatch_w":     4.3,
+    "leg_swatch_h":    14.8,   # measured at native resolution on 青梅特快's, the
+    "leg_swatch_dy":   -1.4,   # one row where nothing else shares its colour
+    "leg_box_x":       11.1,   # the label box, on the active row only
+    "leg_box_w":       69.5,
+    "leg_box_h":       12.7,   # sized so its foot clears the underline by ONE
+    "leg_box_dy":      -1.5,   # pixel — the reference's box ends y 327 and its
+                               # underline starts 329, and that gap is visible
+    "leg_rule_x":       3.6,   # the underline, on EVERY row, out to the slant
+    "leg_rule_h":       1.3,   # thinner than the slant, which is thinner again
+                               # than the line — three weights, all measured
+
+    # The label is a FOUR-CELL run whatever the type's length, and a shorter type
+    # spreads to the ends of it rather than setting tight from the left. 快速's
+    # two characters measure at cells 1 and 4 of the same run 各駅停車 fills, so
+    # this is the reference's own behaviour, not a borrowed convention.
+    "leg_cell_cx0":    22.2,   # centre of cell 1; ink starts x 39 on the reference
+    "leg_cell":        14.5,   # cell to cell, 34 reference px
+    "leg_cells":        4,
+
+    # Each chip reaches its own service line down a single straight DIAGONAL —
+    # no right angle and no horizontal stub. Traced per row by colour
+    # (`--crun`): 通勤特快 walks x 85.2 -> 92.9 over y 331 -> 393 at a constant
+    # 0.11 px per row, and 青梅特快 x 82.2 -> 90.8 at 0.18. Two different slopes,
+    # because what is constant is the horizontal RUN (10.7 and 11.1) while the
+    # drop varies with how far that chip sits above its line. So the segment is
+    # stated by its two ENDS and the slope falls out.
+    #
+    # It leaves the chip's BOTTOM edge, not its centre. On the active chip the
+    # fill reaches the start and the two meet; on an inactive one the stroke
+    # simply begins in clear space right of the label.
+    # EVERY row's underline stops at one x and the slant takes over there —
+    # green 82.66, navy 82.24, orange 83.09, 各駅停車 82.24, measured at native
+    # resolution. An earlier reading made this a per-row staircase, which is the
+    # FOOT's pattern, not the head's.
+    "fold_head_x":     83.0,
+    # The foot is where the thin slant becomes the thick line, so it is also
+    # that line's left end. Taken from a LEAST-SQUARES fit over each stroke's own
+    # run centres (`--slants`), not from its endpoints: an endpoint is where the
+    # stroke meets the underline above or the line below, which is exactly where
+    # the trace is contaminated. Reading the feet off the band extents instead
+    # put 通勤快速 at 94.2 against a fitted 88.3, and that was the visible error.
+    "fold_foot_x":     (95.3, 92.0, 90.4, 88.3, 88.3),
+    "fold_w":           1.7,   # the slant is THINNER than the line it becomes,
+                               # measured across it at native resolution
+
+    # 各駅停車 leaves the axis rather than folding straight into its line: down
+    # from the underline, a long horizontal stub, then up to where the line
+    # starts at 御茶ノ水. The 方面 label sits under the stub.
+    "spur_y":         441.3,   # the stub, x 87.8..160.6 on the reference
+    "spur_x0":         87.8,
+    "spur_x1":        160.6,
+    "spur_top_x":     168.3,   # where it meets the line, y 434
+    "spur_label_x":   103.1,   # the reference's ink edge. NOT the stub's centre,
+                               # which sits 2.1px left of where the label starts
+    "spur_label_dy":    5.6,   # ink lands y 446.1..457.6 on the reference
+    "spur_label_size": 11,     # ink 11.50 tall on the reference, which is an 11
+                               # plus the downscale's fringe — a 12 renders 12.9
+    # Both 方面 labels are LETTER-SPACED, and by the same amount: 千葉方面 runs
+    # 29.83 against a natural 28.00 over three gaps, and the 立川 label 167.88
+    # against 159.00 over thirteen. 0.65 and 0.68 — one value serves both, which
+    # is why it is here rather than per label.
+    "label_track":      0.66,
+
+    # The 立川 junction spur: every service that SERVES the junction leaves it
+    # for the branch, which on this sheet is all five rapid services. 各駅停車
+    # never reaches 立川, so the same test that draws the others withholds it —
+    # no service list is stated here.
+    #
+    # The slants emerge at x 410, which is the pill's own left edge, so where
+    # each one actually meets its line is hidden underneath the pill and cannot
+    # be measured. What IS measured is the foot and the stub.
+    "jspur_head_x":   410.0,
+    "jspur_foot_x":   (437.6, 435.4, 433.4, 431.4, 429.5),
+    "jspur_stub_y0":  308.0,   # the stubs CONVERGE — 3px per row against the
+    "jspur_stub_step":  3.0,   # lines' own 7.65, which is what bunches them
+    "jspur_right":    453.4,   # and they all end together, as the folds do
+    "jspur_label_x":  456.4,   # the reference's ink edge, 3px clear of the stub's
+                               # end at 453.4. An earlier window started left of
+                               # that and adopted the stub tail as label ink,
+                               # which read the run 11px wide and bought a size 12
+    "jspur_label_cy": 315.1,
+    "jspur_label_size": 11,    # same size as the other 方面 label. The run spans
+                               # 156.80 on the reference (x 456.35..613.16) and
+                               # 11 + the 0.66 tracking gives 156.2. The label uses
+                               # the HALF-WIDTH ･, as the transfer panel does —
+                               # the full-width form runs the whole 方面 line 10px
+                               # past where the reference ends it
+}
+# fmt: on
+
+
+# The sheet's own text, declared from the sheet rather than from `route.json`:
+# its axis is the SYSTEM's, so it can carry a station no diagram on that line
+# stops at, and its service types include the ones no diagram runs at all. Both
+# are exactly the strings `STATION_NAMES` cannot reach.
+#
+# `STATION_NAMES` itself is deliberately NOT here. Every string this view draws
+# comes from the sheet, so including it widened the declared domain from 32 to
+# 268 — and `check_declared`, which is the half that keeps a declaration honest,
+# validates against that domain. A corpus-wide alias would have let an
+# accidental draw of any station name pass unremarked.
+_OVERVIEW_DRAWS = (
+    at("audio/*/system.json:rows[][]"),
+    at("audio/*/system.json:services[].type"),
+    at("audio/*/system.json:services[].spur"),
+    at("audio/*/system.json:junctions[].spur"),
+    at("audio/*/system.json:junctions[].station"),
+)
+
+
+class JapanesePatternsOverviewDisplay:
+    """The service-pattern sheet: lines, marks, names, pill, spurs and legend.
+
+    The axis, the service list, their colours and their spans all arrive in
+    `route_data["system"]`, so this class holds no station name and no service
+    name. A line with no sheet draws nothing rather than falling back to
+    something Chūō-shaped.
+
+    What it does NOT yet take from the sheet is the GEOMETRY. The row split, the
+    slot pitch, the per-service stack spacing and the legend's placement are
+    fitted against the one Chūō reference and live in `_TUNEABLES_OVERVIEW` as
+    per-row and per-service tuples, so their LENGTHS carry Chūō's 2 rows and 6
+    services even though no name does. `WIP_e233_0_display.md` section 14.2
+    records that those four have to derive from the axis they are handed before
+    a second system can draw here; the author deferred that until more overview
+    references are collected, so `_assert_shape` refuses a sheet this drawing
+    cannot express rather than the drawing pretending to be general.
+    """
+
+    def __init__(self, screen, route_data, stops):
+        self.screen = screen
+        self.route_data = route_data
+        self.stops = stops
+        self._state = None
+        self._bind_sheet(route_data.get("system"), stops)
+        self._name_fonts: Dict[int, pygame.font.Font] = {}
+
+    def _bind_sheet(self, sheet, stops) -> None:
+        """Everything the content decisions read, derived from the sheet once.
+
+        Its own method so a headless test can bind it onto a stub rather than
+        restate it — a fixture that rebuilds `_route_idx` by hand keeps agreeing
+        with the old shape after this derivation changes (`principles.md` § "A
+        second implementation of a production decision drifts silently").
+        """
+        self._sheet = sheet
+        # Flatten once: a service's span is stated as two station names on the
+        # whole axis, and each row draws the part of that span it holds.
+        self._rows = [list(r) for r in sheet["rows"]] if sheet else []
+        self._axis = [n for r in self._rows for n in r]
+        # Axis station -> this run's stop index, which is what makes the greying
+        # live. Most of the axis is absent from any one run, and that absence is
+        # itself the answer (see `_dim`).
+        #
+        # FIRST occurrence wins, matching `route_loader._resolve_frames`. A
+        # circular route names its origin twice (Yamanote's stops[0] and
+        # stops[29] are both 大崎), and last-wins would pin that station to the
+        # terminus so `di < curr` never fires and it stays black for the whole
+        # loop. No line with a duplicate stop name has a sheet today; the two
+        # maps agreeing is what stops that being a surprise later.
+        self._route_idx: Dict[str, int] = {}
+        for i, s in enumerate(stops):
+            self._route_idx.setdefault(s["name"], i)
+        if sheet:
+            self._assert_shape(sheet)
+
+    @staticmethod
+    def _assert_shape(sheet) -> None:
+        """Refuse a sheet whose shape the fitted geometry cannot express.
+
+        The row and service tuneables are TUPLES indexed by row and by service,
+        so a sheet with more rows raises `IndexError` deep inside a draw, and one
+        with more services silently draws a line from the legend's x and runs its
+        chip off the canvas. Two failure modes for one cause is worse than
+        either; state the requirement once, here, and name the sheet in it.
+        `critical_lessons.md` section 2 — fail loudly, never degrade quietly.
+
+        The service bound is asked PER SERVICE, not as one count. `fold_foot_x`
+        and `jspur_foot_x` hold five entries against Chūō's six services, and
+        that is not an off-by-one: 各駅停車 starts mid-axis so it needs no fold
+        foot, and never reaches 立川 so it needs no spur foot. A flat
+        `len(...) + 1` would admit any sixth service and then let two fallbacks
+        mis-draw it — `_fold_ends` would hand back the LEGEND's x as a foot, and
+        `_draw_junction_spurs` would reuse the fifth service's slant. Asking
+        which feet a service actually needs is derived from the sheet and cannot
+        be true only because Chūō's last service happens to need neither.
+        """
+        t = _TUNEABLES_OVERVIEW
+        rows, services = sheet.get("rows", []), sheet.get("services", [])
+        max_rows = min(len(t["row_r_cx"]), len(t["row_pitch"]), len(t["row_cy0"]), len(t["line_h_active"]))
+        problems = []
+        if len(rows) > max_rows:
+            problems.append(f"{len(rows)} rows against {max_rows} fitted")
+        axis = [n for r in rows for n in r]
+        # Only a junction that DECLARES a spur draws one; `_draw_junction_spurs`
+        # skips the rest, so counting those would refuse a sheet for a foot it
+        # never uses.
+        junctions = {j.get("station") for j in sheet.get("junctions", ()) if j.get("spur")}
+        for i, svc in enumerate(services):
+            label = svc.get("type", f"#{i}")
+            # A service whose span starts at the axis origin folds out of the
+            # legend, so it needs its own foot x.
+            if svc.get("from") == (axis[0] if axis else None) and i >= len(t["fold_foot_x"]):
+                problems.append(f"{label} folds from the legend but is service {i}, past {len(t['fold_foot_x'])} fitted feet")
+            if junctions & set(svc.get("stops") or ()) and i >= len(t["jspur_foot_x"]):
+                problems.append(f"{label} serves a junction but is service {i}, past {len(t['jspur_foot_x'])} fitted spur feet")
+        # The legend is stacked, not fitted per service, so it bounds the count
+        # on its own — and it is the bound that catches a service needing neither
+        # foot, which the two tests above are both silent about.
+        if services:
+            last_chip = t["leg_cy0"] + (len(services) - 1) * t["leg_pitch"] + t["leg_h"] / 2
+            if last_chip > S_HEIGHT:
+                problems.append(f"{len(services)} services put the last legend chip at y {last_chip:.0f}, past the {S_HEIGHT}px canvas")
+        if problems:
+            raise ValueError(
+                f"system.json for {sheet.get('system', '?')} does not fit this drawing: "
+                + "; ".join(problems)
+                + ". Deriving the geometry from the axis is WIP_e233_0_display.md section 14.2, still open."
+            )
+
+    def set_state(self, state) -> None:
+        self._state = state
+
+    def _name_font(self, size: int):
+        """One cache for every text on this page.
+
+        The declaration spans station names AND service-type labels, because the
+        legend draws types out of the sheet while the axis and the pill draw
+        station names. `lcd_font` validates each draw against it in dev, so an
+        undeclared type fails on the first frame rather than in a build that
+        ships no font software.
+        """
+        f = self._name_fonts.get(size)
+        if f is None:
+            f = lcd_font(_NAME_FACE, size, draws=_OVERVIEW_DRAWS)
+            self._name_fonts[size] = f
+        return f
+
+    def _span(self, service) -> Tuple[int, int]:
+        """A service's span as inclusive indices into the flattened axis.
+
+        Fails loud on a station the axis does not carry: a `.index` miss here
+        means the sheet and its own axis disagree, which is a data defect rather
+        than something to draw around.
+        """
+        return self._axis.index(service["from"]), self._axis.index(service["to"])
+
+    def _slot_cx(self, r: int, j: int) -> float:
+        """Centre x of slot `j` (0 = leftmost) on data row `r`."""
+        t = _TUNEABLES_OVERVIEW
+        n = len(self._rows[r])
+        return t["row_r_cx"][r] - (n - 1 - j) * t["row_pitch"][r]
+
+    def _dim(self, name: str) -> bool:
+        """Is this axis station BEHIND the train, or one it runs through?
+
+        The run-through half is `is_passing_stop`, the same predicate the
+        full-route view uses, rather than a second wording of it. Grey for a
+        station already passed AND for one the train passes through, black for
+        this station and every stopping station ahead. The current station is
+        tested first and wins outright, because a route ORIGIN carries `pa: []`
+        and would otherwise be greyed while the train stands at it.
+
+        The axis is the SYSTEM's, so most of it is not on the loaded route at
+        all — every 各駅停車-only station on a 快速 run, and the whole 高尾 half
+        on an 青梅 diagram. Those are stations this train never reaches, which is
+        the same thing the grey says, so an absent station greys.
+
+        NOT carried: the full-route view's third term, `di > dest_stop_idx`, which
+        greys everything past a run that terminates before its stop list ends. No
+        sheet-carrying line does that today (only keihin/727B and saikyo/759K
+        terminate early, and neither has a sheet), and the whole greying rule is
+        an OPEN item against the reference — WIP § 14.4 records that the capture
+        greys upper-row stations its own train stops at, which no rule here
+        reproduces. Settle that before adding a term to match a sibling view.
+        """
+        state = self._state
+        if state is None:
+            return False
+        di = self._route_idx.get(name)
+        if di is None:
+            return True
+        curr = state.curr_stop
+        if di == curr:
+            return False
+        return di < curr or is_passing_stop(self.stops[di])
+
+    def show_stops(self, state, current_time: float = 0.0) -> None:
+        self._state = state
+        self.draw()
+
+    def draw(self, current_time: float = 0.0) -> None:
+        if not self._sheet:
+            return
+        self._draw_lines()
+        self._draw_folds()
+        self._draw_junction_spurs()
+        # The pill is the topmost thing at 立川 and it covers both the marks and
+        # the axis name. 立川 is a stop on all five rapid services and the
+        # reference shows none of those five markers; nor does it carry a grey
+        # 立川 above the pill, because the pill's own white text IS the name.
+        self._draw_marks()
+        self._draw_names()
+        self._draw_junctions()
+        self._draw_legend()
+
+    # -- elements --------------------------------------------------------------
+
+    def _bands(self):
+        """`(r, row, i, service, base, lo, hi, cy, color)` per drawn band.
+
+        Where service `i`'s band sits on row `r`, in one place. The lines pass
+        and the marks pass are deliberately separate — a later service's thicker
+        active band would otherwise paint over an earlier service's markers — but
+        they answer the same geometric question, and a marker that stopped
+        tracking its own line is a visible defect. Yields nothing for a service
+        that does not reach the row.
+        """
+        t = _TUNEABLES_OVERVIEW
+        base = 0
+        for r, row in enumerate(self._rows):
+            for i, service in enumerate(self._sheet["services"]):
+                a, b = self._span(service)
+                lo, hi = max(a, base), min(b, base + len(row) - 1)
+                if lo <= hi:
+                    cy = t["row_cy0"][r] + i * t["line_pitch"]
+                    yield r, row, i, service, base, lo, hi, cy, tuple(service["color"])
+            base += len(row)
+
+    def _draw_lines(self) -> None:
+        """One coloured line per service per row. Markers are their own pass."""
+        t = _TUNEABLES_OVERVIEW
+        active = self.route_data.get("type")
+        for r, row, i, service, base, lo, hi, cy, color in self._bands():
+            h = t["line_h_active"][r] if service["type"] == active else t["line_h"]
+            # At the axis ORIGIN the line begins where its slant's FOOT is —
+            # the point the stroke stops being thin. Reading it from
+            # `_fold_ends` means the thickness change and the join are one
+            # value, so retuning the slant cannot leave a step at the seam.
+            # A service leaving the axis meets its line at the spur's top
+            # instead, which is the same idea one bend further along.
+            if lo == 0:
+                x0 = self._fold_ends(i)[1][0]
+            elif service.get("spur") and r == 0:
+                x0 = t["spur_top_x"]
+            else:
+                x0 = self._slot_cx(r, lo - base) - t["pad"]
+            end = t["pad_terminus"] if hi == len(self._axis) - 1 else t["pad"]
+            x1 = self._slot_cx(r, hi - base) + end
+            pygame.draw.rect(
+                self.screen,
+                color,
+                pygame.Rect(round(x0), round(cy - h / 2), round(x1) - round(x0), h),
+            )
+
+    def _draw_marks(self) -> None:
+        """Stop markers, as their own pass AFTER every line and BEFORE the pill.
+
+        Separate from `_draw_lines` because the services stack at 7.65px while the
+        loaded train's own line is 5px tall, so drawing each line with its markers
+        lets the next service's band paint over the previous one's marks.
+
+        Under the pill, not over it. An earlier docstring here claimed the
+        reference showed four markers on top of the 立川 pill; measured inside the
+        pill on the reference (x 960..1002, y 557..705 at 1502x1124) there is no
+        service colour and no marker at all, only pill grey and the white 立川.
+        What the slot-by-slot probe read as four marker cores was that kanji —
+        its strokes cross four of the six line rows, and 快速's row happens to
+        fall in the gap between 立 and 川, which is why exactly one came back
+        missing. Do not reorder these calls on the strength of that reading.
+        """
+        t = _TUNEABLES_OVERVIEW
+        for r, row, _i, service, base, lo, hi, cy, color in self._bands():
+            stops = set(service["stops"])
+            for j in range(lo - base, hi - base + 1):
+                if row[j] not in stops:
+                    continue
+                outer = pygame.Rect(0, 0, t["mark_w"], t["mark_h"])
+                outer.center = (round(self._slot_cx(r, j)), round(cy))
+                pygame.draw.rect(self.screen, color, outer)
+                pygame.draw.rect(self.screen, (255, 255, 255), outer.inflate(-2 * t["mark_rim"], -2 * t["mark_rim"]))
+
+    def _draw_names(self) -> None:
+        """Vertical station names, bottom-aligned onto each row's first line.
+
+        Never compressed and never wrapped: this axis's longest name is five
+        characters and the pitch carries it, which is the full-route view's rule
+        on the same data.
+        """
+        t = _TUNEABLES_OVERVIEW
+        font = self._name_font(int(t["name_size"]))
+        # `draw_1col_text_plain` steps by `get_height() + line_gap`, so a cell
+        # tighter than the glyph is a NEGATIVE gap. Derived from the authored
+        # pitch rather than the other way round, so the pitch stays the number
+        # that was measured and does not move when the size is retuned.
+        gap = int(round(t["name_pitch"] - font.get_height()))
+        pitch = font.get_height() + gap
+        # A junction carries no axis name. Its pill's own white text IS the name,
+        # and the reference leaves the slot above the pill empty — drawing both
+        # puts a second 立川 in the band, since the pill starts below the name.
+        pilled = {j["station"] for j in self._sheet.get("junctions", ())}
+        for r, row in enumerate(self._rows):
+            bottom = t["row_cy0"][r] - t["line_h"] / 2 - t["name_lift"]
+            for j, name in enumerate(row):
+                if name in pilled:
+                    continue
+                text = name.replace(" ", "")  # a space is the data's line break;
+                # this element has one column, so it is dropped rather than drawn
+                color = t["name_dim"] if self._dim(name) else t["name_color"]
+                cx = self._slot_cx(r, j)
+                # Centre on the COLUMN, which `draw_1col_text_plain` sizes to the
+                # widest glyph and treats `x` as the left edge of. Measuring the
+                # first glyph instead is right only while it happens to be the
+                # widest, which every full-width name on this axis is.
+                col_w = column_width(font, text)
+                draw_1col_text_plain(
+                    font,
+                    text,
+                    int(round(cx - col_w / 2.0)),
+                    int(round(bottom - ((len(text) - 1) * pitch + font.get_height()))),
+                    color,
+                    self.screen,
+                    line_gap=gap,
+                )
+
+    def _draw_junction_spurs(self) -> None:
+        """The branch leaving a junction: a slant per service, then one stub each.
+
+        Drawn BEFORE the pill, because the pill covers where each slant meets its
+        line — which is also why that meeting point cannot be measured and the
+        slants are stated from the pill's own left edge outward.
+        """
+        t = _TUNEABLES_OVERVIEW
+        w = float(t["fold_w"])
+        for junction in self._sheet.get("junctions", ()):
+            name = junction["station"]
+            if not junction.get("spur"):
+                continue
+            for r, row in enumerate(self._rows):
+                if name not in row:
+                    continue
+                for i, service in enumerate(self._sheet["services"]):
+                    # Serving the junction IS the test — no service list.
+                    if name not in service["stops"]:
+                        continue
+                    color = tuple(service["color"])
+                    feet = t["jspur_foot_x"]
+                    foot = feet[i] if i < len(feet) else feet[-1]
+                    stub_y = t["jspur_stub_y0"] + i * t["jspur_stub_step"]
+                    self._stroke(color, t["jspur_head_x"], t["row_cy0"][r] + i * t["line_pitch"], foot, stub_y, w)
+                    pygame.draw.rect(
+                        self.screen,
+                        color,
+                        pygame.Rect(
+                            round(foot - w / 2),
+                            round(stub_y - w / 2),
+                            round(t["jspur_right"]) - round(foot - w / 2),
+                            max(1, round(w)),
+                        ),
+                    )
+                self._draw_tracked(
+                    self._name_font(int(t["jspur_label_size"])),
+                    junction["spur"],
+                    t["jspur_label_x"],
+                    t["jspur_label_cy"],
+                    t["name_color"],
+                )
+
+    def _draw_junctions(self) -> None:
+        """The grey pill over a branch node, with its name reversed out of it.
+
+        Drawn AFTER the lines and names so it covers them, which is what the
+        reference does — the pill is the topmost thing at 立川.
+        """
+        t = _TUNEABLES_OVERVIEW
+        font = self._name_font(int(t["pill_size"]))
+        for junction in self._sheet.get("junctions", ()):
+            name = junction["station"]
+            for r, row in enumerate(self._rows):
+                if name not in row:
+                    continue
+                cx = self._slot_cx(r, row.index(name))
+                rect = pygame.Rect(0, 0, round(t["pill_w"]), round(t["pill_h"]))
+                rect.centerx = round(cx)
+                rect.top = round(t["pill_top"])
+                pygame.draw.rect(self.screen, t["pill_color"], rect, border_radius=round(t["pill_r"]))
+                gap = int(t["pill_line_gap"])
+                pitch = font.get_height() + gap
+                # The EXACT stack height, the same expression `_draw_names` uses.
+                # `len(name) * pitch` overstates it by `gap`, so half the gap was
+                # absorbed into `pill_text_dy` and retuning `pill_line_gap` moved
+                # the text by the intended amount plus half the gap change.
+                block_h = (len(name) - 1) * pitch + font.get_height()
+                draw_1col_text_plain(
+                    font,
+                    name,
+                    int(round(cx - column_width(font, name) / 2.0)),
+                    int(round(rect.centery - block_h / 2.0 + t["pill_text_dy"])),
+                    t["pill_ink"],
+                    self.screen,
+                    line_gap=gap,
+                )
+
+    def _draw_legend(self) -> None:
+        """One chip per service, and the loaded train's own type highlights.
+
+        The highlight is LIVE, not authored: it matches `route.json`'s `type`
+        against the sheet's service list, so loading a different diagram moves
+        it. A type the sheet does not carry highlights nothing rather than
+        falling back to the first row, which would claim the train is running a
+        service it is not.
+        """
+        t = _TUNEABLES_OVERVIEW
+        font = self._name_font(int(t["leg_size"]))
+        active = self.route_data.get("type")
+        for i, service in enumerate(self._sheet["services"]):
+            color = tuple(service["color"])
+            cy = t["leg_cy0"] + i * t["leg_pitch"]
+
+            # The vertical rectangle is on every row, active or not.
+            pygame.draw.rect(
+                self.screen,
+                color,
+                pygame.Rect(
+                    round(t["leg_swatch_x"]),
+                    round(cy + t["leg_swatch_dy"] - t["leg_swatch_h"] / 2),
+                    round(t["leg_swatch_w"]),
+                    round(t["leg_swatch_h"]),
+                ),
+            )
+
+            # The underline is on every row too, running from the rectangle out
+            # to the slant's head — so it ends where the slant begins by
+            # construction rather than by two numbers agreeing. 各駅停車 has no
+            # slant, so its underline stops at the head its row WOULD have.
+            head_x, head_y = self._fold_ends(i)[0]
+            pygame.draw.rect(
+                self.screen,
+                color,
+                pygame.Rect(
+                    round(t["leg_rule_x"]),
+                    round(head_y - t["leg_rule_h"] / 2),
+                    round(head_x) - round(t["leg_rule_x"]),
+                    round(t["leg_rule_h"]),
+                ),
+            )
+
+            # Only the box and the reversed ink mark the active service. It does
+            # NOT fill the row: the rectangle and the underline are the same on
+            # every row, and the gap at x 8.1-11.1 is what keeps them separate
+            # marks rather than one block (author, and the colour trace agrees).
+            ink = t["name_color"]
+            if service["type"] == active:
+                ink = (255, 255, 255)
+                pygame.draw.rect(
+                    self.screen,
+                    color,
+                    pygame.Rect(
+                        round(t["leg_box_x"]),
+                        round(cy + t["leg_box_dy"] - t["leg_box_h"] / 2),
+                        round(t["leg_box_w"]),
+                        round(t["leg_box_h"]),
+                    ),
+                )
+            self._draw_type_cells(font, service["type"], cy, ink)
+
+    def _draw_type_cells(self, font, text: str, cy: float, ink) -> None:
+        """A service type on the legend's fixed four-cell run.
+
+        Four characters fill the run one per cell. A shorter type SPREADS to the
+        run's ends rather than setting tight from the left, so 快速 lands in
+        cells 1 and 4 — which is what the reference measures, its two characters
+        sitting exactly where 各駅停車's first and last do.
+        """
+        t = _TUNEABLES_OVERVIEW
+        n = len(text)
+        last = int(t["leg_cells"]) - 1
+        for i, ch in enumerate(text):
+            # One character centres on the run; more spread evenly across it, so
+            # the first and last always land on the outer cells.
+            slot = last / 2.0 if n == 1 else i * last / (n - 1)
+            cx = t["leg_cell_cx0"] + slot * t["leg_cell"]
+            g = font.render(ch, True, ink)
+            self.screen.blit(
+                g,
+                (round(cx - g.get_width() / 2), round(cy + t["leg_text_dy"] - g.get_height() / 2)),
+            )
+
+    def _draw_folds(self) -> None:
+        """Each chip's line running out to meet its service on the lower row.
+
+        Only a service that starts at the axis ORIGIN gets one, which is what
+        makes this data-driven rather than a count: 各駅停車 begins mid-row at
+        御茶ノ水 and reaches its chip through the 千葉方面 spur instead, so the
+        same test that places the fold also withholds it.
+
+        The turns NEST — the chip with the longest drop turns furthest right —
+        so no vertical crosses another row's horizontal.
+        """
+        t = _TUNEABLES_OVERVIEW
+        w = float(t["fold_w"])
+        for i, service in enumerate(self._sheet["services"]):
+            color = tuple(service["color"])
+            (x0, y0), (x1, y1) = self._fold_ends(i)
+            if self._span(service)[0] == 0:
+                self._stroke(color, x0, y0, x1, y1, w)
+                continue
+            # A service that leaves the axis reaches its line the long way: down
+            # from the underline, along a stub carrying the 方面 label, then back
+            # up to where its line starts. Keyed on the span rather than on the
+            # service's name, so the sheet decides which row does this.
+            if not service.get("spur"):
+                continue
+            self._stroke(color, x0, y0, t["spur_x0"], t["spur_y"], w)
+            self._stroke(color, t["spur_x1"], t["spur_y"], t["spur_top_x"], y1, w)
+            # The stub is horizontal, where a constant-horizontal-width quad
+            # degenerates to a zero-area sliver — so it is a rect.
+            pygame.draw.rect(
+                self.screen,
+                color,
+                pygame.Rect(
+                    round(t["spur_x0"] - w / 2),
+                    round(t["spur_y"] - w / 2),
+                    round(t["spur_x1"] + w / 2) - round(t["spur_x0"] - w / 2),
+                    max(1, round(w)),
+                ),
+            )
+            font = self._name_font(int(t["spur_label_size"]))
+            self._draw_tracked(
+                font,
+                service["spur"],
+                t["spur_label_x"],
+                t["spur_y"] + t["spur_label_dy"] + font.get_height() / 2,
+                t["name_color"],
+            )
+
+    def _fold_ends(self, i: int):
+        """`((head_x, head_y), (foot_x, foot_y))` of row `i`'s slant.
+
+        The head is also where every row's underline stops, so the two read it
+        from here rather than each computing it — a second expression is how the
+        underline would drift out from under the slant the first time it moves.
+        """
+        t = _TUNEABLES_OVERVIEW
+        feet = t["fold_foot_x"]
+        foot = feet[i] if i < len(feet) else t["fold_head_x"]
+        return (
+            (t["fold_head_x"], t["leg_cy0"] + i * t["leg_pitch"] + t["leg_h"] / 2),
+            (foot, t["row_cy0"][0] + i * t["line_pitch"]),
+        )
+
+    def _draw_tracked(self, font, text: str, x: float, cy: float, ink) -> float:
+        """A letter-spaced run, drawn left to right. Returns its right edge.
+
+        Per character rather than one `render`, because pygame has no tracking
+        and the reference's 方面 labels carry two thirds of a pixel between every
+        glyph — which over the 立川 label's thirteen gaps is 9px, enough to end
+        the line in the wrong place.
+        """
+        track = _TUNEABLES_OVERVIEW["label_track"]
+        cx = x
+        for ch in text:
+            g = font.render(ch, True, ink)
+            self.screen.blit(g, (round(cx), round(cy - g.get_height() / 2)))
+            cx += font.size(ch)[0] + track
+        # The right edge. No caller consumes it — it is what a measurement pass
+        # reads back, and the 立川 label's 156.80px run was fitted against it.
+        return cx - track
+
+    def _stroke(self, color, x0, y0, x1, y1, w) -> None:
+        """A straight stroke of constant HORIZONTAL width between two points.
+
+        Horizontal rather than perpendicular, so a slant's foot is a flat edge
+        on the line it becomes and the join needs no mitre.
+        """
+        draw_aapolygon(self.screen, color, [(x0 - w / 2, y0), (x0 + w / 2, y0), (x1 + w / 2, y1), (x1 - w / 2, y1)])
+
+
 class LowerDisplay(LowerDisplayBase):
     """E233-0 lower LCD manager — rotates five slots, all of them built.
 
@@ -2783,6 +3605,7 @@ class LowerDisplay(LowerDisplayBase):
         self.transfer_display = transfer
         self.priority_seat_display = PrioritySeatDisplay(screen, route_data, stops)
         self.manner_mode_display = MannerModeDisplay(screen, route_data, stops)
+        self.overview_display = JapanesePatternsOverviewDisplay(screen, route_data, stops)
         self._lap = 0
         self._notice_showing = False
 
@@ -2792,6 +3615,7 @@ class LowerDisplay(LowerDisplayBase):
         self.japanese_eight_display.set_state(state)
         self.priority_seat_display.set_state(state)
         self.manner_mode_display.set_state(state)
+        self.overview_display.set_state(state)
         # `transfer_display` is bound by the base — not repeated here.
 
     # -- the two standing notices -----------------------------------------
@@ -2808,6 +3632,12 @@ class LowerDisplay(LowerDisplayBase):
     # because a uniform beat is what the schedule is made of.
     _SLOT_PRIORITY = 3
     _SLOT_MANNER = 4
+    # WIP § 14. Deliberately absent from `_available_slots`, so it is reachable
+    # from the preview and the editor and never rotates into a drive — the sheet
+    # is Chūō-only and the page's cadence is not settled, and the same call was
+    # made for the transfer slot's `_PendingView`. It IS in the atlas bake,
+    # which sweeps every `_SLOT_*` defined rather than every one with a beat.
+    _SLOT_OVERVIEW = 5
     _NOTICE_EVERY = 3  # laps between notices — one notice per three rotations
     _SLOT_BEATS = {
         **LowerDisplayBase._SLOT_BEATS,
@@ -2861,6 +3691,8 @@ class LowerDisplay(LowerDisplayBase):
         *"approach, and full switch at the stop"* (WIP § 11.1). Both halves are
         the base's existing machinery; nothing here schedules it.
         """
+        if self._current_slot == self._SLOT_OVERVIEW:
+            return self.overview_display
         if self._current_slot == self._SLOT_PRIORITY:
             return self.priority_seat_display
         if self._current_slot == self._SLOT_MANNER:

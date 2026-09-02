@@ -325,10 +325,15 @@ class PASimulator:
 
         self.station_db = self._load_station_db()
 
+        # No in-tree caller supplies `route_data` today — the TIMS flow passes
+        # None so this loads through `load_route_from_dir`, which is the only
+        # reader that also resolves the line's system.json. The branch below
+        # stays because `route_data=` is a supported constructor argument, and it
+        # must produce the same shape; don't go looking for its producer.
         if self.route_data is None:
             self.route_data = load_route_from_dir(self.work_dir, self.station_db)
         else:
-            self.route_data = finalize_route(self.route_data, self.station_db)
+            self.route_data = finalize_route(self.route_data, self.station_db, work_dir=self.work_dir)
 
         self.stops = self.route_data.get("stops", [])
         # Single resolved audio root — route folder, or the per-line shared

@@ -325,6 +325,19 @@ def draw_1col_text(
         screen.blit(img, (int(x_pos), int(y_pos)))
 
 
+def column_width(font: pygame.font.Font, text: str) -> int:
+    """Width of the single column `draw_1col_text` and `..._plain` lay `text` in.
+
+    Both primitives centre every glyph inside `max(char widths)` and treat their
+    `x` as that column's LEFT edge, so a caller centring a column on a slot has
+    to convert. Three call sites were each restating the `max(...)` to do it, and
+    a fourth measured only the FIRST glyph, which is right only while that glyph
+    happens to be the widest — true of every full-width name on the E233-0 axis
+    and of nothing else. `conventions.md` § Tooling, canonical-source duplication.
+    """
+    return max(font.size(c)[0] for c in text) if text else 0
+
+
 def draw_1col_text_plain(
     font: pygame.font.Font,
     text: str,

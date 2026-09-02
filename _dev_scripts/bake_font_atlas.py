@@ -116,47 +116,19 @@ def shipped_routes() -> list:
 # ---------------------------------------------------------------------------
 
 
-def _norm_file(rel: str) -> str:
-    """Collapse a route path so every route shares one location.
-
-    Every `route.json` holds the same SHAPE, so a station name observed on one
-    route must bind that location on ALL routes. Keeping the paths per-route
-    would make the domain per-route, and a route the sweep drove shallowly would
-    stay uncovered — which is the hole this whole mechanism exists to close.
-    """
-    return "audio/*/route.json" if rel.split("/")[0] == "audio" else rel
-
-
 def walk_shipped_json() -> dict:
     """Every string VALUE in every shipped JSON, mapped to where it appears.
 
-    Names no key. Attempt 3 of this work derived the text domain by reading
-    `stops` and missed the 18 stations in `sobu/1217F`'s `pre_stops`: naming keys
-    IS the failure mode, so this walk knows nothing about any schema and finds
-    both arrays precisely because it asks for neither.
-
-    Returns `{string: {location, ...}}`, a location being
-    `audio/*/route.json:pre_stops[].name` — list indices collapsed to `[]` so
-    every member of an array shares one location.
+    `font_atlas`'s, not a copy. This module HAD a second implementation of both
+    the walk and its path normaliser, and only production's pair was updated when
+    `system.json` joined the shipped set — so `cook_from_data` and
+    `verify_declared_coverage`, which is the gate written to be independent of the
+    sweep, both resolved the sheet's four declarations to the empty set and
+    reported clean over nothing. The two must agree by construction, not by
+    someone remembering to edit both. `principles.md` § "A second implementation
+    of a production decision drifts silently".
     """
-    out: dict = {}
-
-    def rec(node, loc):
-        if isinstance(node, str):
-            out.setdefault(node, set()).add(loc)
-        elif isinstance(node, dict):
-            for k, v in node.items():
-                rec(v, loc + ("" if loc.endswith(":") else ".") + k)
-        elif isinstance(node, list):
-            for v in node:
-                rec(v, loc + "[]")
-
-    for p in sorted(ROOT.glob("data/*.json")) + sorted(ROOT.glob("audio/**/route.json")):
-        rel = p.relative_to(ROOT).as_posix()
-        if any(seg.startswith("_") for seg in rel.split("/")):
-            continue  # staging, not shipped
-        rec(json.loads(p.read_text(encoding="utf-8")), _norm_file(rel) + ":")
-    return out
+    return font_atlas.walk_shipped_json()
 
 
 def cook_from_data(sink: dict, walk: dict) -> dict:
@@ -427,10 +399,24 @@ def sweep(on_frame) -> tuple:
         # to frame 1. Driving the axis explicitly is what makes the verify pass
         # able to see them at all.
         n_frames = getattr(sim.lower, "_frame_count", 1)
-        # Slots likewise: every `_SLOT_*` the manager defines, not the three names
+        # Slots likewise: every `_SLOT_*` the manager DEFINES, not the three names
         # preview_display happens to map. A model that adds a fourth view joins
         # the sweep by defining it, with nothing to remember here.
-        slots = sorted(sim.lower._SLOT_BEATS)
+        #
+        # Read off the class attributes, not off `_SLOT_BEATS`. A slot that is
+        # built but not yet in the rotation has no beat entry, and keying on the
+        # beats dict silently drops it: `_SLOT_OVERVIEW = 5` was defined, drawn
+        # and declared while the bake never rendered it once, so none of the
+        # E233-0 sheet's text was baked and no gate could say so. That is
+        # `critical_lessons.md` section 9 — a gate built from an enumeration
+        # cannot see a gap in that enumeration — with the two lists meaning
+        # different things: beats say WHEN a slot shows, definitions say it
+        # exists.
+        _lower_cls = type(sim.lower)
+        slots = sorted(
+            set(sim.lower._SLOT_BEATS)
+            | {getattr(_lower_cls, n) for n in dir(_lower_cls) if n.startswith("_SLOT_") and isinstance(getattr(_lower_cls, n), int)}
+        )
         for stop in range(n_stops):
             for mode in MODES:
                 for slot in slots:
@@ -976,10 +962,20 @@ def verify_shipped() -> int:
         shutil.copytree(root / "data", stage / "data")
         # displays/ deliberately NOT copied — /build excludes it, and its absence
         # is half of what this gate exists to exercise.
-        for rj in (root / "audio").rglob("route.json"):
-            rel = rj.relative_to(root)
+        # Staged from the SAME helper `data_fingerprint` hashes, never a glob
+        # typed here. A hand-listed `audio/**/route.json` was correct until
+        # `system.json` joined the shipped set, and then the stage hashed 22
+        # files against the bake's 23 — so this gate refused a correct atlas as
+        # stale and printed that every user would see the same, which was false.
+        # A second implementation of "what ships" drifts the moment the answer
+        # changes (`principles.md` § "A second implementation of a production
+        # decision drifts silently"), and it took the sheet out of the one frame
+        # that leaves the dev environment as well.
+        for p, rel in font_atlas.shipped_json_files():
+            if not rel.startswith("audio/"):
+                continue
             (stage / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(rj, stage / rel)
+            shutil.copy2(p, stage / rel)
 
         print(f"shipped-frame check: fonts/ staged without {', '.join(dropped)}; displays/ absent")
         routes = shipped_routes()
