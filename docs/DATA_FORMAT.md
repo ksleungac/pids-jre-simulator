@@ -143,9 +143,9 @@ A stop carries its own `dest` field to override the route-level value:
 
 ```json
 {
-    "name": "田町",
+    "name": "東京",
     "pa": ["3"],
-    "dest": "東京・上野",
+    "dest": "上野・池袋",
     "time": 3
 }
 ```
@@ -154,7 +154,9 @@ A stop carries its own `dest` field to override the route-level value:
 
 **Loader-time closure.** `route_loader.finalize_route` walks the stops list once at load time and fills `dest` on every stop with the effective value. After load, every stop has a `dest` field, and renderers read it directly with no fallback logic. JSON is input grammar: only the irreducible overrides are authored, and the runtime structure is the closure.
 
-**Yamanote example:** the route-level `dest` is 品川・東京. Overrides at 田町 / 神田 / 鶯谷 / 目白 / 代々木 / 恵比寿 cycle through a next-2-major-terminals window. Display semantics (kanji always, English uses translation lookup) are in [DISPLAY_E235.md § Destination Behavior](DISPLAY_E235.md).
+**Yamanote example:** the route-level `dest` is 東京・上野. Overrides at 東京 / 上野 / 池袋 / 新宿 / 渋谷 cycle through a next-2-major-terminals window. Display semantics (kanji always, English uses translation lookup) are in [DISPLAY_E235.md § Destination Behavior](DISPLAY_E235.md).
+
+**The override sits ON the major station, not after it.** The window holds the first two majors *strictly after* the next stop, so a major leaves the pair the moment it becomes the next stop — approaching 上野 the real PIDS already reads 池袋・新宿. Placing each override one stop later reads as correct in the file and renders the whole loop one stop behind; it shipped that way until a user reported it (2026-09-03, reported against v0.6.3). The overrides are the six majors minus 品川, which the route-level value covers.
 
 ---
 

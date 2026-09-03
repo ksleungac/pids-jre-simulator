@@ -16,7 +16,7 @@
     "type": "各駅停車",
     "direction": "内回り",
     "remarks": "山手線内回り",
-    "dest": "品川･東京",
+    "dest": "東京･上野",
     "stops": [
         {
             "name": "大崎",
@@ -49,7 +49,6 @@
                 "JY27"
             ],
             "sta_cut": 11.55,
-            "dest": "東京･上野",
             "time": 3,
             "sta_code": "JY27"
         },
@@ -98,6 +97,7 @@
                 "JY01_TYO"
             ],
             "sta_cut": 7.1,
+            "dest": "上野･池袋",
             "time": 2,
             "sta_code": "JY01"
         },
@@ -110,7 +110,6 @@
                 "JY02_KND"
             ],
             "sta_cut": 11.46,
-            "dest": "上野･池袋",
             "time": 2,
             "sta_code": "JY02"
         },
@@ -147,6 +146,7 @@
                 "JY05_UEN"
             ],
             "sta_cut": 11.33,
+            "dest": "池袋･新宿",
             "time": 2,
             "sta_code": "JY05"
         },
@@ -159,7 +159,6 @@
                 "JY06"
             ],
             "sta_cut": 11.1,
-            "dest": "池袋･新宿",
             "time": 2,
             "sta_code": "JY06"
         },
@@ -244,6 +243,7 @@
                 "JY13_IKB"
             ],
             "sta_cut": 9.1,
+            "dest": "新宿･渋谷",
             "time": 3,
             "sta_code": "JY13"
         },
@@ -256,7 +256,6 @@
                 "JY14"
             ],
             "sta_cut": 11.3,
-            "dest": "新宿･渋谷",
             "time": 2,
             "sta_code": "JY14"
         },
@@ -293,6 +292,7 @@
                 "JY17_SJK"
             ],
             "sta_cut": 8.4,
+            "dest": "渋谷･品川",
             "time": 2,
             "sta_code": "JY17"
         },
@@ -305,7 +305,6 @@
                 "JY18"
             ],
             "sta_cut": 11.4,
-            "dest": "渋谷･品川",
             "time": 2,
             "sta_code": "JY18"
         },
@@ -330,6 +329,7 @@
                 "JY20_SBY"
             ],
             "sta_cut": 12.91,
+            "dest": "品川･東京",
             "time": 2,
             "sta_code": "JY20"
         },
@@ -342,7 +342,6 @@
                 "JY21_EBS"
             ],
             "sta_cut": 11.2,
-            "dest": "品川･東京",
             "time": 3,
             "sta_code": "JY21"
         },
