@@ -2332,7 +2332,12 @@ is still two rows; whether the legend is still each service's terminus; whether 
 or drawn out. Two sheets disagreeing on any of those is the generalisation question answering
 itself.
 
-- OPEN — **the 11px text should be DeBold and currently ships Heavy.** `--ink` now reports `cover`,
+- SETTLED 2026-09-03 — **the 11px text is DeBold.** The author put the file on this machine and it
+  now rides the `private/fonts` ref (`_harness/sync_fonts.py`), so `_SMALL_FACE = _TRANSFER_FACE`
+  and the placeholder is gone. `check_harness` names a face this machine lacks before a render can
+  raise on it. The reasoning below stands as the record of how the weight was chosen, and of the
+  measurement error in the middle of it.
+- **the 11px text should be DeBold and currently ships Heavy.** `--ink` now reports `cover`,
   the ink integral over the bbox, which separates weight from size; the control is the spur's own
   text read on both images, agreeing to 0.002. Bracketing the same strings in both cuts this
   checkout holds: on 中央特快 Medium reads 0.340 and Heavy 0.493 against the reference's 0.409, and on

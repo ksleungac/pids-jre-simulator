@@ -499,13 +499,11 @@ _TRANSFER_FACE = "ShinGoPro-DeBold.otf"
 # face — the transfer band uses it. The station names stay on Medium: they are
 # set at 15 rather than 11 and were never in question.
 #
-# PLACEHOLDER — the answer is `_TRANSFER_FACE`, and this says Heavy.
-# `ShinGoPro-DeBold.otf` is on neither of the author's machines right now, and it
-# is in no baked atlas either, so naming it here makes the whole E233-0 lower LCD
-# unrenderable and the view cannot be worked on at all. Heavy is one weight step
-# too bold and it renders. Flip this line to `_TRANSFER_FACE` on a machine that
-# has the file; nothing else changes. Tracked in WIP_e233_0_display.md § 14.4.
-_SMALL_FACE = "ShinGoPr6N-Heavy.otf"
+# It shipped as Heavy for one day (2026-09-02) because the file was on neither
+# machine, which made naming it here unrenderable rather than merely unverified.
+# The private fonts ref carries it now — `_harness/sync_fonts.py`, and
+# check_harness names a face this machine lacks before a render can raise on it.
+_SMALL_FACE = _TRANSFER_FACE
 
 # The position marker is composited at this scale and resolved by one
 # downscale — see `_marker_image`. Same construction as the upper LCD's
