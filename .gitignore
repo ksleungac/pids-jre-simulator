@@ -86,8 +86,7 @@ _sta_verify_*.json
 # build needs no ShinGo file at all. The files stay on the author's machines because
 # BAKING still needs the real outlines — a clone without them renders LCD text only
 # from a pre-baked atlas, and font_atlas/ is itself ignored above. History keeps the
-# blobs by the no-rewrite decision (2026-07-27). HelveticaNeue / NeueFrutigerWorld
-# remain tracked until #116 bakes them. See WIP_font_atlas.md.
+# blobs by the no-rewrite decision (2026-07-27). See WIP_font_atlas.md.
 /fonts/ShinGoPr6N-*.otf
 # The rule above names ONE naming convention, and Morisawa's own filenames do not
 # follow it — `A-OTF Shin Go Pro DB.otf` arrived 2026-08-25 matching neither this
@@ -96,6 +95,20 @@ _sta_verify_*.json
 # filename, so match the family however it is spelled.
 /fonts/*Shin*Go*.otf
 /fonts/*ShinGo*.otf
+
+# HelveticaNeue / NeueFrutigerWorld — untracked 2026-09-03, same reasoning as
+# ShinGo above and reached once the private remote existed to hold them
+# (_harness/sync_fonts.py). Two differences worth stating rather than inferring.
+# These are NOT baked (#116 is still open), so the RELEASE keeps shipping the
+# real files — /build copies the working-tree fonts/ folder, untracked members
+# included, which is why it must delete ShinGo from the staged copy by hand.
+# Untracking therefore changes what a CLONE carries, not what a user downloads;
+# THIRD-PARTY.md § Fonts states both halves. And a clone can no longer build
+# until it pulls the private fonts ref, which is one command and reported at
+# session start by check_harness.
+# Noto stays tracked: OFL, redistributable, and it is the TIMS chrome face.
+/fonts/HelveticaNeue-*.otf
+/fonts/NeueFrutigerWorld-*.otf
 
 # User settings (language, future per-PC preferences). Lives next to the exe in
 # frozen builds / project root in dev. Local-only — separate per machine.
@@ -111,7 +124,7 @@ _sta_verify_*.json
 /.serena/
 _audio_backup/
 
-# Narrative memory — canonical store is the origin/memory journal ref
+# Narrative memory — canonical store is the private/memory journal ref
 # (_harness/publish_memory.py); local files are the write queue. Untracked on
 # master so code history stays pure. (Historic memory/ tracking removed via
 # `git rm -r --cached memory/` in the migration commit.)

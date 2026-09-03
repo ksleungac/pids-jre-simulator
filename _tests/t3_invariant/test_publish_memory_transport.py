@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: MIT
 # TIER: T3 — publish_memory transport: bootstrap + journal-ref push + race union, sandboxed
-"""End-to-end publish against a throwaway bare repo (never the real origin).
+"""End-to-end publish against a throwaway bare repo (never a real remote).
 
 Proves the git transport under the journal-ref model: first run BOOTSTRAPS
-origin/memory (parentless orphan commit) from local files; later runs append
+the memory ref (parentless orphan commit) from local files; later runs append
 publish commits to it; master is NEVER touched; two folders publishing
 divergent same-day blocks converge to the union; re-runs are no-ops. The merge
 LOGIC is T1 (test_publish_memory.py); this tier proves the composed pipeline
@@ -39,6 +39,12 @@ def clone(bare, dest):
     subprocess.run(["git", "clone", str(bare), str(dest)], capture_output=True, check=True)
     git(dest, "config", "user.name", "t3")
     git(dest, "config", "user.email", "t3@test")
+    # The narrative ref lives on the PRIVATE remote; the sandbox points both names
+    # at one bare repo so master and the journal ref stay separable in the checks.
+    git(dest, "remote", "add", publish_memory.PUBLISH_REMOTE, str(bare))
+
+
+MEM_REF = publish_memory.REMOTE_REF  # tracks the script — the remote's NAME is not the subject here
 
 
 def point_module_at(repo):
@@ -73,18 +79,18 @@ with tempfile.TemporaryDirectory() as td:
     point_module_at(repo_a)
     rc = publish_memory.sync()
     check("bootstrap: rc 0", rc == 0)
-    origin_daily = git(repo_a, "show", "origin/memory:memory/2026-07-23.md")
+    origin_daily = git(repo_a, "show", f"{MEM_REF}:memory/2026-07-23.md")
     check("bootstrap: content on ref", "Base story." in origin_daily)
-    log_mem = git(repo_a, "log", "--oneline", "origin/memory").splitlines()
+    log_mem = git(repo_a, "log", "--oneline", MEM_REF).splitlines()
     check("bootstrap: single orphan commit", len(log_mem) == 1 and "bootstrap narrative store" in log_mem[0], log_mem)
 
     # --- append from A: publish commit chained on the bootstrap ---
     daily_a.write_text(BASE + BLOCK_A, encoding="utf-8", newline="\n")
     rc = publish_memory.sync()
     check("A publish: rc 0", rc == 0)
-    origin_daily = git(repo_a, "show", "origin/memory:memory/2026-07-23.md")
+    origin_daily = git(repo_a, "show", f"{MEM_REF}:memory/2026-07-23.md")
     check("A publish: block on ref", "from folder A" in origin_daily)
-    log_mem = git(repo_a, "log", "--oneline", "origin/memory").splitlines()
+    log_mem = git(repo_a, "log", "--oneline", MEM_REF).splitlines()
     check("A publish: chained (2 commits)", len(log_mem) == 2 and "publish narrative" in log_mem[0], log_mem)
 
     # --- master NEVER touched by any publish ---
@@ -104,7 +110,7 @@ with tempfile.TemporaryDirectory() as td:
     point_module_at(repo_b)
     rc = publish_memory.sync()
     check("B publish: rc 0", rc == 0)
-    origin_daily = git(repo_b, "show", "origin/memory:memory/2026-07-23.md")
+    origin_daily = git(repo_b, "show", f"{MEM_REF}:memory/2026-07-23.md")
     check("B publish: union has A", "from folder A" in origin_daily)
     check("B publish: union has B", "from folder B" in origin_daily)
     check("B publish: A before B", origin_daily.index("folder A") < origin_daily.index("folder B"))
@@ -112,9 +118,9 @@ with tempfile.TemporaryDirectory() as td:
     check("B publish: stayed on feature", git(repo_b, "branch", "--show-current").strip() == "feature")
 
     # --- idempotency over transport: re-run publishes nothing new ---
-    before = git(repo_b, "rev-parse", "origin/memory").strip()
+    before = git(repo_b, "rev-parse", MEM_REF).strip()
     rc = publish_memory.sync()
-    after = git(repo_b, "rev-parse", "origin/memory").strip()
+    after = git(repo_b, "rev-parse", MEM_REF).strip()
     check("re-run: no-op", rc == 0 and before == after)
 
 # Restore module globals for any later importer in the same process.

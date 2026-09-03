@@ -19,7 +19,7 @@ Keep each commit to one logical change. Mixing related data and program changes 
 1. **Smoke test.** Invoke the modified code path and observe the expected output. "It compiles" doesn't count. A clean `/review-dirty` output also satisfies this.
 2. **User verification.** Surface concrete smoke-test output to the user. Wait for explicit confirmation.
 3. **Branch-domain check.** Run `git branch --show-current`. If you are on a feature branch and the change is unrelated to that feature, surface the mismatch before committing.
-4. **Session-recap check.** If no `memory/<today>.md` covers this session's work, either locally or published on the `origin/memory` ref (the classification report says which), propose recap first. The user can say "skip recap" to waive.
+4. **Session-recap check.** If no `memory/<today>.md` covers this session's work, either locally or published on the `private/memory` ref (the classification report says which), propose recap first. The user can say "skip recap" to waive.
 
 **Skip clause:** user explicitly waives ("trivial, just commit", typo fix). Applies to that commit only.
 
@@ -44,7 +44,7 @@ For bulk additions: subject names the largest change; body enumerates the rest w
 ### Step 4 — Execute
 
 - Stage specific files only. **Never** `git add -A` or `git add .`.
-- **Never stage `memory/**`.** Narrative auto-publishes to the `origin/memory` journal ref via `_harness/publish_memory.py` (recap runs it; session_init retries queued blocks), and master history stays pure code. A dirty memory file is unpublished queue state, not commit cargo.
+- **Never stage `memory/**`.** Narrative auto-publishes to the `private/memory` journal ref via `_harness/publish_memory.py` (recap runs it; session_init retries queued blocks), and master history stays pure code. A dirty memory file is unpublished queue state, not commit cargo.
 - Prepend `CLAUDE_COMMIT_VIA_SKILL=1`. This is mandatory: the PreToolUse hook blocks `git commit` without the marker.
 - Use Bash (not PowerShell) for the commit: `CLAUDE_COMMIT_VIA_SKILL=1 git commit -m "$(cat <<'EOF' ... EOF)"`.
 - Include the `Co-Authored-By:` trailer. Read the exact model name from the session system info (e.g. `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`). Never guess; the system info is always present.

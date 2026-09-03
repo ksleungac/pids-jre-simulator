@@ -2,12 +2,19 @@
 """Publish narrative memory to the dedicated `memory` ref — mechanical suffix-sync.
 
 memory/*.md are append-only narrative (daily logs + MEMORY.md index). The canonical
-store is `origin/memory` — a journal-only ref, so master's history stays pure code.
-This script computes the blocks/entries present in the local files but absent from
-origin/memory, appends them onto origin's copy, and pushes the result as a commit
-built with git plumbing — no branch switch, so it works identically from master, a
-feature branch, or a worktree. If origin/memory doesn't exist yet it is BOOTSTRAPPED
-(parentless orphan commit) from the local memory files.
+store is `private/memory` — a journal-only ref on the PRIVATE remote, so master's
+history stays pure code and a recap is not a publishing surface. This script computes
+the blocks/entries present in the local files but absent from the ref, appends them
+onto the ref's copy, and pushes the result as a commit built with git plumbing — no
+branch switch, so it works identically from master, a feature branch, or a worktree.
+If the ref doesn't exist yet it is BOOTSTRAPPED (parentless orphan commit) from the
+local memory files.
+
+The store moved off `origin/memory` on 2026-09-03 (TODO.md § "A private remote for
+what the public repo cannot hold"). `private/memory` was seeded with origin's full
+history, so there is one ref to read rather than a cutover date splitting it in two.
+`origin/memory` is FROZEN, not retracted: this script refuses edits to published
+blocks, so its 69 commits stay public whatever happens next.
 
 Design (2026-07-23, third-man-adjusted; moved off master same day — commit-noise):
 - The local memory/ files ARE the queue, origin/memory the canonical store.
@@ -40,8 +47,9 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MEMORY_DIR = REPO_ROOT / "memory"
-PUBLISH_BRANCH = "memory"  # journal-only ref on origin; master history stays pure code
-REMOTE_REF = f"origin/{PUBLISH_BRANCH}"
+PUBLISH_REMOTE = "private"  # NOT origin — a recap is not a publishing surface
+PUBLISH_BRANCH = "memory"  # journal-only ref; master history stays pure code
+REMOTE_REF = f"{PUBLISH_REMOTE}/{PUBLISH_BRANCH}"
 MAX_PUSH_RETRIES = 3
 
 
@@ -291,7 +299,7 @@ def _build_and_push(changes: dict) -> bool:
         return False
     commit = out.decode().strip()
 
-    rc, _, err = _git(["push", "origin", f"{commit}:refs/heads/{PUBLISH_BRANCH}"])
+    rc, _, err = _git(["push", PUBLISH_REMOTE, f"{commit}:refs/heads/{PUBLISH_BRANCH}"])
     if rc != 0:
         print(f"[publish-memory] push rejected: {err.decode(errors='replace').strip().splitlines()[-1]}")
         return False
@@ -305,8 +313,16 @@ def sync(fetch: bool = True, dry_run: bool = False) -> int:
     Offline / push-failure is fail-soft: the checkout keeps the queue and the
     next run publishes. Warnings (edited blocks) always print loudly.
     """
+    rc, out, _ = _git(["remote"])
+    if rc != 0 or PUBLISH_REMOTE not in out.decode(errors="replace").split():
+        print(
+            f"[publish-memory] no '{PUBLISH_REMOTE}' remote on this checkout — narrative NOT published; "
+            "queue kept. See TODO.md § 'A private remote for what the public repo cannot hold'"
+        )
+        return 0
+
     if fetch:
-        rc, _, _ = _git(["fetch", "origin"])
+        rc, _, _ = _git(["fetch", PUBLISH_REMOTE])
         if rc != 0:
             print("[publish-memory] offline (fetch failed) — narrative not published; queue kept in checkout")
             return 0
@@ -325,7 +341,7 @@ def sync(fetch: bool = True, dry_run: bool = False) -> int:
         if _build_and_push(changes):
             return 0
         # Push lost a race or transport failed — refetch and recompute.
-        rc, _, _ = _git(["fetch", "origin"])
+        rc, _, _ = _git(["fetch", PUBLISH_REMOTE])
         if rc != 0:
             break
         print(f"[publish-memory] retrying ({attempt + 2}/{MAX_PUSH_RETRIES})")

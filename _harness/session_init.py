@@ -63,6 +63,9 @@ def git_sync():
     master ff/divergence nag doesn't apply there; narrative flows via
     publish_memory against the dedicated origin/memory ref either way."""
     subprocess.run(["git", "fetch", "origin"], capture_output=True)
+    # The private remote carries the narrative ref and the licensed font software.
+    # Fetched on BOTH paths below, so the branch-early-return can't skip it.
+    subprocess.run(["git", "fetch", "private"], capture_output=True)
 
     branch_r = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True, encoding="utf-8")
     branch = branch_r.stdout.strip() if branch_r.returncode == 0 else "?"
@@ -315,6 +318,15 @@ def main():
         publish_sync(fetch=False)
     except Exception as e:
         print(f"[publish-memory] skipped ({e})\n")
+
+    # A missing licensed face otherwise surfaces as a raise deep inside lcd_font,
+    # after it has already been named in production code (2026-09-02, DeBold).
+    try:
+        from sync_fonts import print_report as fonts_report
+
+        fonts_report()
+    except Exception as e:
+        print(f"[sync-fonts] skipped ({e})\n")
 
     today = date.today()
     yesterday = today - timedelta(days=1)

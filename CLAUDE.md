@@ -61,6 +61,16 @@ uv run main.py
 
 After a fresh clone: `uv sync` then `uv run pre-commit install`. See [conventions.md § Tooling](.claude/rules/conventions.md).
 
+**Then add the private remote**, which carries the narrative memory ref and the licensed Morisawa faces. Without it the session has no memory store and the LCD cannot render:
+
+```bash
+git remote add private https://github.com/ksleungac/private-pids-jre-simulator.git
+uv run _harness/sync_fonts.py          # pull the faces this machine lacks
+uv run _harness/sync_fonts.py --push   # publish any face only this machine has
+```
+
+`session_init` fetches it and names a missing face; `publish_memory` refuses to publish without it rather than pushing anywhere public.
+
 ## Mental Model
 
 What this project is modeling. Keep in head — shapes every design decision. Implementation details live in domain docs, read on demand.

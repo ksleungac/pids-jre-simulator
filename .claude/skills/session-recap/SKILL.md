@@ -102,7 +102,7 @@ After approval, update only confirmed files. Each piece of information has ONE h
 
 **MEMORY.md always gets an entry** — one line per session block, written immediately after the daily log. Format at bottom of this file.
 
-**Publish narrative** — after the daily log + MEMORY.md writes, run `uv run _harness/publish_memory.py`. It appends the new blocks/entries to the dedicated `origin/memory` journal ref (works from any branch/folder; memory never rides code commits, master history stays pure code). Offline → it no-ops and the local files keep the queue; the next recap or session start publishes. Memory files are APPEND-ONLY — never reword an already-published block/entry (the publisher refuses edits with a warning).
+**Publish narrative** — after the daily log + MEMORY.md writes, run `uv run _harness/publish_memory.py`. It appends the new blocks/entries to the dedicated `private/memory` journal ref (works from any branch/folder; memory never rides code commits, master history stays pure code). Offline → it no-ops and the local files keep the queue; the next recap or session start publishes. Memory files are APPEND-ONLY — never reword an already-published block/entry (the publisher refuses edits with a warning).
 
 ---
 
@@ -171,6 +171,6 @@ When in doubt, classify rule-shaped. Cost asymmetry: over-promotion = bloat (aud
 
 **MEMORY.md format:** `- [YYYY-MM-DD time-block](file.md) — headline`. Multi-session days get one entry per block.
 
-**150 chars is a hard cap, enforced at publish.** `publish_memory.py` REFUSES an over-cap entry with a loud warning and leaves it queued — the entry does not reach `origin/memory` until it fits. Count before writing; if the headline doesn't fit, the surplus is detail belonging in the daily log the entry links to, never a wider index line. This is the progressive-disclosure boundary: index = pointer, daily log = detail, canonical homes = rules.
+**150 chars is a hard cap, enforced at publish.** `publish_memory.py` REFUSES an over-cap entry with a loud warning and leaves it queued — the entry does not reach `private/memory` until it fits. Count before writing; if the headline doesn't fit, the surplus is detail belonging in the daily log the entry links to, never a wider index line. This is the progressive-disclosure boundary: index = pointer, daily log = detail, canonical homes = rules.
 
 Enforced mechanically because stating it did not work. Measured 2026-07-25 across all 143 entries: 0% over cap in Mar–Apr, then 97% / 100% / 100% for May / Jun / Jul, median rising 135 → 313 → 783 → 1538 while the cap sat in this file unread. Published entries are append-only, so that history stands; the gate applies from here.

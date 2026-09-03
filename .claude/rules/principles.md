@@ -243,11 +243,13 @@ When working through user-stated logic, reason in the vocabulary and frame the u
 - (2026-05-02) Reached a conclusion via "opaque badge paints over text" when the user had never mentioned opacity: *"just dead logic to follow."*
 - (2026-06-12) Resolved "the dot is obstructing" to the rendered marker dot, which I had just been working on, and built a hide-toggle. They meant the editor drag handle.
 - (2026-07-30) The user named the frame, and I re-presented it a turn later as my own finding: *"you see, that i mentioned it a two side efforts."*
+- (2026-09-03) Asked to move the licensed fonts off the public repo, I did it and then reported it with the release's unchanged font shipping attached as a qualifier. Three rounds went to dismantling a constraint on something they had never proposed touching: *"why do i move by release? release is always as it is. what's a problem?"*, and before that *"i don't understand"* twice.
 
 **How to apply:**
 - If a justification uses vocabulary the user didn't introduce, stop and ask.
 - Ambiguous referent and about to implement: confirm which referent first. Don't resolve it toward your own recent work, which is the anchor that makes a wrong reading feel obvious.
 - When a design frame lands, name it back in their words and build on it rather than arriving at it again independently.
+- **A true fact about a surface the user is NOT changing is not a caveat, it is a different topic.** Attaching it to the delivered work frames it as an obstacle, so the reply is about a problem that exists only in the report. Report what changed; raise an untouched surface only when the change actually alters it. The tell is a "still" or a "but" carrying a fact that was equally true before the work started.
 
 ### Scope-expansion guard
 When the user states a rule with a scope phrase ("also applies to all", "everywhere"), apply it only to the axis the prior sentence was about. If extension to a sibling axis is plausible, ask.

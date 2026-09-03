@@ -215,9 +215,10 @@ foreach ($dir in $shipDirs) {
 # step 2a regenerated it from `fonts/` + `data/` in this same run, so it cannot be
 # stale — which is the failure `critical_lessons.md §2` guards against. Committing it
 # instead would put ~4 MB of regenerable binary in git and churn it on every visual
-# tune. Consequence: a build requires the licensed fonts present. They are still
-# tracked today, so any clone can build; once `fonts/` leaves the tree, only a
-# machine holding them can.
+# tune. Consequence: a build requires the licensed fonts present, and since
+# 2026-09-03 none of them are tracked — ShinGo, Helvetica and Frutiger all live on
+# the private remote. Only a machine that has run `_harness/sync_fonts.py` can
+# build; check_harness reports a missing face at session start.
 Copy-Item -Path "font_atlas" -Destination "dist-release\JRE-PA-Simulator\font_atlas" -Recurse -Force
 
 # ShinGo leaves the ship. It is the family the atlas was built for (licensed, no
@@ -229,9 +230,14 @@ Copy-Item -Path "font_atlas" -Destination "dist-release\JRE-PA-Simulator\font_at
 # Deleting after the copy rather than filtering during it, because the BAKE needs
 # them present in the project's own fonts/ — they are a build-time input, not a
 # shipped asset.
-Remove-Item "dist-release\JRE-PA-Simulator\fonts\ShinGoPr6N-*.otf" -Force
+# Match the FAMILY, not one naming convention — the same lesson .gitignore learned
+# when `A-OTF Shin Go Pro DB.otf` arrived, and `ShinGoPro-DeBold.otf` (E233-0 train
+# type + placards + overview) is a second cut that `ShinGoPr6N-*` does not match.
+# Stripping whitespace first folds Morisawa's own spaced filenames into one test.
+$isShinGo = { $_.Name -replace '\s', '' -match 'ShinGo' }
+Get-ChildItem "dist-release\JRE-PA-Simulator\fonts" -Filter *.otf | Where-Object $isShinGo | Remove-Item -Force
 $shipped = Get-ChildItem "dist-release\JRE-PA-Simulator\fonts" -Filter *.otf | ForEach-Object { $_.Name }
-if ($shipped -match 'ShinGo') { throw "ShinGoPr6N still staged in fonts/ — the atlas has not replaced it" }
+if ($shipped -replace '\s', '' -match 'ShinGo') { throw "a ShinGo cut is still staged in fonts/ — the atlas has not replaced it" }
 Write-Host "fonts/ staged without ShinGo:" -ForegroundColor Cyan
 $shipped | ForEach-Object { Write-Host "  $_" }
 ```
@@ -239,7 +245,7 @@ $shipped | ForEach-Object { Write-Host "  $_" }
 - **Two guards, hard then soft.** The tracked-only filter above is the *hard* guard (an untracked dir cannot ship, and any skipped one is printed under `SKIPPED (untracked …)`). The `$shipDirs` print-out is the *soft* guard on top — eyeball-confirm what's being staged. If a **tracked** dir appears that shouldn't ship, add it to `$shipExclude` (a deliberate, visible action) and re-run. If a dir you *expected* to ship shows up under SKIPPED, commit it first (`critical_lessons.md §2`).
 - **`fonts/` ships without ShinGo, and that PARTIAL folder is what decides the mode.** ShinGo is the
   only atlas-backed family (`font_atlas.ATLAS_FACES`), so the staged `fonts/` keeps Helvetica,
-  Frutiger and Noto while the `Remove-Item` above drops the three Morisawa faces. `font_atlas.mode()`
+  Frutiger and Noto while the family filter above drops every Morisawa cut. `font_atlas.mode()`
   therefore asks whether the **baked families** are present, not whether the folder is
   (`_baked_faces_available`) — the staged folder resolves **ATLAS**. An earlier version tested the
   folder, which is the same question only while `fonts/` is all-or-nothing; this step is exactly what

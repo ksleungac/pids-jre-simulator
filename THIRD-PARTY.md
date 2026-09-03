@@ -113,6 +113,15 @@ to them on 2026-08-21; the material comes out if they would rather it did not st
   raster atlas, so neither the shipped build nor a clone contains the font software.
   Regenerating that atlas from source requires a licensed copy of the faces, which
   you must obtain yourself.
+- **Helvetica Neue** (`HelveticaNeue-*.otf`) and **Neue Frutiger World**
+  (`NeueFrutigerWorld-Bold.otf`) are **not** in this repository as of 2026-09-03,
+  and — unlike Shin Go — they **are** still present in the release. They are not
+  yet baked into the atlas, so the app loads the real files at runtime and the
+  build stages them. Removing them from the release is tracked as
+  [#116](https://github.com/ksleungac/pids-jre-simulator/issues/116); until it
+  lands, this entry is the accurate statement and "not in the repository" must not
+  be read as "not distributed". Building from a clone requires a licensed copy of
+  both, which you must obtain yourself.
 
 ## Assets derived from third-party software
 
