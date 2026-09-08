@@ -29,6 +29,11 @@ build = [
     "pyinstaller>=6.19.0",
 ]
 dev = [
+    # PyAV decodes the screen recordings `_dev_scripts/ocr_replay_video.py` replays
+    # through the production read path. Declared explicitly because it arrived only
+    # as a faster-whisper transitive, so dropping that dep would have broken the
+    # replay tool with a bare ImportError. Dev-only: nothing production imports it.
+    "av>=17.0.1",
     "black>=26.1.0",
     "faster-whisper>=1.2.1",
     "ffmpeg>=1.4",

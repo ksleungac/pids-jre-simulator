@@ -318,6 +318,95 @@ def check_rectify() -> None:
         check(got == expected, f"_rectify_speed({value!r}) = {got!r}, expected {expected!r}")
 
 
+# ── 5. is the badge still readable when the LEVELS move ──────────────────────
+# `classify_badge_state` compares absolute RGB, so a capture whose levels are lifted
+# scores far past BADGE_DIFF_REJECT while the badge is perfectly legible and every digit
+# reader on the same frame is unaffected. That is #137's signature: badge read 6-45 % at
+# a diff median of 70-80, against a documented 9.8, with speed at 87-99 % on the same
+# frames. The shape-only second pass exists for exactly that, and this section pins the
+# three things that make it safe to have.
+#
+# The oracle CANNOT be `_tests/fixtures/ocr/*/cells/badge__*.png`: all six are
+# byte-identical to the six anchors they are matched against, so they score 0.00 and are
+# the artifact compared to itself (critical_lessons.md §10). Shifted anchors are honest
+# here for the same reason a shifted anchor is honest anywhere — the transform is the
+# subject, not the pixels.
+
+BADGE_SHIFTS = {
+    # name: (transform, must the RAW pass still own it?)
+    "unshifted": (lambda a: a, True),
+    "offset +40": (lambda a: np.clip(a.astype(float) + 40, 0, 255), True),
+    "offset +90": (lambda a: np.clip(a.astype(float) + 90, 0, 255), False),
+    "offset +120": (lambda a: np.clip(a.astype(float) + 120, 0, 255), False),
+    "gain x2.0": (lambda a: np.clip(a.astype(float) * 2.0, 0, 255), False),
+    "gamma 0.25": (lambda a: 255.0 * np.power(np.clip(a.astype(float), 0, 255) / 255.0, 0.25), False),
+}
+
+
+def badge_garbage(shape):
+    rng = np.random.default_rng(0)
+    return {
+        "black": np.zeros(shape, np.uint8),
+        "white": np.full(shape, 255, np.uint8),
+        "uniform 128": np.full(shape, 128, np.uint8),
+        "uniform noise": rng.integers(0, 256, shape, dtype=np.uint8),
+        "dark noise": rng.integers(0, 60, shape, dtype=np.uint8),
+        "h-gradient": np.tile(np.linspace(0, 255, shape[1], dtype=np.uint8)[None, :, None], (shape[0], 1, 3)),
+    }
+
+
+def check_badge_levels() -> None:
+    anchors = O.load_badge_anchors(ROOT / "ocr_templates" / "badges")
+    n = sum(len(v) for v in anchors.values())
+    check(n == 6, f"expected 6 badge anchors on disk, got {n}")
+    if n == 0:
+        return
+
+    for name, (fn, raw_owns) in BADGE_SHIFTS.items():
+        for true_state, arrs in anchors.items():
+            for a in arrs:
+                cell = fn(a).astype(np.uint8)
+                state, diff, via = O.classify_badge_state(cell, anchors)
+                check(state == true_state, f"badge {name}: {true_state} classified as {state}")
+                # NON-DEGRADATION. Anything the raw pass owns today it must still own, and
+                # the fallback must not be reached. This is the whole safety argument for
+                # the change: it is a property of the ORDER, so it holds without needing
+                # real shifted cells to measure against.
+                if raw_owns:
+                    check(via == "raw", f"badge {name}: must stay on the raw pass, went via {via}")
+                    check(diff <= O.BADGE_DIFF_REJECT, f"badge {name}: raw diff {diff:.1f} over reject")
+                else:
+                    check(via == "ncc", f"badge {name}: raw should have refused; via={via} diff={diff:.1f}")
+                    # `diff` stays the RAW number whichever pass answered, so an old drive
+                    # log's badge_diff still means the same thing after this change.
+                    check(diff > O.BADGE_DIFF_REJECT, f"badge {name}: reported diff {diff:.1f} should be the raw one")
+
+    # The fallback must not RESCUE anything the raw pass refused, or every frame raw
+    # rejects lands on a looser test — `principles.md § "A fallback must be stricter than
+    # the path it replaces"`. Stated as "raw's refusals stay refused" rather than "all
+    # garbage is refused", because the latter is FALSE today and not of this change's
+    # making: raw accepts a flat mid-grey cell at 44.2, under its own 50. That weakness is
+    # pinned below rather than quietly fixed — fixing it would change what production does
+    # on frames it currently classifies, which is the one thing this change must not do.
+    shape = next(iter(anchors.values()))[0].shape
+    for name, g in badge_garbage(shape).items():
+        state, diff, via = O.classify_badge_state(g, anchors)
+        if diff > O.BADGE_DIFF_REJECT:
+            check(state is None and via is None, f"badge garbage {name}: raw refused (diff {diff:.1f}) but fallback rescued it as {state}")
+        else:
+            check(via == "raw", f"badge garbage {name}: raw accepted at {diff:.1f}, so via must be raw, got {via}")
+
+    # The one input raw accepts and should not. Pinned as CURRENT BEHAVIOUR so the gap is
+    # visible and dated rather than latent; the shape-only metric scores it 100.0, so
+    # whenever the raw pass is retired this assertion is what flips.
+    flat = np.full(shape, 128, np.uint8)
+    _state, flat_diff, flat_via = O.classify_badge_state(flat, anchors)
+    check(flat_via == "raw", "known gap: a flat mid-grey cell is accepted by the RAW pass (2026-09-08)")
+    check(flat_diff < O.BADGE_DIFF_REJECT, f"known gap: flat-grey raw diff was {flat_diff:.1f}, expected under {O.BADGE_DIFF_REJECT}")
+    worst_ncc = min(O._badge_ncc_distance(flat, a) for arrs in anchors.values() for a in arrs)
+    check(worst_ncc > O.BADGE_NCC_REJECT, f"the shape-only metric must refuse flat grey; scored {worst_ncc:.1f}")
+
+
 def main() -> int:
     pygame.init()
     templates = O.build_templates()
@@ -326,6 +415,7 @@ def main() -> int:
     check_glyph_matching(templates)
     check_decimal_stop(templates)
     check_rectify()
+    check_badge_levels()
 
     if FAILURES:
         print("FAIL: OCR read")
@@ -335,7 +425,8 @@ def main() -> int:
         f"PASS: OCR read (capture geometry 16:9 + 16:10 letterbox + 8 refusals; "
         f"{len(DEGRADATIONS)} glyph degradations x 10 digits + live clipped-4; "
         f"stub-not-decimal + decimals still found both resolutions; "
-        f"{len(RECTIFY_CASES)} speed-domain cases)"
+        f"{len(RECTIFY_CASES)} speed-domain cases; "
+        f"badge levels {len(BADGE_SHIFTS)} shifts x 6 anchors + 6 garbage refusals)"
     )
     return 0
 

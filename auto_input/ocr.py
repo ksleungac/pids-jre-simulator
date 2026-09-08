@@ -62,6 +62,17 @@ BADGE_ANCHOR_FILES: dict[str, list[str]] = {
 # See auto_input/README.md § "Badge classification".
 BADGE_DIFF_REJECT = 50.0
 
+# Second-chance threshold, on the SHAPE-ONLY metric below. `1 - pearson r`, x100, so a
+# level-shifted real badge stays near 0 while structurally unrelated pixels sit near 100.
+# 50 is the midpoint of a wide empty band, not a fitted value: measured over the six
+# anchors under 34 global transforms (offset to +120, gain to x2.5, gamma to 0.25, full
+# desaturation, and combinations) the worst real badge scores 26.5, while black / white /
+# uniform / noise / gradient cells all score 97.1-100.2. Re-derive it against REAL shifted
+# cells when any exist — see #143. Deliberately NOT fitted to the anchors, because the
+# committed badge fixtures are byte-identical to those anchors (critical_lessons.md §10),
+# so anything tuned tightly against them is tuned against itself.
+BADGE_NCC_REJECT = 50.0
+
 # Tightened threshold: text is near-black (~0-40), HUD bg is light (~200+), scenery
 # bleed-through can land in the gray zone (~80-150). Threshold of 70 keeps text but
 # excludes gray scenery noise — matches the user's "boost the dark" intuition.
@@ -273,12 +284,45 @@ def load_badge_anchors(assets_dir: Path | None = None) -> dict[str, list[np.ndar
     return anchors
 
 
-def classify_badge_state(cell: np.ndarray, anchors: dict[str, list[np.ndarray]]) -> tuple[str | None, float]:
-    """Pixel-diff against each anchor; return (best_state, mean_abs_diff). Lower diff = better match.
+def _badge_ncc_distance(cell: np.ndarray, anchor: np.ndarray) -> float:
+    """`1 - pearson r`, x100. Zero when the two agree up to any `v -> a*v + b`.
 
-    Returns (None, diff) when best_diff > BADGE_DIFF_REJECT — no anchor is a credible
-    match (dark-cell garbage from black-screen frames, mid-animation spikes, etc.).
-    Diff value is preserved for diagnostics. See auto_input/README.md § "Badge classification".
+    Level-blind by construction, which is the point: it is the SHAPE of the cell that has
+    to match, so a capture whose levels are lifted still matches, while pixels that are
+    merely bright or dark in the right range do not. A flat cell has no shape at all and
+    returns the maximum rather than dividing by ~0.
+    """
+    a = cell.astype(float).ravel() - float(cell.mean())
+    b = anchor.astype(float).ravel() - float(anchor.mean())
+    na, nb = float(np.linalg.norm(a)), float(np.linalg.norm(b))
+    if na < 1e-6 or nb < 1e-6:
+        return 100.0
+    return float((1.0 - (a @ b) / (na * nb)) * 100.0)
+
+
+def classify_badge_state(cell: np.ndarray, anchors: dict[str, list[np.ndarray]]) -> tuple[str | None, float, str | None]:
+    """Match the cell against each anchor; return (best_state, mean_abs_diff, via).
+
+    # CONTRACT: the RAW pass must stay first and unchanged. Any frame that classifies
+    # today classifies identically, because the shape-only pass is only reached once raw
+    # has already rejected. Non-degradation is therefore a property of the ORDER, not a
+    # measurement — which matters here because the committed badge fixtures are
+    # byte-identical to the anchors (critical_lessons.md §10) and so cannot prove it.
+    # See auto_input/README.md § "Badge classification".
+
+    `via` says which pass produced the state: ``"raw"``, ``"ncc"``, or None when both
+    refused. Published per sample so the fallback's engagement rate is visible in the
+    drive log rather than silent — it counts the raw pass's misses (#143).
+
+    The second pass exists for a capture whose LEVELS are shifted: a display or capture
+    pipeline that lifts the cell by ~+90 puts raw's mean-abs-diff around 78, far past
+    BADGE_DIFF_REJECT, while the badge is perfectly legible and every digit reader on the
+    same frame is unaffected. It is not a loosening — on every garbage input measured it
+    is STRICTER than raw, which accepts a flat mid-grey cell at 44.2 and it rejects at 100.
+
+    `diff` is always the RAW mean-abs-diff, including when the second pass supplied the
+    state. It stays comparable across drives and across this change, which is what makes
+    an old log's number still mean something.
     """
     best_state: str | None = None
     best_diff = float("inf")
@@ -290,9 +334,22 @@ def classify_badge_state(cell: np.ndarray, anchors: dict[str, list[np.ndarray]])
             if diff < best_diff:
                 best_diff = diff
                 best_state = state
-    if best_diff > BADGE_DIFF_REJECT:
-        return None, best_diff
-    return best_state, best_diff
+    if best_diff <= BADGE_DIFF_REJECT:
+        return best_state, best_diff, "raw"
+
+    ncc_state: str | None = None
+    ncc_best = float("inf")
+    for state, anchor_list in anchors.items():
+        for anchor in anchor_list:
+            if anchor.shape != cell.shape:
+                continue
+            d = _badge_ncc_distance(cell, anchor)
+            if d < ncc_best:
+                ncc_best = d
+                ncc_state = state
+    if ncc_best <= BADGE_NCC_REJECT:
+        return ncc_state, best_diff, "ncc"
+    return None, best_diff, None
 
 
 def load_value_cell(screenshot_path: Path) -> np.ndarray:
@@ -1113,16 +1170,16 @@ def main() -> int:
     # Cross-classify each anchor against all anchors — every anchor's lowest-diff match
     # must be its own state. Catches mis-extraction or wrong-state filename.
     print("\nCross-classification (anchor self-classifies as own state):")
-    print(f"{'anchor':<32} {'expected':<10} {'best':<10} {'diff':<8} verdict")
+    print(f"{'anchor':<32} {'expected':<10} {'best':<10} {'diff':<8} {'via':<5} verdict")
     print("-" * 72)
     all_ok = True
     for state, anchor_list in anchors.items():
         for i, anchor in enumerate(anchor_list):
-            best_state, diff = classify_badge_state(anchor, anchors)
+            best_state, diff, via = classify_badge_state(anchor, anchors)
             ok = best_state == state
             all_ok &= ok
             tag = f"{state}[{i}]"
-            print(f"{tag:<32} {state:<10} {str(best_state):<10} {diff:<8.2f} {'PASS' if ok else 'FAIL'}")
+            print(f"{tag:<32} {state:<10} {str(best_state):<10} {diff:<8.2f} {str(via):<5} {'PASS' if ok else 'FAIL'}")
     return 0 if all_ok else 1
 
 

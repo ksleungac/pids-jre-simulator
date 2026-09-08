@@ -143,6 +143,10 @@ class Reading:
 
     badge: Optional[str] = None
     badge_diff: float = 0.0
+    # Which classifier pass produced `badge`: "raw", "ncc", or None when both refused.
+    # Carried so the shape-only pass's engagement rate is visible per drive instead of
+    # silent — it counts the raw pass's misses, which is the #137 signature (#143).
+    badge_via: Optional[str] = None
 
     speed: Optional[int] = None
     speed_raw: str = ""
@@ -201,7 +205,7 @@ def read_hud(
     sl_cell = crop(frame_bgra, hud, profile.speed_limit_value_bbox)
     b_cell = crop(frame_bgra, hud, profile.badge_bbox)
 
-    badge, b_diff = classify_badge_state(b_cell, badge_anchors)
+    badge, b_diff, b_via = classify_badge_state(b_cell, badge_anchors)
     s_val, s_raw, s_score = read_speed(s_cell, templates, seg=seg)
     # Decimal-precision speed for LOG/report only (never a driver decision — those key
     # off the integer). Read against s_raw so a dropped `.0` degrades to None (→ `.0`),
@@ -231,6 +235,7 @@ def read_hud(
     return Reading(
         badge=badge,
         badge_diff=b_diff,
+        badge_via=b_via,
         speed=s_val,
         speed_raw=s_raw,
         speed_score=s_score,

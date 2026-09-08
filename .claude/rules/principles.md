@@ -671,6 +671,18 @@ When B is useless without A, and A is unusable until B exists, do not build A th
 - A fallback that tolerates B's failure is the weaker answer, and the author will say so: the goal is that B cannot fail alone, not that you cope when it does. Cross-ref § "Construction-proof model beats the next repro theory".
 - Lock it on the COUNT of the underlying operation, not on the outcome. One press, one write — a test that asserts that fails the moment someone reintroduces the second one.
 
+### When you cannot MEASURE that a change is safe, make it unreachable for what already works
+A change to a path you cannot exercise — no hardware, no fixtures, or fixtures that turn out to prove nothing — does not have to be argued from evidence you do not have. Order it so the existing path runs first and unchanged, and the new one is reachable only where the existing path has already given up. Non-degradation is then a property of the control flow, which you can read, rather than of a measurement you cannot take.
+
+**Why:** the alternative is shipping a replacement on synthetic evidence and finding out from the user. Examples:
+- (2026-09-08, #143) The badge classifier compares absolute RGB, so a display pipeline that lifts levels blinds it while every digit reader on the same frame is fine. The fix wanted a shift-invariant metric, and the honest gate for "does this degrade what works" was the committed badge fixtures — which turned out byte-identical to the anchors they are matched against, scoring 0.00 (`critical_lessons.md §10`, recorded 2026-08-19 and never repaired). So the metric was added as a SECOND pass behind the unchanged first one. Every frame that classified before classifies identically, by construction.
+
+**How to apply:**
+- The new path still needs its own refusal, or it becomes a looser test that catches everything the first one rejected — § "A fallback must be stricter than the path it replaces". Measure that refusal against garbage before believing the ordering saved you.
+- Publish which path answered, per sample. The engagement rate is the only evidence you will get that the new path does anything, and it counts the old one's misses.
+- Keep the old path's diagnostic number as the reported one, so logs written before and after the change stay comparable.
+- This buys safety, not correctness. It is the right move when the new path is unverified; it is not a reason to stop trying to verify it.
+
 ### A corrective adjustment must be monotone — clamp it against its own input
 A mechanism that exists to REDUCE a value (a trim, a cap, a shrink, a back-off) must be unable to increase it. Writing the floor as `max(floor, value - correction)` alone does exactly that: where the natural value already sits below the floor, the `max` RAISES it, and the mechanism does the opposite of its name on precisely the inputs it was least needed for. Clamp with the floor, then re-clamp against the original — `min(value, max(value - correction, floor))` — so the result can only ever be smaller.
 

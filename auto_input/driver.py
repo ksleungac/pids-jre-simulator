@@ -1022,7 +1022,7 @@ class AutoDriver:
                         apply_badge_reject_gate=_apply_badge_reject_gate,
                         guard_distance=guard_distance,
                     )
-                    badge, b_diff = r.badge, r.badge_diff
+                    badge, b_diff, b_via = r.badge, r.badge_diff, r.badge_via
                     s_val, s_score = r.speed, r.speed_score
                     s_tenths, s_decimal = r.speed_tenths, r.speed_decimal
                     d_val, d_score = r.distance, r.distance_score
@@ -1087,6 +1087,10 @@ class AutoDriver:
                                 "speed_limit_score": sl_score,
                                 "badge": badge,
                                 "badge_diff": b_diff,
+                                # Which classifier pass supplied the badge. A drive whose
+                                # samples read "ncc" is one where the raw pass is missing
+                                # them, which is the #137 level-shift signature (#143).
+                                "badge_via": b_via,
                                 "curr_stop": self.sim.state.curr_stop,
                                 "cnt_pa": self.sim.state.cnt_pa,
                                 "cnt_pa_at_station": self.sim.state.cnt_pa_at_station,
