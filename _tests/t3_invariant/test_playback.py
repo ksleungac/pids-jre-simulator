@@ -4,12 +4,17 @@
 
 The last sta track at a stop is cut at `sta_cut` into a head that loops and a tail
 that plays once, and BOTH are built up front from one decode so the conductor's cut
-lands on the keystroke. One temp path serves both writes: the head's `Sound` is
-constructed, then that same file is overwritten with the tail. Correctness rests on
-`mixer.Sound()` copying the samples at construction, which is a platform assumption
-held up by a docstring rather than by anything that can fail. If it ever stops
-holding, a press meant to start the melody plays the closing-door announcement —
-indistinguishable from the v0.6.2 double-fire that `cd0d8b2` retired.
+lands on the keystroke.
+
+The head and the tail are ONE operation. The file is written once, decoded once, and
+`split_raw_at` cuts that Sound's own buffer in memory, so the tail cannot fail for
+any reason the head did not already fail for. That is the architectural guarantee
+this module exists to hold: `channel.play` is the last statement in the try, so under
+the earlier build-then-build-then-play shape anything raising while making the tail
+silenced a head that was already playable, and silence is what "the departure melody
+is missing" looks like (#142). The earlier shape also rested on `Sound()` copying at
+construction — measured true on pygame 2.6.1 / SDL 2.28.4 (#141), but a platform
+assumption the app had no reason to be taking. One write cannot alias itself.
 
 THE ORACLE IS PRODUCTION'S OWN NO-SPLIT BRANCH, not a restatement of the split.
 `loop=False` writes the file once and builds one Sound, so it cannot be aliased by a
@@ -25,9 +30,15 @@ The lengths are checked separately, and the two checks are complementary rather 
 redundant: concatenation pins the CONTENT (a head carrying tail bytes fails it), the
 lengths pin WHERE the cut landed (a split at the wrong sample still concatenates).
 
-Discriminates: slice the head as `normalized[cut_sample:]`, swap the two writes, or
-drop the `if loop:` block, and this fails. Verified by mutation on 2026-09-08 —
-`head = normalized[cut_sample:]` turns both oracles red.
+Two further checks guard what the in-memory split newly risks. The write COUNT, which
+is the guarantee itself — one press must cause exactly one `sf.write`, so a future
+refactor that serves the tail from a second write reintroduces the failure and this
+says so. And FRAME ALIGNMENT, because a byte offset that is not a whole number of
+frames swaps the channels for the rest of the track while every length stays right.
+
+Discriminates: slice the head as `normalized[cut_sample:]`, cut at a non-frame
+boundary, or split with a second `sf.write`, and this fails. Verified by mutation on
+2026-09-08 — the misaligned cut and the reintroduced second write each turn it red.
 
 Byte equality needs the mixer to do no resampling, so the mixer is opened AT the rate
 the corpus is in, derived from the files rather than pinned. pygame's default is
@@ -54,6 +65,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import pygame.mixer as mixer  # noqa: E402
 import soundfile as sf  # noqa: E402
 
+import audio as audio_mod  # noqa: E402
 from app_paths import project_root  # noqa: E402
 from audio import AudioPlayer  # noqa: E402
 from route_loader import resolve_audio_root  # noqa: E402
@@ -159,6 +171,48 @@ def main() -> int:
         check(
             head_raw + tail_raw == whole_raw,
             f"{name}: head+tail must reconstitute the unsplit file exactly",
+        )
+
+        # Frame alignment, asked of `split_raw_at` DIRECTLY rather than of the Sounds
+        # it feeds. `Sound(buffer=)` truncates a misaligned buffer to the frame
+        # boundary, so the constructed head always measures aligned and a check on it
+        # reads pygame's normalisation instead of our arithmetic — inert, and verified
+        # inert by mutation. The offset is what can be wrong: one byte out swaps the
+        # channels for the whole remainder.
+        freq, size, channels = mixer.get_init()
+        frame = channels * (abs(size) // 8)
+        h, t = audio_mod.split_raw_at(whole, cut)
+        check(len(h) % frame == 0, f"{name}: split_raw_at head is {len(h)} bytes, not whole {frame}-byte frames")
+        check(len(t) % frame == 0, f"{name}: split_raw_at tail is {len(t)} bytes, not whole {frame}-byte frames")
+        check(h + t == whole_raw, f"{name}: split_raw_at must partition the buffer, losing nothing")
+        check(
+            len(h) == int(cut * freq) * frame,
+            f"{name}: split_raw_at cut at byte {len(h)}, expected {int(cut * freq) * frame} for {cut}s",
+        )
+
+        # THE GUARANTEE: one press, one write. The head and the tail come out of a
+        # single decoded buffer, so the tail cannot fail on its own. A second write
+        # here would mean the tail is independent I/O again, and a failure in it would
+        # silence a head that was already playable (#142).
+        writes = []
+        real_write = audio_mod.sf.write
+
+        def counting_write(*a, **kw):
+            writes.append(a[0] if a else kw.get("file"))
+            return real_write(*a, **kw)
+
+        audio_mod.sf.write = counting_write
+        try:
+            player.play_sta(idx, len(stop["sta"]) - 1, cut_position=cut, loop=True)
+        finally:
+            audio_mod.sf.write = real_write
+        check(
+            len(writes) == 1,
+            f"{name}: one press must cause exactly ONE sf.write; got {len(writes)} — the tail is separate I/O again",
+        )
+        check(
+            player._sta_sound is not None and player._sta_tail_sound is not None,
+            f"{name}: the counted press must still arm both halves",
         )
         checked += 1
 

@@ -502,6 +502,7 @@ Every linter rule, assertion, coverage count and staleness guard gets broken onc
 **How to apply:**
 - Say you are about to, in one line, before the first edit. Name the value, why, and that it goes back. Breaking a production constant looks exactly like breaking a production constant.
 - When the mutation shows the gate cannot fail on the case that motivated it, say so where the gate lives. A check kept for what it does catch is fine; a check believed to cover more than it does is how a whole class goes unwatched.
+- **A check reading a value the PLATFORM has already normalised cannot see the arithmetic that produced it.** Assert on the pure function's own output instead. 2026-09-08: a frame-alignment check measured the head `Sound` built from a byte offset, and `pygame.Sound(buffer=)` truncates a misaligned buffer to the frame boundary, so the constructed head always measured aligned however wrong the offset was. It passed, it looked like the right check, and only the mutation showed it was reading pygame's correction rather than our number. Pointed at `split_raw_at` directly it fires. Any consumer that clamps, rounds, pads or truncates sits between your gate and its subject.
 
 ### The baseline is part of the instrument
 A before/after measurement is only as good as its "before". A stale or wrong baseline produces confident wrong numbers with no error anywhere.
@@ -657,6 +658,18 @@ A recovery, degraded or catch-up path that is quieter or less reversible than th
 - Separate the two questions for any fallback: what do I show, and what do I let this act on. A substitute answer to the first is not permission for the second.
 - Prefer partitioning the input domain (disjoint bands) over ordering the checks; ordering relies on the earlier check firing, partitioning cannot invert.
 - Frequency of fallback engagement is a *metric*, not noise — instrument it, since it counts the primary's misses.
+
+### Two artifacts that must succeed together come from ONE operation, not two in sequence
+When B is useless without A, and A is unusable until B exists, do not build A then build B. Derive both from a single operation whose success is the only thing either depends on. Sequencing them means B has its own failure modes, and every one of them costs you A as well — which is a strictly worse outcome than not attempting B at all.
+
+**Why:** the sequential version reads as fine, because each step is individually correct and the coupling only shows in the failure path nobody exercises. Examples:
+- (2026-09-08, #142) The STA melody was split into a looping head and a tail by writing a temp file, building the head's `Sound`, overwriting that file with the tail and building a second `Sound`, then starting playback. `channel.play` was last, so anything raising while making the tail silenced a head that was already decoded and playable — and silence is what "the departure melody is missing" looks like. Rewritten to write once, decode once, and slice that Sound's own buffer: head-exists now implies tail-exists by construction. It also retired a platform assumption (that `Sound()` copies at construction) that the app had no reason to be taking, since one write cannot alias itself.
+
+**How to apply:**
+- The tell is a handle captured from step 1 that is only *used* after step 2. Ask what happens to it when step 2 raises.
+- Prefer one expensive operation plus cheap in-memory derivation over two cheap operations. It is usually also faster.
+- A fallback that tolerates B's failure is the weaker answer, and the author will say so: the goal is that B cannot fail alone, not that you cope when it does. Cross-ref § "Construction-proof model beats the next repro theory".
+- Lock it on the COUNT of the underlying operation, not on the outcome. One press, one write — a test that asserts that fails the moment someone reintroduces the second one.
 
 ### A corrective adjustment must be monotone — clamp it against its own input
 A mechanism that exists to REDUCE a value (a trim, a cap, a shrink, a back-off) must be unable to increase it. Writing the floor as `max(floor, value - correction)` alone does exactly that: where the natural value already sits below the floor, the `max` RAISES it, and the mechanism does the opposite of its name on precisely the inputs it was least needed for. Clamp with the floor, then re-clamp against the original — `min(value, max(value - correction, floor))` — so the result can only ever be smaller.

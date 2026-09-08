@@ -16,8 +16,8 @@ from constants import TARGET_LOUDNESS, AUDIO_FADE_MS
 _temp_dir = tempfile.mkdtemp(prefix="pa_simulator_audio_")
 # Two double-buffered temp files for PA (mixer.music) + a third for STA
 # (mixer.Sound on a dedicated channel). PA double-buffers to dodge file
-# locks; STA loads fully into memory at Sound() construction so a single
-# file is enough — the next write overwrites freely.
+# locks; STA writes its one path ONCE per press and slices the decoded
+# buffer in memory, so it never overwrites a file it has already read.
 _temp_file_paths = [
     os.path.join(_temp_dir, "temp_audio_1.mp3"),
     os.path.join(_temp_dir, "temp_audio_2.mp3"),
@@ -54,6 +54,29 @@ def _cleanup_temp_dir():
 
 # Register cleanup on exit
 atexit.register(_cleanup_temp_dir)
+
+
+def split_raw_at(sound: "mixer.Sound", seconds: float) -> "tuple[bytes, bytes]":
+    """Split a Sound's already-decoded buffer at ``seconds``, on a frame boundary.
+
+    Both halves come out of the ONE buffer the Sound is already holding, so the
+    tail cannot fail for any reason the head did not already fail for. That is
+    what makes the head/tail pair atomic — see `_load_and_play_sta`'s CONTRACT.
+
+    Offsets are computed in the MIXER's output format, which is what `get_raw()`
+    returns, NOT the source file's sample rate. SDL resamples on load, so using
+    the file's rate here would put the cut in the wrong place on any corpus whose
+    rate differs from the mixer's (this one is 48 kHz against pygame's 44100
+    default). Multiplying a whole frame count by the frame size keeps the offset
+    frame-aligned; an unaligned cut would swap the channels for the rest of the
+    track. Both halves are held to at least one frame, so neither is ever empty.
+    """
+    freq, size, channels = mixer.get_init()
+    frame = channels * (abs(size) // 8)
+    raw = sound.get_raw()
+    cut = int(seconds * freq) * frame
+    cut = max(frame, min(cut, len(raw) - frame))
+    return raw[:cut], raw[cut:]
 
 
 class AudioPlayer:
@@ -241,22 +264,20 @@ class AudioPlayer:
         the keystroke and the announcement, and the cut is the conductor's, so it
         has to land when it is pressed.
 
-        A single temp path serves both writes: Sound() loads the whole file into
-        memory at construction, so the head's file is free the moment its Sound
-        exists (the same property the double-buffered PA path exists to work
-        around, and does not hold there).
-
-        # CONTRACT: the head must never carry the tail's bytes, and `channel.play`
-        # must not be reachable only through the tail's construction.
-        # Measured 2026-09-08 on pygame 2.6.1 / SDL 2.28.4, not assumed: Sound() does
-        # copy at construction AND does not hold the file open, so the overwrite below
-        # cannot reach back into the head. Locked by T3 `_tests/t3_invariant/
-        # test_playback.py`, which asserts head+tail reconstitute the unsplit branch
-        # byte-exactly (#141). Re-measure rather than inherit this if pygame moves.
-        # The ordering is the live hazard (#142): `play` is the LAST statement in this
-        # try, so anything raising while building the tail silences a head that was
-        # already decoded and playable. Do not add work between the head's Sound and
-        # the play call.
+        # CONTRACT: the head and the tail are ONE operation, not two that happen to
+        # run in sequence. Decode the file ONCE, then slice the decoded buffer.
+        # The whole file is written to the temp path and loaded once; `split_raw_at`
+        # then cuts that Sound's own buffer in memory. So if the head exists the tail
+        # exists, by construction — there is no second write and no second decode that
+        # could fail on its own. That matters because `channel.play` is the last
+        # statement in this try: under a build-then-build-then-play shape, anything
+        # raising while making the tail silenced a head that was already playable, and
+        # silence is what "the departure melody is missing" looks like (#142).
+        # Do NOT reintroduce a second `sf.write` to serve the tail. The earlier shape
+        # also rested on `Sound()` copying at construction, which was measured true on
+        # pygame 2.6.1 / SDL 2.28.4 (#141) but was a platform assumption the app had no
+        # reason to take. One write cannot alias itself.
+        # Locked by T3 `_tests/t3_invariant/test_playback.py`.
         """
         if not os.path.exists(track_path):
             print(f"STA file not found: {track_path}")
@@ -282,14 +303,15 @@ class AudioPlayer:
                 cut_sample, loop = 0, False
 
             write_path = _temp_file_paths[_STA_TEMP_INDEX]
-            head = normalized[:cut_sample] if loop else normalized
-            sf.write(write_path, head, rate)
-            self._sta_sound = mixer.Sound(write_path)
+            sf.write(write_path, normalized, rate)
+            whole = mixer.Sound(write_path)
 
             if loop:
-                sf.write(write_path, normalized[cut_sample:], rate)
-                self._sta_tail_sound = mixer.Sound(write_path)
+                head_raw, tail_raw = split_raw_at(whole, cut_position)
+                self._sta_sound = mixer.Sound(buffer=head_raw)
+                self._sta_tail_sound = mixer.Sound(buffer=tail_raw)
             else:
+                self._sta_sound = whole
                 self._sta_tail_sound = None
 
             # Unpause first in case the channel was previously paused via the
