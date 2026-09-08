@@ -63,7 +63,7 @@ One row per module, because one module is one feature (§ "Module scope"). A reg
 | `test_lower_lcd.py` | T1 | 8-station window + FULL-slot lock (pointer-always-visible) · 5-station content incl. passing stations · band-fill slot-enter trigger |
 | `test_window.py` | T1 | zoom pick / ceiling / drag-snap · the single window→LCD transform |
 | `test_bell.py` | T1 | the departure-bell box: state derived from the audio · cap hit-test incl. the dead band and the window→canvas divide · its window's own whole-multiple zoom + drag snap + placement beside the PA window · a remote tap resolving through the same geometry · ON-latches / OFF-momentary press asymmetry |
-| `test_playback.py` | T1 | one Page Up press fires once · STA loop/cut dispatch |
+| `test_playback.py` | T1 + T3 | one Page Up press fires once · STA loop/cut dispatch (T1); the head/tail split over a real corpus file — head+tail reconstitute the unsplit branch byte-exactly, so a `Sound()` that stopped copying at construction cannot serve the tail when the head was asked for, #141 (T3) |
 | `test_input_dispatch.py` | T1 | one frame of `_handle_input_main`: the PA branch's audio gate (a deferred `pending_next_pa` survives and fires once free) · both AutoDriver signals on the consume side — the re-entry advance's `at_station` re-check, the at-station drain's ordering ahead of the press · the `if/elif` masking order · which stream End pauses |
 | `test_startup.py` | T1 | language resolution · audio-root resolution · the start-station grid |
 | `test_stream.py` | T1 + T3 | who may bind + where a tap maps + which view owns a tap when a second one is docked (T1); frames keeping up + taps reaching the event queue (T3) |

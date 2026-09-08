@@ -245,6 +245,18 @@ class AudioPlayer:
         memory at construction, so the head's file is free the moment its Sound
         exists (the same property the double-buffered PA path exists to work
         around, and does not hold there).
+
+        # CONTRACT: the head must never carry the tail's bytes, and `channel.play`
+        # must not be reachable only through the tail's construction.
+        # Measured 2026-09-08 on pygame 2.6.1 / SDL 2.28.4, not assumed: Sound() does
+        # copy at construction AND does not hold the file open, so the overwrite below
+        # cannot reach back into the head. Locked by T3 `_tests/t3_invariant/
+        # test_playback.py`, which asserts head+tail reconstitute the unsplit branch
+        # byte-exactly (#141). Re-measure rather than inherit this if pygame moves.
+        # The ordering is the live hazard (#142): `play` is the LAST statement in this
+        # try, so anything raising while building the tail silences a head that was
+        # already decoded and playable. Do not add work between the head's Sound and
+        # the play call.
         """
         if not os.path.exists(track_path):
             print(f"STA file not found: {track_path}")

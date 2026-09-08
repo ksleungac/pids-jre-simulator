@@ -138,6 +138,7 @@ Before claiming "X is a bug" or "X works like Y", read the call sites and trace 
 - A mitigation whose rationale lives in another domain must be checked against that domain's rules before proposing it. (2026-07-27: proposed stripping ID3 tags from 78 shipped mp3s on a legal rationale, never checked the legal rule, and the proposal inverted its own goal.)
 - A subagent's factual claim is still a claim you're relaying. Verify it against primary source; delegating the work doesn't transfer the verification burden. (2026-06-27)
 - Don't instrument to establish a fact your own edits already determine. A fact about the artifact is measured; a fact about your own actions is remembered. Where memory has genuinely gone, say so and then check. (2026-08-30)
+- **Two reports about one subject are not one reporter.** A shared line, symptom or timeframe is not identity, and a track record borrowed from the wrong person changes what the evidence means. 2026-09-08: an IM report about a missing melody was attributed to the GitHub reporter whose other tickets happened to touch that line, and a whole turn then reasoned from their credibility and their open OCR ticket. The author's correction was one sentence. Ask who before reasoning from who. (2026-09-08)
 
 ### Source order when several sources describe one artifact
 The author's statement first, then the repo's own code, then a reference photograph. The photograph is last and never outranks a human word.
@@ -628,6 +629,7 @@ When a tool, test, harness, baker or proof needs to know what production does, i
 - A tool that knows which cases exist, through a declared table or a restated branch condition, is the smell. Drive the real thing and record what it asked for.
 - If coverage comes from driving, the drive must be exhaustive over the state space, and a mechanical gate must fail on a gap rather than trusting it.
 - Adopting the production path is all-or-nothing. Partial adoption is worse than none, because the tool then claims the contract in its docstring while one input still differs. List every argument the production call site passes and take each from the same source.
+- **The cheapest independent oracle is usually production's own DEGENERATE branch.** A function that splits, derives or caches almost always has a path that does none of it, and that path is a reference no restatement can match. `_load_and_play_sta`'s `loop=False` writes its temp file once, so nothing can overwrite it and its buffer is the unsplit truth; `head + tail == whole` then tests the split byte-exactly while re-deriving neither the loudness gain nor the cut sample. Look for that branch before writing a reference implementation. (2026-09-08, #141.)
 
 ### A simplification must carry its constraints forward
 When a design collapses to something simpler, re-derive which parts of the original were load-bearing. A constraint that was correct in the complex design is still correct in the simple one — dropping it alongside the scaffolding it lived in is silent, and only surfaces as a user-visible defect.
