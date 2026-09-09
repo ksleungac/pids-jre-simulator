@@ -37,6 +37,12 @@
       "expected": "PASSING"
     },
     {
+      "stem": "reporter_slip_lowspeed",
+      "type": "badge",
+      "expected": "MOVING",
+      "note": "The only badge cell here that was never an anchor: a reporter's capture, so its pixels come from another machine. The six above are byte-identical to the anchors they match (diff 0.00, principles.md 'A fixture is not an observation'); this one scores 11.5, which is what a real read looks like."
+    },
+    {
       "stem": "limit_30",
       "type": "speed_limit",
       "expected": 30

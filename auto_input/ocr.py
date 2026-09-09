@@ -64,11 +64,13 @@ BADGE_DIFF_REJECT = 50.0
 
 # Second-chance threshold, on the SHAPE-ONLY metric below. `1 - pearson r`, x100, so a
 # level-shifted real badge stays near 0 while structurally unrelated pixels sit near 100.
-# 50 is the midpoint of a wide empty band, not a fitted value: measured over the six
-# anchors under 34 global transforms (offset to +120, gain to x2.5, gamma to 0.25, full
-# desaturation, and combinations) the worst real badge scores 26.5, while black / white /
-# uniform / noise / gradient cells all score 97.1-100.2. Re-derive it against REAL shifted
-# cells when any exist — see #143. Deliberately NOT fitted to the anchors, because the
+# 50 sits inside a wide empty band, not a fitted value: measured over 74 rungs across 10
+# transform axes the worst real badge scores 39.8 and the best garbage 96.4, so the band is
+# 39.8-96.4. 50 is kept rather than moved to that band's midpoint (68) because a fallback
+# should err strict — `principles.md` § "A fallback must be stricter than the path it
+# replaces" — and 39.8 is the worst case over deliberately absurd rungs (lift +220, gain
+# x6), far past anything a display can do. Re-derive it against REAL shifted cells when any
+# exist — see #143. Deliberately NOT fitted to the anchors, because six of the seven
 # committed badge fixtures are byte-identical to those anchors (critical_lessons.md §10),
 # so anything tuned tightly against them is tuned against itself.
 BADGE_NCC_REJECT = 50.0
@@ -91,6 +93,26 @@ DARK_THRESHOLD = 70
 # posted limit. Clamping keeps those reading empty.
 OTSU_CLAMP_LO = 55
 OTSU_CLAMP_HI = 100
+# These are ABSOLUTE levels and that is a known weakness, deliberately left in place.
+#
+# On 15 of the 23 committed cells the true Otsu already sits ABOVE 100, so the clamp is
+# binding on most normal reads and the "adaptive" threshold is in practice pinned at its
+# ceiling; under a lifted capture it pins there from about +30 on. That is the same species
+# as the badge's absolute-RGB comparison, and #89's silent digit DROPS under brightening
+# (`3417 -> 34`) are its consequence.
+#
+# A relative clamp (fractions 0.30/0.70 of the cell's own range) was built and REVERTED on
+# 2026-09-09. It looked strictly better on every proxy available — identical reads on all 23
+# committed cells, survival to a +100 lift where this one starts losing cells at +60, and it
+# refuses a blocky-scenery cell this one hallucinates `speed=30` out of. Replayed over the
+# 6838-frame live corpus it was a net REGRESSION: 341 of 1962 1440p frames lost their speed
+# decimal (`9 -> None`), plus wrong distances (`3243 -> 3253`, `26 -> 46`) and dropped reads.
+# `principles.md` § "Validate against the outcome, not a proxy" — the fixtures and the
+# synthetic ramp were the proxy, the corpus is the outcome, and they disagreed.
+#
+# The fix this wants is the ORDERING the badge classifier uses: leave this pass first and
+# unchanged, and reach a relative threshold only on a cell it read nothing from, so
+# non-degradation is structural rather than measured. Tracked in #89.
 # Below this dynamic range the band is effectively uniform (no text, or a washed-out frame)
 # and Otsu's split is meaningless — fall back to the fixed threshold.
 OTSU_MIN_CONTRAST = 60
@@ -284,24 +306,43 @@ def load_badge_anchors(assets_dir: Path | None = None) -> dict[str, list[np.ndar
     return anchors
 
 
+_LUMA = np.array([0.2126, 0.7152, 0.0722])
+
+
 def _badge_ncc_distance(cell: np.ndarray, anchor: np.ndarray) -> float:
-    """`1 - pearson r`, x100. Zero when the two agree up to any `v -> a*v + b`.
+    """`1 - pearson r`, x100, over LUMINANCE. Zero when the two agree up to any `v -> a*v + b`.
 
     Level-blind by construction, which is the point: it is the SHAPE of the cell that has
     to match, so a capture whose levels are lifted still matches, while pixels that are
     merely bright or dark in the right range do not. A flat cell has no shape at all and
     returns the maximum rather than dividing by ~0.
+
+    Colour is DISCARDED rather than correlated, and that is a deliberate widening. Ravelling
+    R, G and B into one vector cancels `a*v + b` only when `a` is the same on all three, so a
+    per-channel cast — which is what an HDR tonemap and a ReShade preset both apply on top of
+    their curve — does not cancel, and a heavy cool cast turned green MOVING/STOPPED cells
+    into blue ones that correlated better with PASSING (2 of 6 correct). Discarding colour is
+    affordable because the discrimination does not live there: fully desaturated anchors
+    still self-classify on the RAW pass, so the badge TEXT carries it and the fill only helps.
+
+    Measured over 74 rungs across 10 axes (lift to +220, gain to x6, crush to x0.04, gamma to
+    0.08, full desaturation, warm/cool/green casts, HDR paper-white to 6400 nits, ReShade to
+    6x strong): 74/74 correct, worst real 39.8, best garbage 96.4. The per-channel forms
+    tried first were WORSE — a channel that saturates flat yields no correlation at all, so
+    they scored 100 on real badges and left no gap above garbage.
     """
-    a = cell.astype(float).ravel() - float(cell.mean())
-    b = anchor.astype(float).ravel() - float(anchor.mean())
+    a = (cell.astype(float) @ _LUMA).ravel()
+    b = (anchor.astype(float) @ _LUMA).ravel()
+    a = a - a.mean()
+    b = b - b.mean()
     na, nb = float(np.linalg.norm(a)), float(np.linalg.norm(b))
     if na < 1e-6 or nb < 1e-6:
         return 100.0
     return float((1.0 - (a @ b) / (na * nb)) * 100.0)
 
 
-def classify_badge_state(cell: np.ndarray, anchors: dict[str, list[np.ndarray]]) -> tuple[str | None, float, str | None]:
-    """Match the cell against each anchor; return (best_state, mean_abs_diff, via).
+def classify_badge_state(cell: np.ndarray, anchors: dict[str, list[np.ndarray]]) -> tuple[str | None, float, str | None, float]:
+    """Match the cell against each anchor; return (best_state, mean_abs_diff, via, level).
 
     # CONTRACT: the RAW pass must stay first and unchanged. Any frame that classifies
     # today classifies identically, because the shape-only pass is only reached once raw
@@ -323,9 +364,19 @@ def classify_badge_state(cell: np.ndarray, anchors: dict[str, list[np.ndarray]])
     `diff` is always the RAW mean-abs-diff, including when the second pass supplied the
     state. It stays comparable across drives and across this change, which is what makes
     an old log's number still mean something.
+
+    `level` is the cell's mean minus its nearest anchor's, i.e. how far this capture's
+    levels sit from the ones the anchors were cut at — the "+90" figure #137's analysis had
+    to be inferred from a diff median, over weeks, because nothing published it. It is
+    computed from the RAW pass's winner and so exists on EVERY frame, including the ones
+    both passes refuse, which is when it is most wanted. Diagnostic only: nothing branches
+    on it, and it is published per sample so a future report arrives with its own answer
+    attached rather than needing the reporter's pixels ([#89]).
     """
     best_state: str | None = None
     best_diff = float("inf")
+    best_level = 0.0
+    cell_mean = float(cell.mean())
     for state, anchor_list in anchors.items():
         for anchor in anchor_list:
             if anchor.shape != cell.shape:
@@ -334,8 +385,9 @@ def classify_badge_state(cell: np.ndarray, anchors: dict[str, list[np.ndarray]])
             if diff < best_diff:
                 best_diff = diff
                 best_state = state
+                best_level = cell_mean - float(anchor.mean())
     if best_diff <= BADGE_DIFF_REJECT:
-        return best_state, best_diff, "raw"
+        return best_state, best_diff, "raw", best_level
 
     ncc_state: str | None = None
     ncc_best = float("inf")
@@ -348,8 +400,8 @@ def classify_badge_state(cell: np.ndarray, anchors: dict[str, list[np.ndarray]])
                 ncc_best = d
                 ncc_state = state
     if ncc_best <= BADGE_NCC_REJECT:
-        return ncc_state, best_diff, "ncc"
-    return None, best_diff, None
+        return ncc_state, best_diff, "ncc", best_level
+    return None, best_diff, None, best_level
 
 
 def load_value_cell(screenshot_path: Path) -> np.ndarray:
@@ -1175,7 +1227,7 @@ def main() -> int:
     all_ok = True
     for state, anchor_list in anchors.items():
         for i, anchor in enumerate(anchor_list):
-            best_state, diff, via = classify_badge_state(anchor, anchors)
+            best_state, diff, via, _level = classify_badge_state(anchor, anchors)
             ok = best_state == state
             all_ok &= ok
             tag = f"{state}[{i}]"

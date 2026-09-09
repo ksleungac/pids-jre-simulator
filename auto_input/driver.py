@@ -1026,7 +1026,11 @@ class AutoDriver:
                     s_val, s_score = r.speed, r.speed_score
                     s_tenths, s_decimal = r.speed_tenths, r.speed_decimal
                     d_val, d_score = r.distance, r.distance_score
-                    offset_raw, offset_val, offset_score = r.raw_stopping_offset_cm, r.stopping_offset_cm, r.stopping_offset_score
+                    offset_raw, offset_val, offset_score = (
+                        r.raw_stopping_offset_cm,
+                        r.stopping_offset_cm,
+                        r.stopping_offset_score,
+                    )
                     sl_val, sl_score = r.speed_limit, r.speed_limit_score
                     gated_fields, dist_rejected = r.gated_fields, r.distance_rejected
                     sl_cell = r.cells["speed_limit"]
@@ -1091,6 +1095,11 @@ class AutoDriver:
                                 # samples read "ncc" is one where the raw pass is missing
                                 # them, which is the #137 level-shift signature (#143).
                                 "badge_via": b_via,
+                                # How far this capture's levels sit from the anchors', in
+                                # mean grey. #137's ~+90 had to be inferred from a diff
+                                # median across ten attached logs; with this field a report
+                                # arrives carrying its own answer (#89).
+                                "badge_level": r.badge_level,
                                 "curr_stop": self.sim.state.curr_stop,
                                 "cnt_pa": self.sim.state.cnt_pa,
                                 "cnt_pa_at_station": self.sim.state.cnt_pa_at_station,

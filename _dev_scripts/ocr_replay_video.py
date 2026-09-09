@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import csv
 import sys
+from collections import Counter
 from pathlib import Path
 
 import av
@@ -102,6 +103,7 @@ def main() -> int:
     guard = GuardState()
     prev_badge = None
     rows = []
+    frame_mean: list[float] = []
     n = 0
     if args.dump_suspect:
         args.dump_suspect.mkdir(parents=True, exist_ok=True)
@@ -128,6 +130,12 @@ def main() -> int:
             guard_distance=guard_distance,
         )
         prev_badge = r.badge if r.badge is not None else prev_badge
+        # Scene brightness, to tell a CONSTANT level shift (a display or capture transform)
+        # apart from one that tracks the picture. On #137's recording it separated a third
+        # thing neither of those: a NEGATIVE correlation, because the ESC dim is the darkest
+        # condition and also the highest-diff one. A dark fifth scoring worse than a bright
+        # fifth means a discrete UI state, not a transform — go and look at those frames.
+        frame_mean.append(float(rgb.mean()))
         rows.append((ts, r))
         n += 1
 
@@ -147,6 +155,24 @@ def main() -> int:
     print(f"decoded    : {n} frames (every {args.every})")
     print(f"speed reads: {len(sp)}/{n}   range {min(sp) if sp else '-'}-{max(sp) if sp else '-'}")
     print(f"badge      : {sum(1 for _, r in rows if r.badge is None)} unreadable / {n}")
+    # badge_diff is the whole story for #137 / #143 — a capture-side level shift lifts it
+    # while every digit reader on the same frame is unaffected. A drive whose median sits
+    # near 10 is healthy; near 50 is the reject line; above it the badge is gone.
+    b_diffs = sorted(r.badge_diff for _, r in rows)
+    if b_diffs:
+        mid, hi = b_diffs[len(b_diffs) // 2], b_diffs[int(len(b_diffs) * 0.95)]
+        via = Counter(r.badge_via for _, r in rows)
+        print(f"badge_diff : median {mid:.1f}  p95 {hi:.1f}  max {b_diffs[-1]:.1f}")
+        print(f"badge_via  : " + "  ".join(f"{k}={v}" for k, v in sorted(via.items(), key=lambda kv: str(kv[0]))))
+        if len(frame_mean) == len(rows) and len(rows) > 2:
+            fm = np.array(frame_mean)
+            bd = np.array([r.badge_diff for _, r in rows])
+            rho = float(np.corrcoef(fm, bd)[0, 1])
+            lo, hi_q = np.quantile(fm, 0.2), np.quantile(fm, 0.8)
+            print(
+                f"scene      : mean {fm.mean():.1f}  badge_diff on the darkest fifth "
+                f"{bd[fm <= lo].mean():.1f} vs the brightest fifth {bd[fm >= hi_q].mean():.1f}  (r={rho:+.2f})"
+            )
     print(f"guards     : score_gate={sum(1 for _, r in rows if r.gated_fields)}  dist_reject={sum(1 for _, r in rows if r.distance_rejected)}")
     print(f"\nIMPLAUSIBLE speed steps (>{MAX_PLAUSIBLE_ACCEL_KMH_S} km/h/s): {len(suspects)}")
     for ts, a, b, sc, r in suspects[:25]:
@@ -170,6 +196,8 @@ def main() -> int:
                 [
                     "ts",
                     "badge",
+                    "badge_diff",
+                    "badge_via",
                     "speed",
                     "speed_decimal",
                     "speed_score",
@@ -186,6 +214,8 @@ def main() -> int:
                     [
                         f"{ts:.3f}",
                         r.badge,
+                        f"{r.badge_diff:.2f}",
+                        r.badge_via,
                         r.speed,
                         r.speed_decimal,
                         f"{r.speed_score:.3f}",

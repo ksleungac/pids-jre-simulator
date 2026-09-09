@@ -77,6 +77,8 @@ One row per module, because one module is one feature (§ "Module scope"). A reg
 
 `test_ocr_reads.py` was migrated from the former `_dev_scripts/validate_ocr.py`, which read gitignored 186 MB screenshots and never ran at build pre-flight. Its ground truth is committed real pixels plus hand labels, so it cannot be born wrong agreeing with the code; `--deep` re-sweeps the local calibration set when present, and `_dev_scripts/extract_ocr_assets.py` regenerates it.
 
+**The OCR read path has a second gate that is not in this suite, and should be run for any change to it:** `uv run python _dev_scripts/ocr_observe.py --replay`. It re-reads the live-capture corpus under `_experiments/live_captures/` — thousands of real HUD frames across 1080p / 1200p / 1440p / 2160p, each with production's own read recorded beside it — and diffs. It is out of the suite because the corpus is gitignored and machine-local, so `run_all.py` cannot depend on it; it is nonetheless the only gate here with real breadth, since the committed fixtures are 23 cells and six of those are byte-identical to the anchors they are matched against. Treat its output as a regression diff rather than a pass/fail: a change that fixes a misread appears as a difference too.
+
 ## Cross-cutting invariants
 
 These are not local to any module, so each module asserts its own FACET and says so at the assertion.

@@ -22,6 +22,15 @@ Run after re-capturing reference screenshots (e.g. game HUD layout changed):
     uv run python _dev_scripts/extract_ocr_assets.py
 
 Then commit the diff under `ocr_templates/`. Domain reference: auto_input/README.md.
+
+**It is NOT reproducible across the author's two machines, so check `git status` after running
+it.** The source dirs are gitignored and were captured per-machine, so a run on the other PC
+rewrote all ten dark digit glyphs at different sizes (`1` at 7x30 against 9x30, `6` and `8` a
+pixel taller) purely from a different `_ocr_calibration/`. Nothing errors and the templates
+look fine. That matters because the usual reason to run this is the LAST step — regenerating
+`_tests/fixtures/`, which needs no template change at all — so the shipped read assets can be
+swapped as a side effect of a fixture refresh. Revert `ocr_templates/` unless changing the
+templates was the point. (2026-09-09.)
 """
 
 from __future__ import annotations
