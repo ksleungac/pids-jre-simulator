@@ -126,6 +126,12 @@ CELL_INK           = chrome.INK   # the number ink (bright)
 FAULT_GLYPH        = "?"
 FAULT_SELF_INK     = (226, 152, 42)    # amber — THIS row's own read failed, or scored under the bar
 FAULT_CROSS_INK    = chrome.DIM        # dim — stood down because the BADGE failed; not this row's fault
+                                       # DIM rather than a second bright colour, which is a rendering
+                                       # fact as much as a semantic one: red against amber at this px
+                                       # on near-black does not separate — mocked side by side the two
+                                       # cases read as the same band. Dim against one red badge row
+                                       # reads as "one fault, three consequences", which is the thing
+                                       # the user needs to be able to tell you.
 BADGE_REFUSED_INK  = (208, 64, 60)     # red — the badge classified nothing. Arrival and at-station
                                        # both require it, so this is the one that silences a drive.
 BADGE_RESCUED_MARK = "*"               # the shape-only pass answered: levels are shifted, we recovered
@@ -133,10 +139,6 @@ BADGE_RESCUED_MARK = "*"               # the shape-only pass answered: levels ar
 # every healthy frame in the calibration corpus sits within +/-2 and the raw pass still reads
 # correctly to about +50. A DISPLAY threshold, so it lives here rather than in the driver.
 BADGE_LEVEL_SHOW   = 25.0
-# Cross-gated is DIM rather than a second bright colour, which is a rendering fact as much as a
-# semantic one: red against amber at this px on near-black does not separate — mocked side by side
-# the two cases read as the same band. Dim against one red badge row reads as "one fault, three
-# consequences", which is the thing the user needs to be able to tell you.
 CELL_UNIT_INK      = (130, 144, 156)   # unit (km/h, m) ink — DIMMER than the number, not so bright
 READOUT_NUM_SS_NATIVE = 18          # readout number load px — AA-off native (supersample retired)
 READOUT_UNIT_K      = 1             # unit stays crisp pixel (draw_lowres) at its own native grid

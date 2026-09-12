@@ -620,6 +620,85 @@ def commit_1a(next_pa):
     return ad, first, second
 
 
+# The LATCH itself, separately from what a commit does. `_maybe_reentry` commits
+# only when two consecutive cycles resolve to the SAME target, so the thing under
+# test is a streak across probes rather than any single read. Migrated from
+# `_dev_scripts/verify_reentry_consensus.py` 2026-09-12 — it had run nowhere since
+# it was written, so the eight cases below were coverage the suite did not have.
+
+
+def latch_probe(ad, kind):
+    """Run one cycle resolving to `kind`; return the target committed THIS cycle.
+
+    Each probe rebuilds the per-cycle inputs and leaves `reentry_latch` alone —
+    the latch is the only state that must survive across probes, so pinning the
+    rest is what isolates it.
+    """
+    det = ad._detector
+    ad.sim.pending_next_pa = False
+    ad.sim.pending_silent_advance = None
+    ad.sim.state.at_station = True
+    det.departure_observed = False
+    det.arrival_observed = False
+
+    det.prev_badge = "MOVING"
+    if kind == "1A":  # game CRUISING: MOVING, speed past the departure floor, dist beyond lead
+        ad._maybe_reentry(speed=60, distance=2000)
+    elif kind == "1B":  # game ARRIVING: MOVING, dist inside the lead
+        ad._maybe_reentry(speed=20, distance=300)
+    elif kind == "parked":  # game STOPPED at the platform — resolves to nothing
+        det.prev_badge = "STOPPED"
+        ad._maybe_reentry(speed=0, distance=None)
+    elif kind == "live_fire":  # a normal fire landed this cycle; re-entry stands down
+        ad.sim.pending_next_pa = True
+        ad._maybe_reentry(speed=60, distance=2000)
+    elif kind == "app_moving":  # app is already at 1A/1B, so there is nothing to re-enter
+        ad.sim.state.at_station = False
+        ad._maybe_reentry(speed=60, distance=2000)
+    else:
+        raise ValueError(kind)
+    return ad.sim.pending_silent_advance
+
+
+# (name, probe sequence, target committed on the FINAL probe, total commits)
+LATCH_CASES = [
+    ("same target commits on the 2nd", ["1A", "1A"], "1A", 1),
+    ("one probe is not a consensus", ["1A"], None, 0),
+    ("a changed target re-latches rather than committing early", ["1A", "1B"], None, 0),
+    ("the re-latched target commits on its own 2nd", ["1A", "1B", "1B"], "1B", 1),
+    ("a no-op cycle breaks the streak", ["1A", "parked", "1A"], None, 0),
+    ("and the streak restarts after it", ["1A", "parked", "1A", "1A"], "1A", 1),
+    ("a live fire stands re-entry down", ["1A", "live_fire", "1A"], None, 0),
+    ("an app already moving never re-enters", ["app_moving", "app_moving"], None, 0),
+    ("two arrivals commit 1B", ["1B", "1B"], "1B", 1),
+]
+
+
+def check_reentry_latch() -> None:
+    for name, seq, want_final, want_commits in LATCH_CASES:
+        # next_pa=2 so 1B is resolvable at all; pa=1 collapses 1A and 1B.
+        ad = make_driver(next_pa=2)
+        commits, final = [], None
+        for kind in seq:
+            final = latch_probe(ad, kind)
+            if final is not None:
+                commits.append(final)
+        check(final == want_final, f"latch '{name}': final commit {final!r}, expected {want_final!r} (seq {seq})")
+        check(len(commits) == want_commits, f"latch '{name}': {len(commits)} commits {commits}, expected {want_commits} (seq {seq})")
+        # Two one-way facts, not an equivalence. A commit CONSUMES the latch, so
+        # it must be clear afterwards. A sequence that resolved a target and did
+        # not commit must still be holding that target, which is what makes the
+        # next matching probe a consensus. Nothing is claimed where the last
+        # probe resolved nothing — `app_moving` returns before the latch is
+        # touched, and asserting the converse there is what a first draft of this
+        # got wrong.
+        latch = ad._detector.reentry_latch
+        if commits:
+            check(latch is None, f"latch '{name}': a commit must consume the latch, found {latch!r}")
+        elif seq[-1] in ("1A", "1B"):
+            check(latch == seq[-1], f"latch '{name}': a waiting latch must hold the last resolved target {seq[-1]!r}, found {latch!r}")
+
+
 def check_reentry_commit() -> None:
     # pa>=2 → silent advance signal, no audible press.
     ad, first, second = commit_1a(next_pa=2)
@@ -707,8 +786,18 @@ FAULT_CASES = [
     ((None, None, None, 0.55, None, 0.60, None, 0.70, ("speed", "distance", "speed_limit"), False),
      {"speed": "cross", "distance": "cross", "speed_limit": "cross", "badge": "refused"}),
     # Distance refused by the plausibility guard while the badge is fine → SELF, not cross.
-    (("MOVING", "raw", 48, 0.93, None, 0.95, 100, 0.92, (), True),
+    # The distance is a NUMBER here, and that is the whole case. `guard_distance` answers a
+    # spike with `(last_valid, True)` and cannot reject before it holds an anchor, so a
+    # rejected distance is NEVER None. The first cut of this row passed `None`, a state
+    # `read_hud` cannot emit, and `fault_states` tested `value is not None` first — so the
+    # row was green while `"self"` was unreachable in production for the whole of its life
+    # (`principles.md` § "A fixture is not an observation"). Keep a real held value here.
+    (("MOVING", "raw", 48, 0.93, 1150, 0.95, 100, 0.92, (), True),
      {"speed": None, "distance": "self", "speed_limit": None, "badge": None}),
+    # And the same rejection with the badge ALSO down: the guard's refusal is this row's own
+    # fault, so it outranks the cross mark the gate would otherwise give it.
+    ((None, None, None, 0.55, 1150, 0.95, None, 0.70, ("speed", "distance", "speed_limit"), True),
+     {"speed": "cross", "distance": "self", "speed_limit": "cross", "badge": "refused"}),
     # Accepted but under the bar → "low". The value is still shown; a wrong number that
     # renders like a right one is the dangerous case, so hiding it removes the evidence.
     (("MOVING", "raw", 58, 0.62, 1167, 0.95, 100, 0.92, (), False),
@@ -801,6 +890,7 @@ def main() -> int:
     check_inferred_state()
     check_detector_stream()
     check_reentry_resolver()
+    check_reentry_latch()
     check_reentry_commit()
     check_fire_at_station()
     check_fault_states()
@@ -814,7 +904,8 @@ def main() -> int:
         f"PASS: auto-driver (read gates {len(BADGE_GATE_CASES)} badge-reject + {len(OFFSET_CASES)} stopping-offset + "
         f"{len(DISTANCE_CASES)} distance + double-spike; {len(INFER_CASES)} inferred-state cells + MOVING==PASSING; "
         f"detector stream A-N; {len(GRID)} re-entry grid cells + PASSING/provenance/pa=1 facets + regressions + guards; "
-        f"re-entry commit pa>=2 silent / pa=1 audible; at-station reachability drain + 1B + pa=1 + parked skip; "
+        f"{len(LATCH_CASES)} consensus-latch sequences; re-entry commit pa>=2 silent / pa=1 audible; "
+        f"at-station reachability drain + 1B + pa=1 + parked skip; "
         f"{len(FAULT_CASES)} fault-state cells incl. cross-vs-self + rescued; badge anchor set complete + model-scale)"
     )
     return 0

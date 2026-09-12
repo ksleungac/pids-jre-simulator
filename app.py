@@ -16,7 +16,6 @@ from audio import AudioPlayer
 import bell_window
 from displays.base import ChangeScheduler
 from displays.train_models import get_train_model
-from displays.utils import draw_text
 import frame_stream
 import i18n
 import tims.band as status_band

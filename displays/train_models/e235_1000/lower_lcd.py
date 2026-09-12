@@ -4,9 +4,9 @@
 Contains all display modes (Japanese, English) for the E235-1000 series
 Lower LCD (route map, station markers, travel times, skip animation).
 
-Modes share `ModeCycler` with the Upper LCD, so once both modes are
-implemented for the lower, switching the upper into ENGLISH pulls the
-lower along in lockstep.
+Modes share `ModeCycler` with the Upper LCD, so switching the upper into
+ENGLISH pulls the lower along in lockstep. Both slots have their English
+renderer, so the lockstep is complete rather than pending.
 
 The full-route slot has a complete English mode: Romaji station names
 rotated 45 degrees counter-clockwise, drawn with supersampled bilinear
@@ -1714,7 +1714,6 @@ class EnglishEightStationDisplay(JapaneseEightStationDisplay):
         cos_a, sin_a = math.cos(rad), math.sin(rad)
         scale_factor = 4.0
 
-        bottom_y = self.label_top_y + self.label_box_h
         base_tx = cell_x + self.stops_w // 2 + 6
         base_ty = self.bar_y - 3  # 3px above the colored bar
 

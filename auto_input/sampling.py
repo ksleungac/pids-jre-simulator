@@ -182,15 +182,20 @@ class Reading:
     cells: dict = field(default_factory=dict)
 
 
-# The score a read must clear to be called healthy. Deliberately the SAME number the
-# badge-reject gate applies (`driver.BADGE_NONE_SCORE_GATE`), so "low" means exactly: this
-# read would have been thrown away if we had not trusted the frame. Restating it rather than
-# importing it would be two copies of one decision, so the driver passes its own constant in.
+# The three readout rows the band can mark. The badge is not one of them — it reports its own
+# two outcomes at the end of `fault_states`, because it is the cause of the others rather than
+# a peer of them.
 FAULT_FIELDS = ("speed", "distance", "speed_limit")
 
 
 def fault_states(r: "Reading", low_score: float) -> dict:
     """Per-field read outcome, for the band. Pure — no time, no history, no rendering.
+
+    `low_score` is the score a read must clear to be called healthy, and it arrives as an
+    ARGUMENT rather than a constant. It is deliberately the same number the badge-reject gate
+    applies (`driver.BADGE_NONE_SCORE_GATE`), so "low" means exactly: this read would have been
+    thrown away if we had not trusted the frame. Restating it in this module would be two copies
+    of one decision, so the driver passes its own constant in.
 
     Four outcomes, and the distinction that matters is the middle two:
 
@@ -217,12 +222,19 @@ def fault_states(r: "Reading", low_score: float) -> dict:
     gated = set(r.gated_fields)
     for f in FAULT_FIELDS:
         value, score = getattr(r, f), getattr(r, f"{f}_score")
-        if value is not None:
+        # The rejection test runs FIRST, and that ordering is the whole of `"self"`. A rejected
+        # distance is never None: `guard_distance` answers a spike with `(last_valid, True)`, and
+        # it cannot reject at all until it holds an anchor. So a `value is not None` test placed
+        # above this one takes every rejection into the healthy branch and `"self"` becomes
+        # unreachable — which is what shipped on 2026-09-12 and what the fixture below missed.
+        # The number on screen is a HELD one rather than a read, so the row says `?`: the mark
+        # means "this frame's own read was refused", which is exactly what happened.
+        if f == "distance" and r.distance_rejected:
+            out[f] = "self"
+        elif value is not None:
             out[f] = "low" if score < low_score else None
         elif f in gated:
             out[f] = "cross"
-        elif f == "distance" and r.distance_rejected:
-            out[f] = "self"
         else:
             out[f] = None
     out["badge"] = None if r.badge is not None and r.badge_via == "raw" else ("rescued" if r.badge else "refused")

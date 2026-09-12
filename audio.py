@@ -22,10 +22,12 @@ _temp_file_paths = [
     os.path.join(_temp_dir, "temp_audio_1.mp3"),
     os.path.join(_temp_dir, "temp_audio_2.mp3"),
     # WAV, not MP3, and only for STA. The last track LOOPS at `sta_cut`, and an mp3
-    # encode pads the slice out to a whole frame — measured ~40ms on every write,
-    # which under a loop is 40ms of silence injected into the seam on every pass.
-    # WAV is sample-exact, and skipping the encode makes the write cheaper too. The
-    # file is transient: `mixer.Sound()` reads it fully into memory at construction.
+    # encode pads out to a whole frame — measured ~40ms on every write, which under a
+    # loop is 40ms of silence injected into the seam on every pass. WAV is sample-exact,
+    # and skipping the encode makes the write cheaper too. Since #142 the file carries
+    # the WHOLE track and the cut is made in memory on the decoded buffer, so no encode
+    # can land at the seam by construction — but the format still has to be sample-exact,
+    # because a padded decode would move the cut itself.
     os.path.join(_temp_dir, "temp_sta.wav"),
 ]
 _STA_TEMP_INDEX = 2
@@ -33,7 +35,6 @@ _STA_TEMP_INDEX = 2
 
 def _cleanup_temp_dir():
     """Clean up the temp directory on exit."""
-    global _temp_file_paths, _temp_dir
     try:
         for path in _temp_file_paths:
             if os.path.exists(path):
@@ -254,7 +255,8 @@ class AudioPlayer:
     def _load_and_play_sta(self, track_path: str, cut_position: float = 0, loop: bool = False) -> None:
         """STA playback path. Uses a dedicated mixer.Channel so STA can overlap PA
         (mixer.music). Sound.play() has no start-offset arg, so `sta_cut` is
-        implemented by slicing the normalized array before writing the temp file.
+        implemented by decoding the whole track ONCE and slicing that Sound's own
+        buffer — never by writing a pre-sliced file. The CONTRACT below says why.
 
         The LOOP shape (`loop=True`, the last sta track): the file splits at
         `cut_position` into a head that repeats and a tail that plays once. Both
@@ -296,11 +298,14 @@ class AudioPlayer:
             loudness = meter.integrated_loudness(data)
             normalized = pyln.normalize.loudness(data, loudness, TARGET_LOUDNESS)
 
-            cut_sample = int(cut_position * rate) if cut_position > 0 else 0
-            # A cut outside the file is no cut at all — play the whole thing once
-            # rather than looping an empty head or an entire track forever.
-            if not (0 < cut_sample < len(normalized)):
-                cut_sample, loop = 0, False
+            # A cut outside the file is no cut at all — play the whole thing once rather than
+            # looping an empty head or an entire track forever. Asked in SOURCE samples because
+            # that is the unit `normalized` is in; the cut itself is made later, in mixer frames,
+            # by `split_raw_at`. The sample index is only ever the range test — it is deliberately
+            # not carried forward, since a second copy of the cut in a second unit is how the two
+            # drift (`principles.md` § "A second implementation of a production decision").
+            if not (0 < int(cut_position * rate) < len(normalized)):
+                loop = False
 
             write_path = _temp_file_paths[_STA_TEMP_INDEX]
             sf.write(write_path, normalized, rate)

@@ -20,7 +20,7 @@ Production entry: ``run(screen) -> config | None`` (re-exported from ``home``) r
 existing display and returns a launch-config dict shaped like the launch config ``_run_drive`` consumes (action /
 work_dir / route_data / model / start_idx) when the user commits a route and 起動s, else None. ``route_data``
 is always None: reading route.json here was a second implementation of the loader's job and it dropped the
-line's system.json sheet, so ``PASimulator`` does the read (see docs/APP.md § "App entry"). main.py
+line's system.json sheet, so ``PASimulator`` does the read (see docs/APP.md § "Launch config (setup → ``main._run_drive``)"). main.py
 calls it — it is the only setup flow (the classic ``setup.py`` screen was retired 2026-07-30). Preview the screens standalone via
 ``_dev_scripts/preview_setup_tims.py``.
 """

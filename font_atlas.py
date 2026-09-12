@@ -71,8 +71,10 @@ _mode: Optional[str] = None
 _forced: Optional[str] = None
 _atlas: Optional["Atlas"] = None
 _cache: Dict[Tuple[str, int, bool, bool], object] = {}
-# id(font) -> identity, for the live Fonts lcd_font hands out. `_cache` keeps
-# every one of them alive for the process lifetime, so the ids stay valid.
+# What the bake needs to store, keyed by the `ident` tuple (face, size, bold, italic).
+# NOT by `id(font)` — that was the 2026-07-27 misattribution bug, and `LcdFont` below
+# exists because the fix is to carry identity ON the object. See conventions.md
+# § "Never key a side table on `id(obj)`".
 _record: Optional[dict] = None
 # The same, for faces NOT in ATLAS_FACES — see `unbaked_record()`. Separate so a
 # live-loaded face can never be mistaken for something to bake.
@@ -280,8 +282,11 @@ class Source:
 def at(*locations: str, prefix: str = "", suffix: str = "", split=False, replace=None, wrap: str = "", cuts=False) -> Source:
     """Every value at these data locations, e.g. `audio/*/route.json:stops[].name`.
 
-    Locations are fnmatch patterns over the keys `walk_shipped_json` produces, so
-    `data/lines.json:*.name_ja` covers every line id without naming one.
+    Locations are GLOBS over the keys `walk_shipped_json` produces, so
+    `data/lines.json:*.name_ja` covers every line id without naming one. `*` is the
+    only wildcard: `_loc_pattern` escapes `[` first, because raw fnmatch reads the
+    brackets in `rows[][]` as a character class and the location then matches nothing
+    at all, silently. Don't write a character class here expecting it to work.
 
     The options cover text a renderer DERIVES from a data value — text that exists
     in no JSON file, and would otherwise be in the atlas only because some state
@@ -512,9 +517,9 @@ def force_mode(mode: Optional[str]) -> None:
     Used by the verification pass that renders the same frames both ways and
     requires zero pixel difference.
     """
-    global _forced, _mode, _cache, _atlas
+    global _forced, _mode, _atlas
     _forced, _mode, _atlas = mode, None, None
-    _cache.clear()
+    _cache.clear()  # mutated in place, so it is not rebound and needs no `global`
 
 
 def _baked_faces_available() -> bool:

@@ -190,7 +190,6 @@ _LANGS = ("en", "zh_HK", "zh_CN")
 
 
 def run_interactive():
-    global ACTIVE_LANG
     pygame.init()
     pygame.font.init()
     i18n.init(ACTIVE_LANG)

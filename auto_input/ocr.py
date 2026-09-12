@@ -5,7 +5,7 @@ Three readers:
     - read_distance(cell, templates) -> int meters
     - read_speed(cell, templates) -> int km/h (decimal stripped at decimal-point bbox)
     - read_speed_tenths(cell, templates) -> the digit after the decimal (log/report only)
-    - classify_badge_state(cell, anchors) -> "MOVING" | "STOPPED" | "PASSING"
+    - classify_badge_state(cell, anchors) -> (state, diff, via, level)
 
 Digit OCR pipeline:
     1. Crop value cell using HUD_BBOX + cell-relative bbox from hud_layout.py
@@ -14,8 +14,12 @@ Digit OCR pipeline:
     4. Pixel-match each glyph against pre-extracted digit templates 0-9
     5. Concatenate matched chars to integer
 
-Badge classifier: pixel-diff against 6 anchor templates (Moving-EN/JA, Stopped-EN/JA,
-Passing-EN/JA); lowest diff wins. Language-agnostic.
+Badge classifier: TWO passes against the same 6 anchor templates (Moving-EN/JA, Stopped-EN/JA,
+Passing-EN/JA), language-agnostic. Pass 1 is the original absolute pixel-diff, lowest diff wins.
+Pass 2 runs only where pass 1 refused, and correlates LUMINANCE instead, so a capture whose
+levels are shifted by HDR or a post-process shader still classifies. `via` says which answered
+and `level` is the cell's mean offset from its anchor — the size of that shift.
+See auto_input/README.md § "Badge classification".
 
 Runtime assets live under `ocr_templates/` — pre-extracted small PNGs (dark digit
 glyphs ~20×30 binary, red digits and badge anchors at the model's scale). There is
@@ -57,9 +61,10 @@ BADGE_ANCHOR_FILES: dict[str, list[str]] = {
 # Reject threshold — diff > this means no anchor is a credible match. Real reads
 # sit < 15 (cross-state diffs ~6-15); black-screen / dark-cell garbage frames
 # diff 60-110; mid-animation transient spikes >70. 50 cleanly separates real
-# from garbage with margin on both sides. Gate lives in classify_badge_state:
-# rejected frames return (None, diff) so the detector treats them as OCR FAIL.
-# See auto_input/README.md § "Badge classification".
+# from garbage with margin on both sides. Failing this no longer ends the read:
+# `classify_badge_state` hands the frame to the shape-only NCC pass below, and only
+# a refusal THERE returns `(None, inf, None, 0.0)` for the detector to treat as an
+# OCR FAIL. See auto_input/README.md § "Badge classification".
 BADGE_DIFF_REJECT = 50.0
 
 # Second-chance threshold, on the SHAPE-ONLY metric below. `1 - pearson r`, x100, so a

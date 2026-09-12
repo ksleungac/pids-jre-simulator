@@ -389,7 +389,6 @@ def run(screen):
 def run_interactive():
     """Dev preview wrapper: init pygame + the own-window, run the menu loop, print the launch config it
     returns. Production goes through ``run(screen)`` (main.py owns the window + the PASimulator hand-off)."""
-    global ACTIVE_LANG
     pygame.init()
     pygame.font.init()
     i18n.init(ACTIVE_LANG)

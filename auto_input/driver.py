@@ -194,7 +194,7 @@ def badge_anchor_problems(badges_dir: Path, anchors: dict, read_profile) -> list
     # CONTRACT: every DECLARED anchor must be present AND the model's cell shape.
     # Three silent-skip layers stack here — `load_badge_anchors` skips a missing file,
     # `classify_badge_state` skips a shape-mismatched anchor, and a cell where all of
-    # them mismatch returns (None, inf). So a partial or wrong-scale set starts the
+    # them mismatch returns (None, inf, None, 0.0). So a partial or wrong-scale set starts the
     # driver cleanly, reads no badge for the whole drive, and fires no PA, with nothing
     # printed anywhere — and `any(anchors.values())` is still True throughout.
     # Measured 2026-08-19: dropping running_ja / passing_en / passing_ja is invisible to
@@ -1067,7 +1067,7 @@ class AutoDriver:
                     )
                     badge, b_diff, b_via = r.badge, r.badge_diff, r.badge_via
                     s_val, s_score = r.speed, r.speed_score
-                    s_tenths, s_decimal = r.speed_tenths, r.speed_decimal
+                    s_decimal = r.speed_decimal  # the tenths digit is only ever a means to this
                     d_val, d_score = r.distance, r.distance_score
                     offset_raw, offset_val, offset_score = (
                         r.raw_stopping_offset_cm,

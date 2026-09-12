@@ -26,7 +26,7 @@ from app import AppState, PASimulator
 from app_paths import project_root
 from route_loader import resolve_audio_root
 from displays.train_models.e235_1000 import S_HEIGHT, S_WIDTH
-from tims.widgets import _TUNEABLES_TIMS_BUTTON, draw_tims_button, press_transition
+from tims.widgets import draw_tims_button, press_transition
 
 import tims.chrome as chrome  # shared TIMS palette + button-preset warehouse (tims package)
 
