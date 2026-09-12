@@ -1,6 +1,12 @@
 # SPDX-License-Identifier: MIT
-"""Throwaway: what colour shift puts the badge classifier at the diffs #137 reports, and would a
-normalised metric survive it?
+"""What colour shift puts the badge classifier at the diffs #137 reports, and would a normalised
+metric survive it?
+
+KEEP — written 2026-09-09 as a one-off and cited since: `auto_input/README.md` § "Badge
+classification" takes its luminance-NCC figures from here, and `_tests/t1_unit/test_ocr_read.py`
+encodes its shift ladder as `BADGE_SHIFTS`. Anyone re-checking either, or adding a transform
+(HDR paper-white, a ReShade grade, a channel cast), runs this first — the sheet is what says
+whether the ladder still separates the states.
 
 #137's reporter (2560x1440, HDR display) records `badge_diff` medians of 70-102 across seven drives
 and 39.2 across two, against a documented <15 for real reads and a reject at 50. Their speed and

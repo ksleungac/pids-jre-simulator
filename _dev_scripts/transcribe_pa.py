@@ -1,20 +1,22 @@
 # SPDX-License-Identifier: MIT
-"""PoC: transcribe a PA source mp3 with Whisper to recover timestamped segments.
+"""Transcribe a PA source mp3 with Whisper to recover timestamped segments.
 
-Idea: instead of the user manually scrubbing through src.mp3 to write
-timestamps.txt, run Whisper, get text + timestamps for every utterance, then
-match utterances against the route's station names to auto-generate timestamps.
-
-This is just step 1 — get the raw transcription. Matching/cutting comes later
-once we see the output quality.
+Step 0.2 of `/pa-make`, and the reason nobody scrubs a 27-minute source by hand
+any more: the transcript's segment timestamps are what the station-name match
+runs against to propose `timestamps.txt`.
 
 Usage:
-    uv run _dev_scripts/transcribe_pa.py audio_src/sobu/1217F/src_from12.mp3
+    uv run _dev_scripts/transcribe_pa.py audio_src/sobu/1217F/src_from12.mp3 \
+        --model large-v3 --device cuda
 
 Notes:
-- First run downloads the model (~1.5 GB for medium). Cached after that.
-- CPU is fine for PoC; ~1–3 minutes for a 27-min source on a typical laptop.
-- int8 quantization keeps RAM usage modest with negligible accuracy loss.
+- `large-v3` on `cuda` is the production setting and the default. `medium`
+  misses bilingual content and produces more homophone errors.
+- First run downloads the model (~3 GB for large-v3). Cached after that.
+- The transcript is NOT ground truth. `/pa-make` § 0.3 lists three ways it lies
+  — stock hallucinations on non-speech, the prompt echoed back verbatim, and a
+  language-locked pass dropping the other language with no garbled text to
+  notice. Cross-check before cutting anything.
 """
 
 from __future__ import annotations

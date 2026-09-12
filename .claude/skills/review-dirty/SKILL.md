@@ -55,7 +55,7 @@ This project has codified rules and dormant-scaffolding patterns; surface findin
 2. Read today's + yesterday's `memory/YYYY-MM-DD.md` — recent decisions, in-flight work
 3. Read `memory/MEMORY.md` — long-term curated index
 4. Read `.claude/rules/critical_lessons.md`, `conventions.md`, `principles.md` — codified rules to apply
-5. Read `.claude/skills/vibe-check/SKILL.md` Step 2 — the 10 smell categories you will apply as Lens 2
+5. Read `.claude/skills/vibe-check/SKILL.md` Step 2 — the smell categories you will apply as Lens 2. Take the count from that file; this line carried its own number and drifted to 10 while Lens 2 below said 13, so a reviewer reading only the prep step was three categories short. The three it dropped are the expensive ones — local-utility-should-be-shared, deployment-frame primitive outside `app_paths.py` (`critical_lessons.md` §4) and integration residue (§6).
 6. For any domain doc in the diff (`docs/DISPLAY.md`, `docs/DATA_FORMAT.md`, `auto_input/README.md`), read its EDIT-CONTRACT block at the top
 
 ## Derivation-bypass scan — canonical-source duplication (run BEFORE the lenses)
