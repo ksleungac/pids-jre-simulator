@@ -15,11 +15,13 @@ what is on screen and when does it change:
      leg it is crossing, on a route long enough to window
   5. e233_0 PATTERNS-OVERVIEW CONTENT — which axis stations grey, where a slot
      sits on each row, and which slice of the axis a service spans
+  6. e233_0 PATTERNS-OVERVIEW ROTATION — which laps the slot joins
 
 Every method here reads only `self.*` fields plus class constants, so they are
 called UNBOUND against a `SimpleNamespace` stub — no pygame, no fonts, no display,
-no route. Rendering itself stays by-eye (`_tests/README.md`); what is tested is
-the logic that decides what gets rendered.
+no route. Section 6 is the one exception and says why at its own heading.
+Rendering itself stays by-eye (`_tests/README.md`); what is tested is the logic
+that decides what gets rendered.
 """
 
 import os
@@ -46,6 +48,7 @@ from displays.train_models.e235_0.lower_lcd import (  # noqa: E402
 from displays.train_models.e233_0.lower_lcd import (  # noqa: E402
     JapaneseFullRouteDisplay as E233FullRoute,
     JapanesePatternsOverviewDisplay as E233Overview,
+    LowerDisplay as E233LowerDisplay,
     _TUNEABLES_OVERVIEW as OVERVIEW_T,
 )
 from displays.train_models.e235_1000.lower_lcd import (  # noqa: E402
@@ -584,12 +587,87 @@ def check_overview_content() -> None:
     )
 
 
+# ── 6. e233_0: which slots the patterns overview joins ────────────────────────
+#
+# `LowerDisplay._available_slots` admits OVERVIEW on two conditions — the route
+# carries a sheet, and the eight-lock has not dropped FULL. Both are cheap to get
+# wrong in a way nothing else reports: a missing sheet gives the rotation a blank
+# page for 12s, and admitting it under the lock changes a terminus behaviour the
+# author signed off.
+#
+# Unlike the sections above this one needs a real INSTANCE, not a
+# `SimpleNamespace`: the method calls zero-arg `super()`, which checks the first
+# argument against the defining class. `object.__new__` gives an instance with no
+# `__init__` run, so the fields below are the complete set the call path reads —
+# and that list is itself the point, since a new read would raise here.
+
+
+def _e233_rotation(*, has_sheet, n_stops, cursor, curr, at_station, transfers, lap=0):
+    d = object.__new__(E233LowerDisplay)
+    # `pa` non-empty so `_in_transfer_window` can qualify; the at-station half is
+    # driven separately, so the two are not collapsed onto one flag.
+    d.stops = [{"name": f"S{i}", "pa": ["0"]} for i in range(n_stops)]
+    d.overview_display = SimpleNamespace(has_sheet=has_sheet)
+    d.transfer_display = SimpleNamespace(_resolve_transfers=lambda name: ["JB"] if transfers else [])
+    d._lap = lap
+    state = SimpleNamespace(cursor_pos=cursor, curr_stop=curr, at_station=at_station, cnt_pa=0)
+    return E233LowerDisplay._available_slots(d, state)
+
+
+def check_overview_rotation() -> None:
+    F, E, T = E233LowerDisplay._SLOT_FULL, E233LowerDisplay._SLOT_EIGHT, E233LowerDisplay._SLOT_TRANSFER
+    OV = E233LowerDisplay._SLOT_OVERVIEW
+    LOCK = E233LowerDisplay.LOCK_THRESHOLD
+
+    # Mid-route, sheet present: a peer of FULL, straight after EIGHT.
+    # `lap=1` keeps the notice out so the tail of the list is the overview's own.
+    mid = dict(n_stops=40, cursor=0, curr=0, at_station=False, transfers=False, lap=1)
+    check(
+        _e233_rotation(has_sheet=True, **mid) == [F, E, OV],
+        f"overview: mid-route lap must be FULL, EIGHT, OVERVIEW — got {_e233_rotation(has_sheet=True, **mid)}",
+    )
+
+    # No sheet: the rotation is exactly what it was before this slot existed.
+    check(
+        _e233_rotation(has_sheet=False, **mid) == [F, E],
+        "overview: a line with no system.json must not give the slot a turn — it would draw a blank page",
+    )
+
+    # The eight-lock drops FULL, and it must take OVERVIEW with it: the tail keeps
+    # its single-slot cycle. cursor sits INSIDE the threshold; curr_stop is left
+    # behind it so the lock is proven to read cursor_pos rather than either.
+    tail = dict(n_stops=40, cursor=40 - LOCK, curr=30, at_station=False, transfers=False, lap=1)
+    check(
+        _e233_rotation(has_sheet=True, **tail) == [E],
+        f"overview: the eight-lock must drop OVERVIEW with FULL — got {_e233_rotation(has_sheet=True, **tail)}",
+    )
+
+    # In the transfer window, TRANSFER stays LAST of the base three, so the
+    # at-station force-switch still lands on the page a stop wants.
+    win = dict(n_stops=40, cursor=0, curr=0, at_station=True, transfers=True, lap=1)
+    got = _e233_rotation(has_sheet=True, **win)
+    check(got == [F, E, OV, T], f"overview: in-window lap must keep TRANSFER last — got {got}")
+
+    # A notice lap appends AFTER the overview, so the notice is still the last
+    # page before the lap restarts.
+    notice = _e233_rotation(has_sheet=True, n_stops=40, cursor=0, curr=0, at_station=False, transfers=False, lap=0)
+    check(
+        notice[:3] == [F, E, OV] and notice[-1] in E233LowerDisplay._NOTICES, f"overview: a notice lap must append after the overview — got {notice}"
+    )
+
+    # Every rotating slot needs a dwell; a member with no beat entry raises in
+    # `scheduled_slot` the first time the cadence asks how long it runs.
+    for s in set(notice) | set(got):
+        check(s in E233LowerDisplay._SLOT_BEATS, f"overview: slot {s} rotates but has no _SLOT_BEATS entry")
+
+
 def main():
     check_eight_window()
     check_five_station_content()
     check_fill_slot_enter()
     check_e233_marker_column()
     check_overview_content()
+    check_overview_rotation()
 
     if FAILURES:
         print("FAIL: lower LCD")
@@ -600,7 +678,8 @@ def main():
         "e235_0 never-locks #68/#81; 5-station passing empty ring, no time:null crash #66; band fill only on a genuine slot-enter; "
         "e233_0 marker row-first column agrees with _slot on a windowed 46-cell route; "
         "overview greys passed / run-through / off-route and keeps the origin and an at-station-only stop black, "
-        "spans index the flattened axis, rows keep separate anchors and pitches)"
+        "spans index the flattened axis, rows keep separate anchors and pitches; "
+        "overview joins the lap after EIGHT, only with a sheet, and leaves with FULL under the eight-lock)"
     )
 
 

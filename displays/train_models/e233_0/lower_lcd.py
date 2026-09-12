@@ -578,8 +578,12 @@ def _offset_polygon(verts, pad, facing=None):
 
     Capped at 4x so a near-degenerate vertex cannot throw a spike.
 
-    Module-level because two elements need it: the marker builds its rim and its
-    shadow ramp from it, and the continuity chevrons their white outline.
+    Module-level, with ONE caller today: `_marker_image` builds the marker's rim and
+    its shadow ramp from it. It was written for a second — the continuity chevrons'
+    white outline — and that outline was then ruled out (author, 2026-08-28: plain
+    orange, no outline; see `_TUNEABLES_FULL_ROUTE_MARKS`), so the generality here is
+    residue rather than a requirement. Say so rather than let a reader hunt for the
+    caller the old docstring promised.
     """
     if pad == 0:
         return list(verts)
@@ -1353,8 +1357,6 @@ class JapaneseFullRouteDisplay:
 
         ss = _MARKER_SUPERSAMPLE
         verts = [(float(dx), float(dy)) for dx, dy in m["tri_verts"]]
-        gx = sum(p[0] for p in verts) / len(verts)
-        gy = sum(p[1] for p in verts) / len(verts)
 
         def grown(pad, facing=None):
             return _offset_polygon(verts, pad, facing)
@@ -3043,11 +3045,14 @@ _TUNEABLES_OVERVIEW = {
 # 268 — and `check_declared`, which is the half that keeps a declaration honest,
 # validates against that domain. A corpus-wide alias would have let an
 # accidental draw of any station name pass unremarked.
+# What the Medium face draws on this page, and ONLY that. The axis names and the pill's station
+# are the whole of it. The three small-text locations — the two 方面 spur labels and the legend's
+# service types — went to DeBold at `9ab5451` and are declared on `_small_font` instead; leaving
+# them here too would bake Medium rasters nobody draws AND license an accidental Medium draw of
+# them, which is `conventions.md` § "a `draws=` declaration wider than what the view draws weakens
+# the check it exists for".
 _OVERVIEW_DRAWS = (
     at("audio/*/system.json:rows[][]"),
-    at("audio/*/system.json:services[].type"),
-    at("audio/*/system.json:services[].spur"),
-    at("audio/*/system.json:junctions[].spur"),
     at("audio/*/system.json:junctions[].station"),
 )
 
@@ -3174,14 +3179,25 @@ class JapanesePatternsOverviewDisplay:
     def set_state(self, state) -> None:
         self._state = state
 
-    def _name_font(self, size: int):
-        """One cache for every text on this page.
+    @property
+    def has_sheet(self) -> bool:
+        """Does this route carry a sheet for the page to draw?
 
-        The declaration spans station names AND service-type labels, because the
-        legend draws types out of the sheet while the axis and the pill draw
-        station names. `lcd_font` validates each draw against it in dev, so an
-        undeclared type fails on the first frame rather than in a build that
-        ships no font software.
+        The rotation asks before admitting the slot. Without it a line with no
+        `system.json` would take its turn on a blank lower LCD — the class draws
+        nothing rather than falling back to something Chuo-shaped, which is right
+        for the renderer and wrong for the schedule.
+        """
+        return bool(self._sheet)
+
+    def _name_font(self, size: int):
+        """The Medium face: station names on the axis and in the 立川 pill, nothing else.
+
+        The declaration used to span the service types too, because the legend
+        drew them in this face until `9ab5451` moved the page's small text to
+        DeBold. It is `_small_font`'s now. `lcd_font` validates each draw against
+        the declaration in dev, so an undeclared string fails on the first frame
+        rather than in a build that ships no font software.
         """
         f = self._name_fonts.get(size)
         if f is None:
@@ -3271,7 +3287,7 @@ class JapanesePatternsOverviewDisplay:
         self.draw()
 
     def draw(self, current_time: float = 0.0) -> None:
-        if not self._sheet:
+        if not self.has_sheet:
             return
         self._draw_lines()
         self._draw_folds()
@@ -3699,9 +3715,12 @@ class JapanesePatternsOverviewDisplay:
         if scale > 1:
             surf = pygame.transform.smoothscale(surf, (max(1, round(w / scale)), max(1, round(h / scale))))
         self.screen.blit(surf, (round(x), round(cy - surf.get_height() / 2)))
-        # The right edge, from the ADVANCES rather than the surface, which carries
-        # a rounding pad. No caller consumes it — it is what a measurement pass
-        # reads back, and the 立川 label's 156.80px run was fitted against it.
+        # The right edge, from the ADVANCES rather than the surface, which carries a
+        # rounding pad. Deliberately unused: neither call site assigns it, and no tool
+        # reads it either — `_e233_lower_geometry.py` measures the rendered PIXELS, not
+        # this number. Kept because it is the run's honest extent and costs nothing, and
+        # because a caller that needs to butt something against the label's end wants it
+        # rather than the padded surface width.
         return x + run / scale
 
     def _stroke(self, color, x0, y0, x1, y1, w) -> None:
@@ -3714,13 +3733,16 @@ class JapanesePatternsOverviewDisplay:
 
 
 class LowerDisplay(LowerDisplayBase):
-    """E233-0 lower LCD manager — rotates five slots, all of them built.
+    """E233-0 lower LCD manager — rotates six slots, all of them built.
 
-    Full route (§ 9) and 6-station (§ 10) live in this module; the standalone
-    transfer view (§ 11) and the two standing notices (§ 12) are constructed from
-    their own modules in this package. The notices join the rotation at most one
-    at a time and only every third lap, so a page turns up about every 108s —
-    see `_available_slots`.
+    Full route (§ 9), 6-station (§ 10) and the patterns overview (§ 14) live in
+    this module; the standalone transfer view (§ 11) and the two standing notices
+    (§ 12) are constructed from their own modules in this package. The overview
+    takes an ordinary turn wherever the route has a sheet; the notices join at
+    most one at a time and only every third lap, so a page turns up about every
+    144s in the transfer window and 120s outside it — see `_available_slots`.
+    (It was 108s before the overview joined; the figure is three laps plus the
+    notice, so adding a 3-beat slot moves it.)
     """
 
     # Stations-from-terminus below which the view locks to the zoomed slot.
@@ -3775,32 +3797,44 @@ class LowerDisplay(LowerDisplayBase):
     # because a uniform beat is what the schedule is made of.
     _SLOT_PRIORITY = 3
     _SLOT_MANNER = 4
-    # WIP § 14. Deliberately absent from `_available_slots`, so it is reachable
-    # from the preview and the editor and never rotates into a drive — the sheet
-    # is Chūō-only and the page's cadence is not settled, and the same call was
-    # made for the transfer slot's `_PendingView`. It IS in the atlas bake,
-    # which sweeps every `_SLOT_*` defined rather than every one with a beat.
+    # WIP § 14. A PEER of FULL and EIGHT (author, 2026-09-12), on their 3-beat
+    # dwell, not a rare page like the two notices above — it rides the ordinary
+    # lap. § 14.4 carried its place in the rotation as an OPEN and this settles
+    # it. Two conditions gate membership, both in `_available_slots`: the route
+    # must carry a sheet, and the eight-lock must not have dropped FULL.
     _SLOT_OVERVIEW = 5
     _NOTICE_EVERY = 3  # laps between notices — one notice per three rotations
     _SLOT_BEATS = {
         **LowerDisplayBase._SLOT_BEATS,
         _SLOT_PRIORITY: 3,
         _SLOT_MANNER: 3,
+        _SLOT_OVERVIEW: 3,
     }
     _NOTICES = (_SLOT_PRIORITY, _SLOT_MANNER)
 
     def _available_slots(self, state) -> list:
-        """The base rotation, plus at most ONE notice page when a lap is due.
+        """The base rotation, plus the overview, plus at most ONE notice page.
 
         Keyed on a lap counter rather than on wall-clock, so the answer is
         stable for the whole of a rotation — this is called every frame, and a
         list that changed mid-lap would make the cadence jump slots.
 
-        Appended at the END so a notice never displaces the view a stop's
+        OVERVIEW sits straight after EIGHT and is admitted on exactly the terms
+        FULL is: the same 3-beat dwell, and gone the moment the eight-lock drops
+        FULL. Both views answer "where does this line go", so the lock that says
+        a whole-line picture has stopped earning its turn near the terminus says
+        it about this one too, and the tail keeps the single-slot cycle the
+        author signed off. The sheet test is the other half — a line with no
+        `system.json` draws a blank page, so it never joins.
+
+        The notice is appended at the END so it never displaces the view a stop's
         arrival wants: the `at_station` force-switch still lands on TRANSFER,
         and the notice is simply the last page before the lap restarts.
         """
         slots = super()._available_slots(state)
+        if self._SLOT_FULL in slots and self.overview_display.has_sheet:
+            slots = list(slots)
+            slots.insert(slots.index(self._SLOT_EIGHT) + 1, self._SLOT_OVERVIEW)
         if len(slots) > 1 and self._lap % self._NOTICE_EVERY == 0:
             slots = slots + [self._NOTICES[(self._lap // self._NOTICE_EVERY) % len(self._NOTICES)]]
         return slots

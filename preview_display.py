@@ -55,6 +55,16 @@ from app import PASimulator
 from displays.base import DisplayMode
 from displays.train_models import TRAIN_MODELS, get_train_model
 
+# `--help` alone crashed on Windows: the model help text carries `Sōbu`, and a
+# cp1252 console cannot encode it, so the one flag a new reader reaches for
+# raised a UnicodeEncodeError instead of printing. conventions.md § Tooling
+# "Hook scripts that output non-ASCII must reconfigure stdout" — the same
+# applies to any entry point whose own help or output carries a macron.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError):
+    pass
+
 DEFAULT_MOCK_ROUTE = "_mock/main"
 
 MODE_MAP = {
@@ -62,6 +72,20 @@ MODE_MAP = {
     "furigana": DisplayMode.FURIGANA,
     "english": DisplayMode.ENGLISH,
 }
+
+
+def _lower_view_choices() -> tuple:
+    """Every lower-LCD view name any registered model defines, plus 'cycle'.
+
+    Read off the `_SLOT_*` class attributes rather than listed, so a new view is
+    previewable the moment it is defined. `argparse` needs this before a sim
+    exists, so it spans the whole registry; whether the model you picked has the
+    view is `apply_state`'s question and it fails loud there.
+    """
+    names = set()
+    for m in TRAIN_MODELS.values():
+        names |= {n[len("_SLOT_") :].lower() for n in dir(m.lower_cls) if n.startswith("_SLOT_") and isinstance(getattr(m.lower_cls, n), int)}
+    return tuple(sorted(names)) + ("cycle",)
 
 
 def _resolve_work_dir(spec: str) -> str:
@@ -130,9 +154,9 @@ def parse_args():
     parser.add_argument(
         "--lower-view",
         type=str,
-        choices=("full", "eight", "transfer", "overview", "cycle"),
+        choices=_lower_view_choices(),
         default="cycle",
-        help="Force lower-LCD view: 'full' = full-route, 'eight' = 8-station zoom, 'transfer' = transfer-info panel (requires station with transfers + at_station=True), 'overview' = service-pattern sheet (e233_0 only, needs the line's system.json), 'cycle' = normal alternation (default).",
+        help="Force lower-LCD view, or 'cycle' for the normal alternation (default). The list is every view any registered model defines, so a name valid here can still be absent from the model you picked — that fails loud. 'transfer' needs a station with transfers and at_station=True; 'overview' is e233_0 only and needs the line's system.json.",
     )
     parser.add_argument(
         "--no-upper",
@@ -192,16 +216,13 @@ def apply_state(sim, *, stop=0, pa=None, mode=None, lower_view="cycle", skip=Non
     # rotate FULL → EIGHT → TRANSFER on its normal cadence; the forced slot
     # would only persist for the boot frame.
     if lower_view != "cycle":
-        slot_map = {
-            "full": sim.lower._SLOT_FULL,
-            "eight": sim.lower._SLOT_EIGHT,
-            "transfer": sim.lower._SLOT_TRANSFER,
-            # Per-model: only e233_0 carries an overview slot, so this is None
-            # elsewhere and the pin fails loud rather than silently landing on
-            # FULL and looking like the flag was honoured.
-            "overview": getattr(sim.lower, "_SLOT_OVERVIEW", None),
-        }
-        if slot_map[lower_view] is None:
+        # Derived from the manager's own `_SLOT_*` attributes, never a table
+        # typed here: a model that adds a view becomes previewable by defining
+        # it. The hardcoded four is how the two E233-0 notices ended up
+        # unreachable after they were built, which cost a throwaway renderer
+        # script to get a still out of one of them.
+        slot = getattr(sim.lower, f"_SLOT_{lower_view.upper()}", None)
+        if slot is None:
             raise SystemExit(f"--lower-view {lower_view}: not a view on model {sim._train_model.key}")
         # The MODEL having the slot is half the question; the ROUTE having the
         # data is the other half. The overview renderer returns immediately on a
@@ -210,7 +231,7 @@ def apply_state(sim, *, stop=0, pa=None, mode=None, lower_view="cycle", skip=Non
         # for, which is what the check above exists to stop.
         if lower_view == "overview" and not (sim.route_data or {}).get("system"):
             raise SystemExit("--lower-view overview: this line has no <audio_root>/system.json, so the page has nothing to draw")
-        sim.lower._current_slot = slot_map[lower_view]
+        sim.lower._current_slot = slot
         # Lock: the scheduler owns every discrete change, so disabling it
         # freezes the slot AND the language flip in one switch.
         sim.scheduler.enabled = False

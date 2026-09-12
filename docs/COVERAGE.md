@@ -186,10 +186,17 @@ an absence.
 
 ### Display — per-line-native train models
 
-`displays/train_models/` holds **e235_0** and **e235_1000** only, and just `yamanote/1208G` declares
-a model. The other 14 diagrams fall to the e235_1000 default, which is in-spec only for
-`sobu/1217F`. Per `CLAUDE.md` § Per-model IRL line scope, those renders are transitional and are
-meant to be retired as native models land.
+`displays/train_models/` holds **e235_0**, **e235_1000** and **e233_0**. Six of the 17 diagrams
+declare a model: `yamanote/1208G` on e235_0, and Chūō's three plus Keihin-Tōhoku's two on e233_0.
+The other 11 fall to the e235_1000 default, which is in-spec only for `sobu/1217F`. Per `CLAUDE.md`
+§ Per-model IRL line scope, those renders are transitional and are meant to be retired as native
+models land.
+
+Keihin-Tōhoku on e233_0 is the best-effort case rather than a native one: its stock is E233-1000,
+which is a re-skin of this drawing and not yet built, so the nearest real relative hosts it until
+that lands. E233-0's ENGLISH mode still resolves to the kanji renderer on both halves (`WIP` § 4),
+so a diagram declaring it has no English lower LCD; the setup screen's 列車型號 picker puts any route
+back on e235_1000 for a user who wants one.
 
 **Not every line has LCD work at all.** IRL only **E233 (non-3000)**, **E235** and **E231-500**
 carry an LCD PIDS. A line whose stock is outside that set has no native display to build, so its
@@ -201,8 +208,8 @@ native model can ever exist.
 |---|---|---|
 | yamanote | E235-0 | built |
 | sobu | E235-1000 | built |
-| chuo | E233-0 | **available** |
-| keihin | E233-1000 | **available** |
+| chuo | E233-0 | **built**, native |
+| keihin | E233-1000 | **available** — hosted on e233_0 meanwhile |
 | keiyo | E233-5000 | **available** |
 | saikyo | E233-7000 | **available** |
 | nambu | E233-8000 | **available** |
@@ -210,9 +217,9 @@ native model can ever exist.
 | takasaki | E233-3000 | none exists |
 | *(joban)* | E531 | none exists |
 
-So the display roadmap is **five lines**, all E233 non-3000. **E233-0 comes first**: it serves chuo's
-two diagrams now and Ōme later, and it pays for the family architecture that -1000 / -5000 / -7000 /
--8000 inherit as skins. Beyond the catalogue, **E233-6000** (Yokohama Line) and **E231-500**
+So the display roadmap is **five lines**, all E233 non-3000. **E233-0 came first** and is built: it
+serves Chūō's three diagrams and Ōme later, and it paid for the family architecture that -1000 /
+-5000 / -7000 / -8000 inherit as skins. **-1000 is next**, which retires Keihin-Tōhoku's borrow. Beyond the catalogue, **E233-6000** (Yokohama Line) and **E231-500**
 (Chūō・Sōbu Local) are LCD; **E217** (Yokosuka) is not.
 
 **Utsunomiya brings no display work**, being an E233-3000 pure audio route. Same for Tōkaidō Inbound.

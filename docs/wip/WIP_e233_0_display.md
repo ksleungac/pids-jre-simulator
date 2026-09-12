@@ -3,8 +3,9 @@
 Spec-first build of the E233-0 LCD. This doc is the **spec**; code follows it, not the
 other way round. Built so far: the upper band's chrome and its first element, and four
 lower views — full-route (§ 9), 6-station (§ 10), the two notices (§§ 11–12) and the
-patterns overview (§ 14). The overview is Chūō-only and sits outside the slot rotation.
-Graduation is not due: § 14.4 is open, and no Chūō diagram declares `model: e233_0` yet.
+patterns overview (§ 14). The overview is Chūō-only and rotates as a peer of FULL.
+All three Chūō diagrams and both Keihin ones now declare `model: e233_0`, so the model
+drives for real. Graduation still is not due: § 14.4 is open.
 
 **EDIT-CONTRACT.** A value that came from a script says `[measured]`; a value read off a
 reference by eye says `[observed]` and is not to be trusted until a script measures it. An
@@ -159,7 +160,7 @@ so this table grows before building starts.
 | 3 | **Transfer info** | Connecting lines per station | **BUILT**, § 11 — inline band (§ 10.3.4) and standalone view |
 | 3a | **優先席** | Priority-seat placard, static | **BUILT** 2026-08-29 · `priority_seat.py` · reference `priority-seats.png` |
 | 3b | **マナーモード** | Mobile-phone notice, static | **BUILT** 2026-08-29 · `manner_mode.py` · reference `manner-mode.png` |
-| 4 | **Patterns overview** | All six Chūō service patterns as parallel coloured lines with per-station stop markers | **BUILT** 2026-09-01, § 14 — Chūō only, outside the rotation |
+| 4 | **Patterns overview** | All six Chūō service patterns as parallel coloured lines with per-station stop markers | **BUILT** 2026-09-01, § 14 — Chūō only, in the rotation 2026-09-12 |
 | … | *further views* | author collecting references | pending |
 
 **Transfer info — deferred to its own session, and not an E233-0 distinctive.** In the
@@ -2135,8 +2136,8 @@ drawing. § 14.3 is measured. § 14.4 is what one reference cannot say.
 
 **Built the same day**, six elements against the single reference: the service lines, their stop
 markers, the station names, the 立川 junction pill, the two spurs and the legend. Reachable as
-`preview_display.py --lower-view overview`; `_SLOT_OVERVIEW` is deliberately outside
-`_available_slots`, so it never rotates into a drive while § 14.4 is open.
+`preview_display.py --lower-view overview`, and since 2026-09-12 it also rotates into a drive as a
+peer of FULL — § 14.4 records the cadence and the two conditions gating membership.
 
 **The geometry is NOT yet derived from the axis, which § 14.2 requires.** The row split, the slot
 pitch, the per-service stack spacing and the legend's placement are fitted literals in
@@ -2362,8 +2363,15 @@ itself.
   -7000 / -8000 re-skins inheriting this drawing for their own systems. Different work, not settled.
 - OPEN — **whether a second sheet gets authored at all.** If it does, the data house has to be
   pleasant to write by hand, which is a real constraint on its shape.
-- OPEN — **the slot's place in the rotation.** A peer of FULL / EIGHT / TRANSFER, or rarer like the
-  two standing notices (§ 12).
+- SETTLED 2026-09-12 — **the slot's place in the rotation: a peer of FULL**, on the same 3-beat
+  dwell, sitting straight after EIGHT (author: *"include it in the normal loop as other full route
+  loop pattern"*). Not rarer like the two standing notices. Two conditions gate membership, both in
+  `LowerDisplay._available_slots`. The route must carry a sheet, since a line with no `system.json`
+  draws a blank page and the renderer's refusal to invent one is right for the drawing and wrong for
+  the schedule. And the eight-lock must not have dropped FULL: both views answer "where does this
+  line go", so the lock that says a whole-line picture has stopped earning its turn near the terminus
+  says it about this one too, and the tail keeps its single-slot cycle unchanged. Out of the transfer
+  window the lap is now FULL → EIGHT → OVERVIEW, 9 beats.
 - OPEN — **where the data house file sits.** A line folder serves while no live case shares one
   system across several folders. JT/JU/JS was that case and it is out on topology.
 - OPEN — **station-name black and grey.** Built as the § 9.1 rule, this train's own stopping pattern,
