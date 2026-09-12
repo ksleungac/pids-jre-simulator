@@ -52,6 +52,7 @@ from auto_input.driver import (  # noqa: E402
 )
 from auto_input.hud_layout import DOWNSCALE_PROFILE  # noqa: E402
 from auto_input.ocr import BADGE_ANCHOR_FILES, DEFAULT_TEMPLATES_DIR, load_badge_anchors  # noqa: E402
+from auto_input.sampling import Reading, fault_states  # noqa: E402
 
 FAILURES: list[str] = []
 
@@ -681,6 +682,75 @@ def check_fire_at_station() -> None:
     check(sim.pending_next_pa is False, "parked: fire must skip (already STOPPING)")
 
 
+# ── 6. fault states: which row failed, and whose fault it was ────────────────
+# The band drew `--` for both "nothing is posted here" and "the read failed", so a Keihin
+# drive with no speed limit was indistinguishable from a broken one. `fault_states` is the
+# pure split, and the distinction it exists for is cross vs self: a row the BADGE took down
+# returns on its own once the badge is fixed, while a row that failed on its own terms does
+# not. One says fix one thing, the other says fix three.
+#
+# Pinned as a TABLE over a real `Reading` rather than a stub dict, because the function reads
+# `gated_fields` and `distance_rejected`, which the guards write — a stub that omitted either
+# would silently test a narrower function than production calls.
+
+# (badge, badge_via, speed, s_score, dist, d_score, limit, sl_score, gated, dist_rej) -> expected
+# fmt: off
+FAULT_CASES = [
+    # Healthy — every field reads, nothing marks. `badge_via="raw"` is the ordinary path.
+    (("MOVING", "raw", 48, 0.93, 1167, 0.95, 100, 0.92, (), False),
+     {"speed": None, "distance": None, "speed_limit": None, "badge": None}),
+    # No posted limit: value None, NOT gated, NOT rejected → silent. This is the case that
+    # must stay quiet, or a whole Keihin drive cries wolf on a row that is correctly empty.
+    (("MOVING", "raw", 48, 0.93, 1167, 0.95, None, 1.00, (), False),
+     {"speed": None, "distance": None, "speed_limit": None, "badge": None}),
+    # Badge refused and took the digits with it → every dropped field is CROSS, badge refused.
+    ((None, None, None, 0.55, None, 0.60, None, 0.70, ("speed", "distance", "speed_limit"), False),
+     {"speed": "cross", "distance": "cross", "speed_limit": "cross", "badge": "refused"}),
+    # Distance refused by the plausibility guard while the badge is fine → SELF, not cross.
+    (("MOVING", "raw", 48, 0.93, None, 0.95, 100, 0.92, (), True),
+     {"speed": None, "distance": "self", "speed_limit": None, "badge": None}),
+    # Accepted but under the bar → "low". The value is still shown; a wrong number that
+    # renders like a right one is the dangerous case, so hiding it removes the evidence.
+    (("MOVING", "raw", 58, 0.62, 1167, 0.95, 100, 0.92, (), False),
+     {"speed": "low", "distance": None, "speed_limit": None, "badge": None}),
+    # Boundary: exactly at the gate is healthy (strict <), matching the gate's own semantics.
+    (("MOVING", "raw", 58, BADGE_NONE_SCORE_GATE, 1167, 0.95, 100, 0.92, (), False),
+     {"speed": None, "distance": None, "speed_limit": None, "badge": None}),
+    # Rescued by the shape-only pass: the badge READ, so nothing is cross — but the capture's
+    # levels are shifted and that is the #137 signature, so the badge itself marks.
+    (("MOVING", "ncc", 48, 0.93, 1167, 0.95, 100, 0.92, (), False),
+     {"speed": None, "distance": None, "speed_limit": None, "badge": "rescued"}),
+    # MIXED — the case colour alone could not express, so the band must get it from here:
+    # speed/dist stood down by the badge, limit refused on its own.
+    ((None, None, None, 0.55, None, 0.60, None, 1.00, ("speed", "distance"), False),
+     {"speed": "cross", "distance": "cross", "speed_limit": None, "badge": "refused"}),
+]
+# fmt: on
+
+
+def check_fault_states() -> None:
+    for args, expected in FAULT_CASES:
+        badge, via, sp, ss, ds, dsc, sl, sls, gated, rej = args
+        r = Reading(
+            badge=badge,
+            badge_via=via,
+            speed=sp,
+            speed_score=ss,
+            distance=ds,
+            distance_score=dsc,
+            speed_limit=sl,
+            speed_limit_score=sls,
+            gated_fields=gated,
+            distance_rejected=rej,
+        )
+        got = fault_states(r, BADGE_NONE_SCORE_GATE)
+        for field, want in expected.items():
+            check(
+                got.get(field) == want,
+                f"fault_states(badge={badge},via={via},gated={gated},rej={rej})[{field}]: " f"expected {want!r}, got {got.get(field)!r}",
+            )
+
+
 def check_badge_anchor_set() -> None:
     """The shipped anchor set must be complete and at the model's scale.
 
@@ -733,6 +803,7 @@ def main() -> int:
     check_reentry_resolver()
     check_reentry_commit()
     check_fire_at_station()
+    check_fault_states()
     check_badge_anchor_set()
 
     if FAILURES:
@@ -743,7 +814,8 @@ def main() -> int:
         f"PASS: auto-driver (read gates {len(BADGE_GATE_CASES)} badge-reject + {len(OFFSET_CASES)} stopping-offset + "
         f"{len(DISTANCE_CASES)} distance + double-spike; {len(INFER_CASES)} inferred-state cells + MOVING==PASSING; "
         f"detector stream A-N; {len(GRID)} re-entry grid cells + PASSING/provenance/pa=1 facets + regressions + guards; "
-        f"re-entry commit pa>=2 silent / pa=1 audible; at-station reachability drain + 1B + pa=1 + parked skip; badge anchor set complete + model-scale)"
+        f"re-entry commit pa>=2 silent / pa=1 audible; at-station reachability drain + 1B + pa=1 + parked skip; "
+        f"{len(FAULT_CASES)} fault-state cells incl. cross-vs-self + rescued; badge anchor set complete + model-scale)"
     )
     return 0
 

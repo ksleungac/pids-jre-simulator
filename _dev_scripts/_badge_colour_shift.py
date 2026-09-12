@@ -489,6 +489,13 @@ def main() -> int:
         return 1
     print(f"production reject threshold: {BADGE_DIFF_REJECT}\n")
 
+    # The sheet is the only output anyone re-runs on its own — it has to be regenerated
+    # after any change to the metric, and the full pass (five metrics x 74 rungs, plus the
+    # digit ramp over 23 cells) takes minutes and answers questions nobody asked again.
+    if "--sheet-only" in sys.argv:
+        render_sheet(anchors, ladder(anchors))
+        return 0
+
     # Baseline: every anchor against the anchor set, raw and normalised. This is the
     # separation the classifier lives on, with NO shift applied.
     print("=== baseline, no shift — within-state vs cross-state ===")

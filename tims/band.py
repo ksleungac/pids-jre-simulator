@@ -118,6 +118,25 @@ CELL_PAD           = 3
 SEP_COLOR          = chrome.FRAME   # vertical separators flanking the cell
 SEP_W              = 2
 CELL_INK           = chrome.INK   # the number ink (bright)
+# FAULT MARKS — a read that failed says so on its own row. `--` is NOT reused for this: it is a
+# well-formed answer meaning "nothing is posted here", true all drive long on a line with no
+# speed limit, so wearing it for a failure makes the failure look normal. `?` means tried and
+# could not. The unit stays in every state (docs/APP.md § "Persistent status band" makes it
+# static chrome), so the row keeps its identity.
+FAULT_GLYPH        = "?"
+FAULT_SELF_INK     = (226, 152, 42)    # amber — THIS row's own read failed, or scored under the bar
+FAULT_CROSS_INK    = chrome.DIM        # dim — stood down because the BADGE failed; not this row's fault
+BADGE_REFUSED_INK  = (208, 64, 60)     # red — the badge classified nothing. Arrival and at-station
+                                       # both require it, so this is the one that silences a drive.
+BADGE_RESCUED_MARK = "*"               # the shape-only pass answered: levels are shifted, we recovered
+# Below this the capture's level shift is ordinary variation and printing it would be noise:
+# every healthy frame in the calibration corpus sits within +/-2 and the raw pass still reads
+# correctly to about +50. A DISPLAY threshold, so it lives here rather than in the driver.
+BADGE_LEVEL_SHOW   = 25.0
+# Cross-gated is DIM rather than a second bright colour, which is a rendering fact as much as a
+# semantic one: red against amber at this px on near-black does not separate — mocked side by side
+# the two cases read as the same band. Dim against one red badge row reads as "one fault, three
+# consequences", which is the thing the user needs to be able to tell you.
 CELL_UNIT_INK      = (130, 144, 156)   # unit (km/h, m) ink — DIMMER than the number, not so bright
 READOUT_NUM_SS_NATIVE = 18          # readout number load px — AA-off native (supersample retired)
 READOUT_UNIT_K      = 1             # unit stays crisp pixel (draw_lowres) at its own native grid
@@ -704,18 +723,61 @@ def _band_vals(status, sim_state, stops):
         msgs.append(i18n.t("panel.header_paused"))
     sl, sp, ds = status.get("speed_limit"), status.get("speed"), status.get("distance")
     over = sp is not None and sl is not None and sl > 0 and sp > sl
-    badge_tail = f" · {badge_disp}" if badge_disp else ""
+    faults = status.get("faults") or {}
+
+    def cell(value, unit, field):
+        """One readout row: the value, or `?` when the read faulted, plus its per-row ink."""
+        f = faults.get(field)
+        if f in ("cross", "self"):
+            return ((FAULT_GLYPH, unit), FAULT_CROSS_INK if f == "cross" else FAULT_SELF_INK)
+        if f == "low" and value is not None:
+            # A low-scoring read is still SHOWN. It is the dangerous case — a wrong number
+            # that renders like a right one — so hiding it would remove the only evidence.
+            return ((str(value), unit), FAULT_SELF_INK)
+        return ((str(value) if value is not None else "--", unit), None)
+
+    # Row 2's badge tail. A refused badge used to vanish, and an absence is the least
+    # noticeable failure there is: the row still looked complete. It now holds its slot.
+    bf = faults.get("badge")
+    level = status.get("badge_level") or 0.0
+    # The level number rides the badge row because it is a property of the whole CAPTURE, not
+    # of the badge — the badge is just the only reader that compares absolute colour, so it is
+    # where a frame-wide fact breaks first. Shown only when abnormal; on a healthy machine it
+    # is within a couple of levels and printing it would be noise.
+    level_txt = f"  {level:+.0f}" if abs(level) >= BADGE_LEVEL_SHOW else ""
+    if bf == "refused":
+        tail, tail_ink = FAULT_GLYPH + level_txt, BADGE_REFUSED_INK
+    elif bf == "rescued":
+        tail, tail_ink = f"{badge_disp}{BADGE_RESCUED_MARK}{level_txt}", FAULT_SELF_INK
+    else:
+        tail, tail_ink = badge_disp, None
+    badge_tail = f" · {tail}" if tail else ""
     return {
         # row0 green notif, yielding to the mirror address on a timer (see the
         # STREAM block); row1 segment; row2 state · played · BADGE, folded on.
         "left": [
             _row0_drive(),
             ([(seg, STATE_INK, STATE_NATIVE, "name")], None),
-            ([(f"{word} · {played}{badge_tail}", STATE_SUB, STATE_NATIVE, "chrome")], None),
+            # TWO chunks when the badge marks, so the tail carries its own ink. With one
+            # string a refused badge draws in the dim secondary colour — quieter than a
+            # gated number, which inverts the severity of the only read that stops a fire.
+            (
+                (
+                    [(f"{word} · {played}{badge_tail}", STATE_SUB, STATE_NATIVE, "chrome")]
+                    if tail_ink is None
+                    else [
+                        (f"{word} · {played} · ", STATE_SUB, STATE_NATIVE, "chrome"),
+                        (tail, tail_ink, STATE_NATIVE, "chrome"),
+                    ]
+                ),
+                None,
+            ),
         ],
-        "limit": (str(sl) if sl is not None else "--", "km/h"),
-        "speed": (str(sp) if sp is not None else "--", "km/h"),
-        "dist": (str(ds) if ds is not None else "--", "m"),
+        "limit": (lm := cell(sl, "km/h", "speed_limit"))[0],
+        "speed": (sc := cell(sp, "km/h", "speed"))[0],
+        "dist": (dc := cell(ds, "m", "distance"))[0],
+        # Per-row ink, None where the row is healthy and keeps the shared readout colour.
+        "row_ink": {"limit": lm[1], "speed": sc[1], "dist": dc[1]},
         # cyan change-cue: driver stamps limit_change_ts on a value→value change (mirrors last_fire);
         # blink for LIMIT_FLASH_WINDOW s after, then plain. None reads don't stamp (OCR-dropout safe).
         "limit_changed": (lct := status.get("limit_change_ts") or 0) > 0 and time.time() - lct < LIMIT_FLASH_WINDOW,
@@ -834,6 +896,12 @@ def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, f
     ticks = pygame.time.get_ticks()
     no_rd = vals.get("no_readings", False)  # setup stage: dim '--' placeholders, no highlight/flash
     rd_ink = STATE_SUB if no_rd else CELL_INK
+    _row_inks = vals.get("row_ink") or {}
+
+    def row_ink(key):
+        """A faulting row's own ink, else the shared readout colour."""
+        return _row_inks.get(key) or rd_ink
+
     # LIMIT carries the highlight block (only the limit value, NOT the whole column):
     #   * over speed   → the block FLASHES RED (warning), light ink.
     #   * just changed → BLINKS cyan↔plain for LIMIT_FLASH_WINDOW s, then plain (cyan = change cue).
@@ -862,9 +930,9 @@ def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, f
         limit_hl = False  # PLAIN at rest — cyan is the change cue, not the resting state
         if vals["limit_changed"] and not no_rd:
             limit_hl = force_flash_on or (ticks // LIMIT_FLASH_MS) % 2 == 0
-        _blit_readout(surf, *vals["limit"], rx, LIMIT_Y, num_font, unit_font, rd_ink, CELL_UNIT_INK, highlight=limit_hl)
-    _blit_readout(surf, *vals["speed"], rx, SPEED_Y, num_font, unit_font, rd_ink, CELL_UNIT_INK)
-    _blit_readout(surf, *vals["dist"], rx, DIST_Y, num_font, unit_font, rd_ink, CELL_UNIT_INK)
+        _blit_readout(surf, *vals["limit"], rx, LIMIT_Y, num_font, unit_font, row_ink("limit"), CELL_UNIT_INK, highlight=limit_hl)
+    _blit_readout(surf, *vals["speed"], rx, SPEED_Y, num_font, unit_font, row_ink("speed"), CELL_UNIT_INK)
+    _blit_readout(surf, *vals["dist"], rx, DIST_Y, num_font, unit_font, row_ink("dist"), CELL_UNIT_INK)
 
     # MESSAGE strips: two dim bars; active messages render BRIGHT YELLOW + FLASH (auto-clear when none)
     msg_w = save_rect.left - MSG_GAP_R - MSG_X

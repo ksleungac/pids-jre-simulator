@@ -26,9 +26,11 @@ from __future__ import annotations
 import json
 import os
 import re
+import statistics
 import threading
 import time
 import traceback
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -40,7 +42,7 @@ import pygame
 import soundfile as sf
 
 from .hud_layout import DOWNSCALE_PROFILE, PROFILES, profile_for
-from .sampling import GuardState, downscale_hud, read_hud
+from .sampling import GuardState, downscale_hud, fault_states, read_hud
 from .ocr import (
     BADGE_ANCHOR_FILES,
     DEFAULT_TEMPLATES_DIR,
@@ -140,6 +142,12 @@ MISREAD_DUMP_DIR = project_root() / "_ocr_calibration" / "_misread_dumps"
 # Set from the badge=None sampling: those reads cluster at score ~0.60 (the docs' <0.6
 # random-match danger zone) vs ~0.90 (p25 0.88) when the badge reads. 0.80 splits them.
 BADGE_NONE_SCORE_GATE = 0.80
+# Band fault marks — see `_fault_run` on AutoDriver for why the debounce lives on this side.
+FAULT_RAISE_SAMPLES = 2  # agreeing samples before a mark appears (~0.4 s at 5 Hz)
+FAULT_HOLD_S = 1.5  # ...and how long it stays after the fault clears
+# Rolling window for the published badge_level. 60 samples is ~12 s at 5 Hz — long enough to
+# survive a tunnel or a platform, short enough that a screenshot still describes now.
+BADGE_LEVEL_WINDOW = 60
 
 # Distance plausibility guard: slack (m) added on top of the physical v·Δt bound so legit
 # approach reads + OCR jitter pass, while the 1000m+ single-frame spikes are still rejected.
@@ -751,6 +759,18 @@ class AutoDriver:
     # no-limit segments, ignored so they don't spuriously flash). Published as `limit_change_ts`.
     _last_speed_limit: Optional[int] = field(default=None, init=False)
     _limit_change_ts: float = field(default=0.0, init=False)
+    # Band fault marks. The DEBOUNCE lives here rather than in the band because the band
+    # renders at frame rate and samples arrive at ~5 Hz, so the renderer sees the same sample
+    # several times and has no way to count consecutive ones. A mark needs FAULT_RAISE_SAMPLES
+    # agreeing samples to appear and holds FAULT_HOLD_S after it clears, so a single dropped
+    # frame — which is ordinary — cannot flash the band.
+    _fault_run: dict = field(default_factory=dict, init=False)  # field -> consecutive count
+    _fault_until: dict = field(default_factory=dict, init=False)  # field -> hold-expiry ts
+    _fault_shown: dict = field(default_factory=dict, init=False)  # field -> state being displayed
+    # Rolling badge_level, for the band's shift readout. A SINGLE sample is not photographable:
+    # #137's reporter moved between 39 and 78 with scene brightness, so one frame could show
+    # either. The median over this window is what makes a screenshot representative.
+    _level_window: deque = field(default_factory=lambda: deque(maxlen=BADGE_LEVEL_WINDOW), init=False)
     # Distance plausibility guard anchor: last VALID remaining-distance read + its ts. A read that
     # moves further from this than the train physically could (v·Δt) is a spike → held. See
     # guard_distance. Re-anchors only on a re-point: a DISTANCE_RETARGET_PAIRS pair AND upward.
@@ -767,6 +787,29 @@ class AutoDriver:
 
     def __post_init__(self) -> None:
         self._detector = _Detector(arrival_lead_m=self.lead_m)
+
+    def _debounced_faults(self, r, now: float) -> dict:
+        """`sampling.fault_states` with hysteresis, so a mark cannot flicker at sample rate.
+
+        Raise takes FAULT_RAISE_SAMPLES consecutive samples agreeing on the SAME state;
+        clearing holds FAULT_HOLD_S. Both halves are needed and for different reasons — the
+        raise stops one dropped frame from marking the band, the hold stops a fault that is
+        flapping every other sample from strobing. Display-only: nothing here feeds a fire
+        decision, so a wrong mark costs a wrong-looking band and never a wrong announcement.
+        """
+        raw = fault_states(r, BADGE_NONE_SCORE_GATE)
+        for fname, state in raw.items():
+            if state is not None and self._fault_run.get(fname, (None, 0))[0] == state:
+                run = self._fault_run[fname][1] + 1
+            else:
+                run = 1
+            self._fault_run[fname] = (state, run)
+            if state is not None and run >= FAULT_RAISE_SAMPLES:
+                self._fault_shown[fname] = state
+                self._fault_until[fname] = now + FAULT_HOLD_S
+            elif now >= self._fault_until.get(fname, 0.0):
+                self._fault_shown[fname] = None
+        return {k: v for k, v in self._fault_shown.items() if v is not None}
 
     def _lead_for(self, stop_idx: int) -> int:
         """Arrival lead for the stop being approached: base + long-approach bump."""
@@ -1043,6 +1086,10 @@ class AutoDriver:
                             self._limit_change_ts = sample_ts
                         self._last_speed_limit = sl_val
 
+                    band_faults = self._debounced_faults(r, sample_ts)
+                    self._level_window.append(r.badge_level)
+                    level_med = statistics.median(self._level_window) if self._level_window else 0.0
+
                     # Publish status to the simulator's debug panel (atomic dict swap).
                     # Single-writer (this thread), single-reader (main thread) — no lock needed.
                     self.sim.auto_input_status = {
@@ -1057,6 +1104,15 @@ class AutoDriver:
                         "speed_limit": sl_val,
                         "speed_limit_score": sl_score,
                         "limit_change_ts": self._limit_change_ts,
+                        # Per-field read outcome for the band's fault marks, already debounced.
+                        # See `sampling.fault_states` for what the values mean and
+                        # `auto_input/README.md § "Fault marks"` for how they render.
+                        "faults": band_faults,
+                        "badge_via": b_via,
+                        # MEDIAN over the last BADGE_LEVEL_WINDOW samples, never the instant
+                        # value — a screenshot of one sample is not evidence about a capture
+                        # whose shift moves with scene brightness.
+                        "badge_level": level_med,
                         "segment_start_stop": self._segment_start_stop,
                         "departure_observed": self._detector.departure_observed,
                         "arrival_observed": self._detector.arrival_observed,

@@ -41,12 +41,14 @@ class _MockState:
 
 # Mock stops list — the panel only reads `name` on the row 3 station-name lookup.
 _STOPS = [
-    {"name": "高尾"},
-    {"name": "西八王子"},
-    {"name": "八王子"},
-    {"name": "豊田"},
-    {"name": "日野"},
-    {"name": "立川"},
+    # `pa` is read only for the row-2 played counter (`3/4`). Without it every scenario shows
+    # a dash there, which is not what a real drive looks like at any point.
+    {"name": "高尾", "pa": ["1", "2", "3", "4"]},
+    {"name": "西八王子", "pa": ["1", "2", "3", "4"]},
+    {"name": "八王子", "pa": ["1", "2", "3", "4"]},
+    {"name": "豊田", "pa": ["1", "2", "3", "4"]},
+    {"name": "日野", "pa": ["1", "2", "3", "4"]},
+    {"name": "立川", "pa": ["1", "2", "3", "4"]},
 ]
 
 
@@ -195,6 +197,84 @@ def _scenarios() -> list[tuple[str, dict, _MockState]]:
     ]
 
 
+def _fault_scenarios() -> list[tuple[str, dict, _MockState]]:
+    """The band's FAULT MARKS, driven by real `faults` / `badge_level` status keys.
+
+    These are the states the band could not express before 2026-09-12: a `--` meant both
+    "nothing is posted here" and "the read failed", so a Keihin drive with no speed limit
+    looked identical to a broken one. Each entry below is a status dict of the shape
+    `AutoDriver` publishes, so this previews production rather than a drawing of it.
+    """
+    base = {
+        "speed_score": 0.93,
+        "distance_score": 0.95,
+        "speed_limit_score": 0.92,
+        "inferred_state": "CRUISING",
+        "segment_start_stop": 2,
+        "badge_via": "raw",
+        "paused": False,
+    }
+    st = _MockState(curr_stop=3, cnt_pa=1)
+    ok = {**base, "badge": "MOVING", "speed": 48, "distance": 1167, "speed_limit": 100}
+    return [
+        ("F1. healthy — unchanged from today", ok, st),
+        ("F2. no posted limit (Keihin) — a legitimate dim '--'", {**ok, "speed_limit": None}, st),
+        (
+            "F3. limit SELF — its own read was refused (amber ?)",
+            {**ok, "speed_limit": None, "faults": {"speed_limit": "self"}},
+            st,
+        ),
+        (
+            "F4. #137 before the fix — badge refused, digits fine",
+            {**ok, "badge": None, "badge_via": None, "badge_level": 91.0, "faults": {"badge": "refused"}},
+            st,
+        ),
+        (
+            "F5. #137 after it — rescued by the shape pass, shift shown",
+            {**ok, "badge_via": "ncc", "badge_level": 91.0, "faults": {"badge": "rescued"}},
+            st,
+        ),
+        (
+            "F6. CROSS — badge died and stood the digits down (one cause)",
+            {
+                **ok,
+                "badge": None,
+                "badge_via": None,
+                "badge_level": 104.0,
+                "speed": None,
+                "distance": None,
+                "speed_limit": None,
+                "faults": {"badge": "refused", "speed": "cross", "distance": "cross", "speed_limit": "cross"},
+            },
+            st,
+        ),
+        (
+            "F7. MIXED — badge took speed+dist; limit failed on its own",
+            {
+                **ok,
+                "badge": None,
+                "badge_via": None,
+                "badge_level": 104.0,
+                "speed": None,
+                "distance": None,
+                "speed_limit": None,
+                "faults": {"badge": "refused", "speed": "cross", "distance": "cross", "speed_limit": "self"},
+            },
+            st,
+        ),
+        (
+            "F8. speed accepted but LOW score — a number, marked",
+            {**ok, "speed": 58, "speed_score": 0.62, "faults": {"speed": "low"}},
+            st,
+        ),
+        (
+            "F9. shift present but UNDER the show threshold — no number",
+            {**ok, "badge_via": "ncc", "badge_level": 12.0, "faults": {"badge": "rescued"}},
+            st,
+        ),
+    ]
+
+
 def _footer(surf, font, label, paused, lang):
     surf.fill((30, 30, 36))
     pygame.draw.line(surf, (60, 60, 70), (0, 0), (surf.get_width(), 0), 1)
@@ -264,6 +344,11 @@ def _save_montage(path, scenarios, label_font):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--screenshot", metavar="PATH")
+    ap.add_argument(
+        "--faults",
+        action="store_true",
+        help="preview the FAULT-MARK states (?, cross vs self, badge refused/rescued, level shift)",
+    )
     args = ap.parse_args()
     pygame.init()
     pygame.font.init()
@@ -273,8 +358,12 @@ def main():
     footer_font = pygame.font.Font(str(project_root() / "fonts" / "ShinGoPr6N-Medium.otf"), 14)
     win_h = band.BAND_H + FOOTER_H
 
+    if args.faults:
+        scenarios = _fault_scenarios()
+
     if args.screenshot:
-        _save_montage(args.screenshot, scenarios + [_over_limit_case()], footer_font)
+        extra = [] if args.faults else [_over_limit_case()]
+        _save_montage(args.screenshot, scenarios + extra, footer_font)
         return
 
     pygame.display.set_caption("OCR band preview")

@@ -182,6 +182,53 @@ class Reading:
     cells: dict = field(default_factory=dict)
 
 
+# The score a read must clear to be called healthy. Deliberately the SAME number the
+# badge-reject gate applies (`driver.BADGE_NONE_SCORE_GATE`), so "low" means exactly: this
+# read would have been thrown away if we had not trusted the frame. Restating it rather than
+# importing it would be two copies of one decision, so the driver passes its own constant in.
+FAULT_FIELDS = ("speed", "distance", "speed_limit")
+
+
+def fault_states(r: "Reading", low_score: float) -> dict:
+    """Per-field read outcome, for the band. Pure — no time, no history, no rendering.
+
+    Four outcomes, and the distinction that matters is the middle two:
+
+      ``"cross"``  suppressed because the BADGE failed, not because this read did. The
+                   badge-reject gate wrote the field into `gated_fields`. Fix the badge and
+                   this row returns on its own — one cause, several symptoms.
+      ``"self"``   this row's own read was refused on its own merits: the distance
+                   plausibility guard rejected the value as physically impossible.
+      ``"low"``    a value came back and was accepted, but under `low_score`. The number is
+                   shown, marked — this is the dangerous one, since a wrong value that
+                   renders like a right one is worse than no value.
+      ``None``     healthy, OR nothing was there to read.
+
+    The last conflation is deliberate and cannot currently be undone: a cell with no digits
+    returns `min_score = 1.0` vacuously, so "the row is legitimately empty" and "segmentation
+    found nothing on a row that had something" are indistinguishable from here. The limit row
+    is legitimately empty on most lines, so guessing would cry wolf for a whole drive.
+
+    The badge is not a member of `FAULT_FIELDS`: it reports `"refused"` (classified nothing —
+    the fault that causes the `"cross"` ones) or `"rescued"` (the shape-only pass answered, so
+    the capture's levels are shifted and we are recovering rather than reading).
+    """
+    out: dict = {}
+    gated = set(r.gated_fields)
+    for f in FAULT_FIELDS:
+        value, score = getattr(r, f), getattr(r, f"{f}_score")
+        if value is not None:
+            out[f] = "low" if score < low_score else None
+        elif f in gated:
+            out[f] = "cross"
+        elif f == "distance" and r.distance_rejected:
+            out[f] = "self"
+        else:
+            out[f] = None
+    out["badge"] = None if r.badge is not None and r.badge_via == "raw" else ("rescued" if r.badge else "refused")
+    return out
+
+
 def read_hud(
     frame_bgra: np.ndarray,
     profile,

@@ -658,6 +658,30 @@ The live panel's layout (left OCR-state column / centre speed·limit·distance r
 
 The historical 3-line `draw_debug_panel` layout (ShinGoPr6N @ 14pt, `dep✓ arr·` flags, confidence colours) has been removed — `tims.band.render` is now the sole panel renderer.
 
+### Fault marks
+
+Per-element confidence returned 2026-09-12, in a different shape from the tint the migration dropped. The goal is not a debug readout: it is that **a screenshot of the band is a bug report**, naming the failing field, whose fault it is, and the magnitude of any capture-level shift, with no drive log involved. `#137` took a week and ten attached JSONLs to reach a conclusion that this band would have stated on the first frame.
+
+**`--` is not reused for failure.** It is a well-formed answer meaning "nothing is posted here", and on Keihin-Tōhoku that is true for an entire drive. A failed read says `?` instead. The unit stays in every state, since `docs/APP.md` makes `km/h` and `m` static chrome.
+
+| mark | meaning |
+|---|---|
+| `--` dim | nothing there. Unchanged, and the common resting state of the 制限 row |
+| `?` dim | **cross** — stood down because the badge failed. Not this row's fault; fix the badge and it returns |
+| `?` amber | **self** — this row's own read was refused on its own merits |
+| amber number | accepted but scored under `BADGE_NONE_SCORE_GATE`. Shown, not hidden: a wrong value that renders like a right one is the dangerous case |
+| `· ?` red on row 2 | the badge classified nothing. Arrival and at-station both require it, so this is what silences a drive |
+| `· MOVING*` amber | the shape-only pass answered — levels are shifted and we are recovering rather than reading |
+| `+91` beside the badge | `badge_level`, the capture's shift in mean grey. Only drawn past `BADGE_LEVEL_SHOW` (25) |
+
+**Cross-gated is dim rather than a second bright colour, and that is a rendering fact before it is a semantic one.** Red against amber at 18px AA-off on near-black does not separate — mocked side by side the two cases read as the same band. Dim against one red badge row reads as "one fault, three consequences", which is the distinction the user has to be able to report.
+
+**The level number rides the badge row because it is a property of the CAPTURE, not of the badge.** Speed and distance binarise to shape and have no opinion about levels; the badge is simply the only reader that compares absolute colour, so a frame-wide fault breaks there first. It is a **median over `BADGE_LEVEL_WINDOW` (60) samples**, never the instant value — `#137`'s reporter moved between 39 and 78 with scene brightness, so a screenshot of one sample could have shown either.
+
+**Derivation is pure and lives in `sampling.fault_states`**; the driver adds hysteresis (`FAULT_RAISE_SAMPLES` = 2 agreeing samples to raise, `FAULT_HOLD_S` = 1.5 s to clear) because the band renders at frame rate while samples arrive at ~5 Hz, so the renderer cannot count consecutive ones. Published as the `faults` status key. Display-only: nothing here feeds a fire decision, so a wrong mark costs a wrong-looking band and never a wrong announcement. Locked in T1 `test_auto_driver.py` § 6; preview with `uv run _dev_scripts/preview_band_ocr.py --faults`.
+
+**One conflation is deliberate and currently unfixable.** "The row is legitimately empty" and "segmentation found nothing on a row that had something" both render `--`, because a cell with no digits returns `min_score = 1.0` vacuously — there is no signal to separate them. Guessing would cry wolf for a whole drive on every line with no posted limit.
+
 ### Width adaptivity
 
 The band takes its width from the caller's surface (`surf.get_width()`); `PASimulator` allocates the sub-surface at `S_WIDTH` from the active train model, so the band follows future train models with different LCD widths automatically.
@@ -670,6 +694,10 @@ The band takes its width from the caller's surface (`surf.get_width()`); `PASimu
 {
     "badge": "MOVING" | "STOPPED" | "PASSING" | None,
     "badge_diff": float | None,            # template-match diff (lower = better)
+    "badge_via": "raw" | "ncc" | None,     # which classifier pass answered — see § "Badge classification"
+    "badge_level": float,                  # capture shift in mean grey, MEDIAN over BADGE_LEVEL_WINDOW
+    "faults": dict,                        # field -> "cross"|"self"|"low", badge -> "refused"|"rescued".
+                                           # Debounced; absent keys are healthy. See § "Fault marks"
     "speed": int | None,                   # km/h, integer (decimal stripped) — drives the band + all decisions
     "speed_decimal": float | None,         # km/h with the tenths (e.g. 5.3) — LOG/report only, never a decision; None-tenths degrades to X.0
     "speed_score": float,                  # OCR confidence 0..1
