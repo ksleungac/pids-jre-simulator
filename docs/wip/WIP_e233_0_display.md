@@ -1776,6 +1776,15 @@ bottom edge, and the whole band then pushes up a few px rather than clipping —
 band, so adjacent stations' rows stay on shared lines, which is what makes the row-wise rule below
 mean anything.
 
+- **The push is capped at `bar_gap`**, so the band can reach the bar and never cross it. Uncapped,
+  秋葉原 on Keihin 1275A pushed every list up into the blue bar (v0.7.0 release review).
+- **What the cap cannot absorb FOLDS**: while the last row still runs past the bottom, the last
+  entry moves onto the end of the row above it, `fold_gap` px after that row's text. Two whole
+  entries then share a row and compress by the per-row rule below. Author, 2026-09-16: *"put the
+  overflow line same line as the last line"*. It is out-of-spec relief rather than a reference
+  behaviour: the Keiyō line puts JY and JC on one row IRL, which is the shape it borrows. A sweep of
+  all 17 shipped routes, calibrated by disabling the fold, found no list left running off any edge.
+
 **A gutter, enforced PER ROW.** Two lists never touch; a row compresses to stop short of the
 neighbour's row (`list_gap`). A row whose neighbour has nothing at that depth keeps its natural
 width and needs no gutter — which is why the gutter belongs to the row bound, not to the block.
@@ -1786,9 +1795,11 @@ separator. 東海道･山陽新幹線 needs 0.94 and stays on one row; 東北�
 needs 0.40 and cuts 3 + 3, which is the reference's own cut. A width-driven greedy cut put the break
 a segment early and left the second line squeezed to nothing.
 
-**A wrapped entry's two rows share ONE ratio** (author — *"if line 2 compresses, line 1 should
-follow"*), computed before anything is drawn, since a row cannot know what its partner needs until
-both are measured. Its continuation row carries no badge and indents to the TEXT column.
+**A wrapped entry's two rows compress INDEPENDENTLY.** Each row takes its own ratio from its own
+neighbour, so a row with room keeps the natural width. Author, 2026-09-16: *"if there's a space
+within 1 line, that respective line takes normal ratio"*. This reverses the shared ratio of
+2026-08-29 (*"if line 2 compresses, line 1 should follow"*). The continuation row carries no badge
+and indents to the TEXT column.
 
 **The badge centres on the text's INK**, not on its font box — a box carries ascent and descent the
 glyphs never reach, and they are not equal, so box-centring left the badge above the line the text
@@ -1804,7 +1815,8 @@ draws on. The same trap as the minute digits.
 
 **The reference draws ONE entry where our data holds two.** At 東京 a Chūō train's band reads
 `横須賀線・総武線快速` on a single row; `data/stations.json` lists `yokosuka_sobu.yokosuka` and
-`yokosuka_sobu.sobu` separately, so we draw two rows — which also pushes 丸ノ内線 off the bottom.
+`yokosuka_sobu.sobu` separately, so we draw two rows. That used to push 丸ノ内線 off the bottom;
+the fold in § "Vertical" now keeps it on screen, but the two-row reading remains.
 
 **The current ops cannot express the collapse**, and this is the audit the author called for:
 

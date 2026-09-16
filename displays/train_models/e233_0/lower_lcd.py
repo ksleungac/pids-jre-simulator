@@ -1961,8 +1961,9 @@ _TUNEABLES_SIX_STATION_TRANSFERS = {
     # list runs its last row into the screen's bottom edge, and the whole band
     # then pushes up a few px rather than clipping. The reference is that case —
     # 東京's ten rows put its first ink at 341.25 against a bar ending at 337, a
-    # gap of 4.25, which is the TIGHTENED value; 8 - 4 reproduces it exactly. A
-    # route whose longest block is short sits at the full 8.
+    # gap of 4.25, which is the TIGHTENED value; with `bar_gap` at its original 8,
+    # 8 - 4 reproduced it exactly. `bar_gap` is now 2, so the push is capped at
+    # `bar_gap` in `_draw_transfers` — the band may touch the bar, never enter it.
     "bar_gap":         2,  # nominal clear px below the bar — ALMOST TOUCHING it
                            # (author, 2026-08-29), so the list reads as belonging
                            # to the station above rather than floating
@@ -1995,6 +1996,8 @@ _TUNEABLES_SIX_STATION_TRANSFERS = {
                            # element is for.
     "name_color":  (12, 13, 18),  # [measured] near-black, NOT blue
     "edge_pad":        3,  # clear px inside the screen border
+    "fold_gap":        6,  # between two entries folded onto one row when a list
+                           # would overflow the bottom (author, 2026-09-16)
     # TWO POSITIONS (author, 2026-08-29). A block sits at a NOMINAL anchor inset
     # into its cell, and a block too wide for the room shifts LEFT by however
     # much it overruns — "each transfer list optimizes itself … it would offset a
@@ -2040,17 +2043,6 @@ _TUNEABLES_SIX_STATION_SKIP = {
 # fmt: on
 
 SIX_STATION_RECT = pygame.Rect(0, UPPER_HEIGHT, S_WIDTH, S_HEIGHT - UPPER_HEIGHT)
-
-
-def _wrapped_pairs(block):
-    """Index pairs `(first, second)` for each wrapped entry in a block.
-
-    A continuation row is the one carrying NO badges — every entry resolves at
-    least the `_universal` icon, so an empty icon list can only mean "this is the
-    tail of the row above". That keeps the pairing structural rather than
-    re-deriving which names wrapped.
-    """
-    return [(i - 1, i) for i in range(1, len(block)) if not block[i][0]]
 
 
 class JapaneseSixStationDisplay:
@@ -2362,7 +2354,15 @@ class JapaneseSixStationDisplay:
                 continue  # the marker owns this cell
             stop = self.display_stops[di]
             cx = self._slot_cx(di)
-            if self._is_passing(stop):
+            # The route ORIGIN is a stopping station — the run begins there — but it
+            # carries `pa: []` because a run has no approach announcement at its own
+            # start, and `_is_passing` reads that as a station the train runs through.
+            # So once the train left, the origin took a chevron where § 10.3.3's rule
+            # asks for an empty box (高尾 on 1654T, found in the v0.7.0 release
+            # review). The full-route names already name this station directly for the
+            # same reason; `display_offset` is the origin's index, which also keeps the
+            # `pre_stops` before it on their deliberate chevron.
+            if self._is_passing(stop) and di != self.display_offset:
                 inset = (float(t["bar_h"]) - float(m["arrow_h"])) / 2.0
                 draw_aapolygon(
                     self.screen,
@@ -2690,21 +2690,52 @@ class JapaneseSixStationDisplay:
         if deepest:
             tail = top + (deepest - 1) * pitch + font.get_height()
             crowd = tail - (S_HEIGHT - BORDER_W - float(t["bottom_pad"]))
-            top -= min(max(0.0, crowd), float(t["crowd_push"]))
+            # "Never past the bar" is ENFORCED here, not left to the two numbers agreeing.
+            # `crowd_push` = 4 was fitted when `bar_gap` was 8, and when the author later
+            # brought the band up to almost touching (`bar_gap` = 2) the push stayed 4, so
+            # every crowded frame lifted the whole band 2px INTO the bar (1275A at 秋葉原,
+            # 727B at 東京 — author, 2026-09-16: "it is now clipping the blue route color
+            # bar"). Capping at `bar_gap` lets the band touch the bar and go no further.
+            top -= min(max(0.0, crowd), float(t["crowd_push"]), float(t["bar_gap"]))
+
+        # The block to the RIGHT is the cell BESIDE it on screen, not the station one
+        # index away. A skip does not matter to a transfer list — every shown cell is
+        # an ordinary neighbour (author, 2026-09-16: "whether it's skip or not doesn't
+        # matter, treat as normal station"). `di - 1` stood in for that while cells
+        # were consecutive; once a skip break drops stations from the window it
+        # named a station that is not drawn, so the row found no neighbour, never
+        # compressed, and ran over the next column (1275A at 王子 and 秋葉原, found
+        # in the v0.7.0 release review). Screen order comes from the slot x the
+        # cells are actually drawn at. Nothing to the right of slot 0 but the edge.
+        by_x = sorted(cell_lefts, key=cell_lefts.get)
+        right_of = {a: b for a, b in zip(by_x, by_x[1:])}
+
+        # AN OVERFLOWING LIST FOLDS ITS LAST ROW ONTO THE ROW ABOVE (author, 2026-09-16), the way
+        # the Keiyō PIDS puts JY and JC on one line. Vertical spacing is never squeezed, so a list
+        # that still runs past the bottom after the push gives up a ROW instead: the last entry
+        # moves up beside the one before it. In the shipped corpus it is at most one row, 東京 on
+        # out-of-spec Keiyō and Utsunomiya. Measured on INK against the border — `font.get_height()`
+        # carries leading the glyphs never reach, and that measure would fold Keihin's 東京, which
+        # fits. Only two WHOLE entries fold: a wrap continuation (no badges) stays with its parent.
+        limit = S_HEIGHT - BORDER_W - float(t["bottom_pad"])
+        tails = {}
+        for di, block in rows.items():
+            tails[di] = {}
+            while len(block) >= 2 and block[-1][0] and block[-2][0]:
+                last_ink = font.render(block[-1][1], True, color).get_bounding_rect()
+                if top + (len(block) - 1) * pitch + max(last_ink.bottom, last_ink.y + (last_ink.h + badge_h) / 2.0) <= limit:
+                    break
+                keep = len(block) - 2  # index of the row it joins, taken BEFORE the pop shortens the list
+                tails[di][keep] = block.pop()
+        fold_gap = float(t["fold_gap"])
 
         for di, block in rows.items():
             left = max(lefts[di], BORDER_W + pad)
-            # The block to the RIGHT is the next slot toward slot 0, since the
-            # cells read right to left. Nothing to the right of slot 0 but the
-            # screen edge.
-            right_di = di - 1
+            right_di = right_of.get(di)
             y = top
-            # A WRAPPED ENTRY'S TWO ROWS SHARE ONE RATIO (author, 2026-08-29 —
-            # "if line 2 compresses, line 1 should follow"). Squeezing each row
-            # on its own lets line 1 stay natural while line 2 tightens, and the
-            # two then read as different sizes inside one entry. Computed here,
-            # before anything is drawn, because a row cannot know what its
-            # partner needs until both have been measured.
+            # EACH ROW COMPRESSES ONLY AS MUCH AS IT NEEDS, a wrapped shinkansen's two lines
+            # included (author, 2026-09-16: "if there's a space within 1 line, that respective line
+            # takes normal ratio"). This reverses 2026-08-29's shared ratio for a wrapped entry.
             ratios = []
             for r, (_, text, indent) in enumerate(block):
                 neighbour = rows.get(right_di) or []
@@ -2713,9 +2744,12 @@ class JapaneseSixStationDisplay:
                 bound = (lefts[right_di] - gutter) if r < len(neighbour) else S_WIDTH - BORDER_W - pad
                 room = max(1.0, bound - (left + indent))
                 w = font.size(text)[0]
-                ratios.append(min(1.0, room / w) if w else 1.0)
-            for a, b in _wrapped_pairs(block):
-                ratios[a] = ratios[b] = min(ratios[a], ratios[b])
+                tail = tails[di].get(r)
+                if tail is not None:
+                    # A folded row squeezes both names by one ratio and never the badges.
+                    room -= fold_gap + tail[2]
+                    w += font.size(tail[1])[0]
+                ratios.append(min(1.0, max(1.0, room) / w) if w else 1.0)
 
             for r, (ics, text, indent) in enumerate(block):
                 img = font.render(text, True, color)
@@ -2744,6 +2778,18 @@ class JapaneseSixStationDisplay:
                 if ratios[r] < 1.0:
                     img = pygame.transform.smoothscale(img, (max(1, int(round(img.get_width() * ratios[r]))), img.get_height()))
                 self.screen.blit(img, (int(round(x)), int(round(y))))
+                tail = tails[di].get(r)
+                if tail is not None:
+                    # The folded entry: its own badges, then its name, after `fold_gap`.
+                    t_ics, t_text, t_indent = tail
+                    tx = x + img.get_width() + fold_gap
+                    for j, ic in enumerate(t_ics):
+                        self.screen.blit(ic, (int(round(tx)), int(round(badge_top))))
+                        tx += ic.get_width() + (inter if j < len(t_ics) - 1 else 0)
+                    t_img = font.render(t_text, True, color)
+                    if ratios[r] < 1.0:
+                        t_img = pygame.transform.smoothscale(t_img, (max(1, int(round(t_img.get_width() * ratios[r]))), t_img.get_height()))
+                    self.screen.blit(t_img, (int(round(x + img.get_width() + fold_gap + t_indent)), int(round(y))))
                 y += pitch
 
     def show_stops(self, state, current_time: float = 0.0) -> None:
