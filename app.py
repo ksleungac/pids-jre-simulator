@@ -522,7 +522,13 @@ class PASimulator:
                         pressed = self.bell.tap(event.pos, timestamp)
                         if pressed:
                             self._bell_press(pressed)
-                elif event.type == pygame.QUIT:
+                elif event.type == pygame.QUIT or (event.type == pygame.WINDOWCLOSE and getattr(event, "window", None) is None):
+                    # SDL posts QUIT only when the LAST window closes. With the bell box open
+                    # there are two, so the PA window's X arrives as a bare WINDOWCLOSE and a
+                    # QUIT-only test left the drive running with no way to close it but the
+                    # console (found in the v0.7.0 release review). The bell's own close is
+                    # claimed by the branch above, so a WINDOWCLOSE reaching here is the PA
+                    # window's — `window is None` is how pygame reports the display window.
                     self.running = False
                 elif event.type == pygame.VIDEORESIZE:
                     # Snap the dragged size to a whole multiple so the blit stays nearest-neighbour.
