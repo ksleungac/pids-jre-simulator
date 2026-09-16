@@ -66,16 +66,28 @@ def _model_font():
     return i18n.pixel_font_for_lang("en", MODEL_NATIVE)  # "en"=NotoSansJP — E235系 / 番台 are fixed, locale-independent
 
 
+def model_name_parts(label):
+    """A registry label as its full JR designation, series then sub-series: 'E235-1000' → ('E235系', '1000番台').
+
+    The ONE place the written form is decided. This grid draws the two parts on two lines, and the
+    案内設定 table joins them on one (`pa_setting._current_model_label`), so the two screens cannot
+    drift into different names for the same train. A label with no sub-series comes back unchanged
+    as a single part rather than as a malformed '…系番台'."""
+    series, sep, sub = label.partition("-")
+    return (f"{series}系", f"{sub}番台") if sep else (label,)
+
+
 def _entries():
     """Unified grid list ordered by series then sub-series, grayed and built INTERLEAVED — a roadmap
     E233-1000 sits directly after the built E233-0. Each entry: {key, line1 (series, e.g. 'E235系'),
     line2 (sub-series, e.g. '1000番台'), enabled}."""
     out = []
     for series, sub in _GRAYED:
-        out.append({"key": None, "line1": f"{series}系", "line2": f"{sub}番台", "enabled": False})
+        line1, line2 = model_name_parts(f"{series}-{sub}")
+        out.append({"key": None, "line1": line1, "line2": line2, "enabled": False})
     for key, label in model_choices():
-        series, _, sub = label.partition("-")  # "E235-1000" → "E235" / "1000"
-        out.append({"key": key, "line1": f"{series}系", "line2": f"{sub}番台", "enabled": True})
+        line1, line2 = model_name_parts(label)  # every registry label carries a sub-series
+        out.append({"key": key, "line1": line1, "line2": line2, "enabled": True})
 
     # SORTED BY SERIES THEN SUB-SERIES, across both groups. The two used to be
     # concatenated — every grayed model, then every built one — which read as

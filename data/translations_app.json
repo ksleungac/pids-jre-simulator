@@ -444,6 +444,7 @@
   "setup_tims.pa_setting.field.type": { "en": "Train Type", "zh_HK": "列車種別", "zh_CN": "列车种别" },
   "setup_tims.pa_setting.field.from_to": { "en": "From / To", "zh_HK": "始發・終着站", "zh_CN": "始发・终到站" },
   "setup_tims.pa_setting.field.model": { "en": "Train Model", "zh_HK": "列車型號", "zh_CN": "列车型号" },
+  "setup_tims.model_variant.e233_0": { "en": " (station numbering update)", "zh_HK": "（車站編號更新）", "zh_CN": "（车站编号更新）" },
   "setup_tims.pa_setting.field.remark": { "en": "Remarks", "zh_HK": "備註", "zh_CN": "备注" },
 
   "setup_tims.back": { "en": "Back", "zh_HK": "返回", "zh_CN": "返回" },

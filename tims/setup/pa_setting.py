@@ -116,10 +116,27 @@ _model_override = None  # last user-picked train model (列車型號 picker); se
 
 
 def _current_model_label():
-    """Designation of the model in effect (override > committed route's default > global default), e.g.
-    'E235-1000' — shown in the 列車型號 table row so the pick is visible without re-opening the picker."""
+    """Full designation of the model in effect (override > committed route's default > global default),
+    e.g. 'E235系1000番台' — shown in the 列車型號 table row so the pick is visible without re-opening the
+    picker. The picker owns the written form (`model_select.model_name_parts`); this only joins it on
+    one line, so the table and the picker name the same train the same way."""
+    from .model_select import model_name_parts  # local import (sibling), as the picker's own open is
+
     key = _model_override or (_committed["route"]["model"] if _committed else DEFAULT_MODEL_KEY)
-    return dict(model_choices()).get(key, key)
+    return "".join(model_name_parts(dict(model_choices()).get(key, key)))
+
+
+def _current_model_variant():
+    """The localized VARIANT tag for the model in effect, or "" when it has none.
+
+    The designation stays Japanese in every locale; the tag says WHICH build of that train the LCD
+    models, in the reader's language. E233-0 is the 駅ナンバリング対応 refit (author, 2026-09-16:
+    zh_HK 車站編號更新). A model without a `setup_tims.model_variant.<key>` entry gets no tag —
+    `i18n.t` hands back the key itself when an entry is missing, which is the absence test."""
+    key = _model_override or (_committed["route"]["model"] if _committed else DEFAULT_MODEL_KEY)
+    tag_key = f"setup_tims.model_variant.{key}"
+    tag = i18n.t(tag_key)
+    return "" if tag == tag_key else tag
 
 
 def _apply_selection(result):
@@ -231,8 +248,16 @@ def render(surf):
         chrome.blit_lowres(surf, label, label_x + CELL_PAD_X, ry + (ROW_H - lh) // 2, label_font, ROW_LABEL_COLOR, 1)
         value = _current_model_label() if i == MODEL_ROW else ROW_VALUES[i]  # model row is dynamic, not stored
         if value:
-            _, vh = lowres_text_size(value, value_font, 1, 0)
+            vw, vh = lowres_text_size(value, value_font, 1, 0)
             chrome.blit_lowres(surf, value, value_x + CELL_PAD_X, ry + (ROW_H - vh) // 2, value_font, ROW_VALUE_COLOR, 1)
+            tag = _current_model_variant() if i == MODEL_ROW else ""
+            if tag:
+                # TWO FACES ON ONE ROW. The designation is a Japanese proper noun in NotoSansJP; the
+                # tag is chrome in the reader's language, and the JP subset has no 编, so zh_CN's
+                # 车站编号更新 would draw tofu in the value face. `conventions.md` § "Mixed-script
+                # i18n chrome needs two fonts".
+                _, th = lowres_text_size(tag, label_font, 1, 0)
+                chrome.blit_lowres(surf, tag, value_x + CELL_PAD_X + vw, ry + (ROW_H - th) // 2, label_font, ROW_VALUE_COLOR, 1)
     # big consist 'A' — white, x-stretched (same fat variant as the title), centered in its column
     a_font = i18n.pixel_font_for_lang("en", A_NATIVE)
     aw, ah = lowres_text_size("A", a_font, 1, 0)
