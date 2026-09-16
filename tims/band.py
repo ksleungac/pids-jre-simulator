@@ -562,9 +562,14 @@ def draw_overlay(surf) -> None:
     block = _qr_surface(url)
     if block is None:
         return
+    z = _view_zoom
+    if z > 1:
+        # Drawn on the PRESENTED window, after the canvas was scaled up, so place and size it in
+        # window px. Nearest-neighbour keeps the modules square, which is what a scanner needs.
+        block = pygame.transform.scale(block, (block.get_width() * z, block.get_height() * z))
     w, h = block.get_size()
-    x = max(0, min(LEFT_X, surf.get_width() - w))
-    y = min(BAND_H + QR_GAP, max(0, surf.get_height() - h))
+    x = max(0, min(LEFT_X * z, surf.get_width() - w))
+    y = min((BAND_H + QR_GAP) * z, max(0, surf.get_height() - h))
     surf.blit(block, (x, y))
 
 
@@ -602,11 +607,24 @@ def install_overlay_hook() -> None:
         setattr(pygame.display, name, _wrapped)
 
 
+# The WINDOW is the canvas scaled by a whole number. `render(zoom=)` sets it every frame (the setup
+# screens pass nothing, so it is 1 there), and both directions read it: the pointer comes IN from the
+# window, and the QR popup goes OUT onto the presented window. The drive band used to test the raw
+# window pointer against canvas hit-rects, so at 2x (the 4K default) hovering the visible address
+# did nothing, the top-left of the band raised the popup instead, and the popup landed inside the
+# doubled band (v0.7.0 release review). The drive's zoom is always a whole multiple
+# (`window_utils.snap_zoom`), so `// z` here is exactly `app.py::window_to_canvas` and `* z` its inverse.
+_view_zoom = 1
+
+
 def _mouse_pos():
-    """The pointer, or None when there is no display to have one — a ``save_screenshot`` render
-    goes to an offscreen Surface, where asking pygame for the mouse is meaningless. Checked rather
-    than caught, so a real fault here still raises."""
-    return None if pygame.display.get_surface() is None else pygame.mouse.get_pos()
+    """The pointer in CANVAS coordinates, or None when there is no display to have one — a
+    ``save_screenshot`` render goes to an offscreen Surface, where asking pygame for the mouse is
+    meaningless. Checked rather than caught, so a real fault here still raises."""
+    if pygame.display.get_surface() is None:
+        return None
+    x, y = pygame.mouse.get_pos()
+    return x // _view_zoom, y // _view_zoom
 
 
 def _update_hover_cursor():
@@ -789,7 +807,7 @@ def _band_vals(status, sim_state, stops):
     }
 
 
-def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, force_flash_on=False, home_inert=False):
+def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, force_flash_on=False, home_inert=False, zoom=1):
     """Persistent TIMS status band across the top. Drives off a live OCR `status` dict (auto_input
     shape: badge / inferred_state / segment_start_stop / speed / speed_limit / distance /
     stopping_offset_cm / last_fire / reentry_pending / paused, + `sim_state.curr_stop/cnt_pa` + `stops`
@@ -803,7 +821,11 @@ def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, f
                        paused. Home always rightmost.
     `force_flash_on` pins the limit-flash + message-strip blink to their ON phase (for a STATIC
     montage render — otherwise both depend on `get_ticks` and a frozen frame may catch them dark).
+    `zoom` is how many window px one canvas px occupies — the live drive passes its own; setup screens
+    run unscaled and leave it at 1. It is stored for `_mouse_pos` and the QR overlay, see `_view_zoom`.
     Returns {"home"/"save"/"pause": rect} hit-rects."""
+    global _view_zoom
+    _view_zoom = max(1, int(zoom))
     width = surf.get_width()
     vals = _band_vals(status, sim_state, stops)
     save_msg = _save_message(save_notice)  # Save-button confirmation → top strip, priority over ambient msgs

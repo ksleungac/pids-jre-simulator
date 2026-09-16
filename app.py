@@ -566,7 +566,12 @@ class PASimulator:
             return
         status_band.ACTIVE_LANG = i18n.current_lang()  # band chrome follows the user's UI language
         self._band_hits = status_band.render(
-            self.debug_surface, status=self.auto_input_status, sim_state=self.state, stops=self.stops, save_notice=getattr(self, "last_save", None)
+            self.debug_surface,
+            status=self.auto_input_status,
+            sim_state=self.state,
+            stops=self.stops,
+            save_notice=getattr(self, "last_save", None),
+            zoom=self.zoom,  # the band maps the pointer in, and the QR popup out, by the window's scale
         )
 
     def _handle_band_click(self, pos) -> None:
