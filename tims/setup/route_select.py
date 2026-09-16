@@ -618,6 +618,11 @@ def _render_diagram(surf, route_name, start_name, end_name, variants, *, selecte
     # off the top/bottom borders without touching the row-to-row spacing (still HDR_ROW_H apart).
     row0_y = HDR_Y + HDR_PAD_Y
     _cell_text(surf, i18n.t("setup_tims.hdr.from_to"), lab_font, HDR_LABEL_COLOR, pygame.Rect(HDR_X, row0_y, lab_cell_w, HDR_ROW_H), align="left")
+    # The terminus is the HIGHLIGHTED diagram's, not the first listed one's. Two diagrams offered from
+    # one start can end in different places (宇都宮線 1545E → 東京, 3520M → 上野), and a fixed
+    # `end_name` read 東京 with 3520M selected (v0.7.0 release review). Nothing picked yet → the caller's.
+    if selected_idx is not None and 0 <= selected_idx < len(variants):
+        end_name = variants[selected_idx].get("end") or end_name
     _draw_from_to(surf, start_name, end_name, val_font, HDR_VALUE_COLOR, pygame.Rect(split_x, row0_y, val_cell_w, HDR_ROW_H))
     # row 1 — (路線名) | (line). The (路線名) LABEL is centered in the label cell (per reference); the
     # line value stays left-aligned like the station row above it.
