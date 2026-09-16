@@ -942,6 +942,29 @@ def verify_shipped() -> int:
     Builds the staged shape in a temp dir and drives the real app in a SUBPROCESS,
     because the root has to be redirected before any display module imports.
     """
+    if not (ROOT / "font_atlas").is_dir():
+        print("no baked atlas to test — run the bake first")
+        return 1
+    # TWO shipped frames, not one. The clean one is what /build stages. The second is
+    # a user extracting a new zip OVER an old install, which leaves every file the new
+    # zip does not overwrite: v0.6.2 and earlier shipped `fonts/ShinGoPr6N-*.otf`, and
+    # no release ever shipped `ShinGoPro-DeBold.otf`. mode() read "some ShinGo file
+    # exists" as "the baked families are loadable", picked LIVE, and every E233-0
+    # drive — the default model for Chuo and Keihin-Tohoku from v0.7.0 — died on its
+    # first frame looking for DeBold. Found in the v0.7.0 release review; the clean
+    # frame could never have shown it, because it has no leftovers to mislead with.
+    for label, keep in (
+        ("clean staged build", lambda name: False),
+        ("extracted over a <=v0.6.2 install (old ShinGoPr6N cuts left behind)", lambda name: name.startswith("ShinGoPr6N-")),
+    ):
+        rc = _verify_shipped_frame(label, keep)
+        if rc:
+            return rc
+    return 0
+
+
+def _verify_shipped_frame(label, keep) -> int:
+    """One staged frame for `verify_shipped`. `keep(name)` spares baked-family font files."""
     import shutil
     import subprocess
     import tempfile
@@ -951,13 +974,11 @@ def verify_shipped() -> int:
     try:
         # Mirror /build step 2d: stage fonts/, then drop the baked families.
         shutil.copytree(root / "fonts", stage / "fonts")
-        dropped = sorted(p.name for fam in font_atlas.ATLAS_FACES for p in (stage / "fonts").glob(f"{fam}*.otf"))
+        dropped = sorted(p.name for fam in font_atlas.ATLAS_FACES for p in (stage / "fonts").glob(f"{fam}*.otf") if not keep(p.name))
         for fam in font_atlas.ATLAS_FACES:
             for p in (stage / "fonts").glob(f"{fam}*.otf"):
-                p.unlink()
-        if not (root / "font_atlas").is_dir():
-            print("no baked atlas to test — run the bake first")
-            return 1
+                if not keep(p.name):
+                    p.unlink()
         shutil.copytree(root / "font_atlas", stage / "font_atlas")
         shutil.copytree(root / "data", stage / "data")
         # displays/ deliberately NOT copied — /build excludes it, and its absence
@@ -977,7 +998,7 @@ def verify_shipped() -> int:
             (stage / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(p, stage / rel)
 
-        print(f"shipped-frame check: fonts/ staged without {', '.join(dropped)}; displays/ absent")
+        print(f"shipped-frame check [{label}]: fonts/ staged without {', '.join(dropped)}; displays/ absent")
         routes = shipped_routes()
         r = subprocess.run(
             [sys.executable, "-c", _SHIPPED_DRIVER, str(stage), *routes],
@@ -994,7 +1015,7 @@ def verify_shipped() -> int:
             print((r.stderr or "").strip()[:1200])
             print("\n  A build staged from this tree would fail the same way for every user.")
             return 1
-        print("SHIPPED-FRAME OK — the staged layout resolves ATLAS and renders every route")
+        print(f"SHIPPED-FRAME OK [{label}] — the staged layout resolves ATLAS and renders every route")
         return 0
     finally:
         shutil.rmtree(stage, ignore_errors=True)

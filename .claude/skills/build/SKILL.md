@@ -85,7 +85,10 @@ gap — `mode()` answered LIVE off `fonts/` merely existing and sent every ShinG
 step deletes, and `code_fingerprint()` hashed an empty file list and refused the atlas as stale.
 Both were invisible to 21,978 states of pixel-identical proof, because all 21,978 ran in the frame
 that has the fonts (`critical_lessons.md` §4, §6). It builds the staged shape in a temp dir and
-drives the real app there, so it costs seconds and needs no PyInstaller run.
+drives the real app there, so it costs seconds and needs no PyInstaller run. It stages TWO frames:
+the clean build, and the same build extracted over a ≤v0.6.2 install, whose leftover
+`ShinGoPr6N-*` cuts made `mode()` answer LIVE and killed every E233-0 drive on its first frame
+(v0.7.0 release review). A user's folder is not the staged folder.
 
 **2b — Generate `version_info.txt`**
 

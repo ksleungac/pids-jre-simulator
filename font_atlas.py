@@ -547,6 +547,17 @@ def mode() -> str:
         else:
             have_fonts = _baked_faces_available()
             have_atlas = (project_root() / ATLAS_DIRNAME / "manifest.json").is_file()
+            # A SHIPPED layout uses the atlas it shipped with, whatever else sits in fonts/.
+            # "Some ShinGo file exists" is not "the faces this build draws are loadable":
+            # a user extracting a new zip over a <=v0.6.2 install keeps the old
+            # ShinGoPr6N cuts, which alone answered LIVE, and E233-0 then died on its
+            # first frame looking for ShinGoPro-DeBold, a cut no release ever shipped.
+            # Absent source tree is the shipped-layout test the fingerprint check below
+            # already trusts; `bake_font_atlas.py --verify-shipped` stages that
+            # extract-over case as its own frame. (v0.7.0 release review.)
+            if have_atlas and not code_sources_present():
+                _mode = ATLAS
+                return _mode
             if not have_fonts and not have_atlas:
                 raise RuntimeError(
                     f"font_atlas: neither {project_root() / 'fonts'} nor a baked atlas at "

@@ -267,6 +267,15 @@ rigour and is the thing that makes the blind spot invisible.
   gate names a file that is provably correct, suspect the gate's DOMAIN before the file. Fixed by
   recording unbaked faces into a separate sink the baker never reads, so the predicate spans the
   same set as the question. (2026-08-30.)
+- **The user's folder is not the staged folder: an upgrade EXTRACTS OVER the old install**, so
+  every file a previous release shipped and this one does not survives beside the new ones. v0.6.2
+  and earlier shipped `fonts/ShinGoPr6N-*`. In an extracted-over folder `mode()` read those as "the
+  baked families are loadable", picked LIVE, and every E233-0 drive died on its first frame
+  looking for `ShinGoPro-DeBold`, a cut no release shipped. `--verify-shipped` passed, because its
+  one frame was the clean build, which has no leftovers to mislead with. Fixed by trusting the
+  shipped layout (no source tree → ATLAS) and staging the extract-over case as a second frame.
+  Any predicate of the form "file X is present ⇒ capability Y" has this separator whenever an
+  older release shipped X. (2026-09-16, v0.7.0 release review.)
 - **A bound written as an OFFSET from a fitted list states a fact about the SET, not about the
   member.** The overview's shape gate read `len(services) <= len(fold_foot_x) + 1`, true only
   because the one service lacking a fitted fold also happened to need no junction spur. The `+ 1`
