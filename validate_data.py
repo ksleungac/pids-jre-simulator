@@ -553,6 +553,12 @@ def check_route(route_path: Path, translations: dict, train_types: dict, issues:
         for forbidden in PRE_STOP_FORBIDDEN:
             if forbidden in ps:
                 issues.append((rel, f"pre_stops[{i}] {psname}: '{forbidden}' forbidden"))
+        # name → translations (cross-ref). Stops had this check and pre_stops did not, so the
+        # eight 大月..相模湖 pre_stops Chūō 1654T / 916H gained after v0.6.3 shipped untranslated
+        # and drew as tofu in English mode on E235-1000, with this validator passing. A pre_stop
+        # is drawn on the route bar exactly like a stop, so it owes the same entry.
+        if not fixture and "name" in ps and psname not in translations:
+            issues.append((rel, f"pre_stops[{i}] {psname}: no translations.json entry — renders as tofu in English mode"))
 
     # Stop-level
     stops = data.get("stops", [])
