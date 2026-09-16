@@ -387,7 +387,8 @@
             "yurikamome"
         ],
         "transfers_by_view": {
-            "JY_inner": {"drop": ["keihin_tohoku", "tokaido", "ueno_tokyo"]}
+            "JY_inner": {"drop": ["keihin_tohoku", "tokaido", "ueno_tokyo"]},
+            "JK_south": {"drop": ["ueno_tokyo"]}
         }
     },
     "日暮里": {
@@ -420,7 +421,8 @@
         ],
         "transfers_by_view": {
             "JC_up": {"edit": {"yokosuka_sobu": "yokosuka_sobu"}},
-            "JY_inner": {"drop": ["keihin_tohoku"]}
+            "JY_inner": {"drop": ["keihin_tohoku"]},
+            "JK_south": {"drop": ["ueno_tokyo", "chuo_rapid"]}
         }
     },
     "横浜": {
