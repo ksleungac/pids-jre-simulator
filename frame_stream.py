@@ -65,6 +65,7 @@ MAX_CLIENTS = 3  # browsers routinely open a speculative 2nd connection, so >1
 # stream after that is refused with 503, which the browser draws as a broken-image icon. Measured
 # 2026-08-29: swaps 1-3 returned 200 and swap 4 onward 503, with `_clients` pinned at 3.
 STREAM_WRITE_TIMEOUT = 2.0  # seconds; a live client drains a ~4 KB frame in microseconds
+ADDRESS_REFRESH_S = 10.0  # LAN bind: how often the server re-reads this machine's addresses — see _Server
 BOUNDARY = "pidsframe"
 
 # NOTE: deliberately has NO reader. `install_display_quit_guard` takes this across
@@ -1018,6 +1019,37 @@ class _Server(ThreadingHTTPServer):
     """
 
     daemon_threads = True
+    # NOT the stock server's True. On Windows SO_REUSEADDR lets a SECOND socket bind a port that is
+    # already listening, so a second copy of the app silently shared 8541: its bind "succeeded", its
+    # band offered the address, and every request was answered by the FIRST copy — the loud bind
+    # failure `start`'s CONTRACT promises never happened (v0.7.0 release review, measured 6/6 requests
+    # to the other instance). Without it the second bind fails and says so. The settings page's own
+    # stop-then-start on the same port still rebinds: `stop()` closes the listener before `start()`.
+    allow_reuse_address = False
+
+    # A LAN bind re-reads this machine's addresses on the server's own thread, at most this often,
+    # so Wi-Fi connecting after launch (or a new DHCP lease, or the mobile hotspot) is offered in the
+    # band and admitted by the Host gate. They were captured once in `start`, so a new address got
+    # 421 on every endpoint and the band kept showing the old one. Never on the render path: the
+    # lookup is a route probe plus `getaddrinfo`, which can stall on a slow resolver.
+    lan_port: Optional[int] = None
+    _refreshed = 0.0
+
+    def service_actions(self):
+        """Called by `serve_forever` every poll; refreshes the LAN address sets when due."""
+        global _urls, _bound_hosts
+        if self.lan_port is None or time.monotonic() - self._refreshed < ADDRESS_REFRESH_S:
+            return
+        self._refreshed = time.monotonic()
+        hosts = lan_candidates()
+        seen = {*_all_local_addresses(), *hosts, *_own_names()}
+        if _server is not self or _stop.is_set():
+            return  # stopped or replaced while looking — must never repopulate a dead listener's sets
+        # UNION for the gate: an address that disappears is harmless to keep (nothing can reach it),
+        # and dropping it would 421 a phone mid-roam. The OFFERED list is replaced, since it must
+        # name only what is reachable now.
+        _bound_hosts = _bound_hosts | seen
+        _urls = [f"http://{h}:{self.lan_port}/" for h in hosts]
 
     def handle_error(self, request, client_address):
         if isinstance(sys.exc_info()[1], (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, TimeoutError)):
@@ -1254,6 +1286,9 @@ def start(host: str, port: int = DEFAULT_PORT) -> Optional[list[str]]:
         print("[stream] streaming is OFF for this session (firewall prompt declined, or port in use)")
         _bound_hosts = set()  # the allow-list must never outlive the listener it describes
         return None
+    if host == "0.0.0.0":
+        _server.lan_port = port
+        _server._refreshed = time.monotonic()  # the sets above are fresh; the first refresh is due later
     threading.Thread(target=_server.serve_forever, daemon=True, name="frame-stream").start()
     _urls = [f"http://{h}:{port}/" for h in hosts]
     return list(_urls)
@@ -1280,6 +1315,9 @@ def stop() -> None:
         _server.shutdown()
         _server.server_close()  # release the port NOW, so an immediate re-bind on it succeeds
         _server = None
+        # Again, now that `serve_forever` has returned: an address refresh already past its checks
+        # when `_urls` was cleared above could have written it back, and none can run after this.
+        _urls = []
     # AFTER the listener is down. Clearing first left a window where the server was still accepting
     # and every request met an empty allow-list, so a legitimate in-flight one got 421.
     _bound_hosts = set()
