@@ -143,10 +143,16 @@ MISREAD_DUMP_DIR = project_root() / "_ocr_calibration" / "_misread_dumps"
 # random-match danger zone) vs ~0.90 (p25 0.88) when the badge reads. 0.80 splits them.
 BADGE_NONE_SCORE_GATE = 0.80
 # Band fault marks — see `_fault_run` on AutoDriver for why the debounce lives on this side.
-FAULT_RAISE_SAMPLES = 2  # agreeing samples before a mark appears (~0.4 s at 5 Hz)
-FAULT_HOLD_S = 1.5  # ...and how long it stays after the fault clears
-# Rolling window for the published badge_level. 60 samples is ~12 s at 5 Hz — long enough to
-# survive a tunnel or a platform, short enough that a screenshot still describes now.
+# Both numbers below were first written against a "~5 Hz" sample rate that production has never
+# had. The driver samples once per `interval_s`: 3 s by default, 1-10 s user-set. So:
+FAULT_RAISE_SAMPLES = 2  # agreeing samples before a mark appears — 6 s of persistent fault at 3 s
+FAULT_HOLD_S = 1.5  # extends a mark only at the 1 s setting. At 2 s and above the next clean
+#                     sample is always past it, so a mark clears on the first clean sample; it
+#                     still cannot strobe, because the status it rides on holds for a whole interval.
+# Rolling window for the published badge_level: 180 s at the 3 s default, 60 s at 1 s, 10 min at 10 s.
+# Long on purpose. The level is a property of the display pipeline, which changes when the user
+# changes a setting, not with the scene — and the scene is what moved #137's reporter between 39
+# and 78, so a longer median is the steadier answer to "how shifted is this capture".
 BADGE_LEVEL_WINDOW = 60
 
 # Distance plausibility guard: slack (m) added on top of the physical v·Δt bound so legit
@@ -760,10 +766,10 @@ class AutoDriver:
     _last_speed_limit: Optional[int] = field(default=None, init=False)
     _limit_change_ts: float = field(default=0.0, init=False)
     # Band fault marks. The DEBOUNCE lives here rather than in the band because the band
-    # renders at frame rate and samples arrive at ~5 Hz, so the renderer sees the same sample
-    # several times and has no way to count consecutive ones. A mark needs FAULT_RAISE_SAMPLES
-    # agreeing samples to appear and holds FAULT_HOLD_S after it clears, so a single dropped
-    # frame — which is ordinary — cannot flash the band.
+    # renders at frame rate and a sample arrives once per `interval_s`, so the renderer sees the
+    # same sample many times and has no way to count consecutive ones. A mark needs
+    # FAULT_RAISE_SAMPLES agreeing samples to appear, so a single dropped frame — which is
+    # ordinary — cannot mark the band.
     _fault_run: dict = field(default_factory=dict, init=False)  # field -> consecutive count
     _fault_until: dict = field(default_factory=dict, init=False)  # field -> hold-expiry ts
     _fault_shown: dict = field(default_factory=dict, init=False)  # field -> state being displayed
