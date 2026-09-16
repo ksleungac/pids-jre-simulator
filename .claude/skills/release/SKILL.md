@@ -177,15 +177,21 @@ Don't tag, don't push, don't run gh in this step — the user owns the publish d
 
 `pyproject.toml`'s `[project] version` is the single source of truth for the UI version tag in dev — `app_paths.display_version()` reads it (frozen exes read the build-stamped PE metadata instead). Bump it to this release and **commit before tagging**, so the tag annotates the SHA that carries the correct version. This also makes `pyproject == version_info.txt == tag` hold by construction (Step 2b already checked `version_info == $VERSION`), closing the version-drift gap (#36).
 
-```powershell
-# $V = $VERSION with any leading 'v' stripped (e.g. "0.6.2", or "0.6.2b").
-(Get-Content pyproject.toml) -replace '(?m)^version = ".*"', "version = `"$V`"" | Set-Content pyproject.toml -Encoding utf8
-```
+**Bump it with the Edit tool, never a shell round-trip.** Change the one `version = "…"` line under `[project]` to `$V` (the version with any leading `v` stripped, e.g. `0.7.0` or `0.6.2b`). This step used to run `(Get-Content pyproject.toml) -replace … | Set-Content pyproject.toml -Encoding utf8`, and that command IS the v0.6.3 incident: PowerShell 5.1 decodes the file as ANSI and writes it back with a BOM, so the release commit `7edf2ff` shipped a BOM plus a mojibake em-dash and Black failed on every commit after it until someone noticed (`conventions.md` § "A BOM disables Black silently"). The rule against the round-trip already existed and lost to a command typed into this file, so the command is gone rather than warned about.
 
-Commit the bump through the commit gate (a bare `git commit` is blocked without the marker — see `/commit`), then tag:
+Then sync the lockfile, which pins the project's own version too, and check the bytes survived:
 
 ```bash
-CLAUDE_COMMIT_VIA_SKILL=1 git commit -m "chore(release): bump version to v$VERSION" -- pyproject.toml
+uv lock
+python -c "b=open('pyproject.toml','rb').read(); assert b[:3]!=b'\xef\xbb\xbf', 'BOM'; print('ok, non-ASCII bytes:', sum(x>127 for x in b))"
+```
+
+The non-ASCII count must equal the pre-bump count (3 on 2026-09-16, one em-dash). A higher number is mojibake.
+
+Commit BOTH files through the commit gate (a bare `git commit` is blocked without the marker — see `/commit`), then tag. `uv.lock` rides along because the next `uv run` rewrites it otherwise, leaving a dirty tree that step 2c would refuse on the following release:
+
+```bash
+CLAUDE_COMMIT_VIA_SKILL=1 git commit -m "chore(release): bump version to v$VERSION" -- pyproject.toml uv.lock
 ```
 ```powershell
 git tag -a "v$VERSION" -m "v$VERSION"
