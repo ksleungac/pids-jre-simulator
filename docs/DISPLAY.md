@@ -351,7 +351,18 @@ Any lower-LCD view whose window is locked to the train's position (E235-1000 8-s
 
 Non-circular routes terminate at the route-level `dest`, not at `len(stops) - 1`. Some route data (e.g. Keihin 727B) extends past the operational dest for through-running reference: Keihin 727B's dest is 磯子 (index 40), but stops continue 41..45 to 大船 to capture the through-running segment.
 
-`PASimulator.__init__` resolves `self.dest_stop_idx` once by name-matching `self.dest` against `self.stops`. `_next_pa` computes `terminus_idx = self.dest_stop_idx` for non-circular routes, or `len(self.stops) - 1` for circular ones. A duplicate-name first-match would be wrong there, but circular routes use the loop-back branch, so it does not matter.
+`PASimulator.__init__` resolves `self.dest_stop_idx` once through `route_loader.dest_stop_index`, which name-matches `dest` against the stops. `_next_pa` computes `terminus_idx = self.dest_stop_idx` for non-circular routes, or `len(self.stops) - 1` for circular ones. A duplicate-name first-match would be wrong there, but circular routes use the loop-back branch, so it does not matter.
+
+**A terminus OFF the list — stage 1 of through-running, decided 2026-09-19.** Utsunomiya 1545E is bound for 熱海 and its data ends at 東京, so `dest` names no listed stop. The rule is that **the train's terminus is `dest`, whether listed or not**, and the drive ends at the last listed stop, which is a hand-off point rather than a terminus:
+
+| surface | shows |
+|---|---|
+| LCD destination | 熱海 行 |
+| 次は終点 / まもなく終点 (E233-0) | never at 東京; the predicate asks whether the stop IS `dest` |
+| TIMS 始発・終着 (route picker header, 案内設定) | 宇都宮 → 熱海, via `route_loader.terminus_name` |
+| where the drive stops | 東京, `dest_stop_index`'s last-stop fallback |
+
+A loop is the exception: its `dest` is a 方面 phrase, so it names its last stop. Before this, the TIMS screens named the last LISTED stop for every route, which was also wrong for a terminus that is listed but not last (Saikyō 759K showed 川越 for 大宮, Keihin 727B 大船 for 磯子). What a real display does across the boundary is still the open part: `TODO.md` § "Through-running is modelled, not flattened to a base line name".
 
 ---
 

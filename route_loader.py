@@ -94,6 +94,41 @@ def finalize_route(route_data: dict, station_db: dict, work_dir=None) -> dict:
     return route_data
 
 
+def is_loop(stops: list) -> bool:
+    """A loop route: its first and last stops are the same station (Yamanote's 大崎)."""
+    return bool(stops) and stops[0].get("name") == stops[-1].get("name")
+
+
+def terminus_name(stops: list, dest: str) -> str:
+    """The station this train TERMINATES at, by name — what a screen names as its end.
+
+    ``dest`` whenever it is a station: the one it names on the list, or itself when
+    the train runs on past the listed stops (Utsunomiya 1545E is bound for 熱海 and
+    its data ends at 東京). A loop's ``dest`` is a 方面 phrase rather than a
+    station, so a loop names its last stop. Stage 1 of through-running, decided
+    2026-09-19: docs/DISPLAY.md § "Terminus (`dest_stop_idx`)".
+    """
+    if not stops:
+        return ""
+    if is_loop(stops) or any(s.get("name") == dest for s in stops):
+        return stops[dest_stop_index(stops, dest)].get("name", "")
+    return dest
+
+
+def dest_stop_index(stops: list, dest: str) -> int:
+    """Index of the stop where the train TERMINATES: the first whose name is ``dest``.
+
+    Not the last stop. A route's stops may run on past its terminus as drawn,
+    unserved stations (Keihin 727B ends at 磯子 and lists on to 大船; Saikyō 759K
+    ends at 大宮 and lists on to 川越), so ``stops[-1]`` names the wrong station.
+    Falls back to the last stop when ``dest`` names none, which is every loop
+    route, whose destination is a 方面 phrase. See docs/DISPLAY.md § "Terminus
+    (`dest_stop_idx`)". The app ends its drive here, and ``terminus_name`` reads
+    it for the TIMS route list, so the two cannot disagree about a listed terminus.
+    """
+    return next((i for i, s in enumerate(stops) if s.get("name") == dest), len(stops) - 1)
+
+
 def _fill_dest_closure(route_data: dict) -> None:
     """Fill ``stop['dest']`` on every stop via sticky-override propagation.
 

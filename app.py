@@ -17,6 +17,7 @@ import bell_window
 from displays.base import ChangeScheduler
 from displays.train_models import get_train_model
 import frame_stream
+from route_loader import dest_stop_index, is_loop
 import i18n
 import tims.band as status_band
 import window_utils
@@ -214,7 +215,7 @@ class PASimulator:
 
         # Initialize state
         self.state = AppState()
-        self.state.circular = 1 if (self.stops and self.stops[0].get("name") == self.stops[-1].get("name")) else 0
+        self.state.circular = 1 if is_loop(self.stops) else 0
 
         # Index of the route's destination within the stops list. For
         # non-circular routes, this is where the train terminates — stops
@@ -223,10 +224,7 @@ class PASimulator:
         # Circular routes intentionally don't use this — they have stop-level
         # dest cycling and the loop-back branch in _next_pa, so a duplicate
         # name match (first vs last station of a loop) here is harmless.
-        self.dest_stop_idx = next(
-            (i for i, s in enumerate(self.stops) if s.get("name") == self.dest),
-            len(self.stops) - 1,
-        )
+        self.dest_stop_idx = dest_stop_index(self.stops, self.dest)
 
         # Initialize components
         self.audio = _SilentAudio() if preview else AudioPlayer(self.audio_root, self.stops)

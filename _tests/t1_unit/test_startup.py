@@ -10,6 +10,7 @@ interactive step, and no dependence on what happens to be on this machine.
   2. WHERE THE AUDIO IS  — route_loader.resolve_audio_root
   3. WHICH STARTS ARE ON OFFER — route_select._start_station_labels
   4. WHETHER THE LINE HAS A SHEET — route_loader.finalize_route's "system" key
+  5. WHERE THE DRIVE ENDS — route_loader.dest_stop_index, and the route list's `end`
 
 They share a failure mode as well as a shape: each was, or could be, wrong only
 on a machine unlike this one — a clean install (§1, `critical_lessons §6`), a
@@ -314,11 +315,48 @@ def check_system_sheet() -> None:
     check("system" in bare and bare["system"] is None, "finalize_route with no work_dir must set the key to None, not omit it")
 
 
+# ── 5. where the drive ends ───────────────────────────────────────────────────
+# A route's stops may run on past its terminus as drawn, unserved stations, so the
+# LAST stop is not where the train ends. The TIMS route list named it anyway: with
+# Saikyō 759K picked, the header read 大崎 → 川越 for a train bound for 大宮
+# (author, 2026-09-19), and Keihin 727B read 大船 for 磯子. The app had the right
+# rule inline all along; it now lives in `route_loader.dest_stop_index`.
+#
+# Stage 1 of through-running, same day: a train bound for a station OFF the list
+# (Utsunomiya 1545E, 熱海, data ending at 東京) names that station as its terminus,
+# and the drive still ends at the last listed stop — `route_loader.terminus_name`.
+
+
+def check_terminus() -> None:
+    from route_loader import dest_stop_index, terminus_name
+    from tims.setup.route_select import load_routes
+
+    stops = [{"name": n} for n in ("大崎", "池袋", "大宮", "日進", "川越")]
+    check(dest_stop_index(stops, "大宮") == 2, "the terminus is the stop NAMED by dest, not the last one listed")
+    check(dest_stop_index(stops, "熱海") == 4, "the DRIVE of a train bound off the list ends at its last listed stop")
+    check(terminus_name(stops, "大宮") == "大宮", "a listed terminus is named as itself")
+    check(terminus_name(stops, "熱海") == "熱海", "a terminus off the list is still the train's terminus")
+    loop = [{"name": n} for n in ("大崎", "品川", "東京", "大崎")]
+    check(terminus_name(loop, "品川･東京方面") == "大崎", "a loop's 方面 destination is not a station; it names its last stop")
+
+    # The screen's own data, read from the corpus: this is what both TIMS screens draw.
+    # Reverting `end` to `stops[-1]` fails the first three.
+    ends = {(r["name"], r["diagram"]): r["end"] for r in load_routes()}
+    for key, want in (
+        (("埼京線", "759K"), "大宮"),
+        (("京浜東北線", "727B"), "磯子"),
+        (("宇都宮線", "1545E"), "熱海"),
+        (("山手線", "1208G"), "大崎"),
+    ):
+        check(ends.get(key) == want, f"{key[0]} {key[1]} must end at {want}; the route list says {ends.get(key)!r}")
+
+
 def main() -> int:
     check_language()
     check_audio_root()
     check_start_stations()
     check_system_sheet()
+    check_terminus()
 
     if FAILURES:
         print("FAIL: launch resolution")
@@ -327,7 +365,8 @@ def main() -> int:
     print(
         f"PASS: launch resolution (language x{len(i18n.SUPPORTED_LANGS)} + corrupt-to-OS-default, "
         "audio root single-answer no-fallback, start grid excludes the terminus and unions every diagram's starts, "
-        "system sheet attached by finalize_route so the app path gets it and the key is never absent)"
+        "system sheet attached by finalize_route so the app path gets it and the key is never absent, "
+        "the route list names where the train TERMINATES, not its last listed stop)"
     )
     return 0
 

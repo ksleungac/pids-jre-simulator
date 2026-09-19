@@ -33,6 +33,7 @@ import pygame
 import i18n
 from app_paths import project_root
 from displays.train_models import resolve_model_key
+from route_loader import terminus_name
 from ..widgets import (
     _TUNEABLES_TIMS_BUTTON,
     draw_lowres_text,
@@ -230,7 +231,10 @@ def load_routes():
                 "remarks": d.get("remarks") or "",  # 備考 cell text, verbatim from route.json
                 "dest": d.get("dest", "").replace("\n", ""),
                 "start": stops[0] if stops else "",
-                "end": stops[-1] if stops else "",
+                # Where the train TERMINATES, which is not always the last stop listed: 759K ends at
+                # 大宮 and lists on to 川越, 727B ends at 磯子 and lists on to 大船, and 1545E runs on
+                # past its last stop 東京 to 熱海. See route_loader.terminus_name.
+                "end": terminus_name(stops_raw, d.get("dest", "")).replace("\n", ""),
                 "stops": stops,
                 "stop_idxs": stop_idxs,
             }
