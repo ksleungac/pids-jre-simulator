@@ -150,6 +150,11 @@ Each bullet starts with a bolded headline noun followed by `.` then the descript
 
 **Image-first.** If a feature can be shown, embed a screenshot (committed under `docs/assets/`, referenced by a tag-pinned raw URL `https://raw.githubusercontent.com/<owner>/<repo>/<tag>/docs/assets/<file>`) and CUT the prose that narrates what the image shows. Reserve prose for what an image cannot convey: logic/behavioural changes, opt-in requirements, localization.
 
+- **Galleries go in rows of THREE, no captions** (author, v0.7.0: *"each row of 3 screenshots are a sweet spot"*; two side by side was too large). A gallery is a one-glance overview, so pick the shots that differ most rather than showing every view.
+- **Show a companion window WITH the main one, in one state.** The bell box went in as one ringing box beside the main display, not as a strip of all its states.
+- **A setting-gated feature shows its setting page** next to the feature in use (the TIMS remote-control page beside the tablet photo).
+- Release images live in `docs/assets/v<VERSION>/` with a README table giving each one's regenerate command, and they must be committed before the tag, because the URLs pin to it. Check every URL returns 200 after pushing the tag.
+
 **A first release of a component has no baseline.** When a feature ships for the FIRST time (e.g. the TIMS setup interface in v0.6.0), describe it at a high level — do NOT itemize its internal behaviours or polish (button-press feedback, a pre-selected sole option, a toggle label, the default language) as "changes" or "fixes". There is no prior version to compare against, so those read as noise. Report detail only as a change relative to what users already had.
 
 **Weight matches work; categorize by feature, not a "Fixes" bucket.** A large body of work must not be compressed below a minor item. Polish that is part of a new feature belongs under that feature (or is omitted per the first-release rule). A standalone `Fix — X` bullet is reserved for a change to a PRE-EXISTING shipped feature (e.g. the E235-1000 8-station view), never to something new this release.
@@ -173,6 +178,15 @@ Each bullet starts with a bolded headline noun followed by `.` then the descript
 
 Print the drafted `release_notes.md` and wait for explicit user approval before proceeding.
 
+**Give the author a rendered preview, not just the markdown.** Render it with GitHub's own renderer and open it in the browser. The image URLs pin to a tag that does not exist yet, so point them at the local files for the preview. Delete the HTML once the notes are approved.
+
+```bash
+body=$(gh api markdown -f mode=gfm -f context=ksleungac/pids-jre-simulator -F text=@release_notes.md)
+{ echo '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.5.1/github-markdown-light.min.css"><article class="markdown-body" style="max-width:900px;margin:32px auto">'
+  echo "$body" | sed "s#https://raw.githubusercontent.com/ksleungac/pids-jre-simulator/v$VERSION/##g"
+  echo '</article>'; } > release_notes_preview.html && start "" release_notes_preview.html
+```
+
 ```
 Drafted release_notes.md is below — review and confirm. Reply "ship it" /
 "go" / "approved" to proceed; or tell me what to change. Until you do, no
@@ -195,6 +209,8 @@ python -c "b=open('pyproject.toml','rb').read(); assert b[:3]!=b'\xef\xbb\xbf', 
 ```
 
 The non-ASCII count must equal the pre-bump count (3 on 2026-09-16, one em-dash). A higher number is mojibake.
+
+Read the `uv.lock` diff before committing it. Beyond the version line, a newer uv may normalise the file: on v0.7.0 it dropped two redundant `python_full_version >= '3.13'` markers inside packages that are themselves only pulled in on 3.13. `uv sync --dry-run` installing nothing new is the check that such a change is benign.
 
 Commit BOTH files through the commit gate (a bare `git commit` is blocked without the marker — see `/commit`), then tag. `uv.lock` rides along because the next `uv run` rewrites it otherwise, leaving a dirty tree that step 2c would refuse on the following release:
 
