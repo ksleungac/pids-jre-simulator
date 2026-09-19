@@ -7,7 +7,7 @@ name = "pids-jre-simulator"
 # literal elsewhere, and /release Step 6 bumps THIS field + commits before tagging, so
 # pyproject == version_info.txt == tag by construction (#36). uv requires a
 # static version field (`dynamic = ["version"]` forces package/build mode and breaks `uv run`).
-version = "0.6.3"
+version = "0.7.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
