@@ -385,8 +385,8 @@ _TUNEABLES_FULL_ROUTE_MARKS = {
     # the same offset simply leaves more air (author: "it should looks fine when
     # next station is a passing arrow").
     #
-    # Not applied at a row's first cell, whose previous station is on the other
-    # row — there is no leg on this row to sit in the middle of.
+    # Applied at a row's first cell too, where it puts the marker on the row's
+    # arriving edge — the leg comes in from the other row (author, 2026-09-19).
     "marker_box_gap":  1.0,
     "tri_split_dy":    0.5,  # where the two tones meet, relative to the bar's
                              # centre row: the reference's row 277 is still fully
@@ -941,9 +941,14 @@ class JapaneseFullRouteDisplay:
 
         Keyed on `cursor_pos` while running, so it walks station by station
         across the stations run through instead of jumping the whole gap
-        (`docs/DISPLAY.md` § "Station Skip Logic"). Not offset at a row's first
-        cell: the station behind it is on the other row, so there is no leg on
-        this row to sit in the middle of.
+        (`docs/DISPLAY.md` § "Station Skip Logic").
+
+        A row's FIRST cell takes the same offset. Its station behind is on the
+        other row, so the leg runs in through the row's arriving edge, and the
+        marker sits on that edge, clear of the box. Parking it on the cell
+        instead, as this did until 2026-09-19, covered the box of the very
+        station being approached: 品川 on Keihin 1275A, 三鷹 on every Chūō
+        diagram (author: "train green triangle is wrong location").
         """
         m = _TUNEABLES_FULL_ROUTE_MARKS
         at_station = bool(getattr(self.state, "at_station", False)) if self.state else False
@@ -951,14 +956,7 @@ class JapaneseFullRouteDisplay:
         start, count = self._window()
         di = max(start, min(di, start + count - 1))
         row, cx, bar_top = self._slot(di)
-        # The row-first test is on the WINDOW-LOCAL column, not the raw diagram
-        # index — `_slot` above derives its own column the same way (`di - start`,
-        # then `% per`), and so do `_draw_bars` and `_row_edges`. A raw `di % per`
-        # agrees with them only while `start` is 0, which is every Chūō frame and
-        # is why it read as correct: on a route long enough to window (Keihin's 46
-        # cells, `start` 6) it suppresses the offset at a mid-row cell and applies
-        # it at a row-first one, putting the marker past that row's own wall.
-        if not at_station and (di - start) % self._per_row() != 0:
+        if not at_station:
             mins = minutes.get(di)
             half = self._box_width(m, "" if mins is None else str(mins), int(m["time_size"])) / 2.0
             nose = -min(float(vx) for vx, _ in m["tri_verts"])

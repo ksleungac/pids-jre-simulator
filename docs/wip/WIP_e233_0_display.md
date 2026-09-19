@@ -1427,6 +1427,14 @@ each leg rather than jumping. That is the machinery this renderer already keys o
 approach and E235-0 runs an arrow cascade; E233-0 does neither. One marker, one shape, and only its
 position moves — so APPROACHING and STOPPING differ by where the pentagon sits, nothing else.
 
+**A row's first cell takes the same offset — 2026-09-19.** The station behind it is on the other
+row, so the leg comes in through the row's arriving edge, and the marker sits there, over the
+continuity chevrons and clear of the box. Until then the renderer parked it ON the cell, which hid
+the box of the very station being approached: 品川 on Keihin once the window swaps, 三鷹 on every
+Chūō diagram. That exemption was an unasked gap-fill in the build, borrowed from E235-1000's
+"pointer occupies the window's first cell", and no coverage frame approached a row-first stop.
+Author, on seeing it live: *"train green triangle is wrong location"*.
+
 ### 9.3.7 Layout for a route that is not Chūō — SETTLED 2026-08-29
 
 Chūō's diagram is exactly the display's capacity: two rows of twenty. Everything else is one of

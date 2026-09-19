@@ -316,19 +316,19 @@ def check_fill_slot_enter() -> None:
     check(eight._fill_start == 4.0, f"a genuine FULL→EIGHT re-enter must refill at 4.0; got {eight._fill_start}")
 
 
-# ── 4. e233_0 full-route: the marker's row-first test ─────────────────────────
-# Every consumer of the full-route window derives its column the SAME way —
-# `local = di - window_start`, then `local % per_row`. `_slot`, `_draw_bars` and
-# `_row_edges` all do. `_marker_slot` decides whether to push the marker into the
-# middle of the leg it is crossing, and it asked `di % per_row` instead: correct
-# only while the window starts at 0, which is every Chūō frame, so it read as
-# right. On a route long enough to window (Keihin's 46 cells, start 6) it
-# disagreed at 4 of the 40 visible cells — suppressing the offset at two mid-row
-# cells and applying it at both row-first ones, which puts the marker past that
-# row's own wall.
+# ── 4. e233_0 full-route: the marker clears the approached station ────────────
+# While the train is running, the marker sits BETWEEN stations, clear of the box
+# of the station being approached (WIP § 9.3.6). Until 2026-09-19 a row's FIRST
+# cell was exempt: its station behind is on the other row, so the marker was
+# parked on the cell itself — on top of the very box it exists to clear. The
+# author saw it approaching 品川 on Keihin 1275A (row 2's first cell once the
+# window swaps) and it is equally true of 三鷹 on every Chūō diagram: "train
+# green triangle is wrong location". The marker now takes the same offset there,
+# onto the row's arriving edge.
 #
-# The invariant, not the arithmetic: the marker's row-first test must agree with
-# `_slot`'s column for EVERY cell in the window. Restoring `di % per` fails this.
+# The exemption also carried an earlier bug of its own — it tested `di % per`
+# where every other consumer uses the window-local column — so the 46-cell
+# window, where those differ, stays in the sweep.
 
 
 def _e233_full_route_stub(n_cells: int, cursor: int):
@@ -373,61 +373,56 @@ def _marker_offset(stub, di: int) -> float:
 
 
 def check_e233_marker_column() -> None:
-    # The oracle is WIP § 9.3.6, not the arithmetic: the marker sits in the
-    # middle of the leg it is crossing, EXCEPT at a row's first cell, where the
-    # station behind it is on the other row and there is no leg on this row to
-    # sit in. So `_marker_slot`'s x must equal the plain slot centre at a
-    # row-first cell and be pushed off it everywhere else.
+    # The oracle is WIP § 9.3.6: running, the marker is pushed off EVERY cell,
+    # row-first ones included; at the station it sits on the cell. Row-first
+    # cells are counted separately so a sweep that silently stopped reaching them
+    # cannot pass — restoring the exemption fails exactly those.
     #
-    # 46 cells window to (6, 40) — the case that separates the two expressions.
-    # 40 cells window to (0, 40), where `di` and the local column coincide and
-    # the bug is invisible; it is here so a "fix" that breaks Chūō is caught.
+    # 46 cells window to (6, 40): 品川 (di 26) is row 2's first cell there.
+    # 40 cells window to (0, 40): 三鷹 (di 20) is, on Chūō.
     for n_cells in (46, 40):
         stub = _e233_full_route_stub(n_cells, cursor=0)
+        row_firsts = 0
         for di in range(n_cells):
             stub.state.curr_stop = stub.state.cursor_pos = di
             # The window is a function of the cursor, so it must be re-read for
             # every position rather than sampled once — reading it once is how
             # this test first reported a failure that was its own bookkeeping.
             start, count = stub._window()
-            per = stub._per_row()
             if not (start <= di < start + count):
                 continue
             # Row-first is read OUT of `_slot`, not restated: column 0 is the
             # rightmost slot by construction, so a cell whose slot centre IS
-            # `_slot0_cx()` is the one starting its row. Restating the arithmetic
-            # would compare the fix against a copy of itself.
+            # `_slot0_cx()` is the one starting its row.
             _, slot_cx, _ = stub._slot(di)
             row_first = abs(slot_cx - stub._slot0_cx()) < 1e-9
+            row_firsts += row_first
+            stub.state.at_station = False
             offset = _marker_offset(stub, di)
-            if row_first:
-                check(
-                    offset < 1e-9,
-                    f"e233_0 marker must sit ON the slot at a row-FIRST cell " f"(n={n_cells}, window start={start}, di={di}); offset {offset:.2f}px",
-                )
-            else:
-                check(
-                    offset > 0.0,
-                    f"e233_0 marker must be pushed into the leg at a MID-ROW cell "
-                    f"(n={n_cells}, window start={start}, di={di}, local col "
-                    f"{(di - start) % per}); it sat on the slot centre",
-                )
+            check(
+                offset > 0.0,
+                f"e233_0 marker must be pushed clear of the approached cell's box while running "
+                f"(n={n_cells}, window start={start}, di={di}, row-first={row_first}); it sat on the slot centre",
+            )
+            stub.state.at_station = True
+            offset = _marker_offset(stub, di)
+            check(offset < 1e-9, f"e233_0 marker must sit ON the slot at the station (n={n_cells}, di={di}); offset {offset:.2f}px")
+        check(row_firsts >= 2, f"the {n_cells}-cell sweep must reach both rows' first cells; reached {row_firsts}")
 
     # THE SKIP-ANIMATION CELL, which the loop above cannot construct: it pins
     # curr == cursor, so a 46-cell route never presents window (6,40) with the
     # cursor ON di 6. In production those two indices come apart — `_window()`
     # keys on `_curr()` and `_marker_slot` on `_cursor()` — so departing di 6 and
-    # skipping to 7 gives start 6 with the marker still drawn at 6, which is the
-    # row's FIRST cell and must take no offset. Under the old `di % per` it read
-    # `6 % 20 = 6`, mid-row, and the marker went past the row's right wall.
+    # skipping to 7 gives start 6 with the marker drawn at 6, the row's first
+    # cell. It is running, so it too is pushed onto the row's arriving edge.
     skip = _e233_full_route_stub(46, cursor=0)
     skip.state.curr_stop, skip.state.cursor_pos = 7, 6
     start, _ = skip._window()
     check(start == 6, f"precondition: curr_stop 7 on a 46-cell route should window at 6; got {start}")
     check(
-        _marker_offset(skip, 6) < 1e-9,
-        f"e233_0 marker must sit ON the slot at di=6, the row-first cell of window "
-        f"(6,40), while a skip holds cursor_pos behind curr_stop; offset {_marker_offset(skip, 6):.2f}px",
+        _marker_offset(skip, 6) > 0.0,
+        f"e233_0 marker must be pushed off di=6, the row-first cell of window (6,40), "
+        f"while a skip holds cursor_pos behind curr_stop; it sat on the slot centre",
     )
 
 
@@ -676,7 +671,7 @@ def main():
     print(
         "PASS: lower LCD (8-station window short/sliding/locked + pointer-always-visible + Chūō 新宿 regression + "
         "e235_0 never-locks #68/#81; 5-station passing empty ring, no time:null crash #66; band fill only on a genuine slot-enter; "
-        "e233_0 marker row-first column agrees with _slot on a windowed 46-cell route; "
+        "e233_0 marker clears the approached box at every running cell, row-first included; "
         "overview greys passed / run-through / off-route and keeps the origin and an at-station-only stop black, "
         "spans index the flattened axis, rows keep separate anchors and pitches; "
         "overview joins the lap after EIGHT, only with a sheet, and leaves with FULL under the eight-lock)"
