@@ -233,6 +233,7 @@ borrowed E235 behaviour.
 | Transfer | `transfer-tachikawa-ja.png` · `transfer-ocha-ja.png` · `transfer-shinjuku.png` · `transfer-kanda.png` | added 2026-08-29 **during** the build, after § 11 was first written. They are what settled the grouping: `(1,1,1)` · `(1,2)` · `(2,2,2,3)`. The 新宿 one is a photograph of a real screen rather than a clean capture, and carries a ticker line the others do not |
 | Priority seat | `priority-seats.png` | added 2026-08-29 |
 | Manner mode | `manner-mode.png` | added 2026-08-29 |
+| Patterns overview, next is the terminus | `overview-tokao-different-patterns-next-terminus-ja.png` (furigana) · `…-ja-1.png` (kanji) | added 2026-09-18. 次は終点 東京, 9:37: the terminus prefix, its two-line furigana form, and no train type or destination |
 | 6-station, ENGLISH | `6stations-yotsuya-ja.png` | 四ツ谷 — added 2026-08-29. The first capture in a mode other than Japanese, and it confirms the **lower LCD stays kanji** in English mode (§ 4). It is also the only frame showing a **coded station behind the train** (新宿 JC-05, greyed), which is what settled § 10.3.2 |
 
 The first three are the same train at the same instant, which is what made the upper-LCD
@@ -578,8 +579,54 @@ approaching and at-station. Treated as invariant until a reference says otherwis
 
 #### Prefix — SETTLED
 
-次は / まもなく / ただいま, left-flush at the bottom left, in the corner the train type leaves
-free. Same monospaced cell as the destination and the same face.
+次は / まもなく / ただいま / 次は終点, **right-aligned** at the bottom left, in the corner the train
+type leaves free. Same monospaced cell as the destination and the same face.
+
+**Right-aligned to the edge four cells end on** (author, 2026-09-19), so the four-character forms
+stay where the fit below put them and 次は moves up to the plate. The references had shown it all
+along: 御茶ノ水's 次は starts at x 43.5 and 八王子's つぎは at 22.6 `[measured]`. The fit only ever
+used ただいま, which fills the column and cannot show an alignment.
+
+**次は終点 / まもなく終点 when the next stop is the train's terminus** (`overview-…-next-terminus-ja*.png`;
+まもなく per the author, 2026-09-19), keyed on the stop-level `dest` naming the stop itself.
+Anything past four cells stacks: つぎは over 終点 in furigana, まもなく over 終点 in both modes, both
+lines right-aligned, the second on the usual row and the first 28.5 above it `[measured]`.
+
+**Each form is its own layout** (`_TUNEABLES_PREFIX_FORMS`). The references set 次は at 33 on a
+33px cell and つぎは at 31, both larger than a four-cell row allows, so size follows the phrase the
+way the station name's follows its length (§ 8.7). Every form with a reference was fitted by
+`_e233_lower_geometry.py --prefix-fit`, which drives production's own row and scores luminance
+RMS over the corner, averaged across every capture of that form. Re-run on ただいま it puts the
+base within 0.7 of its best, which is its calibration.
+
+| form | references | size / advance / right / y | RMS | nothing |
+|---|---|---|---|---|
+| ただいま, まもなく (base) | full + 6stations takao | 28 / 27.0 / 114 / 113 | 31.1 | 56.5 |
+| 次は | 6stations-kokubunji, -ochanomizu | 33 / 33.0 / 109 / 106 | 21.0 | 47.6 |
+| つぎは | manner-mode, priority-seats | 31 / 31.0 / 113 / 108 | 19.8 | 51.1 |
+| 次は終点 | next-terminus-ja-1 | 30 / 29.0 ×0.90 / 110 / 111 | 24.5 | 65.0 |
+
+The reference CONDENSES 次は終点: full height, narrowed width. A form may carry a `squeeze`, which
+narrows the rendered row horizontally (`_prefix_row`, shared with the fit), and 0.90 took the fit
+from 32.0 to 24.5. まもなく has no reference and keeps the base.
+
+**A stacked form fits each line on its own** (`lines`, top first, absolute `y`), scored inside
+that line's band so the other line is not counted as a miss. The furigana つぎは / 終点 was
+drawing on the base at `line_pitch` and scored WORSE than drawing nothing (70.6 / 67.2 against
+62.6 / 62.7); fitted, it is 26.6 / 23.3 (author: *"needs more fitting"*):
+
+| line | size / advance ×squeeze / right / y |
+|---|---|
+| つぎは | 29 / 30.0 ×0.94 / 111 / 84 |
+| 終点 | 28 / 29.5 ×0.96 / 111 / 113 |
+
+まもなく / 終点 has no reference and still stacks the base at `line_pitch`, unverified.
+
+**The train type and destination stay drawn at the terminus.** Both terminus captures show that
+corner empty, but the author read 602H's まもなく over 終点 under a two-row 通勤特快 as fine
+(2026-09-19).
+- Chūō never shows 次は終点: 東京 carries one approach PA on all three diagrams, and the prefix
+  mapping goes straight to まもなく on a single-PA stop. Keihin's 大船 and 磯子 carry two.
 
 | | value | how it was arrived at |
 |---|---|---|

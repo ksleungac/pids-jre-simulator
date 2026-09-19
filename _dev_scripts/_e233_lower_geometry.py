@@ -927,6 +927,75 @@ def report_fit(face, lo, hi, text, tracking=0.0):
         print(f"   size {size:3d}   ink {box.w:7.2f} x {box.h:6.2f}   advance {f.size(text)[0]:7.2f}   w/h {box.w / max(1, box.h):5.3f}")
 
 
+def report_prefix_fit(
+    text, refs, sizes=(26, 36), advs=(24.0, 34.0), rights=(100, 116), ys=(100, 120), squeezes=(1.0, 1.0), region=(4, 80, 118, 147), top=8
+):
+    """Fit one upper-LCD PREFIX form against every reference that shows it.
+
+    Exhaustive over size x cell advance x squeeze x right edge x y, scored as
+    luminance RMS over the prefix corner, averaged across the references. The row
+    comes from production's own `_prefix_row` and prefix face, so what is scored
+    is what the renderer draws; only the numbers are varied. It is how the
+    original ただいま fit was made (WIP § 8.5), and re-running it on ただいま is
+    the check that the instrument still answers what it answered then.
+
+    `squeezes` is a (lo, hi) range stepped by 0.02; the default holds it at 1.0.
+    `region` is the scored rect `(x0, y0, x1, y1)`; a stacked form fits each line
+    inside its own band, so the other line's ink is not scored as a miss.
+
+    Prints the best `top` candidates, then drawing-nothing as the floor to beat.
+    """
+    import numpy as np
+
+    sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
+    from displays.train_models.e233_0 import upper_lcd as U
+    from font_atlas import lcd_font
+
+    pygame.init()
+    pygame.display.set_mode((8, 8))
+    x0, y0, x1, y1 = region  # default: the prefix corner, clear of the plate at 120
+    targets = []
+    for p in refs:
+        s = pygame.image.load(p)
+        s = pygame.transform.smoothscale(s, (640, round(s.get_height() * 640 / s.get_width())))
+        targets.append(pygame.surfarray.array3d(s)[x0:x1, y0:y1].astype(float).mean(axis=2))
+    bg = np.full((x1 - x0, y1 - y0), sum(U.UPPER_BG[:3]) / 3.0)
+
+    def score(img):
+        return sum(float(np.sqrt(((img - t) ** 2).mean())) for t in targets) / len(targets)
+
+    fonts = {}
+
+    def font_for(sz):
+        if sz not in fonts:
+            fonts[sz] = lcd_font(U._PREFIX_FACE, sz, draws=U._PREFIX_DRAWS)
+        return fonts[sz]
+
+    results = []
+    for size in range(int(sizes[0]), int(sizes[1]) + 1):
+        for adv in np.arange(advs[0], advs[1] + 1e-9, 0.5):
+            for sq in np.arange(squeezes[0], squeezes[1] + 1e-9, 0.02):
+                t = {"font_size": size, "cell_adv": float(adv), "squeeze": float(sq), "color": (0, 0, 0)}
+                row, pad, run_w = U._prefix_row(font_for, text, t)
+                alpha = pygame.surfarray.array_alpha(row).astype(float) / 255.0
+                rw, rh = alpha.shape
+                for right in range(int(rights[0]), int(rights[1]) + 1):
+                    rx = round(right - run_w - pad) - x0
+                    for y in range(int(ys[0]), int(ys[1]) + 1):
+                        ry = y - y0
+                        img = bg.copy()
+                        ax0, ay0 = max(0, -rx), max(0, -ry)
+                        ax1, ay1 = min(rw, bg.shape[0] - rx), min(rh, bg.shape[1] - ry)
+                        if ax1 > ax0 and ay1 > ay0:
+                            img[rx + ax0 : rx + ax1, ry + ay0 : ry + ay1] *= 1.0 - alpha[ax0:ax1, ay0:ay1]
+                        results.append((score(img), size, float(adv), float(sq), right, y))
+    results.sort()
+    print(f"\n== prefix fit {text!r} over {len(refs)} reference(s), {len(results)} candidates ==")
+    for r in results[:top]:
+        print(f"   RMS {r[0]:6.2f}   size {r[1]}  adv {r[2]:5.2f}  squeeze {r[3]:4.2f}  right {r[4]}  y {r[5]}")
+    print(f"   RMS {score(bg):6.2f}   (drawing nothing)")
+
+
 def report_runs(path, cx, cy, cw, ch, klass="B", step=1.0):
     """Per-row runs of one class inside a canvas rect, as canvas intervals.
 
@@ -1684,6 +1753,14 @@ if __name__ == "__main__":
             sys.argv[5],
             tracking=float(sys.argv[6]) if len(sys.argv) > 6 else 0.0,
         )
+    elif len(sys.argv) > 3 and sys.argv[1] == "--prefix-fit":
+        # --prefix-fit TEXT REF [REF ...] [--squeeze LO,HI]
+        args, sq = sys.argv[3:], (1.0, 1.0)
+        if "--squeeze" in args:
+            i = args.index("--squeeze")
+            sq = tuple(float(v) for v in args[i + 1].split(","))
+            args = args[:i] + args[i + 2 :]
+        report_prefix_fit(sys.argv[2], args, squeezes=sq)
     elif len(sys.argv) > 5 and sys.argv[1] == "--runs":
         # `--runs <image> <x> <y> <w> <h> [class] [step]` — per-row runs of one
         # placard class, as canvas intervals. The shape read as numbers.

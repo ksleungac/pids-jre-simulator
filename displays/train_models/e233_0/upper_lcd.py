@@ -68,9 +68,10 @@ DESTINATION_RECT = pygame.Rect(130, 0, 330, 40)
 STATION_PLATE_RECT = pygame.Rect(120, 35, 398, 103)
 
 # The prefix sits in the corner the train type leaves free: the type's stack
-# bottoms out at y 90 and the plate starts at x 120, so this rect is bounded by
-# neither.
-PREFIX_RECT = pygame.Rect(4, 100, 116, 49)
+# bottoms out at y 90 and the plate starts at x 120. It reaches up to 82 for the
+# stacked furigana つぎは / 終点, whose top line starts at 84.5, overlapping the
+# type's band. The only reference of that frame draws no train type.
+PREFIX_RECT = pygame.Rect(4, 82, 116, 67)
 
 # The clock, bottom right. Synced from its tuneables like the plate.
 CLOCK_RECT = pygame.Rect(554, 106, 79, 32)
@@ -794,17 +795,29 @@ _NAME_FACE = "ShinGoPr6N-Medium.otf"
 # against the old one had to be re-derived rather than kept. The score improved
 # from 41.9 to 37.1 across that change.
 #
-# LEFT EDGE IS ITS OWN. It is NOT aligned to the train type above it: prefix ink
-# starts at x/W 0.0120 and the type's at 0.0186, and their centres disagree too
-# (0.0939 vs 0.0762), so they are neither flush nor concentric (WIP § 8.5).
+# RIGHT-ALIGNED to the column's right edge (author, 2026-09-19), which is the
+# edge `cells` fitted cells end on. A four-character prefix fills the column, so
+# ただいま / まもなく / 次は終点 sit exactly where the fit put them; a shorter one
+# moves up to the plate. The references agreed before anyone asked: 御茶ノ水's
+# 次は starts at x 43.5 and 八王子's つぎは at 22.6, not at the left edge.
+#
+# 次は終点 when the next stop is where the train terminates
+# (`overview-tokao-different-patterns-next-terminus-ja*.png`). Kanji fits four
+# cells; furigana's つぎは終点 does not, so it stacks つぎは over 終点, both
+# right-aligned, the second on the usual row [measured: centres 28.5 apart].
+# A SPACE in the prefix text is that line break, as it is in a station name.
+#
+# It is NOT aligned to the train type above it: prefix ink starts at x/W 0.0120
+# and the type's at 0.0186, and their centres disagree too (0.0939 vs 0.0762),
+# so they are neither flush nor concentric (WIP § 8.5).
 #
 # WEIGHT is Medium, by the coverage probe: the reference's ま fills 0.463 /
 # 0.466 of its box, against 0.26 (Light), 0.48 (Medium), 0.53 (DeBold).
 #
 # 次 OVERHANGS ITS CELL, and `_render_cells` pads for it — see the note there.
 # Kana carry ~2px of side bearing so they sit inside a 27px cell at this size;
-# 次 fills its em edge to edge and hung off the left, which no reference frame
-# could have shown because all three of them read ただいま.
+# 次 fills its em edge to edge and hung off the left, which the fit could not
+# have shown because it was run on ただいま alone.
 # =============================================================================
 # fmt: off
 _TUNEABLES_PREFIX = {
@@ -818,15 +831,68 @@ _TUNEABLES_PREFIX = {
     "cell_adv":  27.0,  # FLOAT — the cursor accumulates it and rounds per cell,
                         # so a fractional advance is expressible. The ink starts
                         # measure ~27.5; the fit settled on 27.0.
+    "cells":        4,  # the column's width in cells; the right edge every prefix
+                        # aligns to is x + cells * cell_adv
+    "line_pitch": 28.5, # [measured] a stacked line sits this far above the next —
+                        # the furigana terminus reference's つぎは over 終点
     "color": (0, 0, 0),
+}
+
+# EACH FORM IS ITS OWN LAYOUT. The references set 次は far larger than ただいま,
+# and つぎは larger again than a 4-cell row would allow — the size follows the
+# phrase, the way the station name's follows its length (§ 8.7). So a form with a
+# reference carries its own fit, keyed on the whole prefix text; the rest
+# (ただいま, まもなく, まもなく 終点) draw on the base above. `right` is the right
+# edge the cells end on. A stacked form's `lines` fit each line on its own, top
+# first, with an absolute `y`; one without them stacks the base at `line_pitch`.
+#
+# Fitted by `_e233_lower_geometry.py --prefix-fit`: production's own row,
+# exhaustive over size x advance x right x y, luminance RMS over the corner,
+# averaged across every reference showing the form. Re-run on ただいま it puts
+# the base above within 0.7 of its best, which is the instrument's calibration.
+_TUNEABLES_PREFIX_FORMS = {
+    # 6stations-kokubunji + 6stations-ochanomizu: RMS 21.0, nothing 47.6
+    "次は":     {"font_size": 33, "cell_adv": 33.0, "right": 109, "y": 106},
+    # manner-mode + priority-seats: RMS 19.8, nothing 51.1
+    "つぎは":   {"font_size": 31, "cell_adv": 31.0, "right": 113, "y": 108},
+    # overview-…-next-terminus-ja-1: RMS 24.5, nothing 65.0. The reference
+    # CONDENSES these four glyphs — full height, narrowed width — so the row is
+    # squeezed horizontally (`_prefix_row`). Without the squeeze the best fit
+    # was 32.0, trading height for width.
+    "次は終点": {"font_size": 30, "cell_adv": 29.0, "squeeze": 0.90, "right": 110, "y": 111},
+    # overview-…-next-terminus-ja (furigana), each line fitted inside its own
+    # band: つぎは RMS 26.6, 終点 23.3. The base layout scored 70.6 / 67.2 there,
+    # WORSE than drawing nothing (62.6 / 62.7).
+    "つぎは 終点": {"lines": [
+        {"font_size": 29, "cell_adv": 30.0, "squeeze": 0.94, "right": 111, "y": 84},
+        {"font_size": 28, "cell_adv": 29.5, "squeeze": 0.96, "right": 111, "y": 113},
+    ]},
 }
 # fmt: on
 
 _PREFIX_FACE = "ShinGoPr6N-Medium.otf"
 
-# The three forms `UpperDisplay.set_state` can produce, and nothing else — they
-# live in the source, not in any route file, so they are literals.
-_PREFIX_DRAWS = lit("次は", "まもなく", "ただいま", "つぎは")
+# The lines `UpperDisplay.set_state` can produce, and nothing else — they live in
+# the source, not in any route file, so they are literals.
+_PREFIX_DRAWS = lit("次は", "まもなく", "ただいま", "つぎは", "次は終点", "終点")
+
+
+def _prefix_row(font_for, line: str, t: dict) -> tuple:
+    """One prefix line as `(surface, pad, run_w)`, narrowed by `t["squeeze"]`.
+
+    The cell row from `_render_cells`, scaled horizontally where the form
+    condenses: the reference's 次は終点 keeps its glyph height and narrows its
+    width, which no size-and-advance pair reproduces. `run_w` is the narrowed
+    cell run, the width right-alignment subtracts, and `pad` narrows with it.
+    Shared with `_e233_lower_geometry.py --prefix-fit`, so the fit scores this
+    exact raster rather than a copy of it.
+    """
+    row, pad = _render_cells(font_for, t["font_size"], line, t["cell_adv"], 0, tuple(t["color"]))
+    k = float(t.get("squeeze", 1.0))
+    if k != 1.0:
+        row = pygame.transform.smoothscale(row, (max(1, round(row.get_width() * k)), row.get_height()))
+    return row, pad * k, len(line) * t["cell_adv"] * k
+
 
 # =============================================================================
 # Clock — WIP § 8.5
@@ -1518,18 +1584,31 @@ class JapaneseDisplay:
         return f
 
     def draw_prefix(self, prefix_text: str) -> None:
-        """次は / まもなく / ただいま, left-flush at the bottom left."""
+        """次は / まもなく / ただいま / 次は終点, right-aligned at the bottom left.
+
+        A space breaks the line. A form with fitted `lines` places each line
+        itself; otherwise the last line sits on the row and each earlier one
+        `line_pitch` above it.
+        """
         if not prefix_text:
             return
-        t = _TUNEABLES_PREFIX
-        key = (prefix_text, t["font_size"], t["cell_adv"], tuple(t["color"]))
-        got = self._prefix_rows.get(key)
-        if got is None:
-            got = _render_cells(self._prefix_font, t["font_size"], prefix_text, t["cell_adv"], 0, tuple(t["color"]))
-            self._prefix_rows[key] = got
-        row, pad = got
-        with clip(self.screen, PREFIX_RECT):
-            self.screen.blit(row, (round(t["x"]) - pad, round(t["y"])))
+        base = _TUNEABLES_PREFIX
+        form = _TUNEABLES_PREFIX_FORMS.get(prefix_text, {})
+        shared = {**base, **{k: v for k, v in form.items() if k != "lines"}}
+        per_line = form.get("lines")
+        lines = prefix_text.split(" ")
+        for i, line in enumerate(lines):
+            t = {**shared, **per_line[i]} if per_line else shared
+            y = t["y"] if per_line else t["y"] - (len(lines) - 1 - i) * t["line_pitch"]
+            right = t.get("right", base["x"] + base["cells"] * base["cell_adv"])
+            key = (line, t["font_size"], t["cell_adv"], t.get("squeeze", 1.0), tuple(t["color"]))
+            got = self._prefix_rows.get(key)
+            if got is None:
+                got = _prefix_row(self._prefix_font, line, t)
+                self._prefix_rows[key] = got
+            row, pad, run_w = got
+            with clip(self.screen, PREFIX_RECT):
+                self.screen.blit(row, (round(right - run_w - pad), round(y)))
 
     # -------------------------------------------------------------------------
     # Clock — WIP § 8.5
@@ -1618,10 +1697,12 @@ class FuriganaDisplay(JapaneseDisplay):
     and cannot drift from the kanji mode.
 
     Only 次は has a kana form to switch to; まもなく and ただいま are already
-    kana and pass through, which is why the map has one entry rather than three.
+    kana and pass through. 終点 stays kanji and, at five characters with the
+    kana, takes a second line (the space) — both per the furigana terminus
+    reference.
     """
 
-    _PREFIX_KANA = {"次は": "つぎは"}
+    _PREFIX_KANA = {"次は": "つぎは", "次は終点": "つぎは 終点"}
 
     def __init__(self, screen, route_data, stops):
         super().__init__(screen, route_data, stops)
@@ -1720,12 +1801,19 @@ class UpperDisplay:
         pa = self.stops[curr_stop].get("pa", []) if 0 <= curr_stop < len(self.stops) else []
         is_final_approach_pa = len(pa) >= 1 and cnt_pa == len(pa) - 1
 
+        # The next stop is where this train terminates: 次は終点 / まもなく終点
+        # (`overview-tokao-different-patterns-next-terminus-ja*.png`; まもなく
+        # per the author, 2026-09-19). The STOP-level dest, so a mid-route
+        # override moves the terminus; a loop's 方面 destination never equals a
+        # station name.
+        terminus = bool(self._current_name()) and self._current_name() == self._current_dest()
         if at_station:
             self.prefix_text = "ただいま"
         elif is_final_approach_pa:
-            self.prefix_text = "まもなく"
+            # Six cells do not fit the column, so it stacks — the space is the break.
+            self.prefix_text = "まもなく 終点" if terminus else "まもなく"
         else:
-            self.prefix_text = "次は"
+            self.prefix_text = "次は終点" if terminus else "次は"
 
     def _current_dest(self) -> str:
         """The destination in force at this stop.

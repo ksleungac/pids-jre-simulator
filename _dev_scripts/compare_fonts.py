@@ -4,9 +4,11 @@
 Two modes.
 
 **Overlay** (``--overlay``) — the reference scaled onto the render's canvas, then
-reference / ours / the two blended, stacked and zoomed. The blend is what says
-whether an element sits where the reference puts it; the two alone are what say
-which of them a difference belongs to. The live-nudging form of the same thing is
+reference / ours / the two blended / an ink diff, stacked and zoomed. The blend
+is what says whether an element sits where the reference puts it; the two alone
+are what say which of them a difference belongs to; the diff colours each side's
+ink-only pixels, so an offset reads as a red fringe on one side and blue on the
+other. The live-nudging form of the same thing is
 ``preview_display.py --edit --overlay`` (docs/DISPLAY.md step 6) — this one is for
 handing a still to the author.
 
@@ -101,8 +103,25 @@ def make_compare(name, ref_path, render_path, out_path, label_suffix=""):
     print(f"wrote {out_path}")
 
 
-def build_overlay(ref_path, render_path, out_path, crop=None, zoom=2, alpha=128):
-    """Reference / ours / blended, stacked and zoomed. See the module docstring.
+def _ink_diff(ref, rend, thr):
+    """Where each side has INK: red = reference only, blue = ours only, black = both.
+
+    Ink is luminance under `thr`, the same test `_e233_lower_geometry.py --ink`
+    measures with, so the picture and the numbers agree about what counts. The
+    blend shows WHERE two elements sit; this shows by how much and in which
+    direction, which a 50% ghost cannot for dark-on-light text.
+    """
+    out = pygame.Surface(ref.get_size())
+    for y in range(ref.get_height()):
+        for x in range(ref.get_width()):
+            a = sum(ref.get_at((x, y))[:3]) / 3.0 < thr
+            b = sum(rend.get_at((x, y))[:3]) / 3.0 < thr
+            out.set_at((x, y), (0, 0, 0) if a and b else (220, 30, 30) if a else (30, 80, 230) if b else (255, 255, 255))
+    return out
+
+
+def build_overlay(ref_path, render_path, out_path, crop=None, zoom=2, alpha=128, diff_thr=110):
+    """Reference / ours / blended / ink diff, stacked and zoomed. See the module docstring.
 
     The reference is scaled to the RENDER's canvas first, so every coordinate in
     the composite is a canvas coordinate — the same numbers the tuneables carry.
@@ -120,6 +139,7 @@ def build_overlay(ref_path, render_path, out_path, crop=None, zoom=2, alpha=128)
     if crop:
         r = pygame.Rect(*crop)
         panels = [(t, s.subsurface(r).copy()) for t, s in panels]
+    panels.append(("INK DIFF  red = reference only · blue = ours only · black = both", _ink_diff(panels[0][1], panels[1][1], diff_thr)))
     if zoom != 1:
         panels = [(t, pygame.transform.scale(s, (s.get_width() * zoom, s.get_height() * zoom))) for t, s in panels]
 
