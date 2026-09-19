@@ -40,11 +40,13 @@ jobs:
       - name: Sum live downloads, add the deleted-release base, publish
         env:
           GH_TOKEN: ${{ github.token }}
-          # Downloads of releases that no longer exist, and so can never be counted
+          # Downloads of assets that no longer exist, and so can never be counted
           # again. Author's figure, 2026-08-29: at least 400 across the pre-v0.6.3
           # releases, which were removed for licensing reasons. Deliberately rounded
           # DOWN — the badge should understate rather than claim what it cannot show.
-          DELETED_BASE: 400
+          # + 239 exact, 2026-09-19: v0.6.2's zip (175) and exe (64), removed from
+          # the release (the post stays) because the zip carries the licensed fonts.
+          DELETED_BASE: 639
         run: |
           set -euo pipefail
 
