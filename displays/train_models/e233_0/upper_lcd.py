@@ -863,7 +863,7 @@ _TUNEABLES_PREFIX_FORMS = {
     # overview-…-next-terminus-ja (furigana), each line fitted inside its own
     # band: つぎは RMS 26.6, 終点 23.3. The base layout scored 70.6 / 67.2 there,
     # WORSE than drawing nothing (62.6 / 62.7).
-    "つぎは 終点": {"lines": [
+    "つぎは 終点": {"lines": [  # not-drawn: a form KEY; its lines are drawn — see _PREFIX_DRAWS
         {"font_size": 29, "cell_adv": 30.0, "squeeze": 0.94, "right": 111, "y": 84},
         {"font_size": 28, "cell_adv": 29.5, "squeeze": 0.96, "right": 111, "y": 113},
     ]},
@@ -1702,7 +1702,7 @@ class FuriganaDisplay(JapaneseDisplay):
     reference.
     """
 
-    _PREFIX_KANA = {"次は": "つぎは", "次は終点": "つぎは 終点"}
+    _PREFIX_KANA = {"次は": "つぎは", "次は終点": "つぎは 終点"}  # not-drawn: split into lines, then drawn per line — see _PREFIX_DRAWS
 
     def __init__(self, screen, route_data, stops):
         super().__init__(screen, route_data, stops)
@@ -1811,7 +1811,7 @@ class UpperDisplay:
             self.prefix_text = "ただいま"
         elif is_final_approach_pa:
             # Six cells do not fit the column, so it stacks — the space is the break.
-            self.prefix_text = "まもなく 終点" if terminus else "まもなく"
+            self.prefix_text = "まもなく 終点" if terminus else "まもなく"  # not-drawn: split into lines, then drawn per line — see _PREFIX_DRAWS
         else:
             self.prefix_text = "次は終点" if terminus else "次は"
 
