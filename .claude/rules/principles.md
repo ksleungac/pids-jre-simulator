@@ -189,6 +189,7 @@ When the user states the positive shape of a rule but leaves edge cases / failur
 - (2026-05-01) "Rule 1 = use upper anchors", with collision behavior unspecified. I filled "all-or-nothing forfeit" into a WIP doc, and the next day's session read it as user spec.
 - (2026-06-10) The design specified a full-screen restart; the WIP doc I authored recorded only "blank LCD → JR logo", so I rebuilt the transition lower-LCD-only.
 - (2026-08-19) A restart prompt I wrote added "propose a RULE for what is allowed at root", my inference about why they wanted a cleanup. The next session read it as spec and designed a pre-commit gate for a problem that was really about GitHub's rendered file list.
+- (2026-09-19) The E233-0 spec said the running marker sits between stations and clears the next box, and said nothing about a row's first cell. I parked it ON that cell, borrowing E235-1000's "pointer occupies the window's first cell", which covered the approached station's box for three weeks until a live drive showed it. A sibling's convention used to fill a gap is still an unasked fill.
 
 **How to apply:**
 - The moment a gap surfaces, ask. No minimal placeholder, no picking something reasonable.
@@ -243,6 +244,7 @@ When working through user-stated logic, reason in the vocabulary and frame the u
 **Why:** imported context shifts the frame off the user's logic. Examples:
 - (2026-05-02) Reached a conclusion via "opaque badge paints over text" when the user had never mentioned opacity: *"just dead logic to follow."*
 - (2026-06-12) Resolved "the dot is obstructing" to the rendered marker dot, which I had just been working on, and built a hide-toggle. They meant the editor drag handle.
+- (2026-09-19) "3 needs more fitting" after I had sent four numbered sheets and then a three-row table. I read the table's row 3 and refitted the wrong form; they meant sheet 3: *"no, i mean the furigana"*. When two numbered lists are in play, a bare number is ambiguous.
 - (2026-07-30) The user named the frame, and I re-presented it a turn later as my own finding: *"you see, that i mentioned it a two side efforts."*
 - (2026-09-03) Asked to move the licensed fonts off the public repo, I did it and then reported it with the release's unchanged font shipping attached as a qualifier. Three rounds went to dismantling a constraint on something they had never proposed touching: *"why do i move by release? release is always as it is. what's a problem?"*, and before that *"i don't understand"* twice.
 
@@ -526,6 +528,7 @@ Fitting a shape to a reference is only a fit over the parameters some sample act
 **Why:** an aggregate that cannot distinguish "clean" from "empty" and a fit that cannot distinguish "correct" from "unconstrained" fail identically, by looking numeric. Examples:
 - (2026-08-25) A station-plate fit scored ten cuts and none on the right edge, so `w` wandered 0.9px while the RMS fell. Adding right-edge cuts raised the score from 4.75 to 5.06, and that rise is the honest number.
 - (2026-08-25) A clock-face comparison held `y` fixed across candidates, but each face seats its digits at a different height, so the fixed y was a handicap unrelated to the face. Giving each candidate its own best y and right edge reversed the answer and took the score from 75 to 24.
+- (2026-09-19) The E233-0 prefix was fitted on ただいま alone and then drawn for every form, while two captures each of 次は and つぎは sat in the reference folder unused. 次は came out 17% too small and the stacked つぎは / 終点 scored worse than drawing nothing. A fit on one member says nothing about the members it never scored.
 
 **How to apply:**
 - List the fit's parameters and name the sample that constrains each. A parameter with no answer there is decoration.
