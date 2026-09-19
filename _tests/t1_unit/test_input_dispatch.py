@@ -46,6 +46,7 @@ def drive(
     pending_next_pa=False,
     silent_advance=None,
     pa_drain=False,
+    approach_drain=False,
     at_station=False,
     pa_playing=(),
     sta_playing=(),
@@ -76,6 +77,7 @@ def drive(
         pending_next_pa=pending_next_pa,
         pending_silent_advance=silent_advance,
         pending_pa_drain=pa_drain,
+        pending_approach_drain=approach_drain,
         state=SimpleNamespace(at_station=at_station),
         audio=SimpleNamespace(
             is_pa_playing=lambda: pa_seq[now["i"]],
@@ -89,6 +91,7 @@ def drive(
     fake._next_sta = lambda: calls.append("sta")
     fake._silent_advance_to = lambda t: calls.append(f"silent_advance({t})")
     fake._drain_pa_at_station = lambda: calls.append("drain")
+    fake._drain_approach_pa = lambda: calls.append("approach_drain")
 
     orig_pressed, orig_wait = app_module.keyboard.is_pressed, app_module.pygame.time.wait
     try:
@@ -202,6 +205,46 @@ def check_pa_drain() -> None:
     check(calls == ["pa"], f"a press with no drain request must not drain, got {calls}")
 
 
+def check_approach_drain() -> None:
+    # The AT-STATION fire's drain, split the same way as the departure one (v0.7.0 release
+    # review): the OCR thread only raises `pending_approach_drain`; the arithmetic happens on the
+    # main thread, immediately before the press it belongs to.
+    # 1. ORDER — the approach count must read "last PA played" BEFORE the press, or the press plays
+    #    another まもなく instead of entering STOPPING. Discriminates a drain moved below `_next_pa`.
+    calls, _ = drive([set()], pending_next_pa=True, approach_drain=True)
+    check(calls == ["approach_drain", "pa"], f"approach drain must precede the press, got {calls}")
+
+    # 2. Single-shot, and cleared.
+    calls, sim = drive([set(), {"page down"}], pending_next_pa=True, approach_drain=True)
+    check(calls == ["approach_drain", "pa", "pa"], f"approach drain must fire once, got {calls}")
+    check(sim.pending_approach_drain is False, "a consumed approach-drain request must be cleared")
+
+    # 3. Paired with its press through the audio gate: a sounding PA defers both together.
+    calls, _ = drive([set(), set()], pending_next_pa=True, approach_drain=True, pa_playing=[True, False])
+    check(calls == ["approach_drain", "pa"], f"a deferred approach drain must stay paired with its press, got {calls}")
+
+    # 4. The drain itself, on the real method: in transit and short of the last approach PA, it
+    #    normalizes cnt_pa AND keeps is_last_pa ≡ cnt_pa >= len-1. Parked, or already at the last
+    #    entry, it touches nothing. The parked case is the one the OCR-thread write could not
+    #    guard: the app reaching the platform between the request and the drain.
+    def drained(*, at_station, cnt_pa, pa=("a0", "a1", "a2"), curr_stop=0):
+        stub = SimpleNamespace(
+            state=SimpleNamespace(at_station=at_station, curr_stop=curr_stop, cnt_pa=cnt_pa, is_last_pa=False),
+            stops=[{"pa": list(pa)}],
+        )
+        PASimulator._drain_approach_pa(stub)
+        return stub.state
+
+    s = drained(at_station=False, cnt_pa=0)
+    check(s.cnt_pa == 2 and s.is_last_pa is True, f"in transit, short: must drain to the last approach PA, got cnt_pa={s.cnt_pa} last={s.is_last_pa}")
+    s = drained(at_station=True, cnt_pa=0)
+    check(s.cnt_pa == 0 and s.is_last_pa is False, "parked: must not touch the approach count")
+    s = drained(at_station=False, cnt_pa=2)
+    check(s.cnt_pa == 2 and s.is_last_pa is False, "already at the last approach PA: must not rewrite anything")
+    s = drained(at_station=False, cnt_pa=0, curr_stop=5)
+    check(s.cnt_pa == 0, "a stop index outside the route must be a no-op, not a raise")
+
+
 # ── 3. the priority chain ─────────────────────────────────────────────────────
 # `if / elif / elif`. The masking is deliberate and was preserved verbatim through
 # the 2026-08-11 press-edge fix — only Page Up's ACTION moved to the edge, the
@@ -260,6 +303,7 @@ def main() -> int:
     check_pa_branch()
     check_silent_advance()
     check_pa_drain()
+    check_approach_drain()
     check_chain_order()
     check_pause()
 

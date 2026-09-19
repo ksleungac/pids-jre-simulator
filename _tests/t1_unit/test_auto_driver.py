@@ -728,6 +728,7 @@ def fire(*, at_station=False, curr_stop=0, cnt_pa=0, pa=("a", "b")):
     """Run one _fire_at_station against a stubbed sim; return the sim state."""
     sim = SimpleNamespace(
         pending_next_pa=False,
+        pending_approach_drain=False,
         state=SimpleNamespace(at_station=at_station, curr_stop=curr_stop, cnt_pa=cnt_pa, is_last_pa=False),
         stops=[{"name": "X", "pa": list(pa)}],
     )
@@ -738,27 +739,32 @@ def fire(*, at_station=False, curr_stop=0, cnt_pa=0, pa=("a", "b")):
 
 def check_fire_at_station() -> None:
     # 1. REACHABILITY (the rule): arrival missed — pa=2 but cnt_pa still 0 (app at 1A).
-    #    Must drain to the last approach entry and land the press. Discriminates:
-    #    restoring the old refusal leaves pending_next_pa False.
+    #    The press must land, WITH a drain request riding on it. Discriminates: restoring the old
+    #    refusal leaves pending_next_pa False.
     sim = fire(cnt_pa=0, pa=("approach0", "approach1"))
     check(sim.pending_next_pa is True, "reachability: press must land despite missed arrival (was: refusal → stuck at 1A)")
-    check(sim.state.cnt_pa == 1, f"reachability: cnt_pa must drain to last approach entry, got {sim.state.cnt_pa}")
-    check(sim.state.is_last_pa is True, "reachability: drain must keep the is_last_pa ≡ cnt_pa>=len-1 invariant")
+    check(sim.pending_approach_drain is True, "reachability: the approach drain must be REQUESTED alongside the press")
 
-    # 2. Normal 1B: cnt_pa already at the last approach PA — press lands, no drain.
+    # 2. THE THREAD WRITES NO APP STATE (v0.7.0 release review). Reading curr_stop and writing
+    #    cnt_pa from the OCR thread could put one stop's last-PA index onto the next when the main
+    #    thread advanced in between; the arithmetic is the main thread's (`app._drain_approach_pa`,
+    #    covered in test_input_dispatch). Discriminates the old direct write, which left cnt_pa == 1
+    #    and is_last_pa True here.
+    check(
+        sim.state.cnt_pa == 0 and sim.state.is_last_pa is False,
+        f"the OCR thread must not write AppState, got cnt_pa={sim.state.cnt_pa} last={sim.state.is_last_pa}",
+    )
+
+    # 3. Normal 1B and a pa=1 stop: the press lands and the state is untouched either way.
     sim = fire(cnt_pa=1, pa=("approach0", "approach1"))
-    check(sim.pending_next_pa is True, "normal 1B: press must land")
-    check(sim.state.cnt_pa == 1, "normal 1B: cnt_pa untouched")
-
-    # 3. pa=1 stop (1A≡1B collapse): cnt_pa=0 == len(pa)-1 — press lands, no drain.
+    check(sim.pending_next_pa is True and sim.state.cnt_pa == 1, "normal 1B: press must land, cnt_pa untouched")
     sim = fire(cnt_pa=0, pa=("only",))
-    check(sim.pending_next_pa is True, "pa=1: press must land")
-    check(sim.state.cnt_pa == 0, "pa=1: cnt_pa untouched")
+    check(sim.pending_next_pa is True and sim.state.cnt_pa == 0, "pa=1: press must land, cnt_pa untouched")
 
     # 4. App parked (1C / boot at start station): skip — the app-parked guard is what
     #    lets the detector emit FIRE_AT_STATION unconditionally on STOPPED.
     sim = fire(at_station=True, cnt_pa=0)
-    check(sim.pending_next_pa is False, "parked: fire must skip (already STOPPING)")
+    check(sim.pending_next_pa is False and sim.pending_approach_drain is False, "parked: fire must skip (already STOPPING)")
 
 
 # ── 6. fault states: which row failed, and whose fault it was ────────────────

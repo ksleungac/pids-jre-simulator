@@ -75,6 +75,7 @@ def drive_keys(frames, *, sta_playing_after_first=True):
         pending_next_pa=False,
         pending_silent_advance=None,
         pending_pa_drain=False,
+        pending_approach_drain=False,
         state=SimpleNamespace(at_station=False),
         audio=SimpleNamespace(
             is_pa_playing=lambda: False,

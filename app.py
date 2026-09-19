@@ -298,6 +298,10 @@ class PASimulator:
         # in `_drain_pa_at_station` on the main thread, which is the only place
         # AppState is ever mutated.
         self.pending_pa_drain: bool = False
+        # Same split for the AT-STATION fire (`_fire_at_station`): when the arrival fire was missed the
+        # synthesized press must enter STOPPING rather than play a leftover approach PA, so the approach
+        # count is normalized first — here, in `_drain_approach_pa`, not on the OCR thread.
+        self.pending_approach_drain: bool = False
 
         # Latest OCR readings + detector state, written by AutoDriver thread, read
         # by the debug panel on the main thread. Atomic dict assignment in CPython.
@@ -765,6 +769,9 @@ class PASimulator:
                 if self.pending_pa_drain:
                     self.pending_pa_drain = False
                     self._drain_pa_at_station()
+                if self.pending_approach_drain:
+                    self.pending_approach_drain = False
+                    self._drain_approach_pa()
                 self._next_pa()
                 pygame.time.wait(KEY_REPEAT_DELAY)
             elif pageup_down:
@@ -941,6 +948,29 @@ class PASimulator:
             dropped = len(pa_at_st) - 1 - self.state.cnt_pa_at_station
             self.state.cnt_pa_at_station = len(pa_at_st) - 1
             print(f"[App] Silent drain: dropped {dropped} unplayed pa_at_station entr{'y' if dropped == 1 else 'ies'}")
+
+    def _drain_approach_pa(self) -> None:
+        """Mark the approach PAs played, so the next press enters STOPPING.
+
+        Consumes the AutoDriver's ``pending_approach_drain`` signal (the at-station fire). A STOPPED
+        badge while the app is still short of its last approach announcement means the arrival fire
+        was missed; the synthesized press must land as the STOPPING transition, not as the next
+        まもなく. On the MAIN thread for the same reason as `_drain_pa_at_station`: this reads the
+        CURRENT stop and writes its count, and doing that from the OCR thread could write one stop's
+        index onto the next. ``at_station`` is re-checked — the app may have reached the platform
+        between the request and now, and a parked app has no approach queue to drain.
+        """
+        if self.state.at_station or not (0 <= self.state.curr_stop < len(self.stops)):
+            return
+        pa = self.stops[self.state.curr_stop].get("pa", [])
+        if pa and self.state.cnt_pa < len(pa) - 1:
+            dropped = len(pa) - 1 - self.state.cnt_pa
+            self.state.cnt_pa = len(pa) - 1
+            # App invariant: is_last_pa ≡ cnt_pa >= len(pa)-1 — every other cnt_pa write keeps it.
+            self.state.is_last_pa = True
+            print(
+                f"[App] Silent drain: skipped {dropped} unplayed approach PA entr{'y' if dropped == 1 else 'ies'} (arrival missed; STOPPED badge is the arrival fact)"
+            )
 
     def _next_in_stopping(self) -> None:
         """Press while at_station=True.

@@ -1486,8 +1486,9 @@ class AutoDriver:
         # arithmetic it used to do here — read cnt_pa_at_station, compute, write
         # it back — raced the main thread's own increment of that same counter,
         # which could undo the drain and leave the synthesized press spending
-        # itself on an announcement (#3). It was the only AppState write in this
-        # module, against a README that documents AppState as main-thread-only.
+        # itself on an announcement (#3). `_fire_at_station`'s approach drain had the
+        # same shape and got the same split in the v0.7.0 release review; this
+        # module now writes no AppState, as the README documents.
         self.sim.pending_pa_drain = True
         self.sim.pending_next_pa = True
         self._last_fire = {"ts": time.time(), "type": "departure"}
@@ -1560,25 +1561,23 @@ class AutoDriver:
             print("          [AD] >>> SKIPPED at-station fire (sim already STOPPING)")
             return
         curr = self.sim.state.curr_stop
-        target = self.sim.stops[curr] if curr < len(self.sim.stops) else None
-        if target is None:
+        if curr >= len(self.sim.stops):
             return
-        pa = target.get("pa", [])
-        # Silent approach-PA drain — if cnt_pa is not at the last approach PA
-        # (arrival fire was missed, e.g. OCR dropout through the lead), the press
+        # Silent approach-PA drain — if the arrival fire was missed (OCR dropout
+        # through the lead), cnt_pa is short of the last approach PA and the press
         # below would play the next approach PA instead of entering STOPPING,
-        # leaving the display on まもなく while the train is parked. Normalize
-        # cnt_pa to the last entry so the press lands as the STOPPING transition.
-        # Same pattern as _fire_departure's pa_at_station drain.
-        if pa and self.sim.state.cnt_pa != len(pa) - 1:
-            dropped = len(pa) - 1 - self.sim.state.cnt_pa
-            self.sim.state.cnt_pa = len(pa) - 1
-            # App invariant: is_last_pa ≡ cnt_pa >= len(pa)-1 — every other
-            # cnt_pa write maintains it (_next_in_approaching, _silent_advance_to).
-            self.sim.state.is_last_pa = True
-            print(
-                f"          [AD] >>> Silent drain: skipped {dropped} unplayed approach PA entr{'y' if dropped == 1 else 'ies'} (arrival missed; STOPPED badge is the arrival fact)"
-            )
+        # leaving the display on まもなく while the train is parked.
+        #
+        # REQUESTED here, PERFORMED on the main thread (app.py `_drain_approach_pa`),
+        # the same split `_fire_departure`'s drain got for #3. This method runs on the
+        # OCR thread, and the arithmetic it used to do — read curr_stop and cnt_pa,
+        # then write cnt_pa = len(pa)-1 — raced the main thread: a Page Down or a
+        # consumed press that advanced the app in between put the OLD stop's
+        # last-PA index onto the NEW stop, silently skipping its approach
+        # announcements (v0.7.0 release review). Unconditional, because deciding
+        # whether a drain is needed is itself a read of that state; the main thread
+        # re-checks and does nothing when nothing is short.
+        self.sim.pending_approach_drain = True
         self.sim.pending_next_pa = True
         self._last_fire = {"ts": time.time(), "type": "at-station"}
         print("          [AD] >>> FIRED at-station (set pending_next_pa)")
