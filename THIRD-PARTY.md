@@ -125,16 +125,18 @@ to them on 2026-08-21; the material comes out if they would rather it did not st
 
 ## Assets derived from third-party software
 
-`ocr_templates/`, `data/disclaimer/`, `docs/assets/15-in-use.jpg`
+`ocr_templates/`, `data/disclaimer/`, `docs/assets/15-in-use.jpg`,
+`docs/assets/v0.7.0/15-remote-ipad.jpg`
 
 Glyph templates and reference frames extracted from a third-party train simulator's
 on-screen display, used to locate and read its HUD. Rights in the depicted software
 and its interface belong to its publisher and to East Japan Railway Company.
 
-`docs/assets/15-in-use.jpg` is listed here rather than under § Reference material, which
-covers the rest of `docs/assets/`: it is a screenshot of that simulator running with this
-application beside it, and is the only file in that folder depicting third-party software
-rather than this project's own output or a photograph of railway equipment.
+`docs/assets/15-in-use.jpg` and `docs/assets/v0.7.0/15-remote-ipad.jpg` are listed here
+rather than under § Reference material, which covers the rest of `docs/assets/`: each
+shows that simulator running with this application beside it (the second a photograph,
+with the app mirrored to a tablet), and they are the only files in that folder depicting
+third-party software rather than this project's own output or railway equipment.
 
 The release also contains `font_atlas/`, pre-rendered raster output of the LCD
 typefaces. It is generated at build time and is not in this repository. See § Fonts.
@@ -157,7 +159,7 @@ designs ours.
 
 ## Reference material
 
-`_references/lcd/`, `_references/tims/`, `_references/bell/`, `docs/assets/*.png`
+`_references/lcd/`, `_references/tims/`, `_references/bell/`, `docs/assets/**/*.png`
 
 Photographs of in-service train displays, cab consoles and station platform equipment,
 collected to calibrate the renderer, and screenshots of this application in operation.
