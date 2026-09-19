@@ -106,25 +106,31 @@ Surface this list to the user before drafting — gives them a chance to flag co
 >
 > Mixed commits (one commit touches both shipped and repo-only paths): report only the shipped-facing portion.
 
-**Format** — match the prior release. Read the previous release's notes via `gh release view v<prev>` or check past `release_notes.md` in git history (`git log --all -- release_notes.md`); the v0.5.2 layout uses `### Program` / `### Data` sections + a distribution footer.
+**Format — three tiers by weight, highlights first** (author, 2026-09-19, from v0.7.0: *"it comes with highlights, major items, then others are small fixes, changes at the bottom"*). This replaces the v0.5.2 `### Program` / `### Data` split, which gave a new train model and a one-line data fix the same weight. Which items are highlights is the author's call each release; propose, then ask.
 
 **Structure:**
 ```markdown
 ## v<VERSION> Release
 
-### Program
+### Highlights
 
-- **<headline feature>.** One-paragraph user-facing description. No internal jargon ("apply per-N text scaling tier", "Rule 4 fallback") — describe what the user sees.
+#### <headline feature>
+What it is and what the user gets, in a sentence or two, then its screenshots. A
+large feature can carry a gallery. No internal jargon ("per-N text scaling tier",
+"Rule 4 fallback") — describe what the user sees.
 
-- **<next program change>.** …
+#### <next headline> …
 
-### Data
+### Also in this release
 
-# Group by ROUTE, not by change-type. One bolded route name per bullet,
-# its changes after. (Not "Translations: …" / "Audio cleanup: …" across lines.)
-- **<Route name>.** What changed for this route (new translations, audio trim, …).
+- **<major change to something users already had>.** One to three sentences.
 
-- **<Another route>.** …
+### Fixes and changes
+
+# The bottom tier may be more technical — the reader who scrolls this far wants
+# specifics. Data fixes group by ROUTE, one bolded route per bullet, not by
+# change-type ("Translations: …" across lines).
+- **<Component or route>.** What was wrong or what changed, plainly.
 
 ### Auto-PA display support
 
@@ -220,26 +226,33 @@ https://github.com/ksleungac/pids-jre-simulator/releases/tag/v<VERSION>
 
 `<VERSION>` is the literal value resolved in Step 1 — substitute before printing.
 
-### Deleting an old release — bump `DELETED_BASE` FIRST
+### Never delete a release — remove its distribution ASSETS, and bump `DELETED_BASE` first
 
-**Before removing any published release, add its download count to `DELETED_BASE` in
+**A published release is never deleted: not with `gh release delete`, not from the web
+UI.** Its page, tag and notes are the project's history. When an old one has to stop
+being downloadable (licensing, storage), delete only its **assets**, the distribution zip
+and the exe, with `gh release delete-asset`, and leave the release standing. Author,
+2026-09-19: *"never delete any releases, see if can just delete the distribution files"*.
+The pre-v0.6.3 releases were deleted whole, which is the case this rule exists for.
+
+**Before removing any asset, add its download count to `DELETED_BASE` in
 `.github/workflows/badge-downloads.yml`.** The README's download badge is
-`live releases + DELETED_BASE`, and GitHub destroys a release's count when the release
-goes — it lives on the asset, and there is no API, no export, and no Wayback capture of
-the releases page to recover it from (checked 2026-08-29, all three). Delete first and
-the number is gone permanently; the badge just drops and nothing says why.
+`live assets + DELETED_BASE`, and the count lives ON the asset: GitHub destroys it when
+the asset goes, and there is no API, no export and no Wayback capture of the releases
+page to recover it from (checked 2026-08-29, all three). Delete first and the number is
+gone permanently; the badge just drops and nothing says why.
 
 ```bash
-# the release about to be deleted
+# every asset on the release about to be emptied, with its count
 gh api repos/ksleungac/pids-jre-simulator/releases/tags/vX.Y.Z \
-  --jq '[.assets[].download_count] | add'
-# add that to DELETED_BASE, commit, THEN delete the release
+  --jq '.assets[] | "\(.name)\t\(.download_count)"'
+# add the SUM to DELETED_BASE and commit, THEN remove each asset:
+gh release delete-asset vX.Y.Z "<asset name>" --yes
 ```
 
-This has already cost the project once: the pre-v0.6.3 releases were removed for
-licensing reasons and their counts are unrecoverable, so `DELETED_BASE` opens at the
-author's recollection of "at least 400" rather than a measurement. Every figure added
-after this is exact — keep it that way.
+Whole-release deletion already cost the project once: the pre-v0.6.3 counts are
+unrecoverable, so `DELETED_BASE` opens at the author's recollection of "at least 400"
+rather than a measurement. Every figure added after this is exact — keep it that way.
 
 Rounding is DOWN, always. The badge understating is fine; claiming downloads that cannot
 be shown is not.
@@ -255,5 +268,5 @@ be shown is not.
 
 - **Skill stops before upload, not before tag.** Tagging is reversible (`git tag -d` + `git push origin :refs/tags/...`); uploading creates a public artifact users may have downloaded by the time you notice a problem. The split puts the irreversible step in user hands.
 - **Notes are drafted, not auto-generated.** `release.ps1`'s auto-generation produces commit-subject-shaped bullets that read like git log, not like user-facing notes. The skill's draft is a starting point for the user to edit; the criterion (ships-in-zip) is the filter, not the formatting.
-- **Cross-check the prior release's structure.** v0.5.2's `release_notes.md` is the format reference; staying consistent across releases makes the GitHub release page predictable for the public audience.
+- **Keep the structure stable across releases.** Since v0.7.0 the format reference is the three-tier layout in Step 4 (highlights, also in this release, fixes and changes); staying consistent makes the GitHub release page predictable for the public audience.
 - **No re-build.** `/build` already produced the artifacts and the user smoke-tested them. Re-building under release.ps1 wastes time AND introduces a non-zero risk of "the binary that was tested isn't the binary that ships" — the skill ships the exact bytes the user verified.
