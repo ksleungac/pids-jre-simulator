@@ -258,7 +258,7 @@ pids_jre_simulator/
 | Page Up | Play STA (jumps to sta_cut if playing) |
 | End | Pause |
 
-Yellow hint square = multiple PA tracks available.
+Yellow hint square = more presses yield more PA at this stop. Two branches, different thresholds: in transit it keys on `len(pa) > 1`, at the platform on `len(pa_at_station) > 0`, because `pa` is 2-by-default and `pa_at_station` empty-by-default.
 
 ## When Working On...
 
