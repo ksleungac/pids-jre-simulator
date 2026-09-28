@@ -32,6 +32,7 @@ verifier via verify_ui.
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import shutil
 import subprocess
@@ -818,11 +819,20 @@ def main() -> int:
                     seen_full.add(pa_val)
                     full_items.append({"stop": stop["name"], "pa": pa_val})
 
+    # Verdicts carry the DATE they were given. Without it a PASS from months ago and one
+    # from ten minutes ago are identical in this file, so a run that splices a file but
+    # never re-passes it leaves a green verdict describing audio that no longer exists —
+    # and `audio/README.md`, which is written from here, inherits the claim. Stamped only
+    # when THIS run recorded the verdict; otherwise the prior stamp carries through.
+    today = datetime.date.today().isoformat()
+
     merged_items = []
     for fi in full_items:
         pa_val = fi["pa"]
+        checked = prior_by_pa.get(pa_val, {}).get("checked")
         if pa_val in verdicts:
             verdict = verdicts[pa_val]
+            checked = today
         elif pa_val in prior_by_pa:
             verdict = prior_by_pa[pa_val].get("verdict", "NOT_REVIEWED")
         else:
@@ -830,6 +840,8 @@ def main() -> int:
         note = notes.get(pa_val, prior_by_pa.get(pa_val, {}).get("note", ""))
         resolved = notes_resolved.get(pa_val, prior_by_pa.get(pa_val, {}).get("note_resolved", False))
         item_out = {**fi, "verdict": verdict, "note": note}
+        if checked:
+            item_out["checked"] = checked
         if note:
             item_out["note_resolved"] = bool(resolved)
         merged_items.append(item_out)
