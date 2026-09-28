@@ -37,43 +37,23 @@ SCOPE FIDELITY when codifying user feedback:
 
 ## Collaboration
 
-### Discussion-first
-Present findings before making documentation updates or non-trivial changes. The user reviews and confirms before code lands.
+### Gate the work, then batch the check-ins
+Present findings before a non-trivial change lands. Once running, surface findings together at the end rather than returning after each step. Stop mid-flight only where proceeding under any assumption would be unsafe or waste the work.
 
-**Why:** plans that look right in isolation miss user-side context: parallel work, priorities, constraints. Examples:
-- (2026-05-28) Offered to apply three small fixes as one batch; the user wanted them one at a time so each change stayed trackable.
-- (2026-05-31) Opened a state-machine design with a full triggers×states matrix; the user asked for one rule per turn instead.
+**Why:** plans that look right in isolation miss parallel work, priorities and constraints — but each return also costs a context switch, and most returns ask something claude could decide. Examples:
+- (2026-05-28) Offered three small fixes as one batch; the user wanted them one at a time so each stayed trackable.
+- (2026-05-31) Opened a state-machine design with a full triggers×states matrix; they asked for one rule per turn.
 - (2026-07-25) Read a clarifying question as approval and built the thing: *"i didn't tell you to do it."*
+- (2026-08-18) *"automate more please. don't come back to me too oftenly, only wait when you really need me"*.
 
 **How to apply:**
-- Summarize what you'd do and why before any non-trivial doc edit, code change, or batch operation. The user can waive it per task.
-- A queue of trivial fixes still gets per-item gating: explain, apply, next.
-- Co-designing a rule set: lay out the shared vocabulary first, then one rule per turn.
-- Data work: present the parse and flag uncertainties before generating splitter scripts or touching `route.json`.
-- Keep "was that the intent?" separate from "OK to apply?". A bundled question makes Yes ambiguous.
-- Engagement with a proposal's details is the user understanding it, not authorizing it. Wait for an answer to the apply question you asked.
-
-### Skip-confirmation when explicitly signaled
-When the user says "push directly" or "skip my confirmation", bypass per-file gates. Still split commits logically, just don't pause between them.
-
-**Why:** re-asking after a chain authorization spends the user on permission already granted. Examples:
-- (2026-05-13) Chain auth covered recap → commit → third-man → refactor; I read it as covering a second commit too and skipped the recap.
-
-**How to apply:**
-- The waiver covers the current batch only. The next commit-worthy moment needs a fresh signal.
-- Chain authorizations suppress per-step gates inside the chain. Re-gate anything outside its declared scope.
-- Each /commit consumes its own recap.
-
-### Batch the check-ins, stop only where the answer changes what you do
-A standing preference, unlike the per-batch waiver above. Run the work through and surface findings together at the end rather than returning after each step. Stop mid-flight only when proceeding under any assumption would be unsafe or would waste the work.
-
-**Why:** each return costs the user a context switch, and most of them ask something claude could decide. Examples:
-- (2026-08-18) *"automate more please. don't come back to me too oftenly, only wait when you really need me"*, and later a bare "automate" to skip a skill's own approval gate.
-
-**How to apply:**
-- A question the loaded context already answers: decide it, state the decision in the report, move on. A convention that permits an option is an answer.
+- Summarize what you'd do before any non-trivial doc edit, code change or batch operation. A queue of trivial fixes still gets per-item gating: explain, apply, next.
+- Keep "was that the intent?" separate from "OK to apply?". A bundled question makes Yes ambiguous, and engagement with a proposal's details is the user understanding it, not authorizing it.
+- A question the loaded context already answers: decide it, state the decision, move on. A convention that permits an option is an answer.
 - A gate written into a skill still fires, but honour a waiver rather than re-asking. Say which gate you skipped.
 - Genuinely blocking (the audio is not on disk, the domain fact is theirs): ask once, with everything you need.
+- Co-designing a rule set: shared vocabulary first, then one rule per turn. Data work: present the parse and flag uncertainties before generating splitter scripts or touching `route.json`.
+- **A waiver covers the current batch only**, and the next commit-worthy moment needs a fresh signal. Chain authorizations suppress per-step gates inside the chain; re-gate anything outside its declared scope. Each /commit consumes its own recap. (2026-05-13: chain auth covered recap → commit → third-man → refactor; I read it as covering a second commit and skipped the recap.)
 
 ### Never prompt to commit
 Never suggest, offer, or ask about committing. No "want me to commit?", no end-of-task commit nudge. Commit happens only on explicit user request or a manual `/commit`.
@@ -86,35 +66,19 @@ Never suggest, offer, or ask about committing. No "want me to commit?", no end-o
 - Status question ("what's uncommitted?"): state the facts including uncommitted changes, and do not append a commit offer.
 - Recap and commit are both user-invoked. Neither gets a proactive nudge.
 
-### Harness faults: fix them, don't narrate them
-A defect in the harness itself (`_harness/`, hooks, session scripts, dev tooling) gets fixed silently, with no proposal turn, provided the fix changes nothing about how the project behaves for the user. Report it in one line if at all. A gate is the exception: changing when a hook fires, or what it blocks, has a real implication and needs an ask.
+### Fix it rather than hand the problem back
+A defect you found is yours to fix, not to report. Harness faults (`_harness/`, hooks, session scripts, dev tooling) get fixed silently when the fix changes nothing about how the project behaves for the user. Anything you have called BLOCKING gets fixed in the same turn. The one exception is a fix needing a direction only the user has: ask that question, having already done everything around it.
 
-**Why:** harness bugs cost the user attention twice, once reading the report and once answering a question they have no stake in. Examples:
+**Why:** a report reads as progress and is not — the user spends a turn converting it into an instruction, and a harness bug costs them attention twice, once reading it and once answering a question they have no stake in. Examples:
 - (2026-08-11) Fixed a `session_init.py` bug, then asked whether to scope a commit hook and add a test: *"for harness problems just fix itself (not changing the behaviour or implication for me)."*
-
-**How to apply:** harness-internal and behaviour-neutral, just fix it. Touches a gate, a commit path, or anything the user would notice, ask.
-
-### Naming something as BLOCKING is a commitment to fix it
-If you tell the user something is blocking them, fix it in the same turn. The only exception is a fix needing a direction or design decision from them: ask that one question, having already done everything around it. Reporting a blocker and stopping hands them a problem plus the work of telling you to solve it.
-
-**Why:** the report reads as progress and is not. The user spends a turn converting it into an instruction. Examples:
-- (2026-08-30) Reported `/build`'s pre-flight as red and unclearable without a gate change, then stopped. *"then what? fix that"*, and after I fixed only that one, *"why not fix what you can fix"*. Five of the six items listed for their call needed no direction.
+- (2026-08-30) Reported `/build`'s pre-flight as red and unclearable without a gate change, then stopped: *"then what? fix that"*, then *"why not fix what you can fix"*. Five of six items listed for their call needed no direction.
 
 **How to apply:**
-- This sharpens § "Harness faults" rather than contradicting it. A merely-wrong gate still needs an ask. A blocking gate does not: fix it, and say why it was mis-scoped.
 - Sort the list before presenting it: already fixed, about to fix, genuinely theirs. If the last group is empty, present no list.
 - "Needs a direction" means the answer changes what gets built. A calibrated value or a signed-off element is a reason to be careful, not a reason to stop.
-- After widening or narrowing any gate, mutation-prove it still fires (§ "A measurement is a claim until the instrument is calibrated").
-
-### Announce self-launched multi-step processes
-Name a self-directed multi-step process (a review+fix pass, a coherence sweep, an audit, a subagent fan-out) before running it. Self-launching is fine; the unheralded surprise is what reads as off.
-
-**Why:** the shift from ask-first to self-launch is invisible unless announced. Examples:
-- (2026-07-15) *"i felt like you should explicitly tell me you are running review+fix, otherwise sudden self review sounds weird."*
-
-**How to apply:**
-- State the process by name before the first tool call, not after.
-- Autonomous multi-step work only. A single lookup or read needs no heralding.
+- A gate is the exception to the silent-fix rule: changing when a hook fires, or what it blocks, has a real implication and needs an ask. A *blocking* gate does not — fix it, and say why it was mis-scoped. After widening or narrowing any gate, mutation-prove it still fires.
+- **Announce a self-directed multi-step process** (review+fix, a coherence sweep, an audit, a subagent fan-out) by name before the first tool call. Self-launching is fine; the unheralded surprise is what reads as off, and a single lookup needs no heralding. (2026-07-15: *"i felt like you should explicitly tell me you are running review+fix, otherwise sudden self review sounds weird."*)
+- **Don't gate cheap verification behind a question.** A change that lands in an immediate preview (`preview_display.py`, a `_dev_scripts/preview_*` harness, a headless screenshot) gets launched or rendered while you report — a permission question there is a pointless round-trip. A change reachable only by navigating the live app is not cheap: report and let them launch, and still gate irreversible or outward-facing actions. Once you have written "relaunch to see it", relaunch; the sentence is the decision. (2026-07-11: *"just launch it for me."* 2026-07-15: auto-launched `main.py` behind setup → route → drive → view — *"when fixed don't auto-launch."* 2026-08-29: *"when you tell me relaunch, just relaunch for me unless i tell you not to do so."*)
 
 ### Verify before claiming
 Before claiming "X is a bug" or "X works like Y", read the call sites and trace state transitions. Don't infer from partial context.
@@ -141,45 +105,29 @@ Before claiming "X is a bug" or "X works like Y", read the call sites and trace 
 - **Two reports about one subject are not one reporter.** A shared line, symptom or timeframe is not identity, and a track record borrowed from the wrong person changes what the evidence means. 2026-09-08: an IM report about a missing melody was attributed to the GitHub reporter whose other tickets happened to touch that line, and a whole turn then reasoned from their credibility and their open OCR ticket. The author's correction was one sentence. Ask who before reasoning from who. (2026-09-08)
 
 ### Source order when several sources describe one artifact
-The author's statement first, then the repo's own code, then a reference photograph. The photograph is last and never outranks a human word.
+The author's statement first, then the repo's own code, then a reference photograph. The photograph is last and never outranks a human word. Verify runtime semantics from primary source too: for behaviour depending on deployment frame or external runtime (PyInstaller, threading, I/O timing, OS specifics), primary source outranks cached impression.
 
-**Why:** the photo is the only one of the three that has been through a lens and a resampler, so it carries artefacts, and it is also the easiest to "measure", which is what makes it feel authoritative. Examples:
-- (2026-08-28) The author said the marks were solid, the rim ran all the way round, and the arrows had no white outline. A pixel probe contradicted each one and was wrong each time: *"treating my minute as ref error"*.
-- (2026-08-28) The same element's structure sat in one comment line in the sibling model's source (`e235_1000/lower_lcd.py:694`), unread for two sessions while the geometry was reconstructed from a 2.35× capture, arriving at a different and wrong answer.
+**Why:** the photo alone has been through a lens and a resampler, so it carries artefacts, and it is also the easiest to "measure", which is what makes it feel authoritative. Runtime behaviour invisible from reading code is the other failure substrate. Examples:
+- (2026-08-28) The author said the marks were solid, the rim ran all the way round, the arrows had no white outline. A pixel probe contradicted each one and was wrong each time: *"treating my minute as ref error"*.
+- (2026-08-28) The same element's structure sat in one comment line in the sibling's source (`e235_1000/lower_lcd.py:694`), unread for two sessions while the geometry was rebuilt from a 2.35× capture, arriving at a wrong answer.
+- (2026-05-05) Defended `i18n.app_root`'s `Path(sys._MEIPASS)` as "intentional"; this project ships alongside-exe, not `--add-data`. Release exe crashed.
+- (2026-05-07) Dismissed `i18n.font_named()`'s SysFont as "by design"; a CONTRACT block in the same grep output said never SysFont. Chinese-locale crash.
 
 **How to apply:**
 - Before measuring anything on an element forked from a sibling, read the sibling's code for it. The cost is one grep; the alternative is inventing an element the artifact does not have.
+- Trigger for the runtime half: code references `sys._MEIPASS` / `sys.frozen` / `Path(__file__)` for behaviour-dependent paths, or relies on library API that differs across platforms.
+- When defending behaviour as "intentional" or "leave it alone", confirm primary source before saying it.
 
-### Verify runtime semantics from primary source
-For code whose behavior depends on deployment frame or external runtime (PyInstaller, threading, I/O timing, OS specifics), verify against primary source — not cached impression.
+### Go one level deeper, not one more surface fix
+When the user pushes back N times and each fix is a different concrete state (colour A → B → C → A), stop point-fixing and ask what determines the value structurally. When a problem reveals a pattern of mistake, push past surface framings to the underlying frame mismatch.
 
-**Why:** Behavior not visible from reading code is the failure substrate. Examples:
-- (2026-05-05) Defended `i18n.app_root`'s `Path(sys._MEIPASS)` as "intentional"; this project ships alongside-exe, not `--add-data`. Release exe crashed.
-- (2026-05-07) Dismissed `i18n.font_named()`'s SysFont as "by design"; CONTRACT block in same grep output said never SysFont. Chinese-locale crash.
-
-**How to apply:**
-- Trigger: code references `sys._MEIPASS` / `sys.frozen` / `Path(__file__)` for behavior-dependent paths, or relies on library API that may differ across platforms.
-- When defending behavior as "intentional" / "leave it alone" — confirm primary source before saying it.
-
-### Converge on the model, not the next correction
-When the user pushes back N times and each fix is a different concrete state (color A → B → C → A), stop point-fixing and ask what determines the value structurally.
-
-**Why:** Iterating point-fixes substitutes for grasping intent. Examples:
-- (2026-05-08 PM) Yamanote time-circle color cycled across 6 states; never asked "what determines the color, structurally."
+**Why:** iterating point-fixes substitutes for grasping intent, and a surface description feels satisfying while leaving the family of mistake free to recur. Examples:
+- (2026-05-08 PM) Yamanote time-circle colour cycled across 6 states; never asked "what determines the colour, structurally."
+- (2026-04-30) Diagnosed dep-misclassification as "two factors conflated", then "three factors". Only on the third pass: "claude reasons about code as text rather than as a deployed system."
 
 **How to apply:**
-- 2+ corrections with non-monotonic state → stop adjusting, ask the model question.
-- Frame as "is X a function of position / role / state?" — not "should X be value Y?".
-
-### Causal depth on diagnoses
-When a problem reveals a pattern of mistake, push past surface framings ("three contributing factors") to the underlying frame mismatch.
-
-**Why:** Surface descriptions feel satisfying but leave the family of mistake free to recur. Examples:
-- (2026-04-30) Diagnosed dep-misclassification as "two factors conflated", then "three factors". Only on third pass: "claude reasons about code as text rather than as a deployed system."
-
-**How to apply:**
-- "Is this the actual cognitive failure, or a comfortable surface description?"
-- A list of contributing factors without a shared root means the root is still missing.
+- 2+ corrections with non-monotonic state: stop adjusting, ask the model question. Frame it as "is X a function of position / role / state?", not "should X be value Y?".
+- Ask whether this is the actual cognitive failure or a comfortable surface description. A list of contributing factors with no shared root means the root is still missing.
 
 ### Implementation-completion-as-spec
 When the user states the positive shape of a rule but leaves edge cases / failure modes unstated, ask open questions to clarify. Never fill gaps autonomously.
@@ -214,19 +162,6 @@ When the user asks for a design decision that is claude's to drive, recommend on
 - A finding your own analysis already resolves is not a question. Resolve it and report. (2026-07-21)
 - A sibling model that already solved it outranks any proposal you can write. The per-model split bars borrowing a sibling's *behaviour*, which is easy to over-read as "don't look": the algorithm does not carry, the shape rule underneath it does, already tuned against references you do not have. Say which half you took.
 
-### Don't gate cheap verification behind a question
-After a visible change, if a CHEAP IMMEDIATE preview lets the user verify, just launch it (background) as part of reporting — don't ask "want me to launch?". But don't auto-launch the FULL app when reaching the change requires manual setup navigation — that's not cheap; let the user drive it.
-
-**Why:** an immediate preview is cheap and reversible, so a permission question adds a pointless round-trip. A full-app launch the user must click through a whole flow to reach is not verification you can do for them. Examples:
-- (2026-07-11) After repeated "want me to launch the preview?" prompts: *"next time don't ask such question, just launch it for me."*
-- (2026-07-15) Auto-launched `main.py` after a fix buried behind setup → route → drive → view: *"when fixed don't auto-launch."*
-- (2026-08-29) Four consecutive endings that told the user to relaunch: *"when you tell me relaunch, just relaunch for me unless i tell you not to do so."*
-
-**How to apply:**
-- Change lands in an immediate preview (`preview_display.py`, a `_dev_scripts/preview_*` harness, a headless screenshot): launch or render it while reporting.
-- Change is only reachable by navigating the live app: report and let the user launch. Still gate irreversible or outward-facing actions.
-- Once you have written the words "relaunch to see it", relaunch. The sentence is the decision, and stopping after it makes the user type the word back. This is you proposing the relaunch, which the 2026-07-15 case does not cover, and it costs a turn every round in a test loop.
-
 ### Draw spatial structure, prose loses
 When the answer is where one thing sits relative to another (capture regions, crop chains, bounding boxes, layout offsets), render a labelled overlay on the real artifact and hand over the path instead of describing it.
 
@@ -254,40 +189,12 @@ When working through user-stated logic, reason in the vocabulary and frame the u
 - When a design frame lands, name it back in their words and build on it rather than arriving at it again independently.
 - **A true fact about a surface the user is NOT changing is not a caveat, it is a different topic.** Attaching it to the delivered work frames it as an obstacle, so the reply is about a problem that exists only in the report. Report what changed; raise an untouched surface only when the change actually alters it. The tell is a "still" or a "but" carrying a fact that was equally true before the work started.
 
-### Scope-expansion guard
-When the user states a rule with a scope phrase ("also applies to all", "everywhere"), apply it only to the axis the prior sentence was about. If extension to a sibling axis is plausible, ask.
-
-**Why:** "everywhere" inherits the prior sentence's axis. Examples:
-- (2026-05-03) "Also applies to all steps" was scoped to active-prompt timing; I reverted history-key timing too, under one consistency frame.
-- (2026-09-02) "render the whole screen on different states" arrived after an hour on one view, and I read "states" across every axis the app has — views × modes × PA phases × notices, three diagrams, twenty frames. They meant the element we were working on: *"i only care about the overview under different states"*, then *"don't change anything outside your overview scope"*. A plural noun inherits the subject under discussion, not the app's full state space.
-- (2026-08-19) *"don't complicate things, am tired, treat me as 5 yrs old"* mid-research, so I cut the research. They meant the presentation: *"didn't tell you to stop, you can aggregate the ideas, but when present to me keep them simple."*
-
-**How to apply:**
-- A constraint on the MESSAGE is not a constraint on the WORK. Do the full work, hand over the short version.
-
-### Pre-stated scope fences are absolute
-When the user explicitly partitions a discussion ("DO NOT mix X and Y"), don't re-use a construct derived for one side as a tool for the other — even when mathematically applicable.
-
-**Why:** The fence is a frame declaration, not a turn-level constraint. Examples:
-- (2026-05-02) User fenced row-grouping vs positioning; I reused the row-grouping formula as a positioning rule. Required /third-man to unwind.
-
-### Weirdness-as-signal
-When claude's reaction to a user-stated design is "broken / doesn't make sense", treat that as a signal claude is missing the design intent — not that the user is wrong.
-
-**Why:** Coherence-instinct is unreliable for unfamiliar designs. Examples:
-- (2026-05-03) Dismissed the mixed press-based-history + audio-gated-active model as "broken UX"; the empty window was the deliberate listening pause.
-
-**How to apply:** Re-read the user's words before pre-rejecting in private reasoning. Ask "what makes this intentional?" rather than "this is broken".
-
-### Preserve named user frameworks
-When the user has a named framework (Rules 1-4, the cascade), proposed changes default to enhancement WITHIN that framework. If a proposal would replace a named primitive, name that scope explicitly before sign-off.
-
-**Why:** Superlative framings hide the scope shift. Examples:
-- (2026-05-03) Presented option (2) as "more principled framework — eliminates Rule 4"; user said "Go (2)"; I implemented structural replacement. User: *"don't void my rule 1-4 cascade concept."*
-
-**How to apply:**
-- State explicitly whether an option preserves or replaces a named primitive.
-- Default to enhancement. Replacements require their own separate ask.
+**Scope, fences and named frameworks — four ways the frame gets left:**
+- **A scope phrase inherits the prior sentence's axis.** "Also applies to all", "everywhere", or a plural noun covers the subject under discussion, not the app's full state space. If extension to a sibling axis is plausible, ask. (2026-05-03: "also applies to all steps" was scoped to active-prompt timing; I reverted history-key timing too. 2026-09-02: "render the whole screen on different states" read as views × modes × PA phases × notices, three diagrams, twenty frames — *"i only care about the overview under different states"*, then *"don't change anything outside your overview scope"*.)
+- **A constraint on the MESSAGE is not a constraint on the WORK.** Do the full work, hand over the short version. (2026-08-19: *"don't complicate things, am tired, treat me as 5 yrs old"* mid-research, so I cut the research — they meant the presentation: *"didn't tell you to stop, you can aggregate the ideas, but when present to me keep them simple."*)
+- **A pre-stated fence is a frame declaration, not a turn-level constraint.** When the user partitions a discussion ("DO NOT mix X and Y"), don't re-use a construct derived for one side as a tool for the other, even when mathematically applicable. (2026-05-02: reused the row-grouping formula as a positioning rule; took /third-man to unwind.)
+- **A named framework (Rules 1-4, the cascade) defaults to enhancement WITHIN it.** Say explicitly whether an option preserves or replaces a named primitive; a replacement needs its own ask, because superlative framings hide the scope shift. (2026-05-03: presented option 2 as "more principled framework — eliminates Rule 4", they said "Go (2)", I implemented structural replacement: *"don't void my rule 1-4 cascade concept."*)
+- **"Broken / doesn't make sense" is a signal you are missing the intent, not that the user is wrong.** Coherence-instinct is unreliable for unfamiliar designs. Re-read their words and ask what makes it intentional before pre-rejecting in private reasoning. (2026-05-03: dismissed the mixed press-history + audio-gated model as "broken UX"; the empty window was the deliberate listening pause.)
 
 ### Self-propose /third-man at impasse OR before structural refactors
 At 3+ rounds of restating the same contested point with no convergence, offer `/third-man`. Before any multi-file structural refactor (≥3 files, package layout, module boundaries), offer `/third-man` for design input before coding.
@@ -425,12 +332,11 @@ A tool's worth is capped by whether it gets used *naturally*, and naturalness = 
 
 ## Engineering rigor
 
-### Simplicity First
-Write the minimum code that solves the problem. No speculative additions.
+### Minimum code, and where you factor, a flexible primitive
+Write the minimum that solves the problem: no features beyond what was asked, no abstraction for single-use code, no error handling for impossible scenarios. Where you do factor shared code (helper, utility, chrome layer), design a portable interface — keyword options for variants, parameters over hardcoded constants — so it is callable from many sites. That is not licence for speculative generality: no option without a second caller.
 
-**How to apply:**
-- No features beyond what was asked. No abstractions for single-use code. No error handling for impossible scenarios.
-- The test: would a senior engineer call it overcomplicated?
+**Why:** the two bind in opposite directions, and the author asked for the second explicitly. Examples:
+- (2026-06-27) *"think about primitive when coding. a portable, using options to customize, flexible interface."* — `chrome.title_row` and `blit_lowres(…, right=)` extracted from 3× copy-paste.
 
 ### A rule is not a licence to expand scope
 Citing a principle to justify work the user did not ask for inverts what the corpus is for. Every rule here exists to make the REQUESTED deliverable trustworthy; none of them authorises a new artifact. When a rule seems to demand more scope ("verify before claiming", "test the change", "calibrate the instrument"), it is asking for confidence in what was asked, not for a tool, a harness, or a benchmark that was not.
@@ -455,11 +361,6 @@ Use the words the user uses for concepts they own. Introducing a new term for th
 - A term you introduced and they never echoed back is a rename waiting to happen — check before it reaches an identifier or a CLI flag.
 - Also holds for structure: match an existing convention rather than inventing a parallel one (`live_captures/1440p/`, matching `_tests/fixtures/ocr/1440p/`, not a new `2560x1440/` scheme).
 
-### Reusable code = flexible primitive
-When factoring shared code (helper / utility / chrome layer), design a portable, options-customized interface — keyword options for variants, parameters over hardcoded constants — so it's callable from many sites with different inputs. NOT license for speculative generality (cf. Simplicity First — no abstraction for single-use, no option without a second caller); the flexibility serves reuse you can point to.
-
-**Why:** (2026-06-27) User: *"think about primitive when coding. a portable, using options to customize, flexible interface."* — `chrome.title_row` / `blit_lowres(…, right=)` extracted from 3× copy-paste.
-
 ### Surgical Changes
 Touch only what the task requires. Don't expand edit scope autonomously.
 
@@ -483,68 +384,39 @@ A tool's output is not the fact it was meant to establish. Before a comparison, 
 - (2026-07-27) The same harness gated both pairs on all three trees rendering. The third always failed, silently emptying the first pair's sum, which printed `0 differing pixels` and read as a pass.
 - (2026-07-30) A lint ban written `pygame\.font\.Font\([^)]*ShinGoPr6N` fired on nothing, because every real call site has `project_root()` inside the parens.
 
-**How to apply:**
+**How to apply, the instrument itself:**
 - Feed it a known-same and a known-different case first. A method that can't return "same" on a known-same is measuring something else.
 - A set of failures that changes between runs is the instrument, not the subject. Freeze every clock the platform exposes, not just the language's.
 - Print N alongside every aggregate. A total with no count attached cannot be distinguished from a total over nothing.
 - Snapshot a metric before anything that writes what it measures. If the measuring pass shares state with the measured system, order decides the answer.
-- **A diff over SURFACE SPANS measures formatting, not content.** A coverage proof that compares exact backticked spans before and after reports every reformatting as a loss: adding a path prefix turns `calibration_editor.py` into `_dev_scripts/calibration_editor.py`, and the span set says one identifier vanished while the file names it twice. 2026-09-01 that read 29 lost identifiers, of which 20 were this artifact. Compare at the token level — does the symbol still appear anywhere in the file — and only then read the residue. The failure direction is toward false alarm, so the danger is not a missed loss but a real one buried in noise nobody reads to the end of.
-- A query tool's default page size is part of the instrument. `gh issue list` returns 30 unless `--limit` says otherwise, so `--json number --jq length` reported 30 for a 68-issue backlog. A count landing on a round default (30, 50, 100) is a tell; pass the limit explicitly before believing any aggregate. (2026-08-08)
+- A query tool's default page size is part of the instrument. `gh issue list` returns 30 unless `--limit` says otherwise, so `--json number --jq length` reported 30 for a 68-issue backlog. A count landing on a round default (30, 50, 100) is a tell. (2026-08-08)
 - Similarity and threshold methods fail toward "different": a negative is weak evidence, a positive is strong. Prefer an exact, thresholdless method where one exists.
 - The user asserting a contrary fact about their own domain outranks the instrument. Re-check the instrument, not the assertion.
 - A comparison rendered for the USER to judge is an instrument too. Confirm the arms actually differ before presenting them. (2026-07-27: two rows of a four-row scaling comparison came from the identical call, and the user picked a filter from two copies of one image.)
-- **A COUNT of changed items is not a finding until you have opened some of them.** A regression diff reports how many things moved, never what class they belong to, and the class is the whole answer. 2026-09-09: a replay of a reporter's footage showed 61 of 782 frames recovered by a new fallback, which I reported as the first real evidence it works on the failure it was built for. Grouping those 61 by timestamp gave six short runs, and one frame pulled from a run was the pause menu — the fallback was recovering the ESC dim, a different input entirely, while the failure under investigation was absent from that footage. The count was right, the sentence attached to it was wrong, and it had already gone out. Group the changed set by whatever axis your hypothesis names, then look at one member of each group.
-- **A probe reads whatever is on top, so an occluding element makes it measure the occluder.** A whiteness probe over the 立川 slot was asking whether the reference draws stop markers under the junction pill. The pill carries white kanji, and four of the six line rows cross a stroke, so the probe returned four marker cores. 快速's row fell in the gap between 立 and 川, and that one miss is what made the artefact read as a finding rather than as noise. Name everything else occupying the pixels before believing a probe over a composited region. (2026-09-02.)
+- **A diff over SURFACE SPANS measures formatting, not content.** Comparing exact backticked spans reports every reformatting as a loss: a path prefix turns `calibration_editor.py` into `_dev_scripts/calibration_editor.py`, and the span set says one identifier vanished while the file names it twice. 2026-09-01 that read 29 losses of which 20 were this artifact. Compare at the token level, then read the residue. It fails toward false alarm, so the danger is a real loss buried in noise nobody reads to the end of.
+- **A COUNT of changed items is not a finding until you have opened some of them.** A regression diff reports how many things moved, never what class they belong to, and the class is the answer. 2026-09-09: 61 of 782 frames recovered by a new fallback, reported as the first evidence it works on the failure it was built for. Grouped by timestamp those were six short runs, and a frame from one was the pause menu — it was recovering the ESC dim, a different input, while the failure under investigation was absent from that footage. Group by whatever axis your hypothesis names, then open one member per group.
+- **A probe reads whatever is on top, so an occluding element makes it measure the occluder.** A whiteness probe over the 立川 slot asked whether the reference draws stop markers under the junction pill. The pill carries white kanji and four of six line rows cross a stroke, so it returned four marker cores; 快速's row fell in the gap between 立 and 川, and that one miss made the artefact read as a finding rather than noise. Name everything else occupying the pixels first. (2026-09-02)
 
-### Mutation-prove a new gate at birth
-Every linter rule, assertion, coverage count and staleness guard gets broken once to confirm it fires, then restored. A gate that reports clean on its first run has told you nothing until it has also reported dirty on demand.
+**The gate:** every linter rule, assertion, coverage count and staleness guard gets broken once to confirm it fires, then restored. A check never observed to fail has not been shown to work.
+- Say you are about to, in one line, before the first edit. Breaking a production constant looks exactly like breaking a production constant. (2026-08-19: shifted `speed_value_bbox` by 70 px mid-flow and the user was watching the tool stream — *"why are we changing this? i thought it is all fixed?"*)
+- When the mutation shows the gate cannot fail on the case that motivated it, say so where the gate lives. A check kept for what it does catch is fine; one believed to cover more is how a class goes unwatched. (2026-08-11: a check for a mis-ordered `sta` list passed with the list reversed, because both files were similar lengths so the cut stayed in range.)
+- **A check reading a value the PLATFORM has already normalised cannot see the arithmetic that produced it.** Assert on the pure function's own output. 2026-09-08: a frame-alignment check measured the head `Sound` built from a byte offset, and `pygame.Sound(buffer=)` truncates a misaligned buffer to the frame boundary, so the head always measured aligned however wrong the offset was. Pointed at `split_raw_at` directly it fires. Any consumer that clamps, rounds, pads or truncates sits between your gate and its subject.
 
-**Why:** a check that has never been observed to fail has not been shown to work. Examples:
-- (2026-08-19) Shifted `speed_value_bbox` by 70 px mid-flow to prove a restructured test still discriminated. The user was watching the tool stream: *"why are we changing this? i thought it is all fixed?"* The proof was right and cost a round-trip for want of one sentence.
-- (2026-08-11) A validator check written to catch a mis-ordered `sta` list passed with the list reversed, because both files were similar lengths so the cut stayed in range.
+**The baseline:** a before/after measurement is only as good as its "before", and a stale one produces confident wrong numbers with no error anywhere.
+- Check it exists and is fresh before measuring against it. When two instruments disagree about one fact, resolve that before reporting either. (2026-08-11: `cp -r src dst` nests when `dst` exists, so the copy lands at `dst/src/` and a backup that looked idempotent kept the previous generation — reported 29 changed files and 15.1 s removed against a truth of 17 and 9.5 s.)
+- Before believing a verdict about A measured against B, ask what checks B, and say so in the report when the answer is nothing. Pin a gate to fixed bytes: a synthetic input, or a copy the workflow cannot reach. (2026-08-21: scoring express diagrams against all-stations ones put the error in the baseline, and three reports named diagrams that were correct. 2026-08-18: a pixel-hash gate read a real corpus mp3, the author spliced it in ordinary work, and the gate went red looking like a code regression.)
+- **A past REVIEW is a baseline with a date on it, so "has this been reviewed?" is the wrong question — "what landed since?" is the right one.** 2026-09-12: a sentence away from reporting E233-0 as never vibe-checked when it had a two-cycle review+fix on 2026-08-30, and the useful answer was the ~1,750 production lines added after that date, where the real defect was. `git diff <review-sha>..HEAD` over production paths IS the scope.
 
-**How to apply:**
-- Say you are about to, in one line, before the first edit. Name the value, why, and that it goes back. Breaking a production constant looks exactly like breaking a production constant.
-- When the mutation shows the gate cannot fail on the case that motivated it, say so where the gate lives. A check kept for what it does catch is fine; a check believed to cover more than it does is how a whole class goes unwatched.
-- **A check reading a value the PLATFORM has already normalised cannot see the arithmetic that produced it.** Assert on the pure function's own output instead. 2026-09-08: a frame-alignment check measured the head `Sound` built from a byte offset, and `pygame.Sound(buffer=)` truncates a misaligned buffer to the frame boundary, so the constructed head always measured aligned however wrong the offset was. It passed, it looked like the right check, and only the mutation showed it was reading pygame's correction rather than our number. Pointed at `split_raw_at` directly it fires. Any consumer that clamps, rounds, pads or truncates sits between your gate and its subject.
-
-### The baseline is part of the instrument
-A before/after measurement is only as good as its "before". A stale or wrong baseline produces confident wrong numbers with no error anywhere.
-
-**Why:** the baseline is the half nobody checks, and it misattributes the fault onto whatever was measured against it. Examples:
-- (2026-08-11) `cp -r src dst` nests when `dst` exists — the copy lands at `dst/src/` — so a backup that looked idempotent left the previous generation in place. The comparison reported 29 changed files and 15.1 s removed against a truth of 17 and 9.5 s.
-- (2026-08-21) Scoring express diagrams against all-stations diagrams put the error in the baseline, so three reports named diagrams that were correct. Two landed on the expected value once the baseline was fixed, needing no change themselves.
-- (2026-08-18) A pixel-hash gate read a real corpus mp3; the author spliced it in the ordinary course of work and the gate went red on exactly the checks that decode it, looking like a code regression.
-
-**How to apply:**
-- Check the baseline exists and is fresh before measuring against it. When two instruments disagree about one fact, resolve it before reporting either.
-- **A past REVIEW is a baseline with a date on it, so "has this been reviewed?" is the wrong question — "what landed since?" is the right one.** The module-level question invites a yes-or-no that is wrong either way: 2026-09-12 I was a sentence away from reporting E233-0 as never vibe-checked when it had a two-cycle review+fix on 2026-08-30, and the useful answer was the ~1,750 production lines added after that date, which is where the real defect was. `git diff <review-sha>..HEAD` over production paths IS the scope; ask it before believing any coverage claim about a module.
-- Before believing a verdict about A measured against B, ask what checks B, and say so in the report when the answer is nothing.
-- Pin a gate to fixed bytes: a synthetic input, or a copy the workflow cannot reach.
-
-### A parameter the score cannot see is not being fit
-Fitting a shape to a reference is only a fit over the parameters some sample actually bears on. Anything else is free and drifts while the number improves.
-
-**Why:** an aggregate that cannot distinguish "clean" from "empty" and a fit that cannot distinguish "correct" from "unconstrained" fail identically, by looking numeric. Examples:
+**A parameter the score cannot see is not being fit.** Fitting a shape to a reference only fits the parameters some sample bears on. Anything else is free and drifts while the number improves. List the parameters and name the sample constraining each; one with no answer there is decoration.
 - (2026-08-25) A station-plate fit scored ten cuts and none on the right edge, so `w` wandered 0.9px while the RMS fell. Adding right-edge cuts raised the score from 4.75 to 5.06, and that rise is the honest number.
-- (2026-08-25) A clock-face comparison held `y` fixed across candidates, but each face seats its digits at a different height, so the fixed y was a handicap unrelated to the face. Giving each candidate its own best y and right edge reversed the answer and took the score from 75 to 24.
-- (2026-09-19) The E233-0 prefix was fitted on ただいま alone and then drawn for every form, while two captures each of 次は and つぎは sat in the reference folder unused. 次は came out 17% too small and the stacked つぎは / 終点 scored worse than drawing nothing. A fit on one member says nothing about the members it never scored.
+- (2026-08-25) A clock-face comparison held `y` fixed across candidates, but each face seats its digits at a different height, so the fixed y was a handicap unrelated to the face. Per-candidate best y and right edge reversed the answer and took the score from 75 to 24.
+- (2026-09-19) The E233-0 prefix was fitted on ただいま alone then drawn for every form, while two captures each of 次は and つぎは sat unused in the reference folder. 次は came out 17% too small and the stacked つぎは / 終点 scored worse than drawing nothing. A fit on one member says nothing about members it never scored.
 
-**How to apply:**
-- List the fit's parameters and name the sample that constrains each. A parameter with no answer there is decoration.
-
-### Measuring off a capture
-A number read from a photograph or a screenshot carries the resampler's artefacts as well as the artifact's. Check the measurement against the medium before believing it.
-
-**Why:** the artefacts are systematic, so they look like features rather than noise. Examples:
-- (2026-08-28) The pale bands between the E233-0 chevrons measured brighter than both neighbours, were modelled as a white outline, and drawn. A whole element invented out of the capture; the author saw it immediately: *"what was that?"*
-- (2026-08-25) A ~1.2px line's darkest pixel read 43 on one reference and 64 on another, while their integrated ink agreed to within 1%.
-
-**How to apply:**
-- On an upscaled capture, a band brighter than both its neighbours is resampling overshoot, not ink. Profile a plain edge of the same two colours elsewhere in the same image, and check the colour: the fabricated "white" peaked at `(252,187,151)`, pink rather than neutral.
-- Measure a sub-pixel feature by its integral, not its extreme pixel. The phase moves per capture; the quantity does not. It is also what makes a threshold-derived extent wrong.
+**Measuring off a capture:** a number read off a photograph or screenshot carries the resampler's artefacts as well as the artifact's, systematically, so they look like features rather than noise.
+- On an upscaled capture, a band brighter than both neighbours is resampling overshoot, not ink. Profile a plain edge of the same two colours elsewhere in the image and check the colour: the fabricated "white" peaked at `(252,187,151)`, pink rather than neutral. (2026-08-28: the pale bands between the E233-0 chevrons were modelled as a white outline and drawn — a whole element invented out of the capture, and the author saw it at once: *"what was that?"*)
+- Measure a sub-pixel feature by its integral, not its extreme pixel. The phase moves per capture; the quantity does not, and it is also what makes a threshold-derived extent wrong. (2026-08-25: a ~1.2px line's darkest pixel read 43 on one reference and 64 on another while their integrated ink agreed to within 1%.)
 - After a resample, an artifact touching its own surface edge is not evidence it was cut. A downscale's antialiasing tail legitimately reaches the edge. Test upstream (does the source render have room) and downstream (does the drawn ink land outside its clip rect).
-- **A property that varies along an axis the DESIGN cannot vary along is the capture.** The E233-0 overview draws the loaded train's own service heavier, and the integral read that highlight at 4.83 on one row against 3.31 on the other. It was carried as a per-row pair for want of a second reference. The author threw it out in a line: *"i don't understand by if the current pattern has a bolder line, but this happens only on the lower line not upper line, think this is a reference error"* — the highlight belongs to the SERVICE, so a band cannot hold an opinion about it. Before encoding an asymmetry one capture shows, name what in the design could produce it. Nothing can means the capture did.
+- **A property that varies along an axis the DESIGN cannot vary along is the capture.** The E233-0 overview draws the loaded train's own service heavier, and the integral read that highlight at 4.83 on one row against 3.31 on the other; it was carried as a per-row pair for want of a second reference. The highlight belongs to the SERVICE, so a band cannot hold an opinion about it. Before encoding an asymmetry one capture shows, name what in the design could produce it — nothing can means the capture did. (Author: *"think this is a reference error"*.)
 
 ### Enumerate the reachable space, not the combinatorial one
 Exhaustive search over combinations is the right instrument for "can this happen at all" — it settles what reading the code cannot. But enumerate what the SYSTEM can actually produce, not the Cartesian product of every field. Name the impossible combinations from the domain and exclude them BEFORE searching, and say which ones you dropped.
@@ -569,52 +441,29 @@ Collapsing several modules/files/tables into one has two independent failure mod
 - **Mutate the CONDITION, never the assertion's message.** Editing the message string is a no-op that leaves the test green — and reads exactly like "this section never runs", which is the thing you were testing for. Four of six section-proofs came back as false negatives that way in the same session before the anchors were re-checked.
 - Applies past tests: merged config, a consolidated dispatch table, several scripts folded into one.
 
-### Test the change, not just the bug
-Exercise the change's full blast radius before saying done. Smoke test on the bug-fix target is necessary but not sufficient.
+### Tests: exercise the blast radius, and make each one discriminate
+Exercise the change's full blast radius before saying done; a smoke test on the bug-fix target is necessary and not sufficient. A regression-worthy change ships with a test in the right tier — pure fn → T1, cross-module headless → T3, state-absent first-run → T4, rendering exempt and by-eye. Where the logic isn't reachable headlessly (buried in a pygame monolith, behind a display init, tangled with I/O), extract it to a pure function and test that.
 
-**Why:** Smoke-test pass at one point doesn't generalize. Examples:
-- (2026-05-06) Refactored every route's load path (16 routes); smoke-tested only Yamanote. User: *"How come you change something and not re-running."*
-
-**How to apply:**
-- Identify blast radius before saying done. "Every route's load path" → exercise every route.
-- Grep proves path exists; runtime simulation proves behavioral correctness.
-
-### Testability is a precondition, not an afterthought
-A regression-worthy change ships with a test in the right tier — scope picks the tier (pure fn → T1, cross-module headless → T3, state-absent first-run → T4; rendering exempt, by-eye). If the logic isn't reachable by a headless test — buried in a pygame/blocking monolith, behind a display init, tangled with I/O — **extract it to a pure function so it is**, then test that.
-
-**Why:** untestable logic is how a bug class stays uncovered — the v0.6.0 language picker (a first-run branch no dev ever executed) and the re-entry PA-drop (decision logic reachable only mid-drive) both hid in exactly this gap. Examples:
+**Why:** a pass at one point doesn't generalize, and untestable logic is how a bug class stays uncovered — the v0.6.0 language picker (a first-run branch no dev executed) and the re-entry PA-drop (reachable only mid-drive) both hid in that gap. Examples:
+- (2026-05-06) Refactored every route's load path, 16 routes; smoke-tested only Yamanote: *"How come you change something and not re-running."*
 - (2026-07-16) `resolve_language` extracted from `main()`'s inline first-run block so the decision became a pure `dict → lang` function a T1/T4 test can call; the extraction IS what makes an interactive picker un-reintroducible there.
+- (2026-07-20) Proposed a stub-sim test for `if start_idx is not None:` — *"what is this test… too redundant?"*, and on TIMS *"not like autodriver where it has sophisticated logics… if we test tims it has to be page by page."*
 
-**How to apply:**
-- New production path / decision fn / regression-worthy fix → add the test in the same change; don't defer it to "later."
-- "I can't test this without launching the app" is a design smell, not an excuse — name the extraction. Enforced at review by `review-dirty` Lens 4 (test-not-stale · feature-has-test · code-testable).
+**Test real logic, not ceremony.** What earns a test is the silent-failure class — deployment-frame, first-run, cross-module composition — not every changed line. Name the independent oracle first; if the only oracle is the implementation restated, it is a tautological change-detector with zero forward value. A read-obvious one-liner doesn't earn one, and extracting it *solely* to make the tautology testable over-engineers a single-use helper. A UI flow with no logic core isn't tested page-by-page: its surface is the thin pure seams, such as `_build_config` (picked-result → launch config) where the resolution logic and the bug cluster live.
+- Blast radius before done: "every route's load path" means exercise every route. Grep proves a path exists; runtime simulation proves behaviour.
+- "I can't test this without launching the app" is a design smell, not an excuse. Name the extraction. Enforced at review by `review-dirty` Lens 4 (test-not-stale · feature-has-test · code-testable).
 
-### Test real logic, not ceremony
-Companion bound on the above: the "ships with a test" bar is for the **silent-failure class** (deployment-frame, first-run, cross-module composition) — NOT every changed line. Name the independent oracle first; if the only oracle is the implementation restated, the test is a tautological change-detector (zero forward value). A read-obvious one-liner (a falsy-vs-`None` guard) doesn't earn a test, and extracting it *solely* to make the tautology testable is over-engineering a single-use helper (cf. Simplicity First). And a UI flow with **no logic core** (a linear page sequence, unlike the auto-driver engine) isn't tested page-by-page — its testable surface is the thin pure **seams**: config assembly (`_build_config`: picked-result → launch config), where the real resolution logic + bug cluster live. The pages themselves are rendering → by-eye.
+**What makes it real:** it must fail when the fix is reverted, and you must watch it do so.
+- A downstream backstop can mask a naive fixture. (2026-07-21: a `19.1→19` speed-cell passed with AND without the decimal fix because `_rectify_speed(191)=19`; swapped for a rectify-proof `5.3→5`.)
+- **Discrimination decays — re-run the mutation after ANY later change to the guarded code, its constants, or the fixture.** Verified-once is not verified. (2026-07-21: a logo-suppression assertion was mutation-proven, then a floor retune (2s→4s) plus a `reveal_slot` semantic change silently made it inert, and the first repair was ALSO inert — it sampled the guard state *after* the stepped frame, so it already held the mutated value.)
+- Never read the constant under test into the test. A fixture importing `FLOOR` scales its expectations with any mutation of `FLOOR` and stops discriminating.
+- **A stub that COLLAPSES two inputs production keeps separate cannot reach the cases where they differ, and the test still passes.** A stub is a claim about the state space; pinning two fields to one value silently deletes a region of it. 2026-08-30: a marker-position test stubbed `curr_stop == cursor_pos`, which is every state except the one the feature exists for — a skip animation is *defined* by those disagreeing, and the fix's own comment named that cell. It discriminated on three other cells, so it looked sound. List the fields your stub pins and ask which production path makes each diverge; that path is a case, not an edge case.
 
-**Why:** (2026-07-20) Reflexively proposed a stub-sim test for `if start_idx is not None:` → user *"what is this test… too redundant?"*. On testing TIMS → *"not like autodriver where it has sophisticated logics… if we test tims it has to be page by page."*
-
-**How to apply:**
-- A regression fixture must DISCRIMINATE — fail when the fix is reverted; verify it does. A downstream backstop can mask a naive one (2026-07-21: a `19.1→19` speed-cell passed with AND without the decimal fix because `_rectify_speed(191)=19`; swapped for a rectify-proof `5.3→5`).
-- **Discrimination decays — re-run the mutation after ANY later change to the guarded code, its constants, or the fixture.** Verified-once is not verified. (2026-07-21) A logo-suppression assertion was mutation-proven, then a floor retune (2s→4s) plus a `reveal_slot` semantic change silently made it inert; the review caught it, and the first repair was ALSO inert (it sampled the guard state *after* the stepped frame, so it already held the mutated value).
-- Never read the constant under test into the test — pin the expected value literally. A fixture that imports `FLOOR` scales its own expectations with any mutation of `FLOOR` and stops discriminating.
-- **A stub that COLLAPSES two inputs production keeps separate cannot reach the cases where they differ — and the test still passes, so nothing says so.** A stub is a claim about the state space, and pinning two fields to one value silently deletes a region of it. 2026-08-30: a marker-position test built its stub with `curr_stop == cursor_pos`, which is every state except the one the feature exists for — a skip animation is *defined* by those two disagreeing, and the fix's own comment named that cell as the reachable one. The test discriminated on three other cells, so it looked sound. **List the fields your stub pins, and for each ask which production path makes them diverge**; that path is a case, not an edge case. Sibling of "a parameter the score cannot see is not being fit" — there a free parameter, here a collapsed axis, and both fail by looking green.
-
-### A fixture is not an observation
-A test case that encodes a domain fact is evidence only if it was SAMPLED from reality. One authored to lock a design's intent is that intent restated — it agrees with the code by construction and proves nothing about the world. Check a fixture's provenance before letting it overrule a change; its comment usually says which it is.
-
-**Why:** a green fixture reads as ground truth whichever way it was born. Examples:
-- (2026-08-11) The distance guard's T1 case `("STOPPED","MOVING",1800,3)` asserted a departure carries a large distance jump. I read it as observed behaviour, concluded my change would break a normal departure, and rebuilt the rule around it. Its own comment said *"accepted unconditionally"* — the original design's intent, not a drive. The author then stated the physical fact (the dwell refresh completes while the badge still reads STOPPED), and the fixture was simply wrong. A full design flip and back, off a file that was never a measurement.
-
-**Why:** a green fixture reads as ground truth whichever way it was born. Second shape, worse because nothing in the file admits it — the fixture IS its own subject:
-- (2026-08-19) Six committed badge-cell fixtures were byte-identical to the six badge anchors they were matched against, so `classify_badge_state` scored `diff=0.00` and 7 of 8 badge assertions were the artifact compared to itself. Three of the six anchors could be deleted with the whole suite green, and a wrong-SCALE set passed too, which starts the driver, classifies nothing for a whole drive and prints no error. A self-comparison is not a weak test, it is not a test.
-
-**How to apply:**
-- Ask of any fixture you are about to reason FROM: sampled, or authored? A round illustrative number (`3 → 1800`) and a comment describing intent rather than a capture are the tells.
-- **A fixture authored from the function's SIGNATURE rather than from its producer's reachable output proves the opposite of what it claims.** The fields type-check, the row reads as a legitimate case, and the assertion passes on a state the system cannot produce — so the branch it was written to cover stays untested and can be dead without the suite noticing. 2026-09-12: a fault-state row pinned `distance=None, distance_rejected=True`, which `read_hud` cannot emit, and it was green for the whole life of an unreachable branch. Its own comment claimed rigour, that it used "a real `Reading` rather than a stub dict" — true, and beside the point, since realism of TYPE is not reachability of VALUE. For each field a fixture pins, name the production call that writes it and check the combination survives.
-- **Then ask where its bytes came from.** If the fixture and the thing under test were cut from the same source in the same step, the comparison is an identity and its score is structurally 0 — check for a suspiciously perfect number before believing the coverage. The fix is a fixture from a DIFFERENT capture, not a second assertion on the same one.
-- When a fixture and a domain owner disagree, the owner wins — then fix the fixture and say in-comment which it now is.
-- Cross-ref § "A measurement is a claim until the instrument is calibrated": a fixture is an instrument too.
+**A fixture is not an observation.** A case encoding a domain fact is evidence only if it was SAMPLED from reality. One authored to lock a design's intent is that intent restated: it agrees with the code by construction and proves nothing about the world. A green fixture reads as ground truth whichever way it was born.
+- Ask of any fixture you reason FROM: sampled, or authored? A round illustrative number (`3 → 1800`) and a comment describing intent rather than a capture are the tells. (2026-08-11: the distance guard's T1 case `("STOPPED","MOVING",1800,3)` asserted a departure carries a large distance jump, so I concluded my change would break a normal departure and rebuilt the rule around it. Its comment said *"accepted unconditionally"* — the original intent, not a drive. The author then stated the physical fact, that the dwell refresh completes while the badge still reads STOPPED, and the fixture was simply wrong.)
+- **Then ask where its bytes came from.** Fixture and subject cut from the same source in the same step make the comparison an identity, scoring structurally 0 — check for a suspiciously perfect number before believing the coverage. The fix is a fixture from a DIFFERENT capture, not a second assertion on the same one. (2026-08-19: six committed badge-cell fixtures were byte-identical to the six anchors they were matched against, so `classify_badge_state` scored `diff=0.00` and 7 of 8 badge assertions were the artifact compared to itself. Three anchors could be deleted with the suite green, and a wrong-SCALE set passed too, which starts the driver, classifies nothing for a whole drive and prints no error.)
+- **A fixture authored from the function's SIGNATURE rather than its producer's reachable output proves the opposite of what it claims.** The fields type-check and the assertion passes on a state the system cannot produce, so the branch stays untested and can be dead without the suite noticing. 2026-09-12: a fault-state row pinned `distance=None, distance_rejected=True`, which `read_hud` cannot emit, green for the whole life of an unreachable branch. Its comment claimed rigour — "a real `Reading` rather than a stub dict" — true and beside the point, since realism of TYPE is not reachability of VALUE. For each field a fixture pins, name the production call that writes it.
+- When a fixture and a domain owner disagree, the owner wins. Then fix the fixture and say in-comment which it now is.
 
 ### Don't justify a change by demoting an input the architecture trusts
 When a system ranks its inputs (this one: badge > distance/speed), an argument of the form "this branch only fires when the trusted input is wrong" is circular — it borrows the reliability of A to gate B, then denies it to win the argument. Argue from the invariant instead; a correct rule holds whatever the trusted input is doing.
@@ -651,65 +500,34 @@ When a design collapses to something simpler, re-derive which parts of the origi
 - On collapsing a design, list what the complex version was protecting against, then check each survives. Cheap; the alternative is finding out from the user.
 - A rule derived for one content/case type does not automatically hold once the scope widens to carry several — re-check the premise, don't port the conclusion.
 
-### A fallback must be stricter than the path it replaces
-A recovery, degraded or catch-up path that is quieter or less reversible than the primary must require at least as much evidence. When the fallback is easier to satisfy, every condition that defeats the primary leaves the fallback armed, so its domain becomes residual rather than principled and the system drifts onto the quiet path.
+### A secondary path must not weaken the primary
+A fallback must be stricter than the path it replaces: a recovery, degraded or catch-up path that is quieter or less reversible than the primary must require at least as much evidence. When the fallback is easier to satisfy, every condition that defeats the primary leaves the fallback armed, so its domain becomes residual rather than principled and the system drifts onto the quiet path.
 
-**Why:** the inversion is invisible in each path read alone. It shows up only when the two trigger conditions sit side by side. Examples:
+**Why:** the inversion is invisible in each path read alone, and shows only when the two trigger conditions sit side by side. Examples:
 - (2026-07-21) Departure was a crossing needing two consecutive samples while re-entry's catch-up was a level test on the same threshold needing one. Re-entry is silent and forward-only, so every OCR dropout that broke the crossing handed the departure to a silent advance. The report was "the PA sometimes just doesn't play".
-- (2026-08-23) The stream's bell view fell back to the PIDS when no bell window existed, which is right for the picture. A tap in that state resolved against the fallback and landed inside a TIMS button.
-- (2026-08-30) A click-jump guard needing two samples survived as a side effect after the crossing it belonged to was replaced by a level test, so it demanded more evidence than an ordinary departure: *"if normal app runs will gave out a departure fire, then there's no point guarding this more than the normal app behaviour."*
+- (2026-08-23) The stream's bell view fell back to the PIDS when no bell window existed, right for the picture. A tap in that state resolved against the fallback and landed inside a TIMS button.
+- (2026-08-30) A click-jump guard needing two samples survived after the crossing it belonged to was replaced by a level test, so it demanded more evidence than an ordinary departure: *"if normal app runs will gave out a departure fire, then there's no point guarding this more than the normal app behaviour."*
 
 **How to apply:**
-- A degraded view may substitute what you SHOW. It must never substitute what you ACT ON, or the result is a well-formed press on something the user never pointed at. Separate the two questions for any fallback.
-- The converse binds too: a path that is not quieter must not demand more evidence than the primary. Stricter is a floor set by the fallback's own reversibility, not a licence. A guard nobody designed, surviving a mechanism that has since been replaced, is the tell.
-- Write the primary's and the fallback's trigger conditions next to each other and ask which needs more evidence. If it's the primary, that's the bug — independent of whichever symptom brought you here. If it's the fallback, ask whether the fallback is genuinely quieter or less reversible; when it is not, the asymmetry is the bug instead.
-- Separate the two questions for any fallback: what do I show, and what do I let this act on. A substitute answer to the first is not permission for the second.
-- Prefer partitioning the input domain (disjoint bands) over ordering the checks; ordering relies on the earlier check firing, partitioning cannot invert.
-- Frequency of fallback engagement is a *metric*, not noise — instrument it, since it counts the primary's misses.
+- Write the two trigger conditions next to each other and ask which needs more evidence. If it's the primary, that's the bug, independent of whichever symptom brought you here. If it's the fallback, ask whether the fallback is genuinely quieter or less reversible; when it is not, the asymmetry is the bug instead. A guard nobody designed, surviving a mechanism since replaced, is the tell.
+- A degraded view may substitute what you SHOW, never what you ACT ON, or the result is a well-formed press on something the user never pointed at. Separate those two questions for any fallback.
+- Prefer partitioning the input domain into disjoint bands over ordering the checks: ordering relies on the earlier check firing, partitioning cannot invert.
+- Frequency of fallback engagement is a *metric*, not noise. Instrument it, since it counts the primary's misses.
 
-### Two artifacts that must succeed together come from ONE operation, not two in sequence
-When B is useless without A, and A is unusable until B exists, do not build A then build B. Derive both from a single operation whose success is the only thing either depends on. Sequencing them means B has its own failure modes, and every one of them costs you A as well — which is a strictly worse outcome than not attempting B at all.
+**When you cannot MEASURE that a change is safe, make it unreachable for what already works.** Order it so the existing path runs first and unchanged and the new one is reachable only where the existing path gave up. Non-degradation is then a property of the control flow, which you can read, rather than of a measurement you cannot take.
+- The new path still needs its own refusal, or it becomes a looser test catching everything the first rejected. Measure that refusal against garbage before believing the ordering saved you. Publish which path answered, per sample, and keep the old path's diagnostic number as the reported one so logs stay comparable. This buys safety, not correctness. (2026-09-08, #143: the badge classifier compares absolute RGB, so a display pipeline that lifts levels blinds it while every digit reader on the same frame is fine. The honest gate was the committed badge fixtures, byte-identical to their anchors at 0.00 — `critical_lessons.md §10`, recorded 2026-08-19 and never repaired — so the shift-invariant metric went in as a SECOND pass behind the unchanged first one.)
+- **The SECOND change of the same species in a session is where the ordering gets forgotten.** Having just built that fallback, I replaced the digit threshold's clamp outright the same day — same shape, an absolute bound on a quantity that scales with the capture, no ordering. It passed every proxy I had (identical reads on all 23 committed cells, better survival on a synthetic shift ramp) and cost 341 of 1962 real frames their speed decimal. The discipline reads as a property of the change in front of you rather than of the class, so it does not transfer on its own. When a session touches two absolutes, order both. (2026-09-09, #89)
 
-**Why:** the sequential version reads as fine, because each step is individually correct and the coupling only shows in the failure path nobody exercises. Examples:
-- (2026-09-08, #142) The STA melody was split into a looping head and a tail by writing a temp file, building the head's `Sound`, overwriting that file with the tail and building a second `Sound`, then starting playback. `channel.play` was last, so anything raising while making the tail silenced a head that was already decoded and playable — and silence is what "the departure melody is missing" looks like. Rewritten to write once, decode once, and slice that Sound's own buffer: head-exists now implies tail-exists by construction. It also retired a platform assumption (that `Sound()` copies at construction) that the app had no reason to be taking, since one write cannot alias itself.
+**Two artifacts that must succeed together come from ONE operation, not two in sequence.** Where B is useless without A and A unusable until B exists, derive both from a single operation whose success is the only thing either depends on. Sequencing gives B its own failure modes, and each costs you A too — strictly worse than not attempting B at all.
+- The tell is a handle captured from step 1 that is only *used* after step 2. Ask what happens to it when step 2 raises. Prefer one expensive operation plus cheap in-memory derivation over two cheap operations; it is usually also faster. Lock it on the COUNT of the underlying operation, not the outcome — one press, one write.
+- A fallback that tolerates B's failure is the weaker answer, and the author will say so: the goal is that B cannot fail alone, not that you cope when it does. (2026-09-08, #142: the STA melody was split by writing a temp file, building the head's `Sound`, overwriting that file with the tail, building a second `Sound`, then playing. `channel.play` was last, so anything raising while making the tail silenced a head already decoded and playable, and silence is what "the departure melody is missing" looks like. Rewritten to write once, decode once, slice that Sound's own buffer, so head-exists implies tail-exists by construction — retiring a platform assumption, that `Sound()` copies at construction, the app had no reason to take.)
 
-**How to apply:**
-- The tell is a handle captured from step 1 that is only *used* after step 2. Ask what happens to it when step 2 raises.
-- Prefer one expensive operation plus cheap in-memory derivation over two cheap operations. It is usually also faster.
-- A fallback that tolerates B's failure is the weaker answer, and the author will say so: the goal is that B cannot fail alone, not that you cope when it does. Cross-ref § "Construction-proof model beats the next repro theory".
-- Lock it on the COUNT of the underlying operation, not on the outcome. One press, one write — a test that asserts that fails the moment someone reintroduces the second one.
+**A corrective adjustment must be monotone — clamp it against its own input.** A mechanism that exists to REDUCE a value (a trim, cap, shrink, back-off) must be unable to increase it. `max(floor, value - correction)` alone does exactly that: where the natural value already sits below the floor, the `max` RAISES it, and the mechanism does the opposite of its name on the inputs it was least needed for. Use `min(value, max(value - correction, floor))`. Name the direction the mechanism may move the value, then check every clamp against it; a floor and a reduction in one expression is the smell, since the floor bounds the RESULT rather than licensing the other direction.
+- (2026-08-21) A transfer-panel overhang trim floored at `min_inter_gap = 19` met a natural column gap of 8.7px and pushed it to 19, widening what it was added to narrow. The anchor row ran 31px past the canvas edge, the row below could no longer place its tail on the last column, and it dropped out of Rule 1 into Rule 4 equal-spacing, losing column alignment. The visible symptom was "the alignment is strange", three mechanisms away from the `max`.
 
-### When you cannot MEASURE that a change is safe, make it unreachable for what already works
-A change to a path you cannot exercise — no hardware, no fixtures, or fixtures that turn out to prove nothing — does not have to be argued from evidence you do not have. Order it so the existing path runs first and unchanged, and the new one is reachable only where the existing path has already given up. Non-degradation is then a property of the control flow, which you can read, rather than of a measurement you cannot take.
-
-**Why:** the alternative is shipping a replacement on synthetic evidence and finding out from the user. Examples:
-- (2026-09-08, #143) The badge classifier compares absolute RGB, so a display pipeline that lifts levels blinds it while every digit reader on the same frame is fine. The fix wanted a shift-invariant metric, and the honest gate for "does this degrade what works" was the committed badge fixtures — which turned out byte-identical to the anchors they are matched against, scoring 0.00 (`critical_lessons.md §10`, recorded 2026-08-19 and never repaired). So the metric was added as a SECOND pass behind the unchanged first one. Every frame that classified before classifies identically, by construction.
-
-**How to apply:**
-- The new path still needs its own refusal, or it becomes a looser test that catches everything the first one rejected — § "A fallback must be stricter than the path it replaces". Measure that refusal against garbage before believing the ordering saved you.
-- Publish which path answered, per sample. The engagement rate is the only evidence you will get that the new path does anything, and it counts the old one's misses.
-- Keep the old path's diagnostic number as the reported one, so logs written before and after the change stay comparable.
-- This buys safety, not correctness. It is the right move when the new path is unverified; it is not a reason to stop trying to verify it.
-- **The SECOND change of the same species in a session is where the ordering gets forgotten.** Having just built the badge fallback this way, I replaced the digit threshold's clamp outright the same day — same shape of problem, an absolute bound on a quantity that scales with the capture, and no ordering. It passed every proxy I had (identical reads on all 23 committed cells, better survival on a synthetic shift ramp) and cost 341 of 1962 real frames their speed decimal. The discipline reads as a property of the change you are looking at rather than of the class, so it does not transfer on its own. When a session touches two absolutes, order both. (2026-09-09, #89.)
-
-### A corrective adjustment must be monotone — clamp it against its own input
-A mechanism that exists to REDUCE a value (a trim, a cap, a shrink, a back-off) must be unable to increase it. Writing the floor as `max(floor, value - correction)` alone does exactly that: where the natural value already sits below the floor, the `max` RAISES it, and the mechanism does the opposite of its name on precisely the inputs it was least needed for. Clamp with the floor, then re-clamp against the original — `min(value, max(value - correction, floor))` — so the result can only ever be smaller.
-
-**Why:** the inflation fires only in the regime nobody pictures while writing it (the value was already small, so no correction seemed necessary), and downstream it reads as a *different* subsystem failing. Examples:
-- (2026-08-21) A transfer-panel overhang trim floored at `min_inter_gap = 19` met a natural column gap of 8.7px and pushed it to 19 — widening what it was added to narrow. The anchor row then ran 31px past the canvas edge, the row below could no longer place its tail on the last column, and it dropped out of Rule 1 into Rule 4 equal-spacing, losing column alignment entirely. The visible symptom was "the alignment is strange", three mechanisms away from the `max`.
-
-**How to apply:** name the direction the mechanism is allowed to move the value, then check every clamp against it. A floor and a reduction in one expression is the smell — the floor is a bound on the RESULT, not a licence to move the value the other way.
-
-### A "bonus" feature that writes the sovereign state is not a bonus
-When a secondary / recovery / catch-up feature shares the SAME state and gates as the primary path — not just reads them, WRITES them — it cannot be reasoned about as an isolated add-on. Every rule added to make the secondary smarter becomes a new way to corrupt the primary, because they mutate one thing. The frustration signal is a run of regressions where fixing the secondary keeps breaking the base.
-
-**Why:** the entanglement is invisible while you reason about the secondary on its own axis; it only shows when a primary-path regression traces back to a secondary-motivated edit. Examples:
-- (2026-07-24) Auto-driver re-entry was framed as "a bonus re-aligning feature," but it silently advances the app's Layer 1 sub-state through the same fire gates the normal drive owns. Across one session, re-entry-motivated edits caused: a stranded-at-1A bug (re-anchor set `at_station_observed=True` while a sibling change removed the edge that reset it), and a lost-departure bug (a provenance gate I added disarmed the fallback on a case the primary's speed ceiling then dropped). Each was locally correct and broke the base. User: *"re-entry was supposed to be a bonus … however it is breaking the normal drive multiple times now."*
-
-**How to apply:**
-- Before adding a secondary path that WRITES shared state, ask: can the primary path stand entirely on its own, with the secondary removed? If not, they're one feature, not two — design the primary to be sovereign FIRST, then make the secondary structurally incapable of touching it (a flag defaulting off, a separate signal the primary can ignore), never merely "careful."
-- A run of "fixed X, broke Y in the base": stop patching the secondary and isolate it (or cut it), don't add the next rule.
-- When the user themselves calls it a "bonus," honor that literally: the base must pass with it disabled. Ship the sovereign base; make the bonus opt-in.
+**A "bonus" feature that WRITES the sovereign state is not a bonus.** When a secondary path shares the same state and gates as the primary — not just reads them, writes them — it cannot be reasoned about as an isolated add-on, because every rule added to make it smarter becomes a new way to corrupt the primary. The signal is a run of regressions where fixing the secondary keeps breaking the base.
+- Ask whether the primary can stand entirely on its own with the secondary removed. If not they are one feature: design the primary sovereign FIRST, then make the secondary structurally incapable of touching it (a flag defaulting off, a separate signal the primary can ignore), never merely "careful". On a run of "fixed X, broke Y in the base", isolate or cut the secondary rather than adding the next rule. When the user calls it a bonus, honour that literally — the base must pass with it disabled.
+- (2026-07-24) Auto-driver re-entry was framed as "a bonus re-aligning feature" but silently advances Layer 1 through the same fire gates the normal drive owns. In one session its edits caused a stranded-at-1A bug (re-anchor set `at_station_observed=True` while a sibling change removed the edge that reset it) and a lost-departure bug (a provenance gate disarmed the fallback on a case the primary's speed ceiling then dropped). Each was locally correct and broke the base: *"re-entry was supposed to be a bonus … however it is breaking the normal drive multiple times now."*
 
 ### Validate against the outcome, not a proxy
 Pick the metric that IS the thing you care about. A proxy that correlates in the normal regime can invert exactly where the change bites, and a good change then looks like a regression.
@@ -738,25 +556,13 @@ A reported bug gets REPRODUCED before a fix is written, and the fix gets MUTATIO
 - **A guard whose new term is implied by an existing one is inert** — the shape to check for whenever a fix reads as "add a condition". Ask which input makes the new term decide, and construct it.
 - **The same implication one level up makes a whole BRANCH dead, and an `elif` chain is where it hides.** A branch is unreachable when a broader test ABOVE it is implied by its own condition, and neither branch looks wrong read alone — you have to read the producer to see it. 2026-09-12: `fault_states` tested `value is not None` before `f == "distance" and r.distance_rejected`, and `guard_distance` answers a spike with `(last_valid, True)` and cannot reject before it holds an anchor, so a rejected distance is never `None`. The `"self"` fault mark — the cross-versus-self distinction the whole feature was built for, on the author's explicit ask — could not fire, and shipped that way. When ordering a chain, ask of each branch which producer emits the state that reaches it; a branch whose state no producer emits is the finding.
 - Reproduce with the cheapest instrument that touches the real code path — a standalone server and a raw socket, not the whole app.
-- Once analysis and observation have disagreed across 2+ rounds, stop and read the next section instead.
 
-### An unverifiable change also costs the next iteration
-Before applying a change you cannot exercise, ask what else stops working. "Unverified" is the obvious cost and usually the smaller one; the change can also take the surface offline, so neither you nor the author can keep working on it.
+**Once analysis and observation have disagreed across 2+ rounds, stop theorising.** Your trace says the bug can't happen and the user keeps seeing it: either instrument for ground truth, or redesign the invariant so the whole bug CLASS is impossible by construction. Say "I've hit the limit of what reading proves" and do one of those; the Nth theory has diminishing value, and a construction-proof model also retires enumerating every trigger path.
+- (2026-07-20) The lower-LCD "flash" hunt: the slot cycler's code proved the 5-station slot could not be cut sub-second, since it is in every slot-set, yet the user reproduced it. Six rounds of theories didn't converge. The fix grounded the timing model on "a change" plus a minimum floor so no two changes land too close, making flashes impossible whatever the trigger.
 
-**Why:** the verification gap gets stated and the knock-on does not, so it arrives as a surprise on the next request. Examples:
-- (2026-09-02) Named a font that exists on no machine here as the E233-0 overview's face. That was flagged as unverified and applied anyway — and it made the whole lower LCD raise on load, so the render sheet the author asked for next was impossible, on top of the view being unworkable. It came back as *"oh.. this machine does not have debold...ah damn..."*.
-
-**How to apply:**
-- Prefer a marked placeholder that keeps the loop alive, with the real answer named at the site and in the doc. A comment saying "flip this one line" survives; a broken import blocks.
-- Check the fallbacks before assuming one exists. Here the baked atlas could have supplied the face and did not carry it, which took one command to establish.
-- This does not license shipping the wrong thing quietly. The placeholder is loud, the correct value is written beside it, and it stays an OPEN until it lands.
-
-### Construction-proof model beats the next repro theory
-When static analysis keeps contradicting a reproducible observation across 2+ rounds — your trace says the bug can't happen, the user keeps seeing it — stop generating repro theories. Either instrument for ground truth, or redesign the invariant so the whole bug CLASS is impossible by construction. The Nth theory has diminishing value once analysis and observation disagree.
-
-**Why:** (2026-07-20) The lower-LCD "flash" hunt — the slot cycler's code proved the 5-station slot could not be cut sub-second (it's in every slot-set), yet the user reproduced it. Six rounds of theories didn't converge; the fix was to ground the timing model on "a change" + a minimum floor so no two changes land too close — flashes impossible by construction, whatever the trigger.
-
-**How to apply:** say "I've hit the limit of what reading proves," then instrument OR redesign the invariant — don't spin another theory. A construction-proof model also retires enumerating every trigger path.
+**An unverifiable change also costs the next iteration.** Before applying a change you cannot exercise, ask what else stops working. "Unverified" is the obvious cost and usually the smaller one; the change can also take the surface offline, so neither you nor the author can keep working on it.
+- Prefer a marked placeholder that keeps the loop alive, with the real answer named at the site and in the doc. A comment saying "flip this one line" survives; a broken import blocks. Check the fallbacks before assuming one exists. The placeholder stays loud and stays an OPEN until the real value lands — this does not license shipping the wrong thing quietly.
+- (2026-09-02) Named a font that exists on no machine here as the E233-0 overview's face, flagged it unverified, and applied it anyway. It made the whole lower LCD raise on load, so the render sheet the author asked for next was impossible on top of the view being unworkable: *"oh.. this machine does not have debold...ah damn..."*. The baked atlas could have supplied the face and did not carry it, which took one command to establish.
 
 ### Blind A/B verify presentation convention changes
 Before adopting a new presentation convention, validate via blind A/B: parallel fresh-context agents with identical questions — one reads original, one reads new. Adopt only when answers match.
