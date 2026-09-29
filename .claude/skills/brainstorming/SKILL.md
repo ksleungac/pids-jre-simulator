@@ -166,5 +166,4 @@ A browser-based companion for showing mockups, diagrams, and visual options duri
 
 A question about a UI topic is not automatically a visual question. "What does personality mean in this context?" is a conceptual question, so use the terminal. "Which wizard layout works better?" is a visual question, so use the browser.
 
-If they agree to the companion, read the detailed guide before proceeding:
-`skills/brainstorming/visual-companion.md`
+If they agree to the companion, the offer text above, the per-question test and the `--open` flag are the whole contract — there is no separate guide.

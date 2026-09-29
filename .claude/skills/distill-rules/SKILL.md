@@ -1,6 +1,6 @@
 ---
 name: distill-rules
-description: Periodic audit of the rules corpus (principles.md, conventions.md, critical_lessons.md). Scan for accumulated bloat — recurrence lists, sibling cross-refs, connective tissue, nested sub-rules, multi-paragraph incident traces. Discussion-first, item-by-item. Restructure + rephrase allowed.
+description: Periodic audit of the rules corpus (principles.md, conventions.md, critical_lessons.md). Scan for accumulated bloat — recurrence lists, sibling cross-refs, connective tissue, nested sub-rules, multi-paragraph incident traces — then sweep the skills for instructions that contradict a rule. Discussion-first, item-by-item. Restructure + rephrase allowed.
 triggers:
   - /distill-rules
   - distill rules
@@ -25,10 +25,13 @@ In scope:
 - `.claude/rules/conventions.md` — reference-shaped entries (naming, style, tooling)
 - `.claude/rules/critical_lessons.md` — incident entries: rule + pattern + scope
 
+Read but not trimmed:
+- `.claude/rules/redlines.md` — small + stable, and it is a prohibition source for Step 2.5.
+- `.claude/skills/*/SKILL.md` and `CLAUDE.md` — searched in Step 2.5, and edited there only where one contradicts a rule. Their own bloat is out of scope.
+
 Out of scope:
-- `.claude/rules/redlines.md` — small + stable.
 - Domain docs — handled by `/distill-docs`.
-- `CLAUDE.md`, skills, `memory/*.md`, `TODO.md`.
+- `memory/*.md`, `TODO.md`.
 
 ## When to run
 
@@ -40,9 +43,9 @@ Out of scope:
 
 ### Step 1 — Load target files + record baseline
 
-Load all in-scope files under `.claude/rules/`. Capture per file:
-- Total line count
-- Entry count per `## Section` heading
+`uv run _dev_scripts/check_rules_corpus.py --report` prints the numeric baseline — entries, total words, worst single entry, sibling cross-ref tails — per file, against the recorded ratchet. Read it rather than hand-counting; the script is what the pre-commit hook measures, so a figure derived any other way can disagree with the gate that will judge the pass.
+
+Then load all in-scope files under `.claude/rules/` and capture per file the shapes the script cannot see:
 - Entries with **nested sub-bullets** that look like rules-in-disguise (own trigger / own incident / own how-to-apply paragraph)
 - Entries with **recurrence prose** (`Recurred YYYY-MM-DD`, "Same pathology...", "The shape recurred...")
 - Entries with **sibling cross-ref tails** ("Sibling to X:", "Pairs with Y as", "Distinct from Z")
@@ -63,6 +66,23 @@ Per the EDIT-CONTRACT refuse-list at the top of `principles.md`:
 7. **Multi-paragraph incident traces in Why.** Full traces live in daily logs; `principles.md` carries one-line examples only.
 8. **User-quote padding.** Keep one quote per entry only when load-bearing (captures the rule's failure shape in the user's own words). Drop the rest.
 9. **Entries that should fold.** Two entries describing the same rule with different scope (e.g. parent + "X for Y specifically") → fold the variant into a sub-bullet of the parent.
+
+### Step 2.5 — Sweep the skills for rules they contradict
+
+A rules file and a skill are never read side by side, so a skill can instruct the opposite of a rule for months with nothing anywhere reporting it. This is the one finding class the EDIT-CONTRACT gate and the ratchet are both structurally blind to: each measures one file against itself, and a contradiction is a fact about a pair. Reading one file at a time cannot produce it.
+
+Work from the prohibition to the instruction, in that direction:
+
+1. Collect every hard prohibition in `redlines.md` and every `### Never ...` entry in `principles.md`. Name the forbidden ACT, not the sentence — "offering a commit", "reading a file through a shell".
+2. Grep `.claude/skills/` and `CLAUDE.md` for text instructing that act. The grep is the act's own vocabulary, not the rule's: `suggest committing|offer to commit|want me to commit` found one, `Get-Content|cat |Select-String` found the other.
+3. Order the pair with `git log -1 -S'<phrase>' --format='%h %ad' --date=short` on each side. The newer passage is current; file timestamps and a passage's own claim to supersede others are both worthless here.
+4. Rewrite the older to match the newer, keeping whatever live purpose it had. A skill telling you to suggest a commit still had a real point about commits travelling alone — keep that half.
+
+This step's own text matches its own greps, as does any skill line that states the rule correctly ("don't offer to commit", "read files with Read"). A hit is a finding only when the surrounding sentence tells you to DO the forbidden act.
+
+An **override is not a conflict.** A skill whose different rule is explained by its own task, or that names the rule it overrides, stays. `review-dirty` preferring PowerShell over bash is an override: the msys crash is a live environment fact about that skill's own work. Preferring PowerShell `Get-Content` over the Read tool was the conflict inside it.
+
+Where history cannot order the pair, or where the newer passage would LOOSEN a prohibition, flag it and let the author decide. Two anchor cases, both found 2026-09-29: `/distill-docs` and `/distill-rules` each said "Suggest committing via `/commit`" (2026-04-29, 2026-05-08) against `principles.md § "Never prompt to commit"` (2026-06-11); both review skills said to run `ls` and `cat` in PowerShell (2026-04-24) against `redlines.md`'s built-in-tool rule (2026-08-26). Four months and two months unnoticed respectively, in the files that exist to keep the corpus honest.
 
 ### Step 3 — Verify before flagging
 
@@ -163,7 +183,7 @@ Structural notes (deferred, not in this pass):
 - <e.g. "Engineering rigor section's Test the change rule could split into preventive vs detective halves — flagged for future pass">
 ```
 
-Suggest committing via `/commit`. Distill-rules commits should travel as their own commit (not bundled with feature work) so the audit trail is intact.
+A distill-rules commit travels on its own, not bundled with feature work, so the audit trail stays intact. Don't offer to commit — `principles.md § "Never prompt to commit"`.
 
 ## Things that are NOT bloat
 
@@ -186,20 +206,22 @@ Recognize these and don't flag them:
    - **Any pass that rewrites more than a couple of entries owes a mechanical coverage proof.** Snapshot the before state, then diff three sets: every `2026-MM-DD` date, every backticked identifier, and every `^### ` entry title. Account for each drop — a date or an identifier that vanished under the 4-example cap is a deliberate cut, one that vanished because a how-to-apply bullet got compressed away is a lost rule, and the two look identical in the diff until you check. On 2026-08-31 this found five real losses across `principles.md` and `conventions.md` (a `validate_data.py` instruction, the `v<prev>..HEAD` method, the `--derivable` flag, two file names with reverse-lookup value) that reading the diff had not surfaced.
      - **Diff at the TOKEN level, not the span level.** Comparing exact backticked spans reports every reformatting as a loss, because adding a path prefix rewrites the span: `` `calibration_editor.py` `` becomes `` `_dev_scripts/calibration_editor.py` `` and the set says one identifier vanished while the file names it twice. On 2026-09-01 that gave 29 apparent losses of which 20 were this artifact. For each dropped span, ask whether its leading token still appears anywhere in the file, and only report the residue.
    - **Renaming an entry title breaks every `§ "exact title"` citation.** They are not compiler-checked and nothing greps them. After any rename, collect every heading in the corpus, collect every `§ "..."` reference across rules + skills + docs, and report the ones that no longer resolve. The same sweep found 15 dangling references that predated the pass, six of them pointing at rules under names that no longer existed.
+     - **A citation that names no heading at all is the worse form, and the `§ "..."` pattern misses it.** `/distill-docs` justified a scope exclusion with "per `feedback_proactive_skill_updates`", a snake_case token appearing exactly once in the repo — on that line. It reads as a rule name and there is no rule, so the exclusion had no stated reason for a year. Sweep bare `per \`?[a-z][a-z0-9_]{12,}\`?` and `see \`?[a-z][a-z0-9_]{12,}\`?` alongside the `§` form: a single-occurrence hit is a citation of nothing. (2026-09-29.)
      - **Scope the sweep to citations that NAME a rules file**, matching `(principles|conventions|critical_lessons|redlines)(\.md)?[^\n]{0,40}?§ "..."`. A bare `§ "..."` grep returns everything, and most of it cites headings in `docs/DISPLAY.md`, `auto_input/README.md` or a WIP doc; on 2026-09-01 that was 189 hits against 42 in scope, and a real break would have sat unread in the middle of it. Normalise whitespace before matching, since a citation wraps across two comment lines in `.py` files. Two further sources of noise are expected and are not breaks: `conventions.md` states most of its rules as bullets rather than headings, so a citation into it will not resolve against a heading set; and a citation ending in `…` or `...` is a deliberate truncation.
 5. **Promotion vs folding rule.** Sub-rule has own trigger + own incident → promote to peer. Sub-bullet is a domain instance of parent (same trigger, different scope) → fold into parent as a sub-bullet.
 6. **EDIT-CONTRACT-first sequencing.** If the contract is missing or doesn't cover the patterns this pass surfaced, write/update the contract first as the gate. The contract gates the trim pass itself, not just future drift.
-7. **Don't expand scope mid-pass.** Scope is `.claude/rules/` files only. If you notice bloat in a skill / domain doc / inline contract during the pass, note it in the wrap report; don't pull it into the current proposal.
+7. **Don't expand scope mid-pass.** If you notice bloat in a skill / domain doc / inline contract during the pass, note it in the wrap report; don't pull it into the current proposal. **The exception is a Step 2.5 contradiction**, which is this pass's own subject even though its edit lands in a skill — a rule nothing obeys is a defect in the rule's reach, not in someone else's file. Fix that one; leave everything else about the skill alone.
 8. **Don't auto-commit.** User runs `/commit` themselves.
 
 ## Scope
 
 - **Does** scan all in-scope rules files for bloat shapes.
+- **Does** sweep the skills for instructions that contradict a rule, and rewrite the older side.
 - **Does** verify each finding against primary source.
 - **Does** propose changes item-by-item, wait for approval.
 - **Does** apply EDIT-CONTRACT updates first if missing or stale.
 - **Does** record before/after baselines.
 - **Does not** autofix without discussion.
 - **Does not** restructure beyond what was approved.
-- **Does not** touch domain docs, CLAUDE.md, skills, memory.
+- **Does not** touch domain docs or memory, or trim a skill for anything but a contradiction.
 - **Does not** auto-commit.

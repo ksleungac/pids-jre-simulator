@@ -60,7 +60,7 @@ Each finding must match one of these categories. Do not flag general code style.
    **Intention test — required before flagging a duplicated VALUE or FORMULA block, not just whole functions: do the sites describe the SAME thing and must move together, or do they only match textually today?** Read the USAGE at each site, don't diff the text. A value slaved to one physical object is a real dup and a desync risk, so unify only the shared subset. A formula that merely *coincidentally* matches — because each site derives it for an independent reason, or a sibling copy is documented to potentially DIVERGE later — is NOT a dup; a shared helper there would silently fight the divergence intent. Factor only the values whose intention is genuinely shared, and leave the site-local derivations in place.
 
    2026-07-22, #50: three full-route methods re-derived the same four track constants. `cy` / `v_outer` / `border_outer` / `straight_right` were the one drawn track's geometry, so the passed-band clip MUST track it → shared. But `straight_left` was stop-layout, earmarked to reclaim the left margin later, and the inner-hole radii were single-method → left local. Unifying the whole block would have been wrong.
-2. **Dead helpers / unreachable code.** Methods defined but never called. **CRITICAL EXCEPTION:** documented dormant scaffolding (multi-line `# NOTE: deliberately NOT called from … yet` block, per project convention) is INTENTIONAL — do not flag.
+2. **Dead helpers / unreachable code.** Methods defined but never called. **Exception:** documented dormant scaffolding (multi-line `# NOTE: deliberately NOT called from … yet` block, per project convention) is intentional — do not flag.
 3. **Half-finished implementations.** Placeholder classes that return early unconditionally, branches that obviously don't do what they claim, methods whose body contradicts the docstring.
 4. **Speculative architecture.** Class hierarchies, registries, strategy patterns, or façades where only one concrete option exists and the indirection earns nothing TODAY. Distinguish from dormant scaffolding (which has explicit markers + a known future trigger).
 5. **Module-level constants duplicated across files.** Same value defined in two `.py` files instead of one being the canonical source.
@@ -87,7 +87,7 @@ Skipping verification = false-positive findings = user loses trust in the report
 
 ### Step 4 — Report
 
-Group by smell category. Each finding: `file_path:line_number` + 1 sentence what + 1 sentence why-it-looks-like-cruft. Cap report under 600 words.
+Group by smell category. Each finding: `file_path:line_number` + 1 sentence what + 1 sentence why-it-looks-like-cruft. The author reads this to pick what to fix, so it stays scannable — a finding per line, no prose around the list.
 
 Use a markdown table for the final triage list:
 

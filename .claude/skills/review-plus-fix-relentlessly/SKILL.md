@@ -16,12 +16,14 @@ This skill implements a Ralph loop pattern:
 
 **The fresh reviewer context IS the mechanism — do not optimize it away.** A separate agent holding no prior context and no momentum finds what the author cannot see, and no model generation substitutes for that. Guidance saying "don't use a subagent to verify your own work" is about SELF-verification (one context re-reading itself); this loop is the opposite, and the cycle count, the re-spawn, and the reviewer's independence are all load-bearing. See `principles.md § "Fresh context is the review instrument"`.
 
-## Shell preference (IMPORTANT — Windows host)
-**Prefer PowerShell over bash for every shell command in every cycle.** The Git-for-Windows bash shell on this machine crashes with `fatal error - add_item ... errno 1`, which will abort a review cycle. Use the PowerShell tool for `git status`, `git diff`, file listing, and all other shell operations. The bash code blocks below are illustrative pseudocode for the loop structure — do NOT invoke the Bash tool to run them. Translate to PowerShell or drive the loop step-by-step through tool calls.
+## Shell preference (Windows host)
+**Read files with Read, search with Grep, list with Glob** — `redlines.md` bars a shell for work a built-in tool does. For what genuinely needs a shell in a cycle, which is `git status` and `git diff`, use the PowerShell tool: the Git-for-Windows bash shell on this machine crashes with `fatal error - add_item ... errno 1`, which will abort the cycle.
 
-This applies transitively: when you spawn the review-dirty subagent, that agent must also use PowerShell (its SKILL.md has the same directive baked in).
+The bash code blocks below are illustrative pseudocode for the loop structure. Drive the loop step-by-step through tool calls rather than running them.
 
-## Scope rule (IMPORTANT — only review what you have working context for)
+This applies transitively: the review-dirty subagent you spawn carries the same rule in its own SKILL.md.
+
+## Scope rule — only review what you have working context for
 
 **Only ask the reviewer about files that you (the main agent in this session) actually built, edited, or have working context for.** The dirty / untracked tree often contains unrelated work — files left behind by another Claude session, a parallel agent's WIP, the user's personal in-progress edits. You don't have the context to judge those correctly, and applying "fixes" to them based on a reviewer's surface read can corrupt someone else's in-flight work.
 

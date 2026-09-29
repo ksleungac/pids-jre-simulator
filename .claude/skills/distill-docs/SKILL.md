@@ -1,6 +1,6 @@
 ---
 name: distill-docs
-description: Periodic audit of domain docs (docs/DISPLAY.md, docs/DISPLAY_E235.md, docs/DATA_FORMAT.md, auto_input/README.md, plus future per-series DISPLAY_*.md) — scan for accumulated bloat (history notes, code-snippet illustrations, speculative future sections, design-rationale prose, cross-doc duplication, cumulative staleness). Discussion-first, item-by-item; user approves each removal before any edit lands.
+description: Periodic audit of the domain docs — everything under docs/ that CLAUDE.md § "When Working On..." points at, plus each module README (auto_input/, _tests/, audio/) — scan for accumulated bloat (history notes, code-snippet illustrations, speculative future sections, design-rationale prose, cross-doc duplication, cumulative staleness). Discussion-first, item-by-item; user approves each removal before any edit lands.
 triggers:
   - /distill-docs
   - distill docs
@@ -34,8 +34,8 @@ In scope:
 Out of scope:
 - `CLAUDE.md` (preloaded; mental-model framing is intentionally generous, slim-rule applies to implementation only — see [principles.md § "Preloaded mental model vs progressive implementation detail"](../../rules/principles.md))
 - `.claude/rules/principles.md` (handled by `/distill-rules`, sibling skill)
-- `.claude/rules/conventions.md`, `critical_lessons.md`, `redlines.md` (no dedicated audit; may fold into `/distill-rules` if bloat surfaces)
-- `.claude/skills/*/SKILL.md` (updated proactively per `feedback_proactive_skill_updates`)
+- `.claude/rules/conventions.md`, `critical_lessons.md` (also `/distill-rules`, which took both in scope and ratchets all three files via `_dev_scripts/check_rules_corpus.py`); `redlines.md` is small and stable
+- `.claude/skills/*/SKILL.md` (a skill is edited when the work it governs changes, not on an audit cadence; `/distill-rules` Step 2.5 catches the one case that needs a sweep, a skill contradicting a rule)
 - `memory/*.md` (logs are append-only by design)
 - `TODO.md` (now a pointer to GitHub Issues + closed-off ledger — nothing to audit)
 - `audio/_mock/main/README.md` (small + stable)
@@ -154,7 +154,7 @@ Structural notes (deferred, not in this pass):
 - <e.g. "docs/DISPLAY.md's Lower LCD section is mixing layout + state, candidate for splitting next time">
 ```
 
-Suggest committing via `/commit`. Doc-distill commits should travel as their own commit (not bundled with feature work) so the audit trail is intact.
+A doc-distill commit travels on its own, not bundled with feature work, so the audit trail stays intact. Don't offer to commit — `principles.md § "Never prompt to commit"`.
 
 ## Things that are NOT bloat
 
@@ -183,7 +183,7 @@ Recognize these patterns and don't flag them:
 
 ## Scope
 
-- **Does** scan docs/DISPLAY.md, docs/DATA_FORMAT.md, auto_input/README.md for the named bloat shapes.
+- **Does** scan every in-scope doc listed above for the named bloat shapes — the `docs/` set plus each module README.
 - **Does** verify each finding via cross-doc grep / git log / code read.
 - **Does** propose removals item-by-item, ask before non-trivial deletions, record before/after line counts.
 - **Does not** autofix without discussion.

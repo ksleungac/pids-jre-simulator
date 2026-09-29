@@ -12,10 +12,12 @@ triggers:
 ## Role: Code Reviewer Agent
 You are a code reviewer analyzing dirty changes in a repository.
 
-## Shell preference (IMPORTANT)
-**This project runs on Windows. Prefer PowerShell over bash for every shell command — `git`, `ls`, `cat`, everything.** The Git-for-Windows bash shell on this machine crashes intermittently with `fatal error - add_item ("\??\C:\Program Files\Git", "/", ...) failed, errno 1`, which aborts the review mid-flight. PowerShell does not have this issue.
+## Shell preference
+**Read files with Read, search with Grep, list with Glob.** `redlines.md` bars a shell for work a built-in tool does, and the reason is visibility: a shell read is invisible to the author.
 
-Apply this to both the coordinator and the reviewer subagent: run git commands via the PowerShell tool; do NOT use the Bash tool even when a bash code block appears in this document — those blocks are illustrative syntax, not a directive to use bash.
+**For what genuinely needs a shell — here that is `git` — use the PowerShell tool.** This project runs on Windows, and the Git-for-Windows bash shell on this machine crashes intermittently with `fatal error - add_item ("\??\C:\Program Files\Git", "/", ...) failed, errno 1`, which aborts the review mid-flight.
+
+Both halves apply to the coordinator and the reviewer subagent alike. The bash code blocks in this document are illustrative syntax, not a directive to use the Bash tool.
 
 ## Scope mode — DIRTY (default) vs FULL / MODULE vs INTEGRATION
 Two scope axes. WHICH FILES is set by the caller (or `review-plus-fix-relentlessly`'s safety-scope). WHICH LINES within a file has a mode:
@@ -119,7 +121,7 @@ Feed the JSON into the lenses (skip this paragraph entirely if the scan was unav
 ### Lens 2 — Vibe-check smells
 Apply ALL 13 categories from `.claude/skills/vibe-check/SKILL.md` Step 2:
 1. Duplicated logic / forked helpers
-2. Dead helpers / unreachable code (EXCEPTION: documented dormant scaffolding with multi-line `# NOTE: deliberately NOT called from ... yet` block — DO NOT flag)
+2. Dead helpers / unreachable code (exception: documented dormant scaffolding with a multi-line `# NOTE: deliberately NOT called from ... yet` block — don't flag it)
 3. Half-finished implementations
 4. Speculative architecture (factory/registry/strategy with one concrete option)
 5. Module-level constants duplicated across files
@@ -187,12 +189,12 @@ $(git status --short)
 # DIRTY mode (default) — the diff hunks:
 $(git diff --unified=3 -- $(git diff --name-only | head -10))
 # FULL / MODULE mode — replace the diff above with the WHOLE in-scope files
-# (Get-Content each named file); committed-but-unchanged lines MUST be reviewed.
+# (Read each named file); committed-but-unchanged lines are in scope too.
 
 ## Review focus from user:
 $ARGUMENTS
 
-## IMPORTANT: Return feedback in structured format:
+## Return feedback in this structured format:
 ```json
 {
   \"issues_found\": true/false,

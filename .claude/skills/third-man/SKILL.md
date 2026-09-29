@@ -1,6 +1,6 @@
 ---
 name: third-man
-description: Spawn a fresh-context Opus 4.7 agent to give an independent take when Claude and the user are talking past each other on a contested logic interpretation, OR to validate behavioral self-observations from /session-recap Step 0. User-triggered or claude self-proposed at impasse.
+description: Spawn a fresh-context agent to give an independent take when Claude and the user are talking past each other on a contested logic interpretation, OR to validate behavioral self-observations from /session-recap Step 0. User-triggered or claude self-proposed at impasse.
 triggers:
   - /third-man
   - third man
@@ -18,7 +18,7 @@ Sometimes Claude and the user end up battling over a logic interpretation where 
 - User runs out of patience and approves something they don't fully understand.
 - Two iterations later it surfaces that the misread was a single subtle word — e.g. "match the least badge" meant *full-element width*, but Claude read it as *badge-only width*. (Real incident, 2026-04-30.)
 
-A fresh-context Opus 4.7 agent — never having seen Claude's prior framing — can read the user's literal words against the code and surface the gap that Claude can't see *because* of their prior framing.
+A fresh-context agent — never having seen Claude's prior framing — can read the user's literal words against the code and surface the gap that Claude can't see *because* of their prior framing.
 
 ## When to invoke
 
@@ -73,7 +73,7 @@ YOUR TASK:
    - **Match / mismatch / third reading:** which of the three, and where the gap is if mismatched
    - **Recommended next move:** one concrete action
 
-Keep it under 300 words. Be direct — if Claude is wrong, say so. If the user's words are genuinely ambiguous between readings, say that too.
+Be direct — if Claude is wrong, say so. If the user's words are genuinely ambiguous between readings, say that too. The user reads this mid-impasse, so it answers which reading the words support and stops.
 ```
 
 ### Step 3 — relay verbatim
