@@ -82,3 +82,18 @@ repos:
         # and the commit that added the rule reads as if it removed the file.
         always_run: true
         pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: rules-corpus-ratchet
+        name: Preloaded rules corpus within baseline (conventions.md § Tooling)
+        entry: python _dev_scripts/check_rules_corpus.py
+        language: python
+        # Repo-state check over the whole corpus, not the staged files: the
+        # measures are per-FILE totals, so a diff cannot answer them. The caps in
+        # both rules files' EDIT-CONTRACTs sat violated for months because a cap
+        # written in prose loses to 33k tokens of sibling rules — principles.md
+        # § "Preloaded mental model" records the same pathology on the MEMORY.md
+        # cap and concludes that rules do not reach that bar, gates do.
+        always_run: true
+        pass_filenames: false
