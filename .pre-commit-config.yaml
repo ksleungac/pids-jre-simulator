@@ -55,7 +55,7 @@ repos:
   - repo: local
     hooks:
       - id: no-ttf-fonts
-        name: Ban .ttf fonts in fonts/ (conventions.md § Tooling)
+        name: Ban .ttf fonts in fonts/ (display.md § Tooling)
         entry: python _dev_scripts/check_fonts.py
         language: python
         files: ^fonts/.*\.ttf$
