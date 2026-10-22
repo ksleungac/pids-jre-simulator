@@ -127,11 +127,11 @@ Two things are derived from that key rather than written down. `editable_models(
 
 The edit window is sized from the loaded model's `TrainModel` record (`s_width` / `s_height` / `upper_height`), never from a fixed import. Models differ: e235_0 is 730 × 420 and e233_0 is 640 × 480, so a fixed import lays the panel out for the wrong one silently.
 
-**Convert lazily**, only when an element is next touched for tuning. No eager backfill sweep. The method-local `# fmt: off` block is the predecessor form; a module-level `_TUNEABLES_*` dict is the editor-compatible standard (per `conventions.md § UI code style`).
+**Convert lazily**, only when an element is next touched for tuning. No eager backfill sweep. The method-local `# fmt: off` block is the predecessor form; a module-level `_TUNEABLES_*` dict is the editor-compatible standard (per `display.md § UI code style`).
 
 ## Wire-a-new-model runbook
 
-**A re-skin** is a sub-series of a model already wired. It forks `e235_0` (per `conventions.md § "Forking a sibling-model renderer"`) and inherits editor-readiness. Copy the per-model module keeping its `_TUNEABLES_*` dicts and region rects, then **add** `_REGISTRY` entries pointing at the new package with the new `model` key. Add, never re-point: re-pointing the existing entries takes the model they were serving off the editor.
+**A re-skin** is a sub-series of a model already wired. It forks `e235_0` (per `display.md § "Forking a sibling-model renderer"`) and inherits editor-readiness. Copy the per-model module keeping its `_TUNEABLES_*` dicts and region rects, then **add** `_REGISTRY` entries pointing at the new package with the new `model` key. Add, never re-point: re-pointing the existing entries takes the model they were serving off the editor.
 
 **A genuinely new model** has a different canvas and no sibling to re-skin. It arrives element by element, and its entries appear as its elements do. E233-0 is the first: 640 × 480 against E235's 730 × 420, so nothing about its geometry inherits, and its registry grew one entry (`train_type`) at the moment that element was built. That is the normal shape for a spec-first build (`docs/DISPLAY.md` § "Specifying a new display"), where the editor is step 6's tuning loop rather than something wired up front.
 

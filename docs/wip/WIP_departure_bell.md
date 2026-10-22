@@ -208,7 +208,7 @@ Two fixes, and they are independent on purpose:
   added; the one bit it discloses is already visible in the frames.
 
 The `Content-Type: application/json` + `Host` checks guarding `POST /tap` apply unchanged — see
-`conventions.md § Tooling` on why a write endpoint on loopback is not "no exposure". No endpoint was
+`tims.md § Tooling` on why a write endpoint on loopback is not "no exposure". No endpoint was
 added, so the endpoint set did not grow and the posture is unchanged.
 
 ## Open

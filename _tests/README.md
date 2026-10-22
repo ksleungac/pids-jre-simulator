@@ -31,7 +31,7 @@ Gaps are intentional **for now** — the value is knowing the hierarchy *and* wh
 Naming a test file after the bug that prompted it is `conventions.md § Naming`'s discovery-instance trap, one artifact over: there it corrupts a pattern's name, here it decides the shape of the whole suite. Two costs, and the second is the expensive one:
 
 - The suite reads as **a list of past bugs** rather than a statement of what the system must do. `_tests/t1_unit/` should answer "what does auto-drive guarantee?" — twelve incident-named files answer "which twelve things went wrong."
-- **Coverage gaps go invisible.** A per-incident file answers *is this bug back?*; nothing answers *does the decision layer decide correctly?* The enumeration the suite is built from becomes "the incidents that happened", and a gate built from an enumeration cannot see a gap in that enumeration (`critical_lessons §9`).
+- **Coverage gaps go invisible.** A per-incident file answers *is this bug back?*; nothing answers *does the decision layer decide correctly?* The enumeration the suite is built from becomes "the incidents that happened", and a gate built from an enumeration cannot see a gap in that enumeration (`gates.md §9`).
 
 A feature legitimately spans tiers — its pure decisions in T1, its stateful behaviour in T3 — and that is two modules of the same name in two directories, not two features. `test_stream.py` exists in both: T1 holds who may bind and where a tap maps to, T3 holds frames keeping up and taps reaching the event queue.
 

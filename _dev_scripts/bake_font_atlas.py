@@ -579,7 +579,7 @@ def bake(outdir: Path) -> int:
         # undeclared site silently reverts this combo to coverage-by-reachability
         # -- baked only for text some swept state happened to draw, which is the
         # dependency the declarations exist to remove and the shape that shipped
-        # sobu/1217F's frame-1 KeyError (critical_lessons.md § 9).
+        # sobu/1217F's frame-1 KeyError (gates.md § 9).
         #
         # This is the gate a NEW TRAIN MODEL meets: forking a model adds a dozen
         # lcd_font sites at once, and the fork-the-sibling convention copies the
@@ -711,7 +711,7 @@ def verify_declared_coverage(sink: dict, walk: dict, manifest: dict) -> list:
     The gate the other two structurally cannot be. `--verify` and `--pixel-verify`
     both consume the sweep, so a text no state reaches is absent from the check for
     the same reason it is absent from the bake — the tautology of
-    `critical_lessons.md § 9`. This asks a different question with an independent
+    `gates.md § 9`. This asks a different question with an independent
     oracle: `resolve()` says what the declaration stands for, and the written
     manifest says what the artifact carries. Neither side is the sweep.
 
@@ -839,7 +839,7 @@ def pixel_verify() -> int:
                             out[(stop, m, v, p, f)] = hashlib.sha256(raw).hexdigest()
         # The bell box too — it is route-independent, so the same digest recurs
         # for every route, but leaving it out would let this pass report IDENTICAL
-        # over a set the box was never in (critical_lessons.md § 10: count the
+        # over a set the box was never in (gates.md § 10: count the
         # frames a suite covers, not the cases).
         import departure_bell
 

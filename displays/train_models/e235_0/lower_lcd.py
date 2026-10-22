@@ -398,7 +398,7 @@ class CircularFullRouteDisplay:
         # Cross-method layout params — referenced by both _build_positions and
         # the draw methods. Per-method tuneables (pentagon shape, dot/circle
         # sizes, name clearance) live as locals in their respective draw
-        # methods per conventions.md § "Tuneable-params block".
+        # methods per display.md § "Tuneable-params block".
         # =====================================================================
         self.y_top = UPPER_HEIGHT  # absolute y where lower LCD area starts
         self.lower_h = S_HEIGHT - self.y_top
@@ -1628,7 +1628,7 @@ class JapaneseFiveStationDisplay:
     at the bottom, the next four stops as numbered countdown circles going up.
     Station kanji names sit to the left of each marker. The marker primitives
     (`_draw_numbered_circle`, `_draw_pentagon`) are copied from this module's
-    `CircularFullRouteDisplay` per conventions.md § "Forking a sibling-model
+    `CircularFullRouteDisplay` per display.md § "Forking a sibling-model
     renderer: copy primitives, don't reinvent".
 
     Same interface as JapaneseEightStationDisplay (the class it replaces):

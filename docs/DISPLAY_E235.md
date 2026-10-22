@@ -17,7 +17,7 @@ Per-series renderers for the E235 train family. Two sub-series ship today: **E23
 >
 > **Additions > ~10 lines:** present the diff to the user first. Heavy additions get gated, not auto-applied.
 >
-> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](../.claude/rules/principles.md).
+> Periodic sweep via `/distill-docs`. Underlying principle: [docs.md § "Tighten before appending"](../.claude/rules/docs.md).
 
 ---
 

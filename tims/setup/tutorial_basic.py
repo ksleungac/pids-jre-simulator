@@ -368,7 +368,7 @@ class BasicTutorial(Tutorial):
         self._btn_rects = {}
         for key, label, enabled in specs:
             r = pygame.Rect(bx, by, bw, BTN_H)
-            # disabled → SILVER palette (conventions § "disabled = silver, not a dark scrim")
+            # disabled → SILVER palette (tims.md § "disabled = silver, not a dark scrim")
             btn_t = _BTN_T if enabled else {**_BTN_T, **chrome.DISABLED}
             state = "waiting" if (key == "next" and enabled and flash_on) else "normal"
             draw_tims_button(surf, r, label, font=btn_font, t=btn_t, state=state)

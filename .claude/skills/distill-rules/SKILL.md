@@ -24,6 +24,7 @@ In scope:
 - `.claude/rules/principles.md` — EDIT-CONTRACT at top; entries are rule + why + how-to-apply
 - `.claude/rules/conventions.md` — reference-shaped entries (naming, style, tooling)
 - `.claude/rules/critical_lessons.md` — incident entries: rule + pattern + scope
+- The path-scoped `.claude/rules/<domain>.md` files (`display`, `tims`, `audio`, `ocr`, `data`, `harness`, `docs`, `gates`). They hold the same three entry shapes under `## Conventions` / `## Principles` / `## Critical lessons`, and each shape keeps its home file's contract. A scoped file also has a placement question: an entry that bites outside its `paths:` belongs back in the always-loaded file, which then has to stay under the `check_rules_corpus.py` budget.
 
 Read but not trimmed:
 - `.claude/rules/redlines.md` — small + stable, and it is a prohibition source for Step 2.5.

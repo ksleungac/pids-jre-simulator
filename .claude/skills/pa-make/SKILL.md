@@ -489,7 +489,7 @@ Plays the file straight through from wherever playback started. PASS/FAIL per fi
 | `Z` | clear pending trim + selection |
 | P pass · F fail · R replay · E note · ↑↓ navigate · Q quit | |
 
-Snapshots land in `audio_src/<line>/pa_wave_backup/`. Both trim and splice are destructive lossless recuts, and `U` keys on an in-memory record of what THIS run edited — never on the backup existing (`conventions.md § "An undo, a snapshot…"`).
+Snapshots land in `audio_src/<line>/pa_wave_backup/`. Both trim and splice are destructive lossless recuts, and `U` keys on an in-memory record of what THIS run edited — never on the backup existing (`audio.md § "An undo, a snapshot…"`).
 
 **No preview cycle.** It used to sample 3 s of head and 3 s of tail; that hides the middle, which is where a mis-cut boundary or foreign content actually sits. Free playback replaced it 2026-08-18.
 

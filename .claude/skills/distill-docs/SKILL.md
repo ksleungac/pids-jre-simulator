@@ -32,9 +32,9 @@ In scope:
 - `audio/README.md` (per-line IRL + sim quirks; growing surface as lines accumulate)
 
 Out of scope:
-- `CLAUDE.md` (preloaded; mental-model framing is intentionally generous, slim-rule applies to implementation only — see [principles.md § "Preloaded mental model vs progressive implementation detail"](../../rules/principles.md))
+- `CLAUDE.md` (preloaded; mental-model framing is intentionally generous, slim-rule applies to implementation only — see [docs.md § "Preloaded mental model vs progressive implementation detail"](../../rules/docs.md))
 - `.claude/rules/principles.md` (handled by `/distill-rules`, sibling skill)
-- `.claude/rules/conventions.md`, `critical_lessons.md` (also `/distill-rules`, which took both in scope and ratchets all three files via `_dev_scripts/check_rules_corpus.py`); `redlines.md` is small and stable
+- `.claude/rules/conventions.md`, `critical_lessons.md` and the path-scoped `.claude/rules/<domain>.md` files (also `/distill-rules`, which took them in scope and ratchets them via `_dev_scripts/check_rules_corpus.py`); `redlines.md` is small and stable
 - `.claude/skills/*/SKILL.md` (a skill is edited when the work it governs changes, not on an audit cadence; `/distill-rules` Step 2.5 catches the one case that needs a sweep, a skill contradicting a rule)
 - `memory/*.md` (logs are append-only by design)
 - `TODO.md` (now a pointer to GitHub Issues + closed-off ledger — nothing to audit)

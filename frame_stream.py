@@ -658,10 +658,10 @@ def install_present_hook() -> None:
             # Separate guards: the tap half is the newer, optional one, and a fault
             # in it must not stop the display half from publishing. Sharing a
             # try/except would freeze the browser on a cached frame with nothing
-            # logged anywhere (`principles.md` § "A bonus feature ... is not a bonus").
+            # logged anywhere (`ocr.md` § "A bonus feature ... is not a bonus").
             # Each REPORTS ONCE — a blanket swallow on a 15 Hz call is how the bell window's
             # topmost re-pin silently stopped working for a whole session behind a NameError
-            # (`conventions.md` § UI code style).
+            # (`tims.md` § UI code style).
             _guarded(_drain_taps, "the streamed tap queue")
             _guarded(_publish, "the streamed frame capture")
             return r
@@ -1087,7 +1087,7 @@ class _Handler(BaseHTTPRequestHandler):
         # screen, which it can draw to a canvas and read back. Gating only `/tap` left that open —
         # measured 2026-08-29, `Host: evil.example.com` on /frame.png returned 200 with the frame
         # while the same header on /tap correctly returned 421, and both `_allowed_hosts`' own
-        # docstring and `conventions.md` § Tooling already claimed the reads were covered.
+        # docstring and `tims.md` § Tooling already claimed the reads were covered.
         #
         # An ABSENT Host fails. It was previously admitted (`if host and ...`), which made the gate
         # opt-out for any client that simply omits the header — HTTP/1.1 requires it, so nothing

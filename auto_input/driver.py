@@ -206,7 +206,7 @@ def badge_anchor_problems(badges_dir: Path, anchors: dict, read_profile) -> list
     # Measured 2026-08-19: dropping running_ja / passing_en / passing_ja is invisible to
     # the entire test suite, and losing BOTH passing anchors leaves a PASSING cell 0.94
     # under BADGE_DIFF_REJECT on a CRISP fixture — inside the margin a softened real
-    # capture eats (critical_lessons.md §7), where it misreads as MOVING and defeats the
+    # capture eats (ocr.md §7), where it misreads as MOVING and defeats the
     # arrival gate. Locked by _tests/t1_unit/test_auto_driver.py § "badge anchor set".
     """
     want_h, want_w = read_profile.badge_bbox[3], read_profile.badge_bbox[2]
@@ -917,7 +917,7 @@ class AutoDriver:
         if not profile.verified:
             # Name the BAR, not just the HUD box: on a taller-than-16:9 desktop the letterbox
             # offset is the part being guessed, and it is the first thing to suspect in a
-            # "the OCR reads nothing" report (`critical_lessons.md` §8 — give the degraded
+            # "the OCR reads nothing" report (`ocr.md` §8 — give the degraded
             # path a line worth quoting back).
             print(
                 f"[AutoDriver] NOTE: {pw}×{ph} has not been driven — geometry derived from the 16:9 fractions "

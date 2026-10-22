@@ -720,5 +720,5 @@ class TransferInfoDisplay(_BaseTransferInfoDisplay):
 
 
 # Kept module-level so the calibration editor's registry and any future preview
-# reach the same dict the renderer reads (`conventions.md` § UI code style).
+# reach the same dict the renderer reads (`display.md` § UI code style).
 __all__ = ["TransferInfoDisplay", "_TUNEABLES_TRANSFER_VIEW"]

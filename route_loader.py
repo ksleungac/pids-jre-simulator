@@ -23,7 +23,7 @@ def load_route_from_dir(work_dir, station_db: dict) -> dict:
 
     The key is always present, so a renderer does direct key access and a line
     without a sheet is a ``None`` the view tests once, not a ``.get`` at every
-    call site (``principles.md`` section "JSON is input grammar"). The attach
+    call site (``data.md`` section "JSON is input grammar"). The attach
     lives in ``finalize_route``, not here, so the key is present on every
     finalize whatever the entry point. No in-tree caller hands ``PASimulator`` a
     pre-parsed dict today, but the argument is supported and must not yield a

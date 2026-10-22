@@ -85,7 +85,7 @@ def _resize_area(arr: np.ndarray, th: int, tw: int) -> np.ndarray:
     `rint` before the cast, never a bare `astype`: uint8 conversion TRUNCATES, which biases
     every pixel down by up to 1 LSB. A uniform field of 137 came back as 136. One level of
     systematic darkening is precisely the margin the binarization threshold works in
-    (`critical_lessons.md §7`).
+    (`ocr.md §7`).
     """
     out = np.swapaxes(_box_axis(np.swapaxes(_box_axis(arr, th), 0, 1), tw), 0, 1)
     return np.rint(np.clip(out, 0, 255)).astype(arr.dtype)

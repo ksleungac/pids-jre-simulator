@@ -132,7 +132,7 @@ _REGISTRY = {
             # (spans the framed square + optional code_3 band). _draw_station_
             # code_badge syncs BADGE_RECT + reads badge_x/badge_w from this dict.
             # Internal params (ring/font sizes) stay method-local — convert
-            # lazily per conventions.md § UI code style when next tuned.
+            # lazily per display.md § UI code style when next tuned.
             ("displays.train_models.e235_0.upper_lcd", "_TUNEABLES_BADGE_RECT"),
         ],
     },

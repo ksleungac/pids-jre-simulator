@@ -415,7 +415,7 @@ def report_ends(path, cy1_ratio=0.5783, cy2_ratio=0.8768, span=95):
     tapered tail, how many chevrons, how far past the bar they run — is a SHAPE.
     A run-length summary flattens a shape into numbers that each look plausible;
     a map shows the taper and the chevron count directly, which is what
-    `conventions.md` § UI code style means by not reading structure off a photo
+    `display.md` § UI code style means by not reading structure off a photo
     by eye. Every glyph here comes from a colour test, not from looking.
     """
     pygame.init()
@@ -466,7 +466,7 @@ def report_ends(path, cy1_ratio=0.5783, cy2_ratio=0.8768, span=95):
         print("      centre-row runs: " + "  ".join(f"{c}{a / scale:.1f}..{(b + 1) / scale:.1f}" for c, a, b in rle if b - a >= 1))
         # A ruler, so a boundary in the map is READ off an index instead of
         # counted along a row of characters — counting is the failure mode
-        # `conventions.md` § UI code style bars for reference photos, and it does
+        # `display.md` § UI code style bars for reference photos, and it does
         # not stop being one because the photo has been classified first.
         lo, hi = max(0, x_lo), min(W, x_lo + span)
         ticks = ["|" if not (x - lo) % 12 else " " for x in range(lo, hi)]
@@ -1001,7 +1001,7 @@ def report_runs(path, cx, cy, cw, ch, klass="B", step=1.0):
 
     The compact form of `report_map`, and the one a SHAPE is actually read from.
     A map is a picture and a picture is read by eye, which is what
-    `conventions.md` § Tooling bars for a reference; a row's runs are numbers, so
+    `display.md` § Tooling bars for a reference; a row's runs are numbers, so
     a limb's edge is subtracted rather than counted. `step` samples every Nth
     canvas row — a pictogram is 90px tall and its outline does not need every one.
     """

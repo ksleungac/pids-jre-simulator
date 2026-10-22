@@ -19,7 +19,7 @@ Companion module that automates PA-firing in the simulator by reading JR EAST Tr
 >
 > **Additions > ~10 lines:** present the diff to the user first. Heavy additions get gated, not auto-applied.
 >
-> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](../.claude/rules/principles.md).
+> Periodic sweep via `/distill-docs`. Underlying principle: [docs.md § "Tighten before appending"](../.claude/rules/docs.md).
 
 ## Mental model
 
@@ -39,7 +39,7 @@ Facts about JR EAST Train Sim itself, not about this code. None is derivable by 
 | Fact | Consequence for the driver |
 |---|---|
 | A run **always starts parked at a platform** | Boot state is deterministic — `badge==STOPPED`, speed 0. Not "varies by scenario". |
-| The speed cell **always renders one decimal** | A decimal-less speed read is ALWAYS a misread, never a real frame (`critical_lessons §7`). |
+| The speed cell **always renders one decimal** | A decimal-less speed read is ALWAYS a misread, never a real frame (`ocr.md §7`). |
 | The pause menu can **jump the train to any station**, earlier or later | This is what click-to-jump and re-entry exist for. Distance re-points by any amount in EITHER direction, and the badge changes with no physical motion. |
 | **ESC dims the whole frame** behind the menu, OCR region included | Reads sometimes survive the dark mask. Unlike a black screen this persists for minutes at reduced contrast. |
 | The HUD is **user-toggleable, whole or per-row** | OCR then reads nothing. Expected, understood by the user, not a defect — see § Limitations. |
@@ -307,7 +307,7 @@ Per cycle: grab the capture region at the desktop's own resolution → `sampling
 
 Three things learned choosing it, all measured rather than reasoned:
 
-- **`rint` before the uint8 cast, never a bare `astype`.** The cast truncates, biasing every resampled pixel down by up to 1 LSB — a uniform field of 137 came back as 136. One level of systematic darkening is exactly the margin the binarization threshold works in ([critical_lessons.md §7](../.claude/rules/critical_lessons.md)).
+- **`rint` before the uint8 cast, never a bare `astype`.** The cast truncates, biasing every resampled pixel down by up to 1 LSB — a uniform field of 137 came back as 136. One level of systematic darkening is exactly the margin the binarization threshold works in ([ocr.md §7](../.claude/rules/ocr.md)).
 - **Sharper is not better here, and neither is more faithful.** Cubic scored WORST of everything tried — its edge ringing creates halos the Otsu threshold misreads. The failure mode for this pipeline is a thin stroke falling below the threshold, not aliasing.
 - **Don't tune the resampler on synthetic blur.** An area+unsharp variant beat everything on a gaussian-blur sweep (193 vs 178 across a broad parameter plateau) and then destroyed the decimal digit on **145 of 792 real driven frames**. Gaussian blur is a uniform low-pass that re-sharpening recovers from; real capture degradation is not, and the unsharp overshoot disturbs the 3–4 pixel decimal dot. Validate on real frames — see [principles.md § "Validate against the outcome, not a proxy"](../.claude/rules/principles.md).
 
@@ -562,7 +562,7 @@ The second pass exists for a capture whose **levels** are shifted. #137's report
 
 **What produces #137's lift is still unidentified.** Modelled in linear light, an HDR desktop at 400-nit paper-white costs only 42.7–47.8, inside the reject, against their ~+90, so HDR alone does not explain it. The unmeasured step is what dxcam returns when DDA duplicates an FP16 scRGB surface and `_open_capture_camera` asks for `output_color="BGRA"` — [#140 § "Unverified"](https://github.com/ksleungac/pids-jre-simulator/issues/140). One `ocr_observe.py` run on an affected machine is what settles it; no ReShade capture has been read at all.
 
-**Seven badge fixtures, and six of them are not a gate.** `badge__running_en`, `..._ja`, `stopping_*`, `passing_*` are byte-identical to the six anchors they are matched against, so `classify_badge_state` scores them 0.00 and those T3 assertions are the artifact compared to itself — [critical_lessons.md §10](../.claude/rules/critical_lessons.md) recorded this on 2026-08-19. `badge__reporter_slip_lowspeed.png` is the exception, added 2026-09-09: cut from a reporter's capture, so its pixels come from another machine and it scores **11.5**, which is what a real read looks like. It is the whole of T3's honest badge coverage, and it is also the extra subject T1 § 5 puts every level shift through, so a shifted cell starts at the ~12 of ordinary mismatch rather than a shifted anchor's 0.
+**Seven badge fixtures, and six of them are not a gate.** `badge__running_en`, `..._ja`, `stopping_*`, `passing_*` are byte-identical to the six anchors they are matched against, so `classify_badge_state` scores them 0.00 and those T3 assertions are the artifact compared to itself — [gates.md §10](../.claude/rules/gates.md) recorded this on 2026-08-19. `badge__reporter_slip_lowspeed.png` is the exception, added 2026-09-09: cut from a reporter's capture, so its pixels come from another machine and it scores **11.5**, which is what a real read looks like. It is the whole of T3's honest badge coverage, and it is also the extra subject T1 § 5 puts every level shift through, so a shifted cell starts at the ~12 of ordinary mismatch rather than a shifted anchor's 0.
 
 Everything in `_ocr_calibration_1080p/` other than that one file is a near-duplicate of the anchors' own session: the badge cell's mean level sits within ±2 of them on all 20 remaining frames, and two are byte-identical. So this corpus holds **no** capture with #137's signature, which is why the shifts stay synthetic. `_dev_scripts/_badge_fixture_sources.py` is the survey, and it writes a contact sheet if the labels need re-checking by eye.
 

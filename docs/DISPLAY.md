@@ -22,7 +22,7 @@ Train-family scope and in-spec/best-effort policy live in [CLAUDE.md](../CLAUDE.
 >
 > **Additions > ~10 lines:** present the diff to the user first. Heavy additions get gated, not auto-applied.
 >
-> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](../.claude/rules/principles.md).
+> Periodic sweep via `/distill-docs`. Underlying principle: [docs.md § "Tighten before appending"](../.claude/rules/docs.md).
 
 ---
 
@@ -284,8 +284,8 @@ Skip animation lives in `_advance_to_next_stop`. Entering STOPPING and cycling p
 - **Position constants inlined** as local variables in each draw method (e.g. `box_x, box_y = 15, 8`). Different train models may need different layouts, and per-method positions make that explicit.
 - **Fonts shared** as class members defined in `__init__` (e.g. `self.font_type_bold`). Fonts are consistent within a model.
 - **ShinGo fonts resolve through `font_atlas.lcd_font(face, size, bold=, italic=, draws=…)`.** Never use a bare `pygame.font.Font` for a baked face; `lint_primitives.py` bans it. `set_bold()` / `set_italic()` on the result now **raise**, because style is part of the atlas key, so pass the kwargs instead. `draws=` declares where the text comes from: `at("audio/*/route.json:stops[].name")`, `lit("次は")`, plus `replace=` / `split=` / `wrap=` / `suffix=` for text the renderer derives. **Adding drawn text is a two-part edit**, the string and its declaration. The atlas is cooked from declarations, so coverage never depends on a state being reachable, and `lcd_font` validates every dev draw against the declaration, so an undeclared string fails on the first frame that draws it. Text layout has one implementation, `utils.compose_text_parts`, and the atlas stores its output. A font **size** is part of the key, so `/build` re-bakes every run. Design and gates: [wip/WIP_font_atlas.md](wip/WIP_font_atlas.md).
-- **When a renderer derives text, declare the derivation.** Do not write a `lit()` listing the forms you have seen. `at(...)` carries `split=` / `wrap=` / `cuts=` / `prefix=` / `suffix=` so the declaration says what the **rule** can produce, rather than what the corpus happens to contain today. Pairing a derivation option with a literal for the leftover case reintroduces the enumeration the declaration removed, and it fails the same way: correct when written, silently short the day the data grows. The 6-station transfer band split a line name at `（` and drew the tail with its paren, a string no field holds, so it declared `split="（"` plus `lit("（各駅停車）")`, the one tail Chūō has. `data/lines.json` carries a second full-width-paren name, and it raised on the first frame of a Yamanote drive. In a build that ships no font software the same call is a `KeyError`. `cuts=True` takes both halves at every break position, so it cannot depend on where the rule cuts. Over-approximating costs nothing: a declaration says what **may** be drawn, while the bake stores what **is**. See [critical_lessons.md § 9](../.claude/rules/critical_lessons.md).
-- See [conventions.md § "Tuneable-params block"](../.claude/rules/conventions.md) for the project-wide rule on labeled local variables at the top of every draw method.
+- **When a renderer derives text, declare the derivation.** Do not write a `lit()` listing the forms you have seen. `at(...)` carries `split=` / `wrap=` / `cuts=` / `prefix=` / `suffix=` so the declaration says what the **rule** can produce, rather than what the corpus happens to contain today. Pairing a derivation option with a literal for the leftover case reintroduces the enumeration the declaration removed, and it fails the same way: correct when written, silently short the day the data grows. The 6-station transfer band split a line name at `（` and drew the tail with its paren, a string no field holds, so it declared `split="（"` plus `lit("（各駅停車）")`, the one tail Chūō has. `data/lines.json` carries a second full-width-paren name, and it raised on the first frame of a Yamanote drive. In a build that ships no font software the same call is a `KeyError`. `cuts=True` takes both halves at every break position, so it cannot depend on where the rule cuts. Over-approximating costs nothing: a declaration says what **may** be drawn, while the bake stores what **is**. See [gates.md § 9](../.claude/rules/gates.md).
+- See [display.md § "Tuneable-params block"](../.claude/rules/display.md) for the project-wide rule on labeled local variables at the top of every draw method.
 
 ### Mode Renderer Design
 
@@ -423,7 +423,7 @@ an existing carve-out; a new folder elsewhere is an uninventoried asset class
 **Note what the reference set cannot show you.** References captured at one instant share
 one state, one station name and one train type, so they can agree perfectly and still say
 nothing about what varies. Write that limit down next to the measurement rather than
-reading the agreement as invariance (`critical_lessons.md` § 9: a check that consumes the
+reading the agreement as invariance (`gates.md` § 9: a check that consumes the
 same enumeration the artifact came from verifies fidelity, never coverage).
 
 ### 2. Whole-display basics FIRST
@@ -439,7 +439,7 @@ measured 4:3, which is the first thing its fork could not inherit.
 ### 3. Ratios before pixels, measured by script
 
 Never estimate a ratio by eye. An off-axis or rescaled reference yields a different number
-every time you look (`conventions.md` § UI code style). Threshold ink or detect colour runs
+every time you look (`display.md` § UI code style). Threshold ink or detect colour runs
 inside known rects and read the bbox.
 
 Record ratios, not pixels: references arrive at assorted sizes and the canvas is chosen
@@ -578,7 +578,7 @@ found by adding a cell, not by reading code.
 
 **An element whose layout varies with the DATA cannot be settled against a frozen reference,
 and the fit will not tell you so.** A capture constrains the parameters visible in it and leaves
-every other one free. That is `principles.md` § "A parameter the score cannot see is not being
+every other one free. That is `display.md` § "A parameter the score cannot see is not being
 fit" one level up: there the free parameter was a coordinate the sample did not bear on, here it
 is an axis of the world the harness has no representation for. E233-0's first five upper elements
 are static, so one reference showed the whole of each and an exhaustive RMS fit settled it. Five
@@ -594,7 +594,7 @@ axis the reference cannot.
 
 Fold the settled spec into `docs/DISPLAY_<MODEL>.md` and delete the WIP section. The WIP
 doc dissolves when its stated trigger is met; until then keep its status current rather than
-letting it drift (`conventions.md` § "WIP-doc → canonical-doc graduation").
+letting it drift (`docs.md` § "WIP-doc → canonical-doc graduation").
 
 ---
 
@@ -603,7 +603,7 @@ letting it drift (`conventions.md` § "WIP-doc → canonical-doc graduation").
 Mechanics, once § "Specifying a new display" has produced a spec.
 
 1. Create `displays/train_models/{model_name}/` directory.
-2. Copy and modify `upper_lcd.py` for fonts and positions. This is often a fork from a sibling sub-series; see [conventions.md § "Display module structure"](../.claude/rules/conventions.md) for the copy-don't-reinvent rule.
+2. Copy and modify `upper_lcd.py` for fonts and positions. This is often a fork from a sibling sub-series; see [display.md § "Display module structure"](../.claude/rules/display.md) for the copy-don't-reinvent rule.
 3. Implement `lower_lcd.py` with `LowerDisplay`. Subclass existing model's `LowerDisplay` and override only the slot renderer that differs (precedent: E235-0 subclasses E235-1000 and swaps only FULL slot's renderer when route is Yamanote).
 4. Create `__init__.py` exporting `UpperDisplay`, `LowerDisplay` + per-model dimensions/palette (`S_WIDTH`, `S_HEIGHT`, `UPPER_HEIGHT`, `DARK_BG`, `WHITE_BG`).
 5. Register in `displays/train_models/__init__.py`: import the package and add a `TRAIN_MODELS` entry (key = folder name = the route.json `model` value):

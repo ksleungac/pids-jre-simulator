@@ -21,7 +21,7 @@ This document defines the JSON data formats used by the PA Simulator for route c
 >
 > **Additions > ~10 lines:** present the diff to the user first. Heavy additions get gated, not auto-applied.
 >
-> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](../.claude/rules/principles.md).
+> Periodic sweep via `/distill-docs`. Underlying principle: [docs.md § "Tighten before appending"](../.claude/rules/docs.md).
 
 ---
 
@@ -403,7 +403,7 @@ audio/tokaido/1865E/route.json     <- route data only
 audio/tokaido/3535E/route.json
 ```
 
-Only the **exception** is written down. All 14 shipped routes said `".."`, a value carrying no information, so it was dropped and the default inverted. See `principles.md § "JSON is input grammar"`: author the irreducible, derive the rest.
+Only the **exception** is written down. All 14 shipped routes said `".."`, a value carrying no information, so it was dropped and the default inverted. See `data.md § "JSON is input grammar"`: author the irreducible, derive the rest.
 
 **Resolution lives in one place: `route_loader.resolve_audio_root(work_dir, route_data)`.** Both consumers call it: `app.py._load_route_data` (→ `self.audio_root` → `AudioPlayer`) and `validate_data.check_route`. Nothing else may join an audio path by hand. Two sites did, and the pooling migration silently broke both. The OOBE tutorial's asset pre-flight went False for every new user, and the auto-driver's long-approach probe went inert on every route.
 
@@ -734,7 +734,7 @@ Every diagram on a line draws the same sheet. `route_loader.finalize_route` atta
 **Authored, never derived.** A line's diagrams cover only the services this repo holds recordings for
 — Chūō ships 3 of 6 — so the sheet cannot be inferred from `route.json`, and its axis carries stations
 no diagram on that line stops at. Copy the axis from a diagram's `stops` rather than retyping it, so
-the join cannot fail on an invisible character (§ "Data Validation", and `conventions.md` § Data layout).
+the join cannot fail on an invisible character (§ "Data Validation", and `data.md` § Data layout).
 
 **Coverage is all-or-nothing.** A service missing from the sheet is invisible on screen: five lines
 where six exist looks like a complete diagram. No check can see it — only a reference can.

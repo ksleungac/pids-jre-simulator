@@ -73,7 +73,7 @@ _atlas: Optional["Atlas"] = None
 _cache: Dict[Tuple[str, int, bool, bool], object] = {}
 # What the bake needs to store, keyed by the `ident` tuple (face, size, bold, italic).
 # NOT by `id(font)` — that was the 2026-07-27 misattribution bug, and `LcdFont` below
-# exists because the fix is to carry identity ON the object. See conventions.md
+# exists because the fix is to carry identity ON the object. See display.md
 # § "Never key a side table on `id(obj)`".
 _record: Optional[dict] = None
 # The same, for faces NOT in ATLAS_FACES — see `unbaked_record()`. Separate so a
@@ -861,7 +861,7 @@ def unbaked_record() -> dict:
     priority-seat placard is the case: drawn on every sweep, invisible to the
     check, and it held `/build`'s pre-flight red. The gate's predicate ("absent
     from the records") and its question ("would this KeyError in a fontless
-    build") come apart exactly at a non-baked face — `critical_lessons.md` § 10.
+    build") come apart exactly at a non-baked face — `gates.md` § 10.
     """
     return _record_unbaked if _record_unbaked is not None else {}
 

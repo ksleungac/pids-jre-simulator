@@ -210,39 +210,7 @@ At 3+ rounds of restating the same contested point with no convergence, offer `/
 
 ---
 
-## Data modeling
-
-### Pragmatic over perfect
-Don't build elaborate schemas upfront. Ship route data with whatever metadata surfaces naturally; add structure when pain forces it.
-
-**How to apply:** Default to filename-as-store and minimal JSON. Add metadata files only when filename can't carry enough info.
-
-### Filename-as-store
-Encode 1:1 metadata in the filename (e.g., STA recordings carry station + platform + song id in basename).
-
-**How to apply:** Add a metadata file only when the same fact needs lookup from multiple basenames.
-
-### Variants are out of scope (for now)
-Pitch shifts, station-specific arrangements — explicitly deferred. Each recording gets its own slug; merging into "the same song with variants" is a future problem.
-
-### JSON is input grammar; runtime is the closure
-JSON files = irreducible authored content. Runtime structure = what the loader computes at load time with all derived fields filled. Renderers consume the closure via direct key access, not raw JSON with per-call fallback.
-
-**Why:** Per-call fallback logic breaks across overrides. Examples:
-- (2026-05-06) Yamanote dest-switching: renderers did `stop.get("dest") or self.route_dest` per draw, breaking sticky-override semantics.
-
-**How to apply:**
-- Loader-time computations live in `route_loader.finalize_route`. Renderers do direct key access.
-- `stop.get("X") or default` in a renderer is a smell — promote the fallback into the loader.
-
----
-
 ## Tooling workflow
-
-### Per-source ad-hoc scripts, not maintained libraries
-When format varies between batches, generate a fresh script per source. Don't unify into one master tool.
-
-**Scoped to code whose INPUT FORMAT varies — splitters, parsers, importers. It does not reach instruments.** A measurement that asks a source-invariant question ("are these two files one recording", "where are the silence runs") has one correct implementation and belongs in a maintained module with a self-test. (2026-08-08) The audio-pooling doc told the reader to regenerate its measurement recipes rather than maintain them; four got rebuilt from scratch that session and one returned a confidently wrong answer. Now `_dev_scripts/audio_id.py`. Ask which one you have: varies per source → ad-hoc; same question every time → library.
 
 ### Prototype inside the code that will hold it
 Reached only after § "Search before authoring" comes back empty. Three questions, in order: which tool holds my inputs (a hit means use it and expand it); will this question be asked again (yes means it is a tool, and building one is its own deliverable with its own ask); genuinely one-off, so delete the file unrun. If everything you would have learned survives as a number written down where it belongs, it was scratch. If something you would have to rewrite dies with it, that thing is code and belongs in the module that will hold it from the first line.
@@ -318,15 +286,6 @@ A reviewer holding no prior context and no momentum sees blindspots the author s
 - Distinguish by what the second agent lacks. Same context re-reading itself is self-verification, cut it. Fresh context is an instrument, keep it.
 - A model upgrade never retires it. A stronger author has stronger blindspots, not fewer.
 - It measures ergonomics as well as correctness. Hand a blind agent an ordinary task on the thing just built and watch what it reaches for, which answers whether the seam is discoverable. The author cannot self-assess that at all.
-
-### Natural adoption gates tool value — push through the harness, don't add a pull-MCP
-A tool's worth is capped by whether it gets used *naturally*, and naturalness = **who owns the context-injection step**. A **pull** tool (an MCP the model must choose to call) loses to the reflex and sits unused — Serena is installed, `conventions.md` says "use it going forward," and grep still wins. To get used, the output must be **pushed**: a **skill step** (orchestrated work — the skill invokes it, so it can't be forgotten) or a **harness hook** (free-form work — injected at the decision). Judge a candidate by delivery shape FIRST, capability second.
-
-**Why:** (2026-07-21) evaluating repo-mapping tools (repomix / aider repo-map / codebase-memory-mcp / code-review-graph) — every high-star MCP failed on *adoption*, not capability; the one adopted (code-review-graph) fit because `review+fix` is orchestrated, so the skill calls it.
-
-**How to apply:**
-- Adopt a capability through the harness's injection points (a `review-dirty` pre-flight step, a PreToolUse hook), not a discretionary `.mcp.json` server.
-- "The agent may call it" → expect it unused. If you can't push it, it won't land.
 
 ---
 
@@ -408,18 +367,6 @@ A before/after measurement is only as good as its "before", and a stale one prod
 - Before believing a verdict about A measured against B, ask what checks B, and say so in the report when the answer is nothing. Pin a gate to fixed bytes: a synthetic input, or a copy the workflow cannot reach. (2026-08-21: scoring express diagrams against all-stations ones put the error in the baseline, and three reports named diagrams that were correct. 2026-08-18: a pixel-hash gate read a real corpus mp3, the author spliced it in ordinary work, and the gate went red looking like a code regression.)
 - **A past REVIEW is a baseline with a date on it, so "has this been reviewed?" is the wrong question — "what landed since?" is the right one.** 2026-09-12: a sentence away from reporting E233-0 as never vibe-checked when it had a two-cycle review+fix on 2026-08-30, and the useful answer was the ~1,750 production lines added after that date, where the real defect was. `git diff <review-sha>..HEAD` over production paths IS the scope.
 
-### A parameter the score cannot see is not being fit
-Fitting a shape to a reference only fits the parameters some sample bears on. Anything else is free and drifts while the number improves. List the parameters and name the sample constraining each; one with no answer there is decoration.
-- (2026-08-25) A station-plate fit scored ten cuts and none on the right edge, so `w` wandered 0.9px while the RMS fell. Adding right-edge cuts raised the score from 4.75 to 5.06, and that rise is the honest number.
-- (2026-08-25) A clock-face comparison held `y` fixed across candidates, but each face seats its digits at a different height, so the fixed y was a handicap unrelated to the face. Per-candidate best y and right edge reversed the answer and took the score from 75 to 24.
-- (2026-09-19) The E233-0 prefix was fitted on ただいま alone then drawn for every form, while two captures each of 次は and つぎは sat unused in the reference folder. 次は came out 17% too small and the stacked つぎは / 終点 scored worse than drawing nothing. A fit on one member says nothing about members it never scored.
-
-**Measuring off a capture:** a number read off a photograph or screenshot carries the resampler's artefacts as well as the artifact's, systematically, so they look like features rather than noise.
-- On an upscaled capture, a band brighter than both neighbours is resampling overshoot, not ink. Profile a plain edge of the same two colours elsewhere in the image and check the colour: the fabricated "white" peaked at `(252,187,151)`, pink rather than neutral. (2026-08-28: the pale bands between the E233-0 chevrons were modelled as a white outline and drawn — a whole element invented out of the capture, and the author saw it at once: *"what was that?"*)
-- Measure a sub-pixel feature by its integral, not its extreme pixel. The phase moves per capture; the quantity does not, and it is also what makes a threshold-derived extent wrong. (2026-08-25: a ~1.2px line's darkest pixel read 43 on one reference and 64 on another while their integrated ink agreed to within 1%.)
-- After a resample, an artifact touching its own surface edge is not evidence it was cut. A downscale's antialiasing tail legitimately reaches the edge. Test upstream (does the source render have room) and downstream (does the drawn ink land outside its clip rect).
-- **A property that varies along an axis the DESIGN cannot vary along is the capture.** The E233-0 overview draws the loaded train's own service heavier, and the integral read that highlight at 4.83 on one row against 3.31 on the other; it was carried as a per-row pair for want of a second reference. The highlight belongs to the SERVICE, so a band cannot hold an opinion about it. Before encoding an asymmetry one capture shows, name what in the design could produce it — nothing can means the capture did. (Author: *"think this is a reference error"*.)
-
 ### Enumerate the reachable space, not the combinatorial one
 Exhaustive search over combinations is the right instrument for "can this happen at all" — it settles what reading the code cannot. But enumerate what the SYSTEM can actually produce, not the Cartesian product of every field. Name the impossible combinations from the domain and exclude them BEFORE searching, and say which ones you dropped.
 
@@ -430,18 +377,7 @@ Exhaustive search over combinations is the right instrument for "can this happen
 - State the physical constraint first ("the game never shows STOPPED above 0 km/h"), prune on it, and report the pruning alongside the result.
 - Prune for COST, never for correctness. A negative result ("no case exists") survives pruning, because the space only shrank. A positive result must then be checked for REACHABILITY — otherwise you have found a case the system cannot produce and will chase a phantom.
 - **The inverse bites too: never CONSTRUCT a worst case the domain cannot produce.** Taking the extreme of each axis independently and combining them measures the instrument, not the artifact — and the number it returns is a real measurement of nothing, which is what makes it convincing. 2026-08-30: sizing the status band's segment row, I paired the two widest station names in the corpus into `さいたま新都心 → 葛西臨海公園` and reported 236px against a 210px budget. They are on different lines and can never be one segment. Author: *"your case didn't exists"*. Build the worst case by enumerating what the system emits, exactly as the pruning rule below demands for the search — the two are one discipline pointed in opposite directions. And when a real overflow does turn up, the answer was *"we should be able to comperss it"*: shrink the row, never truncate it.
-- Never prune by what feels unlikely, only by what the domain forbids. Unlikely-but-possible is exactly the degraded case that ships broken (`critical_lessons §7`), and a hand-narrowed axis list is how a gate goes blind (`critical_lessons §9`).
-
-### Merging N things into one needs two proofs, not one
-Collapsing several modules/files/tables into one has two independent failure modes, and a check for either is blind to the other. **Coverage** — did anything get dropped in transcription? Diff the *content* mechanically (an AST sweep of every string and numeric literal in each original against the merged file is cheap and exact; what legitimately goes missing is only the per-file summary lines). **Execution** — does every merged section still RUN? A section whose dispatch call was forgotten keeps all its literals, so the coverage check passes while the assertions never fire. Only a mutation per section proves that one.
-
-**Why:** the merged artifact is green either way, and green after a merge reads as proof. Examples:
-- (2026-08-19) 26 T1 test modules collapsed to 9. The literal diff came back clean across all 21 sources — every case, boundary, invariant sweep and regression anchor present. It could not have detected an uncalled `check_*` function, and the 8-into-1 module had six of them.
-
-**How to apply:**
-- Snapshot the originals before deleting, and run both proofs against the snapshot, not against memory of what they contained.
-- **Mutate the CONDITION, never the assertion's message.** Editing the message string is a no-op that leaves the test green — and reads exactly like "this section never runs", which is the thing you were testing for. Four of six section-proofs came back as false negatives that way in the same session before the anchors were re-checked.
-- Applies past tests: merged config, a consolidated dispatch table, several scripts folded into one.
+- Never prune by what feels unlikely, only by what the domain forbids. Unlikely-but-possible is exactly the degraded case that ships broken (`ocr.md §7`), and a hand-narrowed axis list is how a gate goes blind (`gates.md §9`).
 
 ### Tests: exercise the blast radius, and make each one discriminate
 Exercise the change's full blast radius before saying done; a smoke test on the bug-fix target is necessary and not sufficient. A regression-worthy change ships with a test in the right tier — pure fn → T1, cross-module headless → T3, state-absent first-run → T4, rendering exempt and by-eye. Where the logic isn't reachable headlessly (buried in a pygame monolith, behind a display init, tangled with I/O), extract it to a pure function and test that.
@@ -466,14 +402,6 @@ Exercise the change's full blast radius before saying done; a smoke test on the 
 - **Then ask where its bytes came from.** Fixture and subject cut from the same source in the same step make the comparison an identity, scoring structurally 0 — check for a suspiciously perfect number before believing the coverage. The fix is a fixture from a DIFFERENT capture, not a second assertion on the same one. (2026-08-19: six committed badge-cell fixtures were byte-identical to the six anchors they were matched against, so `classify_badge_state` scored `diff=0.00` and 7 of 8 badge assertions were the artifact compared to itself. Three anchors could be deleted with the suite green, and a wrong-SCALE set passed too, which starts the driver, classifies nothing for a whole drive and prints no error.)
 - **A fixture authored from the function's SIGNATURE rather than its producer's reachable output proves the opposite of what it claims.** The fields type-check and the assertion passes on a state the system cannot produce, so the branch stays untested and can be dead without the suite noticing. 2026-09-12: a fault-state row pinned `distance=None, distance_rejected=True`, which `read_hud` cannot emit, green for the whole life of an unreachable branch. Its comment claimed rigour — "a real `Reading` rather than a stub dict" — true and beside the point, since realism of TYPE is not reachability of VALUE. For each field a fixture pins, name the production call that writes it.
 - When a fixture and a domain owner disagree, the owner wins. Then fix the fixture and say in-comment which it now is.
-
-### Don't justify a change by demoting an input the architecture trusts
-When a system ranks its inputs (this one: badge > distance/speed), an argument of the form "this branch only fires when the trusted input is wrong" is circular — it borrows the reliability of A to gate B, then denies it to win the argument. Argue from the invariant instead; a correct rule holds whatever the trusted input is doing.
-
-**Why:** the circular version sounds like evidence and quietly inverts the trust model. Examples:
-- (2026-08-11) I justified removing a `MOVING→PASSING` guard exemption as "that branch only fires on badge misreads." User: *"we've already agreed badge is the most stable read; when you use badge to enhance the logic of a less accurate read, you can't back assume badge itself is unreliable, otherwise you are trapped in this loop."* The same conclusion follows without the circularity — the exemption exists to absorb a change of the distance TARGET, and that transition has no target change to absorb.
-
-**How to apply:** state the rule so it stands on the invariant, not on a reliability claim about a specific read. If the justification needs the trusted input to be unreliable, you have the wrong justification, not necessarily the wrong change.
 
 ### A second implementation of a production decision drifts silently
 When a tool, test, harness, baker or proof needs to know what production does, it must call production rather than restate it. A restatement is correct the day it is written and diverges thereafter, and its output looks plausible the whole time, because the copy is exercised so nothing errors.
@@ -517,7 +445,7 @@ A fallback must be stricter than the path it replaces: a recovery, degraded or c
 - Frequency of fallback engagement is a *metric*, not noise. Instrument it, since it counts the primary's misses.
 
 **When you cannot MEASURE that a change is safe, make it unreachable for what already works.** Order it so the existing path runs first and unchanged and the new one is reachable only where the existing path gave up. Non-degradation is then a property of the control flow, which you can read, rather than of a measurement you cannot take.
-- The new path still needs its own refusal, or it becomes a looser test catching everything the first rejected. Measure that refusal against garbage before believing the ordering saved you. Publish which path answered, per sample, and keep the old path's diagnostic number as the reported one so logs stay comparable. This buys safety, not correctness. (2026-09-08, #143: the badge classifier compares absolute RGB, so a display pipeline that lifts levels blinds it while every digit reader on the same frame is fine. The honest gate was the committed badge fixtures, byte-identical to their anchors at 0.00 — `critical_lessons.md §10`, recorded 2026-08-19 and never repaired — so the shift-invariant metric went in as a SECOND pass behind the unchanged first one.)
+- The new path still needs its own refusal, or it becomes a looser test catching everything the first rejected. Measure that refusal against garbage before believing the ordering saved you. Publish which path answered, per sample, and keep the old path's diagnostic number as the reported one so logs stay comparable. This buys safety, not correctness. (2026-09-08, #143: the badge classifier compares absolute RGB, so a display pipeline that lifts levels blinds it while every digit reader on the same frame is fine. The honest gate was the committed badge fixtures, byte-identical to their anchors at 0.00 — `gates.md §10`, recorded 2026-08-19 and never repaired — so the shift-invariant metric went in as a SECOND pass behind the unchanged first one.)
 - **The SECOND change of the same species in a session is where the ordering gets forgotten.** Having just built that fallback, I replaced the digit threshold's clamp outright the same day — same shape, an absolute bound on a quantity that scales with the capture, no ordering. It passed every proxy I had (identical reads on all 23 committed cells, better survival on a synthetic shift ramp) and cost 341 of 1962 real frames their speed decimal. The discipline reads as a property of the change in front of you rather than of the class, so it does not transfer on its own. When a session touches two absolutes, order both. (2026-09-09, #89)
 
 **Two artifacts that must succeed together come from ONE operation, not two in sequence.** Where B is useless without A and A unusable until B exists, derive both from a single operation whose success is the only thing either depends on. Sequencing gives B its own failure modes, and each costs you A too — strictly worse than not attempting B at all.
@@ -527,11 +455,6 @@ A fallback must be stricter than the path it replaces: a recovery, degraded or c
 ### A corrective adjustment must be monotone — clamp it against its own input
 A mechanism that exists to REDUCE a value (a trim, cap, shrink, back-off) must be unable to increase it. `max(floor, value - correction)` alone does exactly that: where the natural value already sits below the floor, the `max` RAISES it, and the mechanism does the opposite of its name on the inputs it was least needed for. Use `min(value, max(value - correction, floor))`. Name the direction the mechanism may move the value, then check every clamp against it; a floor and a reduction in one expression is the smell, since the floor bounds the RESULT rather than licensing the other direction.
 - (2026-08-21) A transfer-panel overhang trim floored at `min_inter_gap = 19` met a natural column gap of 8.7px and pushed it to 19, widening what it was added to narrow. The anchor row ran 31px past the canvas edge, the row below could no longer place its tail on the last column, and it dropped out of Rule 1 into Rule 4 equal-spacing, losing column alignment. The visible symptom was "the alignment is strange", three mechanisms away from the `max`.
-
-### A "bonus" feature that writes the sovereign state is not a bonus
-When a secondary path shares the same state and gates as the primary — not just reads them, writes them — it cannot be reasoned about as an isolated add-on, because every rule added to make it smarter becomes a new way to corrupt the primary. The signal is a run of regressions where fixing the secondary keeps breaking the base.
-- Ask whether the primary can stand entirely on its own with the secondary removed. If not they are one feature: design the primary sovereign FIRST, then make the secondary structurally incapable of touching it (a flag defaulting off, a separate signal the primary can ignore), never merely "careful". On a run of "fixed X, broke Y in the base", isolate or cut the secondary rather than adding the next rule. When the user calls it a bonus, honour that literally — the base must pass with it disabled.
-- (2026-07-24) Auto-driver re-entry was framed as "a bonus re-aligning feature" but silently advances Layer 1 through the same fire gates the normal drive owns. In one session its edits caused a stranded-at-1A bug (re-anchor set `at_station_observed=True` while a sibling change removed the edge that reset it) and a lost-departure bug (a provenance gate disarmed the fallback on a case the primary's speed ceiling then dropped). Each was locally correct and broke the base: *"re-entry was supposed to be a bonus … however it is breaking the normal drive multiple times now."*
 
 ### Validate against the outcome, not a proxy
 Pick the metric that IS the thing you care about. A proxy that correlates in the normal regime can invert exactly where the change bites, and a good change then looks like a regression.
@@ -568,13 +491,6 @@ A reported bug gets REPRODUCED before a fix is written, and the fix gets MUTATIO
 - Prefer a marked placeholder that keeps the loop alive, with the real answer named at the site and in the doc. A comment saying "flip this one line" survives; a broken import blocks. Check the fallbacks before assuming one exists. The placeholder stays loud and stays an OPEN until the real value lands — this does not license shipping the wrong thing quietly.
 - (2026-09-02) Named a font that exists on no machine here as the E233-0 overview's face, flagged it unverified, and applied it anyway. It made the whole lower LCD raise on load, so the render sheet the author asked for next was impossible on top of the view being unworkable: *"oh.. this machine does not have debold...ah damn..."*. The baked atlas could have supplied the face and did not carry it, which took one command to establish.
 
-### Blind A/B verify presentation convention changes
-Before adopting a new presentation convention, validate via blind A/B: parallel fresh-context agents with identical questions — one reads original, one reads new. Adopt only when answers match.
-
-**How to apply:** Use for voice / structure / naming changes affecting prose. Not for code refactors or trivial tweaks.
-
-**What it cannot measure: whether the text still reads as machine-written.** Both arms are Claude reading Claude against questions Claude wrote, so the A/B establishes comprehension parity and nothing about register. Rewriting a passage does not remove its machine-ness — it produces the same author's prose with the recognisable tics filed off. 2026-09-01, the author on a whole-corpus register pass: *"you can't just rewrite or rewrite that to think oh the claude-ness is gone."* Two things follow. Target the STRUCTURE rather than the wording, because splitting a sentence and unnesting a parenthetical are mechanical and lose no facts. And take the outside verdict from a human or from prose written outside this project; the corpus cannot audit its own voice.
-
 ---
 
 ## Environment
@@ -584,35 +500,3 @@ Don't hardcode absolute paths in skills, docs, or notes. Use pwd-relative comman
 
 ---
 
-## Documentation strategy
-
-### No central kitchen-sink rules file
-Each rule has exactly one home. Don't create aggregator files.
-
-**How to apply:** Consult the placement table in `/session-recap`. Pick the narrowest-domain home.
-
-### Preloaded mental model vs progressive implementation detail
-Mental model (what it models, scope, IRL framing) → pre-loaded files. Implementation details (draw-method gotchas, JSON-field minutiae) → domain docs, read on demand.
-
-- **Compression buys ATTENTION, not tokens.** Preloaded rules (`.claude/rules/*`) load every turn — compress aggressively, strip rationale to one-liners; on-demand skills can afford fuller rationale, and mechanical classification (commit file sorting) offloads to hooks entirely. But the reason is that any one rule competes with ~33k tokens of sibling rules for attention, NOT that tokens are scarce. So a rule earns removal only by being WRONG or by actively causing bad behaviour (2026-07-26: rules cited as licence to widen scope); redundancy alone never does. (2026-07-27) User: *"i don't care about cost, don't save cost for me, i only care that you 99.9999999% of the time do the right thing."*
-- **Rules do not reach that bar; gates do.** Advisory text competing for attention fails at some rate — the MEMORY.md cap sat stated and unread for three months at 97–100% violation. Where a rule must always hold, move it to a mechanical gate (pre-commit, publish-boundary refusal, a test) and let the prose describe rather than enforce.
-- **Corpus out-competes a lone rule.** A preloaded rule that keeps getting violated is out-voted by the always-loaded docs modeling the counter-behavior — remove the counter-examples, don't restate the rule harder. (2026-07-24: the editorial-tone preference stuck only after de-polluting every rules/doc file, not after a stronger rule.)
-  - **What gets modeled is the PROSE, not only the content.** A preloaded file is a style exemplar every turn, so its register is a functional property rather than decoration: write the corpus in four-clause sentences with nested parentheticals and the replies come back in that register, whatever § Writing tone says. 2026-09-01, measured across the 38.5k-word preloaded corpus: 2 slop words and 0 hedge phrases — the vocabulary layer § Writing tone polices was already clean — against 792 parentheticals, 382 sentences over 35 words and 148 X-not-Y constructions, which no rule covered. The author's report was that a friend's vanilla Claude Code output did not read this way. Sentence architecture is now ruled in `CLAUDE.md` § Writing tone; the point here is that the corpus teaches by example first and by instruction second.
-
-### Single source of truth
-Don't duplicate facts across docs. Cross-reference instead.
-
-### Tighten before appending
-When editing any audited doc, scan for redundant or stale claims about the topic first. Merge or delete in place rather than appending.
-
-**How to apply:** Each audited doc carries an EDIT-CONTRACT. Re-read before non-trivial additions. Periodic sweep via `/distill-docs` or `/distill-rules`.
-
-### Sync downstream enforcers when reframing doc rules
-When a doc rule is reframed from mechanical to case-by-case, audit tooling that hard-encodes the original form. Update or drop the enforcer in the same session.
-
-**How to apply:** On any rule reframe, grep for enforcers referencing the old hard form; update or drop same session.
-
-### Big-bang rewrite when convention shifts
-When a presentation convention changes and affects multiple files, do a one-off rewrite + write-time gate. Don't propose lazy incremental adoption.
-
-**How to apply:** Propose rewrite + gate. Exception: if too large for one session, propose phased plan with deadline.

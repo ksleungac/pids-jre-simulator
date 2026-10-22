@@ -12,7 +12,7 @@ COLUMN-major (down a column, then the next — as the real screen does), a 戻�
 設定 button bottom-right. Each route box is loaded from audio/**/route.json (sampling
 the retired classic screen's scan_routes); station boxes are the chosen route's stops.
 
-NOTE — yellow selection: the shared press model (conventions.md § UI code style) reserves
+NOTE — yellow selection: the shared press model (tims.md § UI code style) reserves
 yellow for the MOMENTARY press beat. This grid additionally uses yellow (the button "pressed" state) as
 the PERSISTENT selected-box marker, because the reference screen does exactly that (the tan/yellow 川崎).
 The momentary beat and the persistent selection share the colour by design here; 設定 going white-and-

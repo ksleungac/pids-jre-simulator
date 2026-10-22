@@ -275,7 +275,7 @@ def check_system_sheet() -> None:
     shape. While the attach sat on the reading function and the TIMS flow parsed
     `route.json` itself, the key was set in preview, the tutorial and the
     validator and never in a drive — the view was verified exclusively in the
-    frame where it worked (`critical_lessons.md` §10). Both halves are fixed, so
+    frame where it worked (`gates.md` §10). Both halves are fixed, so
     this pins the invariant rather than the incident.
     """
     from route_loader import finalize_route

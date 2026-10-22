@@ -1227,7 +1227,7 @@ class JapaneseDisplay:
         # CONTRACT: LCD fonts resolve through font_atlas.lcd_font with a `draws=`
         # declaration — never a bare pygame.font.Font, never SysFont. The shipped
         # build carries no font files, so a bare construct works in dev and raises
-        # there. See conventions.md § Tooling.
+        # there. See display.md § Tooling.
         #
         # `_TYPE_DRAWS` widens the shared TRAIN_TYPES declaration to cover the
         # row substrings this renderer produces — see its definition above.
@@ -1821,7 +1821,7 @@ class UpperDisplay:
         `route_loader._fill_dest_closure` writes `dest` onto EVERY stop by
         sticky propagation, so this is a direct read — the per-call
         `stop.get("dest") or self.dest` that looks equivalent is the smell
-        principles.md § "JSON is input grammar" names, and it breaks the sticky
+        data.md § "JSON is input grammar" names, and it breaks the sticky
         override exactly where a circular route needs it.
         """
         if self.stops and 0 <= self.curr_stop < len(self.stops):

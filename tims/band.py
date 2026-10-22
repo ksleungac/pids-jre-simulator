@@ -214,7 +214,7 @@ def _tims_digit_cell(font, gap):
     centered. ink_top/ink_bot = vertical ink extent shared across digits (baseline align).
 
     Keyed on the FONT OBJECT, never `id(font)`: CPython reuses a collected object's address, so an
-    id-keyed side table silently hands a new font the metrics of a dead one (`conventions.md`
+    id-keyed side table silently hands a new font the metrics of a dead one (`display.md`
     § Tooling). Holding the object as the key also holds a reference, so the address cannot be
     reused while the entry lives — which is the property `id()` throws away."""
     key = (font, gap)
@@ -517,7 +517,7 @@ def _guarded_overlay() -> None:
 
     Never raises into the render loop — a missing QR is a convenience lost, not a broken app — but
     a blanket `except: pass` on a 15 Hz call is how the bell window's topmost re-pin silently
-    stopped working behind a `NameError` for a whole session (`conventions.md` § UI code style).
+    stopped working behind a `NameError` for a whole session (`tims.md` § UI code style).
     """
     global _overlay_failed
     try:
@@ -577,7 +577,7 @@ def install_overlay_hook() -> None:
     """Wrap ``pygame.display.flip`` / ``update`` so the popup lands on every completed frame.
 
     One seam rather than a call in each of the nine setup screens' loops, which is the idiom this
-    codebase already uses for window pinning and frame capture (`conventions.md` § Display module
+    codebase already uses for window pinning and frame capture (`tims.md` § Display module
     structure): the screens are many and grow, and the tenth would silently not have it.
 
     Idempotence is a MODULE FLAG, not an attribute on the wrapper. The attribute form asks "is the
@@ -632,7 +632,7 @@ def _update_hover_cursor():
 
     Owned by the band, called from its own ``render``, because the band owns the rows: a per-screen
     call would have to be added to all nine setup click loops and silently missed by the tenth
-    (`conventions.md` § Display module structure — wrap the call, don't guard each site).
+    (`tims.md` § Display module structure — wrap the call, don't guard each site).
 
     Two things keep it from stomping another owner. It does nothing at all when there are no rows to
     hover, so a live drive — left column full of OCR state, ``_stream_links`` empty — keeps
@@ -684,7 +684,7 @@ def _band_vals(status, sim_state, stops):
         # The MIRROR ROW keys on `status is None`, NOT on this falsy test. The two are different
         # questions and only the caller knows the answer: `app.py` initialises `auto_input_status = {}`
         # and passes it every frame, so `{}` means "in a drive, no OCR sample yet" — which is the whole
-        # drive when the capture thread dies (critical_lessons §8), not a setup screen. Drawing the row
+        # drive when the capture thread dies (ocr.md §8), not a setup screen. Drawing the row
         # there put a dead link on the drive band (`app.py` never calls `click_stream`), fought
         # `app.py::_update_hover_cursor` for the cursor, and dropped the QR popup over the LCD.
         # The dim '--' placeholders below are right for BOTH cases, which is why the branch stays shared.
@@ -983,7 +983,7 @@ def render(surf, status=None, sim_state=None, stops=None, *, save_notice=None, f
 
 
 # Band control buttons flash yellow on press — the TIMS "registered" feedback every clickable
-# button gets (conventions § UI code style, TIMS button model). The tims.setup screens already
+# button gets (tims.md § UI code style, TIMS button model). The tims.setup screens already
 # flash the band Home via press_transition; this is the same feedback for the LIVE-drive cluster
 # (pause / save / home), called from app.py::_handle_band_click at the click site.
 _BAND_BTN_LABEL_KEYS = {

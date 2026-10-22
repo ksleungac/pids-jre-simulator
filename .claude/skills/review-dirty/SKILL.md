@@ -74,7 +74,7 @@ python _dev_scripts/lint_primitives.py <in-scope .py files>
 - **Color literal == a palette constant** — an RGB tuple equal to a `tims.chrome` PALETTE value, typed inline instead of the constant. → the constant.
 - **Dimension re-typed, not read** — one model's dimension hardcoded in SHARED code. → `surf.get_height()` or a param.
 - **UI string bypassing i18n** — a user-facing chrome label as a literal. → `i18n.t(key)`.
-- **Route-derived field with per-call fallback** — `stop.get(\"X\") or default` in a renderer. → filled in the `finalize_route` closure (`principles.md` § \"JSON is input grammar\").
+- **Route-derived field with per-call fallback** — `stop.get(\"X\") or default` in a renderer. → filled in the `finalize_route` closure (`data.md` § \"JSON is input grammar\").
 
 Report each finding as a Lens-3 item (rule: `conventions.md` § Tooling \"canonical-source duplication\") with file:line · the literal · the canonical source it should derive from.
 

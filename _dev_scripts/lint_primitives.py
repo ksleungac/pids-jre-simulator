@@ -28,7 +28,7 @@ BANS: list[tuple[re.Pattern[str], list[str], str]] = [
     (
         re.compile(r"pygame\.font\.SysFont\b"),
         ["compare_fonts.py", "compare_grid.py"],
-        "pygame.font.SysFont is banned in production (crashes on Chinese-locale Windows) — load via pygame.font.Font(str(project_root() / 'fonts' / fname), ...). See conventions.md § Tooling.",
+        "pygame.font.SysFont is banned in production (crashes on Chinese-locale Windows) — load via pygame.font.Font(str(project_root() / 'fonts' / fname), ...). See tims.md § Tooling.",
     ),
     (
         # A baked face named INSIDE a pygame.font.Font(...) call. Only ShinGo is in
@@ -41,7 +41,7 @@ BANS: list[tuple[re.Pattern[str], list[str], str]] = [
         # not cross newlines, so this covers single-line calls, which all of them are.
         re.compile(r"pygame\.font\.Font\(.*ShinGoPr6N"),
         ["_dev_scripts/"],
-        'A baked font face must resolve through font_atlas.lcd_font(face, size, draws=...), never a bare pygame.font.Font(). A bare construct works in dev (fonts/ is present) and raises in a build that ships no font software — invisible-in-dev, critical_lessons.md §4. See conventions.md § Tooling ("LCD fonts resolve through font_atlas.lcd_font").',
+        'A baked font face must resolve through font_atlas.lcd_font(face, size, draws=...), never a bare pygame.font.Font(). A bare construct works in dev (fonts/ is present) and raises in a build that ships no font software — invisible-in-dev, critical_lessons.md §4. See display.md § Tooling ("LCD fonts resolve through font_atlas.lcd_font").',
     ),
     (
         re.compile(r"sys\._MEIPASS\b"),

@@ -12,7 +12,7 @@ next — a wrong answer at any stage is still a well-formed number:
   4. IS THE VALUE POSSIBLE — _rectify_speed (value domain)
 
 The reader's own environment is the thing that breaks it: a real user's capture is
-softer than any produced here (`critical_lessons §7`), and the author's machine
+softer than any produced here (`ocr.md §7`), and the author's machine
 cannot produce most of the resolutions section 1 covers. So sections 1 and 4 are
 pure arithmetic pinned to literals, section 2 degrades the templates by the
 mechanisms measured live, and section 3's oracle is a COMMITTED CELL from an
@@ -328,7 +328,7 @@ def check_rectify() -> None:
 #
 # The oracle CANNOT be `_tests/fixtures/ocr/*/cells/badge__*.png`: all six are
 # byte-identical to the six anchors they are matched against, so they score 0.00 and are
-# the artifact compared to itself (critical_lessons.md §10). Shifted anchors are honest
+# the artifact compared to itself (gates.md §10). Shifted anchors are honest
 # here for the same reason a shifted anchor is honest anywhere — the transform is the
 # subject, not the pixels.
 

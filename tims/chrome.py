@@ -22,7 +22,7 @@ from .widgets import _TUNEABLES_TIMS_BUTTON, draw_lowres_text, draw_lowres_text_
 # ── TIMS palette — the SINGLE SOURCE for chrome colors (design tokens). Screens reference these
 #    instead of re-declaring literals, which had DRIFTED: near-black as (8,10,14) vs (10,13,18); bright
 #    ink as (236,241,246) vs (232,238,245); light-slate as (150,162,176) vs (150,164,178). Only shared
-#    color VALUES live here — layout geometry (positions/sizes) stays per-module (conventions § Data layout).
+#    color VALUES live here — layout geometry (positions/sizes) stays per-module (display.md § Data layout).
 BG          = (62, 68, 80)      # screen background (slate)
 PANEL_BG    = (8, 10, 14)       # near-black panel / table / band-strip interior
 FRAME       = (120, 132, 144)   # slate frame / border / separator
@@ -44,7 +44,7 @@ BTN_LABEL  = {**_B, "text_align": "center", "v_pad": 0, "text_max_k": 1, "line_g
 BTN_ACTION = {**_B, "text_align": "center", "text_pad": 12, "text_max_k": 1}                               # home action cards
 BTN_STEP   = {**_B, "text_align": "center", "v_pad": 4, "text_max_k": 1, "min_w": 0}                       # steppers / number chips
 
-# ── disabled / unavailable = SILVER overlay (conventions § "disabled = silver palette, NOT a dark scrim").
+# ── disabled / unavailable = SILVER overlay (tims.md § "disabled = silver palette, NOT a dark scrim").
 #    Spread over ANY base/role tuneable: {**_TUNEABLES_TIMS_BUTTON, **DISABLED} / {**BTN_BAR, **DISABLED}.
 #    ONE canonical silver, graduated from model_select._GRAY_T once the grey spread past one screen (roadmap
 #    tiles + consent-OK-locked + tutorial-disabled + launch-locked + inert band buttons). Overrides only the

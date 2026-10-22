@@ -607,7 +607,7 @@ def check_route(route_path: Path, translations: dict, train_types: dict, issues:
 
     # audio_root shape — checked for EVERY route including fixtures, because a wrong value
     # surfaces only as N separate "pa/X.mp3 missing" lines, which names the wrong cause.
-    # conventions.md § Tooling: a data-field addition updates this validator in the same change.
+    # data.md § Tooling: a data-field addition updates this validator in the same change.
     from route_loader import resolve_audio_root
 
     raw_root = data.get("audio_root")
@@ -773,7 +773,7 @@ def check_sta_last_is_melody(route_paths: list, issues: list) -> None:
     this check passes on the exact mis-ordering that motivated it — measured, not assumed.
     Deciding which file is a melody and which is an announcement needs content analysis,
     and every derived instrument tried on that question here has returned a confident
-    wrong answer (`critical_lessons.md` §11). It stays a by-ear property.
+    wrong answer (`audio.md` §11). It stays a by-ear property.
 
     What it DOES catch: a multi-entry stop with no `sta_cut` at all, and a cut that falls
     outside its last file — a live risk now, because a cut authored against an earlier
@@ -1007,7 +1007,7 @@ def check_system_sheets(route_paths: list, translations: dict, issues: list) -> 
     SILENT on screen: a mistyped station in `services[].stops` draws no marker, a
     junction off the axis draws no pill, a duplicate axis entry resolves the
     wrong slot, and endpoints stated backwards drop a whole service line. That is
-    the class `conventions.md` § Data layout names — a cross-file key differing by
+    the class `data.md` § Data layout names — a cross-file key differing by
     an invisible character, the 市ケ谷 / 市ヶ谷 trap — and it is why the join is
     asserted by count here rather than read by eye.
 
@@ -1088,7 +1088,7 @@ def check_sheet_colors(route_paths: list, issues: list) -> None:
     # A SET per (root, type), not the first diagram found. Two diagrams of one
     # type on one line disagreeing about `type_color` is the drift closest to
     # what this check is for, and keeping only the first silently scores the
-    # sheet against whichever path sorted earlier (`critical_lessons.md` § 9).
+    # sheet against whichever path sorted earlier (`gates.md` § 9).
     by_root: dict = {}
     for route_path in route_paths:
         data = load(route_path)

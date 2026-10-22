@@ -118,10 +118,11 @@ Consult this before ANY doc write, not only at recap time.
 | Mock route layout, test-station roles | `audio/_mock/main/README.md` | rules files |
 | Per-line IRL + sim quirks | `audio/README.md` | rules files, CLAUDE.md |
 | Game-vs-app route coverage, diagram gaps, what to build next | `docs/COVERAGE.md` | CLAUDE.md (mental model keeps only the scope fence + that coverage is dated), GitHub Issues |
-| Values that shape judgment | `.claude/rules/principles.md` | CLAUDE.md |
-| Style, naming, tooling | `.claude/rules/conventions.md` | CLAUDE.md |
+| Values that shape judgment, true in any domain | `.claude/rules/principles.md` | CLAUDE.md |
+| Style, naming, tooling, true in any domain | `.claude/rules/conventions.md` | CLAUDE.md |
 | Red lines | `.claude/rules/redlines.md` | CLAUDE.md |
-| Past-mistake lessons | `.claude/rules/critical_lessons.md` | anywhere else |
+| Past-mistake lessons, true in any domain | `.claude/rules/critical_lessons.md` | anywhere else |
+| A rule (convention, principle or lesson) that only bites when working in one domain | the path-scoped `.claude/rules/<domain>.md`: `display` (LCD rendering, fonts, display modules) · `tims` (setup flow, band, chrome i18n, window) · `audio` · `ocr` · `data` (route.json, catalogues, loader) · `harness` (hooks, gates over the corpus, private remote) · `docs` (WIP docs, where a rule lives) · `gates` (tests, what a check can see) | the always-loaded files above. `check_rules_corpus.py` caps those at 148k chars, because Claude Code warns past ~150k at session start. A scoped file loads only when a file matching its `paths:` is read or edited. A new domain gets a new file with its own `paths:` |
 | Build/distribution | `.claude/skills/build/SKILL.md` | CLAUDE.md |
 | Auto-input / OCR domain | `auto_input/README.md` | CLAUDE.md |
 | JSON field definitions | `docs/DATA_FORMAT.md` | CLAUDE.md |

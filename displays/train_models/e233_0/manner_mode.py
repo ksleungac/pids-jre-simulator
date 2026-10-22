@@ -711,5 +711,5 @@ class MannerModeDisplay:
 
 
 # Module-level so the calibration editor's registry and any preview reach the
-# same dict the renderer reads (`conventions.md` § UI code style).
+# same dict the renderer reads (`display.md` § UI code style).
 __all__ = ["MannerModeDisplay", "MANNER_MODE_RECT", "_TUNEABLES_MANNER_MODE"]

@@ -7,7 +7,7 @@ claim, or re-labelling the badge fixtures by eye, runs this.
 
 
 The six committed badge fixtures are byte-identical to the six anchors they are matched
-against, so T3's badge assertions score a structural 0.00 (`critical_lessons.md` §10,
+against, so T3's badge assertions score a structural 0.00 (`gates.md` §10,
 2026-08-19; named again in #143). A fixture from a DIFFERENT capture is the repair, and
 `_ocr_calibration_1080p/` is local-only, so this survey only runs on the machine holding it.
 

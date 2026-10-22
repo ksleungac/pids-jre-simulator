@@ -55,7 +55,7 @@ def wrap_two_lines(name: str, font, avail_w: int):
     Model-agnostic, and here rather than on a train model because three
     renderers want it — E235-0's inline panel, E233-0's 6-station band and now
     its transfer view. `docs/wip/WIP_e233_0_display.md` § 10.3.5 asked for the
-    lift rather than a third copy; `conventions.md` § "Display module structure"
+    lift rather than a third copy; `display.md` § "Display module structure"
     is the rule behind it.
 
     Three separators, tried in order, each keeping its own side:

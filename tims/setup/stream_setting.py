@@ -75,7 +75,7 @@ ROW_X              = PANEL_X
 # on one row: measured, the widest locale's access row is 414px, which lands 12px inside the right
 # margin from here and would overflow from 210. The labels were shortened for the same reason —
 # en `Network` alone is 205px at this face, so `Off / PC / LAN` is what makes the row fit in every
-# locale (conventions.md § UI code style, fixed-column multi-locale label strips).
+# locale (tims.md § UI code style, fixed-column multi-locale label strips).
 CONTROL_X          = ROW_X + 190
 ROW_H              = 44                    # control height; both rows use it so they read as a group
 MODE_GAP           = 8                     # gap between the three access cells
@@ -139,7 +139,7 @@ def _save_state():
 
 def _mode_cell_size(font):
     """One size for all three access cells — the worst-case label sets it and the shorter ones centre
-    inside (`conventions.md` § UI code style: grouped buttons share size AND design). Measured in the
+    inside (`tims.md` § UI code style: grouped buttons share size AND design). Measured in the
     ACTIVE locale's face, because the labels differ in width per locale."""
     w = max(tims_button_size(i18n.t(k), font, _MODE_T)[0] for k in _MODE_KEYS.values())
     return w, ROW_H

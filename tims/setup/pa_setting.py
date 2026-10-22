@@ -254,7 +254,7 @@ def render(surf):
             if tag:
                 # TWO FACES ON ONE ROW. The designation is a Japanese proper noun in NotoSansJP; the
                 # tag is chrome in the reader's language, and the JP subset has no 编, so zh_CN's
-                # 车站编号更新 would draw tofu in the value face. `conventions.md` § "Mixed-script
+                # 车站编号更新 would draw tofu in the value face. `tims.md` § "Mixed-script
                 # i18n chrome needs two fonts".
                 _, th = lowres_text_size(tag, label_font, 1, 0)
                 chrome.blit_lowres(surf, tag, value_x + CELL_PAD_X + vw, ry + (ROW_H - th) // 2, label_font, ROW_VALUE_COLOR, 1)

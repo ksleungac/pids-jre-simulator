@@ -33,22 +33,33 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 RULES = Path(__file__).resolve().parent.parent / ".claude" / "rules"
 
-# Recorded 2026-09-29, after the fold pass that took principles.md 70 -> 49 entries.
+# Recorded 2026-10-22, after domain rules moved into path-scoped files (principles.md
+# 49 -> 32 entries, conventions.md 108 -> 24 bullets, critical_lessons.md 11 -> 6).
 # Each value is a CEILING: equal is fine, greater fails. Tighten as passes land.
 #
 # `tails` is HARD at 0 — a sibling cross-ref tail is on both contracts' refuse-list,
 # so there is no legitimate first one. `entries` and `worst_entry_words` carry a few
 # percent, since a genuine new rule is legitimate growth and only bloat is not
-# (`principles.md` § "Preloaded mental model": a rule earns removal by being wrong,
+# (`docs.md` § "Preloaded mental model": a rule earns removal by being wrong,
 # never by redundancy). `words` carries ~5% as a slow-drift alarm rather than a fence:
 # it is the measure that catches a file getting fatter without gaining rules.
 # fmt: off
 BASELINE = {
-    "principles.md":       {"entries":  50, "words": 15800, "worst_entry_words": 1050, "tails": 0},
-    "conventions.md":      {"entries": 110, "words": 15500, "worst_entry_words":  470, "tails": 0},
-    "critical_lessons.md": {"entries":  12, "words":  4400, "worst_entry_words":  950, "tails": 0},
+    "principles.md":       {"entries":  33, "words": 13200, "worst_entry_words": 1050, "tails": 0},
+    "conventions.md":      {"entries":  25, "words":  3650, "worst_entry_words":  320, "tails": 0},
+    "critical_lessons.md": {"entries":   7, "words":  1550, "worst_entry_words":  490, "tails": 0},
 }
 # fmt: on
+
+# The ALWAYS-LOADED budget, in characters: `CLAUDE.md` plus every rules file with no
+# `paths:` frontmatter. Claude Code warns once the instruction files loaded at session
+# start add up past ~150k; the author's global `~/.claude/CLAUDE.md` takes ~1.6k of that,
+# so the repo's share is capped below it. A path-scoped file loads only when a matching
+# file is read or edited, so it is not counted. Over budget means a domain rule is sitting
+# in an always-loaded file: move it to the path-scoped file for its domain (2026-10-22).
+ALWAYS_LOADED_CHARS = 148_000
+REPO = RULES.parent.parent
+PATHS_RE = re.compile(r"\A---\n(?:.*\n)*?paths:", re.M)
 
 # Sibling cross-ref tails: both preloaded contracts put these on their refuse-list.
 # `conventions.md`'s own contract quotes the first three verbatim as what to strip.
@@ -128,8 +139,26 @@ def main() -> int:
                 slack = cap - got[key]
                 print(f"    {key:18} {got[key]:6}   baseline {cap:6}   slack {slack:+}")
 
+    # Every rules file, scoped or not: a tail has no legitimate first one.
+    for path in sorted(RULES.glob("*.md")):
+        if path.name not in BASELINE:
+            n = len(TAIL_RE.findall(path.read_text(encoding="utf-8")))
+            if n and not args.report:
+                failures.append(f"{path.name}: tails {n} exceeds baseline 0")
+
+    loaded = [REPO / "CLAUDE.md"] + [p for p in sorted(RULES.glob("*.md")) if not PATHS_RE.match(p.read_text(encoding="utf-8").replace("\r\n", "\n"))]
+    total = sum(len(p.read_text(encoding="utf-8")) for p in loaded)
+    if args.report:
+        names = ", ".join(p.name for p in loaded)
+        print(f"always-loaded       {total:6} chars   budget {ALWAYS_LOADED_CHARS}   ({names})")
+    elif total > ALWAYS_LOADED_CHARS:
+        failures.append(
+            f"always-loaded corpus {total} chars exceeds budget {ALWAYS_LOADED_CHARS} "
+            f"(+{total - ALWAYS_LOADED_CHARS}). Move domain rules to a path-scoped file."
+        )
+
     if failures:
-        print("Rules corpus grew (conventions.md § Tooling, sensor tiers):")
+        print("Rules corpus grew (harness.md § Tooling, sensor tiers):")
         for f in failures:
             print(f"  - {f}")
         return 1

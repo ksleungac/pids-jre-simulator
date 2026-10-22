@@ -8,7 +8,7 @@ App-level runtime and the setup / chrome flow. This is the canonical home for ap
 >
 > **Refuses:**
 > - LCD render internals → [DISPLAY.md](DISPLAY.md); JSON field defs → [DATA_FORMAT.md](DATA_FORMAT.md); OCR pipeline → [auto_input/README.md](../auto_input/README.md)
-> - Chrome / font / interaction *rules* → [conventions.md § UI code style](../.claude/rules/conventions.md) — cross-reference, don't restate
+> - Chrome / font / interaction *rules* → [tims.md § UI code style](../.claude/rules/tims.md) — cross-reference, don't restate
 > - History notes / change logs / iteration tuning numbers — `git log` + `memory/YYYY-MM-DD.md` have this
 > - Code-snippet illustrations of how a class looks — link `file:line` instead
 > - Speculative future designs ("when X is implemented …") — GitHub Issues is the home
@@ -20,7 +20,7 @@ App-level runtime and the setup / chrome flow. This is the canonical home for ap
 >
 > **Additions > ~10 lines:** present the diff to the user first. Heavy additions get gated, not auto-applied.
 >
-> Periodic sweep via `/distill-docs`. Underlying principle: [principles.md § "Tighten before appending"](../.claude/rules/principles.md).
+> Periodic sweep via `/distill-docs`. Underlying principle: [docs.md § "Tighten before appending"](../.claude/rules/docs.md).
 
 ---
 
@@ -163,7 +163,7 @@ Every setup screen's band Home returns to the home menu rather than one level up
 
 ## Cross-references
 - Window mirroring / remote terminal → § "Window mirroring" above.
-- Chrome / font / interaction rules → `conventions.md § UI code style`, `§ "TIMS chrome text"`.
+- Chrome / font / interaction rules → `tims.md § UI code style`, `§ "TIMS chrome text"`.
 - App state machine → `DISPLAY.md § Unified State Machine`.
 - LCD displays → `DISPLAY.md`, `DISPLAY_E235.md`.
 - Data grammar → `DATA_FORMAT.md`.

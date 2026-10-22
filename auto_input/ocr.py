@@ -76,7 +76,7 @@ BADGE_DIFF_REJECT = 50.0
 # replaces" — and 39.8 is the worst case over deliberately absurd rungs (lift +220, gain
 # x6), far past anything a display can do. Re-derive it against REAL shifted cells when any
 # exist — see #143. Deliberately NOT fitted to the anchors, because six of the seven
-# committed badge fixtures are byte-identical to those anchors (critical_lessons.md §10),
+# committed badge fixtures are byte-identical to those anchors (gates.md §10),
 # so anything tuned tightly against them is tuned against itself.
 BADGE_NCC_REJECT = 50.0
 
@@ -353,7 +353,7 @@ def classify_badge_state(cell: np.ndarray, anchors: dict[str, list[np.ndarray]])
     # today classifies identically, because the shape-only pass is only reached once raw
     # has already rejected. Non-degradation is therefore a property of the ORDER, not a
     # measurement — which matters here because the committed badge fixtures are
-    # byte-identical to the anchors (critical_lessons.md §10) and so cannot prove it.
+    # byte-identical to the anchors (gates.md §10) and so cannot prove it.
     # See auto_input/README.md § "Badge classification".
 
     `via` says which pass produced the state: ``"raw"``, ``"ncc"``, or None when both

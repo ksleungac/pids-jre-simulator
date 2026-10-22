@@ -213,7 +213,7 @@ _TUNEABLES_PRIORITY_SEAT = {
     # figure (adult holding an infant) is a single fused silhouette that the
     # torso/thigh/shin model drew as unrelated blocks. Same call as the
     # E233-0 current-stop marker — a fixed-orientation mark is a free vertex
-    # list and the vertices ARE the shape (`conventions.md` § Display module
+    # list and the vertices ARE the shape (`display.md` § Display module
     # structure).
     "figure_polys": (
         (  # figure 0
@@ -464,7 +464,7 @@ class PrioritySeatDisplay:
         `displays/utils.py::draw_aapolygon`'s own contract and for its reason:
         `smoothscale` averages RGB and alpha independently, so an edge resolving
         against a differently-coloured transparent field comes back carrying that
-        colour as a fringe (`conventions.md` § UI code style).
+        colour as a fringe (`display.md` § UI code style).
         """
         t = _TUNEABLES_PRIORITY_SEAT
         scale = int(t["aa_scale"])
@@ -520,7 +520,7 @@ class PrioritySeatDisplay:
         *"extract the drawings using a color filter"*).
 
         So the vertices ARE the shape, which is the same call
-        `conventions.md` § "Display module structure" already records for this
+        `display.md` § "Display module structure" already records for this
         model's current-stop marker. The parts and their attribute drawers are
         gone; what is left is a list of contours per figure and this loop.
         """
@@ -600,5 +600,5 @@ class PrioritySeatDisplay:
 
 
 # Module-level so the calibration editor's registry and any preview reach the
-# same dict the renderer reads (`conventions.md` § UI code style).
+# same dict the renderer reads (`display.md` § UI code style).
 __all__ = ["PrioritySeatDisplay", "PRIORITY_SEAT_RECT", "_TUNEABLES_PRIORITY_SEAT"]

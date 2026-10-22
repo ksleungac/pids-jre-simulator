@@ -11,7 +11,7 @@ path and the picture cannot drift from the sound.
 # closes the bell and leaves the drive running. Nothing in this module may raise
 # into `app.py`'s loop. The tracebacks are printed in full and carry a distinct
 # leading line, so a user report can be told apart from the crash it replaced
-# (critical_lessons.md § 8).
+# (ocr.md § 8).
 
 # CONTRACT: the window's lifetime is drive-start to drive-end, and `close()`
 # MUST run before `pygame.display.quit()`. Tearing down the display subsystem

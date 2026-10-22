@@ -2,7 +2,7 @@
 """Replay a screen-recording through the PRODUCTION OCR read path.
 
 The point is degraded input. Every local corpus is captured from a live framebuffer and
-is therefore CLEANER than what a reporter's machine produces — `critical_lessons.md §7`
+is therefore CLEANER than what a reporter's machine produces — `ocr.md §7`
 is exactly this trap, and it has now caught us twice. A user's H.264 screen recording is
 the closest thing we have to their real pixels: compression artifacts, their scaling,
 their scenery, their post-processing.
@@ -85,7 +85,7 @@ def main() -> int:
     # describes a pipeline nobody runs. Reading natively instead would ALSO load the wrong
     # anchor set on any resolution whose native cells aren't 1440p-sized: the shapes
     # mismatch, classify_badge_state skips every anchor, and every frame reports badge=None
-    # — a diagnostic returning confident garbage (`critical_lessons.md` §11).
+    # — a diagnostic returning confident garbage (`audio.md` §11).
     templates = build_templates()
     seg = seg_for_scale(DOWNSCALE_PROFILE.scale)
     badges_dir = DEFAULT_TEMPLATES_DIR / "badges"

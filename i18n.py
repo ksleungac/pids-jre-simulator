@@ -158,7 +158,7 @@ def t(key: str, *, lang: str | None = None, **fmt) -> str:
 
 # Per-language TIMS chrome face — Noto Sans, rendered ANTIALIAS OFF at the native display px, NO
 # upscale. The TIMS/embedded "pixel text" look is just an ordinary outline font with AA off (not a
-# pixel font, not bitmap strikes, not upscaling). See conventions.md § "TIMS chrome text" (LOCKED
+# pixel font, not bitmap strikes, not upscaling). See tims.md § "TIMS chrome text" (LOCKED
 # 2026-06-27). Per-locale because Noto Sans JP Han-unifies / tofus Chinese (zh_HK = Traditional,
 # zh_CN = Simplified); JP also serves station names + Latin/EN chrome. OFL — Noto's license must ship
 # alongside the .otf (runtime-required, per critical_lessons §2); see fonts/NotoSans-OFL.txt. Faces

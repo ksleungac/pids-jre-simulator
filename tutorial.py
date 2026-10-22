@@ -1351,7 +1351,7 @@ class Tutorial:
         """TIMS bevel button. Lit (normal) when actionable; SILVER (inactive palette)
         when not — the lit/unlit language shared with the shell tabs. No green
         'primary' state: the lit button is the emphasis."""
-        # disabled → SILVER palette (conventions § "disabled = silver, not a dark scrim") — matches the TIMS flow
+        # disabled → SILVER palette (tims.md § "disabled = silver, not a dark scrim") — matches the TIMS flow
         btn_t = _TUT_BTN_TUNEABLES if enabled else {**_TUT_BTN_TUNEABLES, **chrome.DISABLED}
         draw_tims_button(self.screen, rect, label, font=font, t=btn_t, state="normal")
 

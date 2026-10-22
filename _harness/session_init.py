@@ -29,7 +29,7 @@ def warn_preloaded_corpus_changed(old_sha, new_sha="HEAD"):
     context stale by construction, and nothing says so. The sync block's own
     changed-file list reads as ordinary pull output and gets skimmed: 2026-07-27 a
     pull brought three commits touching all four rules files and the new
-    `critical_lessons §8` corollary went unread for hours. `/clear` or an explicit
+    `ocr.md §8` corollary went unread for hours. `/clear` or an explicit
     Read are the only refreshes; the mid-session modification notices truncate and
     cannot be relied on. (#113)
 
@@ -275,7 +275,7 @@ def tools():
     expand rather than fork when one falls short. That is unenforceable as a
     recollection — the model has to think of looking — so the inventory is put in
     front of it at the one moment guaranteed to precede the thought
-    (`principles.md` § "Natural adoption gates tool value": a PULL tool loses to
+    (`harness.md` § "Natural adoption gates tool value": a PULL tool loses to
     the reflex; this converts it to a push).
 
     2026-08-26 is the cost of not having this: 32 temp-directory scripts written

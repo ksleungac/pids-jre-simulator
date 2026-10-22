@@ -2,7 +2,7 @@
 """Cross-model Lower LCD manager — slot cycling, transfer force-switch, and
 the through-service frame swap.
 
-Parent half of the parent + per-model-concrete split (see conventions.md
+Parent half of the parent + per-model-concrete split (see display.md
 § "Display module structure"). Everything here is model-agnostic
 *coordination*: which slot is on screen, when it is allowed to change, and
 which through-service frame the window renders. Per-model *rendering* —

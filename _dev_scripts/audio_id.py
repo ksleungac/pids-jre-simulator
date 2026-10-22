@@ -10,7 +10,7 @@ question WRONG, on a corpus that had already passed the ear months earlier.
 These are SOURCE-INVARIANT. "Are these one recording", "where are the silence
 runs", "is there speech" do not vary by line, so they are maintained here.
 Per-source SPLITTERS still stay ad-hoc under `audio_src/` — that is what
-`principles.md § "Per-source ad-hoc scripts"` is about, and it does not reach
+`audio.md § "Per-source ad-hoc scripts"` is about, and it does not reach
 these.
 
 CALIBRATE BEFORE YOU TRUST IT:  uv run _dev_scripts/audio_id.py --selftest

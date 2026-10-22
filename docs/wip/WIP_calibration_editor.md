@@ -14,7 +14,7 @@ v1 shipped 2026-05-13 PM on `feat/calibration-editor`. Upper-LCD framework expan
 
 Phase 2 editor upgrades shipped 2026-05-15: (a) Figma-style drag handles for arc waypoints (filled circles with generous hit radius, sidebar auto-jumps to dragged waypoint's `_x` row); (b) centripetal Catmull-Rom centerline replaces straight-line polyline (passes through every waypoint, C1 continuity at junctions, endpoint phantom-neighbor reflection); (c) `arc_smoothing` tuneable for post-densification 3-tap [1,2,1]/4 averaging passes — relaxes the band away from exact waypoint pull when "nodes too strong" perception kicks in; (d) bumped 4 → 7 waypoints, p0/p6 = band end-caps + p1..p5 = 5 station slots rendered as time-circle proxies (pre-IRL stand-ins for direct station-on-band tuning); (e) `--overlay <path>` CLI flag → semi-transparent IRL reference image blit over lower LCD, Alt+drag pan / Alt+wheel-or-`=`/`-` zoom (aspect kept) / `O` toggle, offset/scale/visibility persisted to gitignored `_overlay_state.json` so re-launches resume alignment.
 
-Graduation gate (b) partially proven by the arc; full sign-off still needs the real time-circle render (arrival-minute number, current-stop pentagon) replacing the proxies — copy the primitive from `e235_1000.lower_lcd` per conventions.md § "Forking a sibling-model renderer".
+Graduation gate (b) partially proven by the arc; full sign-off still needs the real time-circle render (arrival-minute number, current-stop pentagon) replacing the proxies — copy the primitive from `e235_1000.lower_lcd` per display.md § "Forking a sibling-model renderer".
 
 2026-06-15: `five_station` element gains draw-state gating (handles + sidebar rows hidden when the element they tune isn't drawn in the current state), approaching arrow renamed to draggable `a0` handle. Current `_TUNEABLES_FIVE_STATION` key schema: always-shown `m0_x/y`, `m1..m4_x/y/r/ts`, `g0..g4_x/y/b/ns/ni`; stopping-only `v0..v4_x/y` (pentagon vertices), `m0_dr` (dot radius); approaching-only `m0_circle_r`, `m0_circle_inset`, `m0_ts` (digit size), `a0_x/y/angle/scale/halo_w` (arrow).
 
@@ -202,7 +202,7 @@ The 7-waypoint Catmull-Rom approach was Phase 1b/2's attempt to encode the Yaman
 
 Before the calibration editor concept merges to master as the new standard, all 5 must be in place:
 
-1. **Code standard** — `conventions.md § UI code style` extended: every tuneable block in `_TUNEABLES_*` dict at module top, suffix convention followed, hit-test rect declared, draw methods read from dict each frame. This is what makes a display module editor-compatible.
+1. **Code standard** — `display.md § UI code style` extended: every tuneable block in `_TUNEABLES_*` dict at module top, suffix convention followed, hit-test rect declared, draw methods read from dict each frame. This is what makes a display module editor-compatible.
 
 2. **Skill** — `/calibration-editor` (or folded into a broader display-authoring skill): step-by-step for adding a new element (extract `# fmt: off` block → `_TUNEABLES_*` → register → smoke-test in `--edit`), and for wiring a brand-new train model from scratch.
 
@@ -228,7 +228,7 @@ Graduate BOTH (E235-0 + editor), E235-0 first. The git merge was a single clean 
 3. ~~FF-merge `feat/calibration-editor` → master + push~~ — done. E235-0 shipped; editor *code* rode along (its *standard* is not canonical until Phase 2).
 
 **Phase 2 — graduate the editor standard (2026-06-23):**
-4. ~~**P1 code standard**~~ **DONE** → `conventions.md § UI code style` gained the "Editor-compatible tuneables: module-level `_TUNEABLES_*` dict" entry (suffix convention + region-rect + register + draw-reads-dict; the method-local block named as predecessor; convert lazily).
+4. ~~**P1 code standard**~~ **DONE** → `display.md § UI code style` gained the "Editor-compatible tuneables: module-level `_TUNEABLES_*` dict" entry (suffix convention + region-rect + register + draw-reads-dict; the method-local block named as predecessor; convert lazily).
 5. **P5 golden template** — **DONE (2026-08-22).** The route bar landed with the lower-view dispatch it was blocked on: lower `_REGISTRY` entries declare a `view`, hit-testing filters by the active one, `V` cycles it, and `_TUNEABLES_FULL_ROUTE` + `FULL_ROUTE_RECT` are extracted and registered as `full_route`. Because station positions are precomputed at `__init__`, `_resync_tuneables` rebuilds them when the dict changes. Verified 6/6 pixel-identical against HEAD across circular / horseshoe / eight / e235_1000 renders, mutation-proven both ways. `e235_0` is now fully wired — the fork source E233-0 inherits. Historical note follows:
 
    ~~**upper DONE, route bar DEFERRED.**~~ Badge + PA-hint wired (`e235_0/upper_lcd.py` `_TUNEABLES_BADGE_RECT` / `_TUNEABLES_PA_HINT_RECT` + registered + smoke-verified). The **route bar (lower full-route track) is deferred to its own task** — it needs editor lower-view dispatch first (its `_TUNEABLES_FULL_ROUTE` element shares the lower-screen region with `five_station`/`transfer_panel` but lives in the *full-route* view, so the editor must disambiguate elements by active `--lower-view` before the route bar is focusable). Tracked in TODO.md.

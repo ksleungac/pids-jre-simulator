@@ -29,7 +29,7 @@ it passes); the 分 at each row's outer end; the green pentagon at the train,
 which sits between two stations while it is running (§§ 9.3.2, 9.3.6); vertical
 station names above each bar.
 
-Sibling mapping (``conventions.md`` § "Forking a sibling-model renderer"): the
+Sibling mapping (``display.md`` § "Forking a sibling-model renderer"): the
 elements the author named (minute box, passing arrow, position marker,
 continuity arrows) come from E235-1000's linear full-route, not E235-0's
 racetrack, so the structural patterns are copied from there. E235-0 supplied the
@@ -363,7 +363,7 @@ _TUNEABLES_FULL_ROUTE_MARKS = {
     # the shadow's (52,62,59) immediately beyond the body on the base, with no
     # bright pixel between — that is the rim reading through a shadow drawn to
     # meet it at native resolution, not an absent rim. The eye on the artifact
-    # outranks the walk (`critical_lessons.md` § 11).
+    # outranks the walk (`audio.md` § 11).
     "tri_rim":         (255, 255, 255),
     "tri_rim_w":       1.5,
     # WHILE THE TRAIN IS RUNNING THE MARKER SITS BETWEEN STATIONS, not parked on
@@ -2197,7 +2197,7 @@ class JapaneseSixStationDisplay:
         Snapped to a whole pixel because the rect ROUNDS its edge while
         `draw_aapolygon` TRUNCATES the triangle's, and a derived value landing a
         hair under a whole pixel leaves a 1px gap between the two
-        (`conventions.md` § UI code style; WIP § 9.3.4).
+        (`display.md` § UI code style; WIP § 9.3.4).
         """
         t = _TUNEABLES_SIX_STATION
         return float(round(float(t["arrow_apex_x"]) + float(t["arrow_depth"])))
@@ -2547,7 +2547,7 @@ class JapaneseSixStationDisplay:
                 # so the five ASCII-paren names never reach it — and the second,
                 # 京浜東北線（大井町・蒲田方面）, raised the moment Yamanote reached
                 # it at 品川. Enumerating what the
-                # author had seen is `critical_lessons.md` §9: a declaration
+                # author had seen is `gates.md` §9: a declaration
                 # cooked from a hand-typed list cannot report the case it omits.
                 # `cuts` takes both halves at every break position, so it does not
                 # depend on where the rule cuts and cannot go a case short as the
@@ -3260,7 +3260,7 @@ class JapanesePatternsOverviewDisplay:
 
         Negative cache key: same dict, different face role. A side table keyed on
         the font would misattribute after a cache clear, which is why identity
-        travels on the object here (`conventions.md` § "Never key a side table on
+        travels on the object here (`display.md` § "Never key a side table on
         `id(obj)`").
         """
         f = self._name_fonts.get(-size)
@@ -3465,7 +3465,7 @@ class JapanesePatternsOverviewDisplay:
                 col_h = (len(text) - 1) * pitch + font.get_height()
                 # Pre-filled with the INK colour at zero alpha: `smoothscale`
                 # averages RGB and alpha separately, so any other fill would rim
-                # every glyph with it. `conventions.md` § UI code style.
+                # every glyph with it. `display.md` § UI code style.
                 col = pygame.Surface((max(1, col_w), max(1, col_h)), pygame.SRCALPHA, 32)
                 col.fill((*color, 0))
                 draw_1col_text_plain(font, text, 0, 0, color, col, line_gap=gap)

@@ -20,10 +20,10 @@ unbaked, so `fonts/` still ships and this doc stays alive until they follow.
 - **Holds:** the goals in priority order, the design, the numbers the design rests on, the rejected
   alternatives, and the gates. Transitional notes while in flight.
 - **Does NOT hold:** anything already true of shipped code — that belongs in
-  `conventions.md § Tooling` (font rules) and `/build`. Measurements that stop being
+  `display.md § Tooling` (font rules) and `/build`. Measurements that stop being
   decision-relevant get cut, not archived.
 - **Graduation trigger:** when the atlas is the shipped path and the proprietary faces are out of
-  the tracked tree, dissolve into `conventions.md § Tooling` + `/build` and delete this doc.
+  the tracked tree, dissolve into `display.md § Tooling` + `/build` and delete this doc.
 
 ---
 
@@ -141,7 +141,7 @@ binary so its test is binary. Grouped by what they can and cannot see:
    manifest just written. **The only gate whose oracle is not the sweep**: the domain comes from
    `resolve()`, the witness from the written manifest. It reads the manifest rather than
    `cook_from_data`'s own record on purpose — checking a generator against its own log is
-   `critical_lessons § 9` one level down, and the packing/write path sits between the two.
+   `gates.md § 9` one level down, and the packing/write path sits between the two.
 3. **Undeclared-site ratchet** — an `lcd_font` call with no `draws=` fails the bake. The migration
    reached zero; an undeclared site silently reverts that combo to coverage-by-reachability, which
    is the dependency the declarations exist to remove. This is the gate a NEW TRAIN MODEL meets:
@@ -198,8 +198,8 @@ outside the dev tree**. It did not work there. Two bugs, stacked, both invisible
 
 **The lesson is not either bug.** It is that adding a sixth gate in the same frame would have found
 neither. A suite that shares one environment verifies that environment, never deployment — the same
-shape as `critical_lessons § 9` (a check consuming the generator's own enumeration verifies
-fidelity, never coverage) one level up. → `critical_lessons.md § 10`.
+shape as `gates.md § 9` (a check consuming the generator's own enumeration verifies
+fidelity, never coverage) one level up. → `gates.md § 10`.
 
 **Fixes, at the root rather than patched:**
 
@@ -533,7 +533,7 @@ decided; this is the agenda.
 **1. ~~The sweep's axis list is hand-declared~~ — RESOLVED 2026-07-30.** Every axis now reads from
 production (`TRAIN_MODELS`, `_SLOT_BEATS`, `_frame_count`, `DisplayMode`), and more importantly the
 sweep stopped being the coverage mechanism at all, so an axis it misses can no longer cost coverage —
-only pixel-verification breadth. Codified as `critical_lessons.md § 9`.
+only pixel-verification breadth. Codified as `gates.md § 9`.
 
 **2. What an enumerable state space costs the LCD design.** A stored-output atlas needs the set of
 `(text, colour, width, collapse, script)` tuples to be finite and reachable. Two future designs

@@ -50,7 +50,7 @@ Then validate all shipped data (the full-scan is the shipped-data gate; skips `a
 uv run validate_data.py
 ```
 
-If non-zero, stop and surface the violations. See `conventions.md § Tooling` ("Data-field additions").
+If non-zero, stop and surface the violations. See `data.md § Tooling` ("Data-field additions").
 
 Then bake the font atlas and run its gates. **Always re-bake — never reuse an existing
 `font_atlas/`.** The atlas keys on `(face, size, bold, italic)`, so a font-size nudge during visual
@@ -76,7 +76,7 @@ on any frame that differs between the live fonts and the atlas (goal 1 is a bina
 The declared-coverage check is the only one that does not consume the state sweep: it takes its
 domain from `resolve()` over the `draws=` declarations and its witness from the manifest just
 written. The two `--verify` passes re-drive the sweep, so a text no state reaches is missing from
-those checks for the same reason it is missing from the bake — see `critical_lessons.md § 9`.
+those checks for the same reason it is missing from the bake — see `gates.md § 9`.
 
 **`--verify-shipped` is the only one that leaves the dev frame**, and it is not optional. The other
 gates all run where every font exists and `displays/` sits beside the code; the staged folder has

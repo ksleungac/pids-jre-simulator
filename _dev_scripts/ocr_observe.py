@@ -34,7 +34,7 @@ Re-reads every dumped HUD under `_experiments/live_captures/` and diffs against 
 `reads.jsonl` written beside it. No game and no dxcam: thousands of REAL frames across four
 resolutions, each carrying production's own read of it, which is the honest oracle the 23
 committed fixtures cannot be (six of those are byte-identical to the anchors they match,
-`critical_lessons.md` §10). It is a REGRESSION baseline, not a correctness one — a change
+`gates.md` §10). It is a REGRESSION baseline, not a correctness one — a change
 that fixes a misread also shows up as a difference, so read the per-field breakdown and open
 the frames. `--every N` subsamples, and note that anything above 1 invalidates the DISTANCE
 column: that guard is cross-sample, so a sparse subsequence exercises a pipeline production
@@ -119,7 +119,7 @@ def replay(root: Path, every: int) -> int:
 
     The corpus is the honest non-degradation gate this project otherwise lacks. The committed
     fixtures are 23 cells, six of them byte-identical to the anchors they match
-    (`critical_lessons.md` §10); this is thousands of REAL frames across four resolutions,
+    (`gates.md` §10); this is thousands of REAL frames across four resolutions,
     each carrying production's own read of it in `reads.jsonl`.
 
     What it is: a REGRESSION baseline. `reads.jsonl` records what the code did that day, not
@@ -231,11 +231,11 @@ def main() -> int:
     if args.replay:
         return replay(args.replay, max(1, args.every))
     # Production's adapter/output walk, not a bare dxcam.create() — on a hybrid-GPU laptop
-    # index 0 raises DXGI_ERROR_UNSUPPORTED (`critical_lessons.md` §8), so the bare call fails
+    # index 0 raises DXGI_ERROR_UNSUPPORTED (`ocr.md` §8), so the bare call fails
     # on exactly the machines whose OCR reports most need collecting.
     camera = _open_capture_camera("BGRA")
     if camera is None:
-        sys.exit("no DXGI capture combo succeeded — see the traceback above (critical_lessons §8).")
+        sys.exit("no DXGI capture combo succeeded — see the traceback above (ocr.md §8).")
     profile = resolve_profile(camera, args.res)
 
     # `profile` is what to CAPTURE; DOWNSCALE_PROFILE is what READS it — production

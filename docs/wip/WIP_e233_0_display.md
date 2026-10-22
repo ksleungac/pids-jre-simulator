@@ -254,7 +254,7 @@ first committed, which is the point the classification starts mattering.
 **Canonical home: [`docs/DISPLAY.md` § "Specifying a new display"](../DISPLAY.md).** The
 workflow was established on this model and generalised out of it in the same session, so it
 is written once, there, and not restated here — it is cross-model process, and it must
-outlive this doc's dissolution. `conventions.md` § "Display module structure" carries the
+outlive this doc's dissolution. `display.md` § "Display module structure" carries the
 pointer that makes it fire before any renderer file exists.
 
 This model's progress against it:
@@ -741,7 +741,7 @@ interior samples 252–254 against a 254 plate — the same white, no square. Fi
 helper an `interior_color` (default unchanged, so E235 is byte-identical — verified: 0 differing
 pixels in its badge region across the change), which E233-0 passes `PLATE_WHITE`. The RMS fit
 that settled the badge varied only geometry, so a 24-level fill error sat inside its residual —
-`principles.md` § "A parameter the score cannot see is not being fit".
+`display.md` § "A parameter the score cannot see is not being fit".
 
 - OPEN — the 3-letter band's own geometry on this model. Inherited, not measured.
 
@@ -1005,7 +1005,7 @@ Three findings, in the order they were made, each one a correction of the last:
 measure of halo evenness returned a p10 of 0.00px on the reference, meaning it
 was measuring "is there any halo here" rather than how even it is. Finding 2 came
 from reading the construction, not from that measurement. Recorded so it is not
-rebuilt (`critical_lessons.md` §11).
+rebuilt (`audio.md` §11).
 
 ### 8.10 Weight — SETTLED
 
@@ -1156,7 +1156,7 @@ probe it"*).
 walking outward from the green shows the shadow's `(52,62,59)` immediately past the base
 with no bright pixel between, which reads as "no rim there" and is not: the rim is under
 the shadow. The author's eye on the artifact settled it against the walk
-(`critical_lessons.md` § 11).
+(`audio.md` § 11).
 
 Three construction facts, each of which was silently wrong first:
 
@@ -1720,7 +1720,7 @@ So the earlier reading of the first two frames as a passing-station rule was wro
 disagreed. The difference bites only on a diagram that runs through a JC-numbered station, which is
 中央特快, where gating on `pa` would blank a code the reference plainly shows.
 - The face is the JR signage one — a station code is the same artefact boxed or not, so it is not
-  a per-view typeface choice (`conventions.md` § "Station-code badge typeface is fixed").
+  a per-view typeface choice (`display.md` § "Station-code badge typeface is fixed").
 - OPEN — sized to the reference's cap height of 13.0, the run comes out **~14% wider** than the
   reference's. That is a FACE difference rather than a size one, and only the **Bold** cut of the
   signage face ships. Left as it stands rather than swapped for a Latin face that would fit the
@@ -1895,7 +1895,7 @@ authored data either way, which is the author's call.
 of line 1 and the cut position is a width TUNEABLE, not authored data, which is what pins the IRL
 cut 東北･山形･秋田 ｜ 北海道･上越･北陸新幹線. The ochanomizu capture breaks in exactly that place.
 It lives on E235-0's class today and wants lifting to a shared primitive rather than copying
-(`conventions.md` § "Display module structure").
+(`display.md` § "Display module structure").
 
 ---
 
@@ -1943,7 +1943,7 @@ drawings using a color filter"*, done as `_e233_lower_geometry.py --trace`:
   way. Keyed on the sign of the figure's LARGEST loop rather than on the algorithm's convention:
   screen-space y flips it, and assuming it rendered every body white and every hole blue.
 
-Same call as this model's current-stop marker (`conventions.md` § "Display module structure"): a
+Same call as this model's current-stop marker (`display.md` § "Display module structure"): a
 fixed-orientation mark is a free vertex list, and the vertices ARE the shape.
 
 ---
@@ -2226,7 +2226,7 @@ rather than JC.
 
 **It is `1654T`'s `stops`, reversed** `[measured]`. Read 東京-first that list is the overview axis
 exactly: 32 stations, same order, split 15 | 17 at 高円寺 | 阿佐ヶ谷. So the axis is COPIED rather
-than retyped, which also joins cleanly on the small-ヶ forms that `conventions.md` § "Data layout"
+than retyped, which also joins cleanly on the small-ヶ forms that `data.md` § "Data layout"
 warns about. NOT `pre_stops + stops`: that diagram's 8 `pre_stops` (大月 … 相模湖) are off this
 sheet and including them yields 40. This paragraph is the recipe a later session would re-run to
 extend the join, so the two were checked mechanically rather than read.
@@ -2259,7 +2259,7 @@ out-of-spec works only when it has data.**
   higher-level than a run: it describes the network rather than a journey. Deriving it from the
   shipped diagrams was considered and rejected. The corpus covers services by which audio was
   recorded, and the missing 各駅停車 is the one contributing the extra stations, so the axis would
-  come out short with nothing reporting it — `critical_lessons.md` § 9 exactly. Comparing a shipped
+  come out short with nothing reporting it — `gates.md` § 9 exactly. Comparing a shipped
   diagram's stop list against its service entry survives as a validator cross-check between two
   independent statements, not as a source.
 - **Nothing Chūō-shaped lives in `e233_0`** (author). That reaches past the data file. A number
