@@ -16,6 +16,8 @@ what is on screen and when does it change:
   5. e233_0 PATTERNS-OVERVIEW CONTENT — which axis stations grey, where a slot
      sits on each row, and which slice of the axis a service spans
   6. e233_0 PATTERNS-OVERVIEW ROTATION — which laps the slot joins
+  7. e233_0 運行情報 LAYOUT — which characters land on which row of the page
+  8. e233_0 運行情報 IN THE RARE TURN — when the page shows, and which message
 
 Every method here reads only `self.*` fields plus class constants, so they are
 called UNBOUND against a `SimpleNamespace` stub — no pygame, no fonts, no display,
@@ -584,11 +586,11 @@ def check_overview_content() -> None:
 
 # ── 6. e233_0: which slots the patterns overview joins ────────────────────────
 #
-# `LowerDisplay._available_slots` admits OVERVIEW on two conditions — the route
-# carries a sheet, and the eight-lock has not dropped FULL. Both are cheap to get
-# wrong in a way nothing else reports: a missing sheet gives the rotation a blank
-# page for 12s, and admitting it under the lock changes a terminus behaviour the
-# author signed off.
+# `LowerDisplay._available_slots` admits OVERVIEW on one condition, that the
+# route carries a sheet, and gives it no terminus treatment. Both are cheap to
+# get wrong in a way nothing else reports: a missing sheet gives the rotation a
+# blank page for 12s, and an eight-lock condition did ship on 2026-09-12 as an
+# inference the author never made.
 #
 # Unlike the sections above this one needs a real INSTANCE, not a
 # `SimpleNamespace`: the method calls zero-arg `super()`, which checks the first
@@ -597,16 +599,91 @@ def check_overview_content() -> None:
 # and that list is itself the point, since a new read would raise here.
 
 
-def _e233_rotation(*, has_sheet, n_stops, cursor, curr, at_station, transfers, lap=0):
+def _e233_rotation(*, has_sheet, n_stops, cursor, curr, at_station, transfers, lap=0, rare=None, messages=("m",)):
     d = object.__new__(E233LowerDisplay)
     # `pa` non-empty so `_in_transfer_window` can qualify; the at-station half is
     # driven separately, so the two are not collapsed onto one flag.
     d.stops = [{"name": f"S{i}", "pa": ["0"]} for i in range(n_stops)]
     d.overview_display = SimpleNamespace(has_sheet=has_sheet)
     d.transfer_display = SimpleNamespace(_resolve_transfers=lambda name: ["JB"] if transfers else [])
+    d.train_info_display = SimpleNamespace(messages=lambda: list(messages))
     d._lap = lap
+    d._rare_slot = E233LowerDisplay._NOTICES[0] if rare is None else rare
     state = SimpleNamespace(cursor_pos=cursor, curr_stop=curr, at_station=at_station, cnt_pa=0)
     return E233LowerDisplay._available_slots(d, state)
+
+
+# ── 8. e233_0 運行情報 IN THE RARE TURN ──────────────────────────────────────────
+# The page shares the notices' rare turn (WIP § 15.3): while there is anything to
+# say it wins a rare lap's draw `_TRAIN_INFO_SHARE` of the time, the notices keep
+# alternating in the turns left to them, nothing to say means no page, and each
+# appearance shows the next message. The draw is made by a stubbed rng, so every
+# branch is forced rather than sampled.
+
+
+class _Rng:
+    def __init__(self, *values):
+        self.values = list(values)
+
+    def random(self):
+        return self.values.pop(0)
+
+
+def _e233_rare_stub(messages, *draws):
+    d = object.__new__(E233LowerDisplay)
+    shown = []
+    d.train_info_display = SimpleNamespace(messages=lambda: list(messages), set_message=shown.append)
+    d._rng = _Rng(*draws)
+    d._notice_turn = d._info_turn = d._lap = 0
+    d._rare_showing = False
+    d._current_slot = E233LowerDisplay._SLOT_FULL
+    d._state = None
+    return d, shown
+
+
+def check_train_info_rotation() -> None:
+    TI, P, M = E233LowerDisplay._SLOT_TRAIN_INFO, E233LowerDisplay._SLOT_PRIORITY, E233LowerDisplay._SLOT_MANNER
+    share = E233LowerDisplay._TRAIN_INFO_SHARE
+    win, lose = share * 0.5, share + (1 - share) * 0.5
+
+    # The draw, and the notices' alternation surviving 運行情報's turns.
+    d, _ = _e233_rare_stub(["a", "b"], win, lose, win, lose, lose)
+    got = [E233LowerDisplay._pick_rare_page(d) for _ in range(5)]
+    check(got == [TI, P, TI, M, P], f"train info: rare turns must be TI, P, TI, M, P — got {got}")
+
+    # Nothing to say, no page, however the draw falls.
+    d, _ = _e233_rare_stub([], win, win)
+    got = [E233LowerDisplay._pick_rare_page(d) for _ in range(2)]
+    check(got == [P, M], f"train info: with no messages the rare turn goes to the notices — got {got}")
+
+    # The rare page is the LAST of its lap, and 運行情報 drops out if its messages
+    # empty mid-lap rather than drawing a pill with nothing under it.
+    lap0 = dict(has_sheet=True, n_stops=40, cursor=0, curr=0, at_station=False, transfers=False, lap=0, rare=TI)
+    got = _e233_rotation(**lap0)
+    check(got[-1] == TI, f"train info: a rare lap ends on the drawn page — got {got}")
+    got = _e233_rotation(**lap0, messages=())
+    check(TI not in got and got[-1] not in E233LowerDisplay._NOTICES, f"train info: emptied mid-lap, the page leaves — got {got}")
+    check(TI in E233LowerDisplay._SLOT_BEATS, "train info: the slot rotates but has no _SLOT_BEATS entry")
+
+    # Each appearance shows the next message, looping; leaving it closes the lap.
+    d, shown = _e233_rare_stub(["a", "b", "c"], lose)  # lap 3 opens a rare lap: one draw
+    for _ in range(4):
+        E233LowerDisplay.apply_slot(d, TI, 0.0)
+        E233LowerDisplay.apply_slot(d, E233LowerDisplay._SLOT_FULL, 0.0)
+    check(shown == ["a", "b", "c", "a"], f"train info: appearances must loop the messages — got {shown}")
+    check(d._lap == 4, f"train info: leaving the page must close its lap — lap {d._lap} after 4 appearances")
+
+    # Under the eight-lock FULL is gone, so a lap starts on EIGHT. Counting on
+    # FULL alone froze the lap there and the rare turn never came back.
+    E, OV = E233LowerDisplay._SLOT_EIGHT, E233LowerDisplay._SLOT_OVERVIEW
+    d, _ = _e233_rare_stub(["a"])
+    d.stops = [{} for _ in range(40)]
+    d._state = SimpleNamespace(cursor_pos=40 - E233LowerDisplay.LOCK_THRESHOLD)
+    d._current_slot = OV
+    for _ in range(2):
+        E233LowerDisplay.apply_slot(d, E, 0.0)
+        E233LowerDisplay.apply_slot(d, OV, 0.0)
+    check(d._lap == 2, f"train info: under the eight-lock each EIGHT must open a lap — lap {d._lap} after 2 laps")
 
 
 def check_overview_rotation() -> None:
@@ -628,13 +705,14 @@ def check_overview_rotation() -> None:
         "overview: a line with no system.json must not give the slot a turn — it would draw a blank page",
     )
 
-    # The eight-lock drops FULL, and it must take OVERVIEW with it: the tail keeps
-    # its single-slot cycle. cursor sits INSIDE the threshold; curr_stop is left
-    # behind it so the lock is proven to read cursor_pos rather than either.
+    # The eight-lock drops FULL and leaves OVERVIEW where it is: the overview has
+    # no terminus treatment (author, 2026-11-12: "there's no special
+    # treatment"). cursor sits INSIDE the threshold; curr_stop is left behind it
+    # so the lock is proven to read cursor_pos rather than either.
     tail = dict(n_stops=40, cursor=40 - LOCK, curr=30, at_station=False, transfers=False, lap=1)
     check(
-        _e233_rotation(has_sheet=True, **tail) == [E],
-        f"overview: the eight-lock must drop OVERVIEW with FULL — got {_e233_rotation(has_sheet=True, **tail)}",
+        _e233_rotation(has_sheet=True, **tail) == [E, OV],
+        f"overview: under the eight-lock the lap must be EIGHT, OVERVIEW — got {_e233_rotation(has_sheet=True, **tail)}",
     )
 
     # In the transfer window, TRANSFER stays LAST of the base three, so the
@@ -656,6 +734,88 @@ def check_overview_rotation() -> None:
         check(s in E233LowerDisplay._SLOT_BEATS, f"overview: slot {s} rotates but has no _SLOT_BEATS entry")
 
 
+# ── 7. e233_0 運行情報 LAYOUT ───────────────────────────────────────────────────
+# Which characters land on which row of the train-information page. The oracle
+# is SAMPLED, not authored: the author's photo of a real E233-0 and the reference
+# capture, row for row. A wrap that held punctuation off a row start would move
+# the photo's two 。 back onto rows 2 and 3 and fail here.
+#
+# The overflow rule has no capture, so its cases lock the author-approved rule
+# (WIP § 15.3: keep whole sentences, cut only a first sentence that alone
+# overflows) on a small grid where every branch is forced.
+
+
+def check_train_info_layout() -> None:
+    from displays.train_models.e233_0.train_info import layout
+
+    head, body = layout(
+        "相鉄線直通列車",
+        "運転見合わせ",
+        "相鉄線直通列車は、渋谷駅ホーム並列化工事のため、終日、新宿～大崎駅間で運転を見合わせます。大崎駅で相鉄線方面に折返し運転を実施します。",
+        22,
+        7,
+    )
+    check(head == ["【相鉄線直通列車　運転見合わせ】"], f"train info: photo headline {head}")
+    check(
+        body
+        == [
+            "相鉄線直通列車は、渋谷駅ホーム並列化工事のた",
+            "め、終日、新宿～大崎駅間で運転を見合わせます",
+            "。大崎駅で相鉄線方面に折返し運転を実施します",
+            "。",
+        ],
+        f"train info: photo body rows {body}",
+    )
+    _, body = layout("中央本線", "遅延", "中央本線は、架線凍結の影響で、塩尻～甲府駅間の上り線で一部列車が運休となっています　。", 22, 7)
+    check(
+        body == ["中央本線は、架線凍結の影響で、塩尻～甲府駅間", "の上り線で一部列車が運休となっています　。"],
+        f"train info: capture body rows {body}",
+    )
+
+    # Overflow, on a 5-column grid with a 2-row budget. Five columns hold the
+    # headline 【A　B】 on one row, so the whole budget goes to the body. The
+    # sentences STRADDLE row breaks: where they end on a break, keeping whole
+    # sentences and cutting at the panel give the same rows, and the case
+    # cannot tell the rule from a plain cut.
+    straddle = "あいう。えおかき。くけこさしすせ"
+    _, body = layout("A", "B", straddle, 5, 2)
+    check(body == ["あいう。え", "おかき。"], f"train info: overflow keeps whole sentences {body}")
+    _, body = layout("A", "B", "あいうえおかきくけこさ。す", 5, 2)
+    check(body == ["あいうえお", "かきくけこ"], f"train info: an overflowing first sentence is cut at the panel {body}")
+    head, body = layout("ABCDEF", "G", straddle, 5, 2)
+    check(len(head) == 2 and body == ["あいう。"], f"train info: each extra headline row costs a body row {head} {body}")
+
+    # Scraped text: a newline, a tab or a zero-width space has no glyph, so it
+    # must not take a cell (or reach a shipped atlas that never baked it).
+    head, body = layout("八高\n線", "遅延", "あいう\r\nえお\t​か。", 5, 3)
+    check(head == ["【八高線　", "遅延】"] and body == ["あいうえお", "か。"], f"train info: control characters dropped {head} {body}")
+
+
+def check_train_info_pool_loader() -> None:
+    """A malformed pool entry raises at LOAD, naming the entry — never at the
+    first draw mid-drive."""
+    import json
+    import tempfile
+
+    from displays.train_models.e233_0 import train_info
+
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "data").mkdir()
+        (Path(tmp) / "data" / "train_info_pool.json").write_text(
+            json.dumps({"messages": [{"line": "八高線", "status": "遅延", "body": "あ。"}, {"line": "川越線", "body": "い。"}]}),
+            encoding="utf-8",
+        )
+        real = train_info.project_root
+        train_info.project_root = lambda: Path(tmp)
+        try:
+            train_info.load_pool()
+            check(False, "train info: a pool entry without a status loaded")
+        except ValueError as e:
+            check("messages[1]" in str(e), f"train info: the load error names the entry: {e}")
+        finally:
+            train_info.project_root = real
+
+
 def main():
     check_eight_window()
     check_five_station_content()
@@ -663,6 +823,9 @@ def main():
     check_e233_marker_column()
     check_overview_content()
     check_overview_rotation()
+    check_train_info_layout()
+    check_train_info_pool_loader()
+    check_train_info_rotation()
 
     if FAILURES:
         print("FAIL: lower LCD")
@@ -674,7 +837,10 @@ def main():
         "e233_0 marker clears the approached box at every running cell, row-first included; "
         "overview greys passed / run-through / off-route and keeps the origin and an at-station-only stop black, "
         "spans index the flattened axis, rows keep separate anchors and pitches; "
-        "overview joins the lap after EIGHT, only with a sheet, and leaves with FULL under the eight-lock)"
+        "overview joins the lap after EIGHT, only with a sheet, and stays under the eight-lock; "
+        "運行情報 rows match the photo and the capture, 。 may open a row, overflow keeps whole sentences, "
+        "control characters take no cell, a malformed pool entry fails at load; "
+        "運行情報 shares the rare turn, notices keep alternating, no messages no page, appearances loop the messages)"
     )
 
 

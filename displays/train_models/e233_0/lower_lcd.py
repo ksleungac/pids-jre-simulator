@@ -40,6 +40,7 @@ uncompressed vertical name stack.
 import colorsys
 import json
 import math
+import random
 from typing import Dict, List, Optional, Tuple
 
 import pygame
@@ -53,6 +54,7 @@ from displays.train_models.e233_0.upper_lcd import _TYPE_SUPERSAMPLE, _build_sof
 from displays.train_models.e233_0.transfer_info import TransferInfoDisplay
 from displays.train_models.e233_0.priority_seat import PrioritySeatDisplay
 from displays.train_models.e233_0.manner_mode import MannerModeDisplay
+from displays.train_models.e233_0.train_info import TrainInfoDisplay
 from font_atlas import STATION_NAMES, at, lcd_font, lit
 
 from displays.train_models.e233_0 import (
@@ -3786,7 +3788,8 @@ class LowerDisplay(LowerDisplayBase):
     most one at a time and only every third lap, so a page turns up about every
     144s in the transfer window and 120s outside it — see `_available_slots`.
     (It was 108s before the overview joined; the figure is three laps plus the
-    notice, so adding a 3-beat slot moves it.)
+    notice, so adding a 3-beat slot moves it.) A seventh slot, the 運行情報 page
+    (§ 15), shares that rare turn with the two notices — see `_pick_rare_page`.
     """
 
     # Stations-from-terminus below which the view locks to the zoomed slot.
@@ -3815,8 +3818,13 @@ class LowerDisplay(LowerDisplayBase):
         self.priority_seat_display = PrioritySeatDisplay(screen, route_data, stops)
         self.manner_mode_display = MannerModeDisplay(screen, route_data, stops)
         self.overview_display = JapanesePatternsOverviewDisplay(screen, route_data, stops)
+        self.train_info_display = TrainInfoDisplay(screen, route_data, stops)
         self._lap = 0
-        self._notice_showing = False
+        self._rare_showing = False
+        self._rng = random.Random()
+        self._notice_turn = 0  # which notice the next notice turn shows
+        self._info_turn = 0  # which message the next 運行情報 turn shows
+        self._rare_slot = self._pick_rare_page()  # lap 0 is a rare lap
 
     def set_state(self, state) -> None:
         super().set_state(state)
@@ -3825,6 +3833,7 @@ class LowerDisplay(LowerDisplayBase):
         self.priority_seat_display.set_state(state)
         self.manner_mode_display.set_state(state)
         self.overview_display.set_state(state)
+        self.train_info_display.set_state(state)
         # `transfer_display` is bound by the base — not repeated here.
 
     # -- the two standing notices -----------------------------------------
@@ -3843,44 +3852,76 @@ class LowerDisplay(LowerDisplayBase):
     _SLOT_MANNER = 4
     # WIP § 14. A PEER of FULL and EIGHT (author, 2026-09-12), on their 3-beat
     # dwell, not a rare page like the two notices above — it rides the ordinary
-    # lap. § 14.4 carried its place in the rotation as an OPEN and this settles
-    # it. Two conditions gate membership, both in `_available_slots`: the route
-    # must carry a sheet, and the eight-lock must not have dropped FULL.
+    # lap. One condition gates membership, in `_available_slots`: the route must
+    # carry a sheet. It has NO terminus treatment (author, 2026-11-12: *"there's
+    # no special treatment"*); an eight-lock condition added with it on
+    # 2026-09-12 was an inference, not the author's, and is gone.
     _SLOT_OVERVIEW = 5
-    _NOTICE_EVERY = 3  # laps between notices — one notice per three rotations
+    # WIP § 15, the 運行情報 page. It SHARES the notices' rare turn rather than
+    # adding one (author, 2026-11-09: *"rare, like the notices"*): while any line
+    # is disrupted, a rare lap gives it the page `_TRAIN_INFO_SHARE` of the time,
+    # and the notices keep their alternation in the turns left to them — the
+    # share was delegated (*"let the information flow and maybe some
+    # randomness"*). Same 3-beat dwell as the notices.
+    _SLOT_TRAIN_INFO = 6
+    _TRAIN_INFO_SHARE = 2.0 / 3.0
+    _NOTICE_EVERY = 3  # laps between rare pages — one per three rotations
     _SLOT_BEATS = {
         **LowerDisplayBase._SLOT_BEATS,
         _SLOT_PRIORITY: 3,
         _SLOT_MANNER: 3,
         _SLOT_OVERVIEW: 3,
+        _SLOT_TRAIN_INFO: 3,
     }
     _NOTICES = (_SLOT_PRIORITY, _SLOT_MANNER)
+    _RARE_PAGES = (_SLOT_PRIORITY, _SLOT_MANNER, _SLOT_TRAIN_INFO)
+
+    def _pick_rare_page(self) -> int:
+        """The page a rare lap appends, decided ONCE, when the lap opens.
+
+        `_available_slots` runs every frame and must answer the same all lap, so
+        the draw cannot happen there. 運行情報 needs something to say — no
+        disruption, no page (§ 15.3) — and otherwise wins the draw
+        `_TRAIN_INFO_SHARE` of the time. A notice turn takes the next notice, so
+        優先席 and マナーモード still alternate between themselves however many
+        turns 運行情報 takes.
+        """
+        if self.train_info_display.messages() and self._rng.random() < self._TRAIN_INFO_SHARE:
+            return self._SLOT_TRAIN_INFO
+        page = self._NOTICES[self._notice_turn % len(self._NOTICES)]
+        self._notice_turn += 1
+        return page
+
+    def _advance_lap(self) -> None:
+        self._lap += 1
+        if self._lap % self._NOTICE_EVERY == 0:
+            self._rare_slot = self._pick_rare_page()
 
     def _available_slots(self, state) -> list:
-        """The base rotation, plus the overview, plus at most ONE notice page.
+        """The base rotation, plus the overview, plus at most ONE rare page.
 
         Keyed on a lap counter rather than on wall-clock, so the answer is
         stable for the whole of a rotation — this is called every frame, and a
         list that changed mid-lap would make the cadence jump slots.
 
-        OVERVIEW sits straight after EIGHT and is admitted on exactly the terms
-        FULL is: the same 3-beat dwell, and gone the moment the eight-lock drops
-        FULL. Both views answer "where does this line go", so the lock that says
-        a whole-line picture has stopped earning its turn near the terminus says
-        it about this one too, and the tail keeps the single-slot cycle the
-        author signed off. The sheet test is the other half — a line with no
+        OVERVIEW sits straight after EIGHT on the same 3-beat dwell, wherever
+        the line has a sheet — near the terminus too, where the eight-lock has
+        dropped FULL (author: no special treatment). A line with no
         `system.json` draws a blank page, so it never joins.
 
-        The notice is appended at the END so it never displaces the view a stop's
-        arrival wants: the `at_station` force-switch still lands on TRANSFER,
-        and the notice is simply the last page before the lap restarts.
+        The rare page (a notice, or 運行情報 — see `_pick_rare_page`) is appended
+        at the END so it never displaces the view a stop's arrival wants: the
+        `at_station` force-switch still lands on TRANSFER, and the rare page is
+        simply the last page before the lap restarts. 運行情報 drops out if its
+        messages empty mid-lap, rather than showing a pill with nothing under it.
         """
         slots = super()._available_slots(state)
-        if self._SLOT_FULL in slots and self.overview_display.has_sheet:
+        if self.overview_display.has_sheet and self._SLOT_EIGHT in slots:
             slots = list(slots)
             slots.insert(slots.index(self._SLOT_EIGHT) + 1, self._SLOT_OVERVIEW)
         if len(slots) > 1 and self._lap % self._NOTICE_EVERY == 0:
-            slots = slots + [self._NOTICES[(self._lap // self._NOTICE_EVERY) % len(self._NOTICES)]]
+            if self._rare_slot != self._SLOT_TRAIN_INFO or self.train_info_display.messages():
+                slots = slots + [self._rare_slot]
         return slots
 
     def apply_slot(self, slot: int, now: float) -> None:
@@ -3892,17 +3933,37 @@ class LowerDisplay(LowerDisplayBase):
         """
         prev = self._current_slot
         super().apply_slot(slot, now)
-        if slot != prev and slot in self._NOTICES:
-            # A notice is the LAST page of its lap, so the lap closes when the
-            # notice is left, not when it is entered. Advancing on ENTER would
-            # rebuild `_available_slots` without it while it is still on screen,
-            # and the base would reconcile it away as layout-invalid.
-            self._notice_showing = True
-        elif slot != prev and self._notice_showing:
-            self._notice_showing = False
-            self._lap += 1
-        elif slot != prev and slot == self._SLOT_FULL:
-            self._lap += 1
+        if slot != prev and slot in self._RARE_PAGES:
+            # A rare page is the LAST page of its lap, so the lap closes when it
+            # is left, not when it is entered. Advancing on ENTER would rebuild
+            # `_available_slots` without it while it is still on screen, and the
+            # base would reconcile it away as layout-invalid.
+            self._rare_showing = True
+            if slot == self._SLOT_TRAIN_INFO:
+                # Each appearance shows the next line, looping (author,
+                # 2026-11-09), and the text is fixed for the appearance: a
+                # refresh landing mid-page changes the NEXT one (§ 15.3).
+                messages = self.train_info_display.messages()
+                if messages:
+                    self.train_info_display.set_message(messages[self._info_turn % len(messages)])
+                    self._info_turn += 1
+        elif slot != prev and self._rare_showing:
+            self._rare_showing = False
+            self._advance_lap()
+        elif slot != prev and slot == self._first_slot():
+            self._advance_lap()
+
+    def _first_slot(self) -> int:
+        """Where a lap starts: FULL, or EIGHT once the eight-lock has dropped FULL.
+
+        Counting laps on FULL alone stopped the count near the terminus, so after
+        one rare page the notices and 運行情報 never came back (found 2026-11-12
+        on a real-scheduler run at 御茶ノ水, once the overview stayed in the
+        locked loop).
+        """
+        if self._state is not None and self._should_lock_to_eight(self._state.cursor_pos):
+            return self._SLOT_EIGHT
+        return self._SLOT_FULL
 
     def _pick_renderer(self, mode):
         """Slot decides the view; mode does not, while v1 is kanji-only (WIP § 4).
@@ -3914,6 +3975,8 @@ class LowerDisplay(LowerDisplayBase):
         """
         if self._current_slot == self._SLOT_OVERVIEW:
             return self.overview_display
+        if self._current_slot == self._SLOT_TRAIN_INFO:
+            return self.train_info_display
         if self._current_slot == self._SLOT_PRIORITY:
             return self.priority_seat_display
         if self._current_slot == self._SLOT_MANNER:

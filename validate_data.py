@@ -103,6 +103,30 @@ def check_lines_json(lines_data: dict, issues: list) -> None:
             _check_badge_icons(slug, vdata.get("badges", []), f".{vname}", issues)
 
 
+def check_train_info_pool(issues: list) -> None:
+    """data/train_info_pool.json: the page's own loader accepts it, and every
+    body is shown WHOLE.
+
+    Both halves ask production — `load_pool` for the shape, `layout` for what
+    fits — so the validator and the page cannot disagree. A pool body the page
+    would cut is real text no one ever sees, which no render complains about."""
+    from displays.train_models.e233_0.train_info import _TUNEABLES_TRAIN_INFO, layout, load_pool
+
+    src = "data/train_info_pool.json"
+    try:
+        pool = load_pool()
+    except ValueError as e:
+        issues.append((src, str(e)))
+        return
+    if not pool:
+        issues.append((src, "no messages — the page has nothing to show offline"))
+    cols, max_lines = int(_TUNEABLES_TRAIN_INFO["cols"]), int(_TUNEABLES_TRAIN_INFO["max_body_lines"])
+    for i, m in enumerate(pool):
+        _head, body = layout(m["line"], m["status"], m["body"], cols, max_lines)
+        if "".join(body) != m["body"]:
+            issues.append((src, f"messages[{i}] ({m['line']}): body runs past {max_lines} lines, so the page drops its tail"))
+
+
 def _resolve_slug_ref(ref: str, lines_data: dict) -> tuple[bool, str]:
     """Resolve a slug reference via production's parser
     (``displays.transfer_info.resolve_entry``). Returns (ok, error_msg).
@@ -1197,6 +1221,7 @@ def main():
         check_transfers_by_view(stations, lines, issues)
         check_app_translations(issues)
         check_station_translations(translations, issues)
+        check_train_info_pool(issues)
         route_paths = sorted(AUDIO_ROOT.rglob("route.json"))
     else:
         route_paths = [route_arg]

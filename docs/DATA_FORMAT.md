@@ -33,7 +33,8 @@ data/
 ├── train_types.json         # Train type English translations (with optional english_short)
 ├── lines.json               # Rail line catalog (badges, colors, display names) for transfer entries
 ├── line_icons/              # PNG assets for branded line logos (Shinkansen, etc.)
-└── stations.json            # Station metadata (3-letter codes, transfers; more fields over time)
+├── stations.json            # Station metadata (3-letter codes, transfers; more fields over time)
+└── train_info_pool.json     # E233-0 運行情報 messages shown when no live feed is available
 audio/[line]/{pa,sta}/              # per-line shared audio pool — every shipped line
 audio/[line]/[diagram]/route.json   # route data only — no audio_root; absent means the pool
 ```
@@ -759,6 +760,20 @@ the line beneath it.
 no duplicate axis entry, every axis name in `translations.json`, every key the renderer dereferences
 present) and `check_sheet_colors` (each colour against that line's own diagrams). Both are full-scan
 only; `--route` has no sibling diagram to witness against.
+
+---
+
+## train_info_pool.json Format (運行情報 Messages)
+
+The messages the E233-0 運行情報 page shows when the live feed is unavailable (`docs/wip/WIP_e233_0_display.md` § 15). Real messages only, copied character for character from JR East's traininfo page or a reference display, including its full-width digits and `～` (U+FF5E). `{"messages": [...]}`, each entry three strings, all drawn verbatim:
+
+| Field | Meaning |
+|---|---|
+| `line` | The line's name as JR East's traininfo page writes it, e.g. `相鉄線直通列車` |
+| `status` | The status label, e.g. `遅延`, `運転見合わせ`, `一部運休`. The headline is `【{line}　{status}】` |
+| `body` | One message. A full-width space is drawn as a blank cell |
+
+**Validated by** `validate_data.check_train_info_pool`: the three fields are present, and every body fits the page whole, asked of the renderer's own `layout`.
 
 ---
 

@@ -166,6 +166,33 @@ _LINE_EN = at("data/lines.json:*.name_en", "data/lines.json:*.variants.*.name_en
 TRANSFER_VIEW_RECT = pygame.Rect(0, UPPER_HEIGHT, S_WIDTH, S_HEIGHT - UPPER_HEIGHT)
 
 
+def glossy_pill(w: float, h: float, edge, mid, flat: float) -> pygame.Surface:
+    """A rounded pill shaded dark at both edges and bright across the middle.
+
+    This model's banner shape, shared by the のりかえ banner and the 運行情報 pill
+    (`train_info.py`), which differ only in colour and size. `flat` is the
+    fraction of the half-height held at `edge` before the ramp toward `mid`.
+    """
+    pill = pygame.Surface((int(round(w)), int(round(h))), pygame.SRCALPHA)
+    ih = pill.get_height()
+    for y in range(ih):
+        # Distance from the centre as a fraction of the half-height, then the
+        # flat plateau taken off the OUTER end of it: 0 across the dark band
+        # nearest each edge, ramping to 1 at the centre line.
+        u = 1.0 - abs((y + 0.5) - ih / 2.0) / (ih / 2.0)  # 0 at the edge, 1 at the centre
+        f = max(0.0, (u - flat) / (1.0 - flat)) if flat < 1.0 else 0.0
+        c = tuple(int(round(edge[i] + (mid[i] - edge[i]) * min(1.0, f))) for i in range(3))
+        pygame.draw.line(pill, c, (0, y), (pill.get_width(), y))
+
+    # Round the ends by punching the corners out of the gradient rather than
+    # drawing a rounded rect in a flat colour — the fill varies per row, so the
+    # shape has to be applied to it, not instead of it.
+    mask = pygame.Surface(pill.get_size(), pygame.SRCALPHA)
+    pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=int(round(h / 2.0)))
+    pill.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+    return pill
+
+
 class TransferInfoDisplay(_BaseTransferInfoDisplay):
     """E233-0's のりかえ view. The parent resolves the list; this draws it."""
 
@@ -225,28 +252,8 @@ class TransferInfoDisplay(_BaseTransferInfoDisplay):
         w, h = float(t["banner_w"]), float(t["banner_h"])
         x0 = float(t["banner_cx"]) - w / 2.0
         y0 = float(t["banner_top"])
-        r = h / 2.0
 
-        edge = tuple(t["banner_edge"])
-        mid = tuple(t["banner_mid"])
-        pill = pygame.Surface((int(round(w)), int(round(h))), pygame.SRCALPHA)
-        ih = pill.get_height()
-        flat = float(t["banner_flat"])
-        for y in range(ih):
-            # Distance from the centre as a fraction of the half-height, then
-            # the flat plateau taken off the OUTER end of it: 0 across the dark
-            # band nearest each edge, ramping to 1 at the centre line.
-            u = 1.0 - abs((y + 0.5) - ih / 2.0) / (ih / 2.0)  # 0 at the edge, 1 at the centre
-            f = max(0.0, (u - flat) / (1.0 - flat)) if flat < 1.0 else 0.0
-            c = tuple(int(round(edge[i] + (mid[i] - edge[i]) * min(1.0, f))) for i in range(3))
-            pygame.draw.line(pill, c, (0, y), (pill.get_width(), y))
-
-        # Round the ends by punching the corners out of the gradient rather than
-        # drawing a rounded rect in a flat colour — the fill varies per row, so
-        # the shape has to be applied to it, not instead of it.
-        mask = pygame.Surface(pill.get_size(), pygame.SRCALPHA)
-        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=int(round(r)))
-        pill.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        pill = glossy_pill(w, h, tuple(t["banner_edge"]), tuple(t["banner_mid"]), float(t["banner_flat"]))
         self.screen.blit(pill, (int(round(x0)), int(round(y0))))
 
         # Centred on its INK, not its font box — the box carries ShinGo's

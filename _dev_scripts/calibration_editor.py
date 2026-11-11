@@ -350,6 +350,19 @@ _REGISTRY = {
         # the tuneables between. Drive it at a two-entry stop (八王子, the
         # reference) for the calibrated case and at 新宿 for the column wrap.
     },
+    "e233_train_info": {
+        "model": "e233_0",
+        "rect_module": "displays.train_models.e233_0.train_info",
+        "rect_attr": "TRAIN_INFO_RECT",
+        "target": "lower",
+        "view": "train_info",
+        "dicts": [
+            ("displays.train_models.e233_0.train_info", "_TUNEABLES_TRAIN_INFO"),
+        ],
+        # The 運行情報 page, WIP § 15. One dict: a pill, two labels and one text
+        # grid. `train-information-ja.png` carries a black surround, so overlay
+        # a crop of its screen (x 12..1349, y 0..1000), not the file itself.
+    },
 }
 
 

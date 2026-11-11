@@ -33,7 +33,7 @@ Interactive controls (forwarded to PASimulator._handle_input_preview):
 --route accepts: a path to route.json, a directory containing one, or a
 shorthand like 'yamanote/1208G' / 'chuo/916H' (resolved under audio/).
 
---lower-view {full,eight,transfer,overview,cycle} forces the lower LCD into a
+--lower-view {full,eight,transfer,overview,train_info,…,cycle} forces the lower LCD into a
 fixed view. Default 'cycle' alternates on the scheduler's own cadence; naming a
 view freezes the cycler on it, which is what a screenshot wants so the frame is
 deterministic regardless of how long the preview has been running. A view the
@@ -159,6 +159,13 @@ def parse_args():
         help="Force lower-LCD view, or 'cycle' for the normal alternation (default). The list is every view any registered model defines, so a name valid here can still be absent from the model you picked — that fails loud. 'transfer' needs a station with transfers and at_station=True; 'overview' is e233_0 only and needs the line's system.json.",
     )
     parser.add_argument(
+        "--train-info",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Show message N of data/train_info_pool.json on the 運行情報 page (e233_0, with --lower-view train_info). Default: the first.",
+    )
+    parser.add_argument(
         "--no-upper",
         action="store_true",
         help="Draw the lower LCD only, with --screenshot or --edit. For a checkout missing one of the licensed faces the upper band draws — the fonts are gitignored, so a machine can hold some and not others, and one absent face otherwise takes the whole model's preview down. The plain interactive run is the app's own loop and cannot honour it.",
@@ -279,6 +286,11 @@ def main():
     # iteration: 0=次は, 1=まもなく, 2=ただいま (STOPPING). Omitted leaves the
     # natural STOPPING landing.
     apply_state(sim, stop=args.stop, pa=args.pa, mode=args.mode, lower_view=args.lower_view, skip=args.skip)
+    if args.train_info is not None:
+        page = getattr(sim.lower, "train_info_display", None)
+        if page is None:
+            raise SystemExit(f"--train-info: model {sim._train_model.key} has no 運行情報 page")
+        page.set_message(page.pool[args.train_info])
 
     if args.screenshot:
         render_frame(sim, upper=not args.no_upper)
@@ -419,13 +431,12 @@ def _run_edit_loop(sim, overlay_path: Optional[str] = None, lower_view: str = "c
     # active view rather than fixed here — the route bar lives in the FULL
     # view, so a hardcoded EIGHT pin made it unreachable no matter what the
     # registry said. `--lower-view` seeds the starting view; V cycles it.
-    _SLOT_FOR_VIEW = {
-        "full": sim.lower._SLOT_FULL,
-        "eight": sim.lower._SLOT_EIGHT,
-        "transfer": sim.lower._SLOT_TRANSFER,
-    }
-    if hasattr(sim.lower, "_SLOT_OVERVIEW"):
-        _SLOT_FOR_VIEW["overview"] = sim.lower._SLOT_OVERVIEW
+    # The view -> slot lookup reads the manager's own `_SLOT_*` attributes, as
+    # `apply_state` does, so a view a model defines is editable with no edit
+    # here. A typed table here left the 運行情報 page unreachable when it landed.
+    def _slot_for_view(view: str) -> int:
+        return getattr(sim.lower, f"_SLOT_{view.upper()}")
+
     # Registry entries are per-model; bind BEFORE seeding the view, because
     # which lower views exist is itself filtered by the active model.
     calibration_editor.set_active_model(sim._train_model.key)
@@ -457,7 +468,7 @@ def _run_edit_loop(sim, overlay_path: Optional[str] = None, lower_view: str = "c
 
         # Re-pin every frame: V changes the editor's active view, and the slot
         # has to follow or the newly-reachable element still isn't drawn.
-        sim.lower._current_slot = _SLOT_FOR_VIEW[calibration_editor.get_active_lower_view()]
+        sim.lower._current_slot = _slot_for_view(calibration_editor.get_active_lower_view())
 
         target = calibration_editor.get_focused_target()
         if target == "lower":

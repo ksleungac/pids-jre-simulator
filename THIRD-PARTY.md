@@ -14,7 +14,8 @@ Read this before redistributing any part of this repository.
 - Python source at the project root and under `displays/`, `auto_input/`, `tims/`,
   `_tests/`, `_dev_scripts/`, `_harness/`
 - Documentation (`*.md`) and `.claude/`
-- Route and translation data: `data/*.json`, `audio/**/route.json`
+- Route and translation data: `data/*.json`, `audio/**/route.json`, except
+  `data/train_info_pool.json` (§ Reference material)
 - Project-authored artwork: `data/e235_0/five_station_band.png`,
   `data/train_icons/`, `docs/assets/roadmap.*`
 - Packaging (`pyproject.toml`, `uv.lock`)
@@ -165,6 +166,9 @@ Photographs of in-service train displays, cab consoles and station platform equi
 collected to calibrate the renderer, and screenshots of this application in operation.
 The displays, equipment and interface designs depicted are the property of East Japan
 Railway Company.
+
+The messages in `data/train_info_pool.json` are East Japan Railway Company's text,
+transcribed from such displays and from its train-information website.
 
 ---
 
