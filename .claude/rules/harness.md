@@ -36,7 +36,8 @@ Path-scoped: Claude Code loads this file when a file matching `paths:` is read o
   |---|---|---|
   | pre-commit | `lint_primitives.py`, `check_fonts.py`, `check_spdx.py`, `check_tracked_ignored.py`, `check_rules_corpus.py` | blocks the commit |
   | build pre-flight | `check_deps.py` | blocks the build |
-  | session-start | `check_harness.py`, `session_init.tools()` | reports; prints the tool inventory from each docstring's first line, derived rather than typed |
+  | SessionStart | `memory_loop.py session-start` → `session_init.py` (`check_harness.py`, `tools()`, memory pull + publish) | reports; injected into context, full text in `.claude/state/session-start.txt`; prints the tool inventory from each docstring's first line, derived rather than typed |
+  | PostToolUse(Edit/Write) + Stop | `memory_loop.py track` / `stop` | **blocks** the end of a turn while this session has edited project files without a step line in today's log; keyed per session because sessions share the tree |
   | PostToolUse(Edit) | `stale_ref_hook.py`, `route_json_hook.py` | injects findings after an edit |
   | PreToolUse(Edit) | `edit_nudge_hook.py` | context reminders for display renderers, `route_loader`, `route.json` |
   | PreToolUse(Glob) | `unread_readme_hook.py` | flags a glob under a module dir whose README is unread this session; self-suppresses once read |

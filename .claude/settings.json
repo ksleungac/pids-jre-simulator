@@ -1,5 +1,27 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run _harness/memory_loop.py session-start",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run _harness/memory_loop.py stop 2>/dev/null || exit 0",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Glob",
@@ -76,6 +98,16 @@
           {
             "type": "command",
             "command": "uv run _harness/route_json_hook.py 2>/dev/null || exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run _harness/memory_loop.py track 2>/dev/null || exit 0",
+            "timeout": 30
           }
         ]
       }

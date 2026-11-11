@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "_harness"))
 
-from publish_memory import merge_daily, merge_index, merged_view, split_daily
+from publish_memory import is_recapped, merge_daily, merge_index, merged_view, split_daily
 
 FAILED = []
 
@@ -143,6 +143,39 @@ check("index over-cap: warned", len(warns) == 1 and "over-cap" in warns[0], f"go
 # Boundary: exactly at the cap still publishes (the gate is >, not >=).
 m, new, warns = merge_index(origin_idx, IDX_HEADER + E_AT_CAP + "\n" + E_OLD + "\n")
 check("index at-cap: publishes", new == [E_AT_CAP] and warns == [], f"got {new!r} {warns!r}")
+
+
+# Pull: the ref's grandfathered over-cap entries must reach the checkout (cap=None).
+m, new, warns = merge_index(origin_idx, IDX_HEADER + E_OVER_CAP + "\n" + E_OLD + "\n", cap=None)
+check("index cap=None: admits over-cap", new == [E_OVER_CAP] and warns == [], f"got {new!r} {warns!r}")
+
+
+# ---------------------------------------------------------------- memory loop: in-progress blocks stay local
+
+IN_PROG = "## Session: in progress — harness port\n\n- step one + why\n"
+check("recapped: narrative block", is_recapped(BLOCK_A))
+check("recapped: in-progress block is not", not is_recapped(IN_PROG))
+
+# New file on the ref: only the recapped block publishes, the preamble rides with it.
+m, new, warns = merge_daily(None, BASE + "\n" + IN_PROG, keep=is_recapped)
+check("keep, new file: in-progress withheld", m is not None and "in progress" not in m and "alpha" in m, repr(m))
+check("keep, new file: one block", len(new) == 1)
+check("keep, new file: preamble kept", m.startswith("# 2026-07-23"), repr(m))
+
+# Only an in-progress block: nothing to publish, no file created.
+m, new, warns = merge_daily(None, "# 2026-07-23\n\n" + IN_PROG, keep=is_recapped)
+check("keep, only in-progress: nothing", m is None and new == [], repr(m))
+
+# Existing file on the ref: the recapped block publishes, the in-progress one does not.
+m, new, warns = merge_daily(BASE, BASE + "\n" + IN_PROG + "\n" + BLOCK_A, keep=is_recapped)
+check("keep, existing: A published", new == [BLOCK_A] and "concurrent A" in m, repr(new))
+check("keep, existing: in-progress withheld", "in progress" not in m)
+
+# Pull = the same merge with the arguments swapped: the ref's blocks land locally,
+# and a local in-progress block survives untouched.
+local_now = BASE + "\n" + IN_PROG
+m, new, warns = merge_daily(local_now, BASE + "\n" + BLOCK_A)
+check("pull: ref block lands locally", "concurrent A" in m and "in progress" in m and new == [BLOCK_A], repr(m))
 
 
 # ---------------------------------------------------------------- merged_view

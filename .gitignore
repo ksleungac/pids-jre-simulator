@@ -116,6 +116,9 @@ _sta_verify_*.json
 
 # Caveman hook turn counter (UserPromptSubmit modulo state)
 .claude/.caveman_turn_count
+# Memory-loop tracker and the last SessionStart output (_harness/memory_loop.py).
+# Per-machine runtime state.
+/.claude/state/
 
 # Serena coding-agent toolkit (local dev aid, per-machine). The MCP launch
 # config + Serena's per-project cache/config dir. Personal tooling — not a

@@ -1,177 +1,107 @@
 ---
 name: session-recap
-description: End-of-session recap — codify learnings synchronously into their canonical homes; daily logs hold narrative continuity only.
+description: End-of-session recap — codify learnings synchronously into their home (CLAUDE.md § "Memory loop" table); compress this session's in-progress block in memory/YYYY-MM-DD.md into narrative; add the index entry; publish to private/memory. Use on /session-recap, "session recap", "recap session", "update docs", "wrap up".
 triggers:
   - /session-recap
   - session recap
   - recap session
   - update docs
+  - wrap up
 ---
 
 ## Purpose
 
-Capture what was learned this session and codify synchronously into canonical home. Daily log = narrative continuity for next-session pickup. Rules / learnings / preferences live in canonical home, written this session, not deferred. Codify-or-omit; no log-only middle bucket.
+Capture what was learned this session and codify it now, into its home per the placement table in `CLAUDE.md` § "Memory loop". The daily log holds narrative continuity; rules, learnings and preferences are written to their home this recap or omitted. There is no log-only middle state: `/distill-memory` is a safety net, not a route.
 
-Two operations: **Codify** (rule/fact → canonical home) and **Narrate** (session story → `memory/YYYY-MM-DD.md`).
+Three operations:
+- **Codify**: rule or fact → its home.
+- **Narrate**: compress this session's `## Session: in progress — <topic>` block in `memory/<today>.md` into a narrative block.
+- **Index + publish**: one `memory/MEMORY.md` entry per block, then `uv run _harness/publish_memory.py`.
 
 ## Process
 
 ### Step 0 — Friction self-check
 
-Before discussing learnings, self-assess: did this session involve friction? (multiple rounds on single point, user frustration, defensive posture instead of re-reading source)
+Did this session involve friction: several rounds on one point, visible frustration, re-justifying from memory instead of re-reading the source? **No → skip to Step 1.** The author will say so if you missed it.
 
-**No friction → skip to Step 1.**
+**Friction → run the loop:** (1) write a behavioural self-observation with evidence quoted inline; (2) hand it to `/third-man` in fair-researcher mode, since it is not always claude's fault: validate the patterns, dedup against `principles.md` § Collaboration, separate claude-side from miscommunication-side, propose wording; (3) ask the author only if third-man surfaces a preference question; (4) consolidate; (5) delete the self-observation file. Step-0 items enter the report under New Understandings with `→ propose:`.
 
-**Friction → run loop:** (1) Write structured behavioral self-observation with project-specific evidence. (2) Hand to `/third-man` as fair researcher — validate patterns, disambiguate against existing `principles.md § Collaboration`, identify claude-side vs miscommunication-side, propose wording. (3) Ask user if third-man surfaces preference questions. (4) Consolidate codifications. (5) Delete ephemeral self-observation file. Step-0 codifications enter Step 1 report under "New Understandings" with `→ propose:` annotations.
+### Step 1 — Report
 
-### Step 1 — Discuss learnings
+Skip the code-change inventory; git has it. Before writing, grep `memory/` for this session's domain nouns: a fact older than ~2 weeks that only a daily log holds is stranded, and goes under New Understandings with a destination. A fact about how a TOOL behaves on real data never belongs only in a log; its home is the skill step that runs that tool.
 
-Skip code-change inventory (git covers it). **Brevity mandatory** — each bullet fits one line: learning + destination annotation. No parenthetical WHY tails (WHY belongs in the codification target, not the recap).
+**Brevity is mandatory.** One line per bullet: the learning and its destination. The why goes in the home, not the recap. Collapse omitted remarks to a count.
 
 ```
 ## Session Learnings Summary
 
 ### New Understandings
+- <learning> (already in <home> from this session)
+- <learning> → propose: write to <home>
 
-**Every bullet MUST carry a destination annotation — no exceptions.**
-A bullet without a save produces zero forward value (next session has no record).
+### Corrections / preferences
+- "verbatim quote" → rule-shaped → principles.md / conventions.md / domain rules file / skill / # CONTRACT:
+- "verbatim quote" → fact-shaped → CLAUDE.md / domain doc / inline
+- "verbatim quote" → both → domain doc (content) AND conventions.md (binding)
+- (N passing remarks omitted)
 
-Every bullet = one of:
-- `(already in X.md from this session)` — pointer for user review.
-- `→ propose: write to X.md` — proposed for codification in Step 3.
+### Scratch
+- `_dev_scripts/_*.py` written this session: did anything marked Throwaway turn out to matter? (or: "no scratch")
 
-No destination → OMIT the bullet entirely.
+### Issues (GitHub)
+- Closed: … · New: … · Partly done → sub-issue under it · Deferred: … · Stale in-progress: … (or: "No changes")
 
-### Prior-session graduation check
-
-For each learning this session, ask: **did a past daily log already contain it?** If yes, that fact was stranded — codify it now, and name the log line that held it.
-
-Cheapest form: grep `memory/` for the session's domain nouns (a detector name, a line name, an artifact pattern) before writing the recap. A hit older than ~2 weeks with no canonical home is a stranded fact by definition — the log is the only reason you know it.
-
-Rule of thumb: **a fact about how a TOOL behaves on real data never belongs only in a log.** Its home is the skill step that runs that tool. (2026-05-09 recorded "yamanote is normalized hot, so the detectors bracketed the music instead of the KAK"; it reached no skill, and 2026-07-26 spent a session re-deriving it on keihin.)
-
-### Corrections / preferences this session
-
-Classify each and propose canonical home. Every entry promotes or is omitted.
-- "verbatim quote" → **rule-shaped** → `principles.md` / `conventions.md` / skill / `# CONTRACT:`
-- "verbatim quote" → **fact-shaped** → CLAUDE.md / domain doc / inline
-- "verbatim quote" → **both-shaped** → domain doc (canonical) AND conventions.md (binding)
-- (N passing remarks omitted — collapse to count, don't enumerate)
-
-If no corrections, state explicitly. All omits → "all N corrections omitted as passing remarks."
-
-### Scratch this session
-
-Backstop only — the throwaway-or-keep call was made at WRITE time, in each file's docstring
-(`conventions.md` § Naming). List any `_dev_scripts/_*.py` written this session and answer one
-question: **did anything marked throwaway turn out to matter to a later session?** A yes is a
-misclassification worth naming, and that file's docstring stops saying "Throwaway".
-
-No scratch → state "no scratch this session."
-
-### Issue backlog reconcile (GitHub Issues)
-Closure is authoritative — a pushed commit with `Closes #N` already closed the issue, so there's no fuzzy matching. Then:
-- **Closed this session**: `gh issue list --state closed --search "closed:>=<last-session-date>"` — confirm each maps to work that shipped (GitHub already closed them; no action needed).
-- **New**: deferred design Qs / dangling follow-ups surfaced this session → `gh issue create --label <area>`. Scope each as an **outcome**, not a unit of work; a multi-stage outcome gets a parent + sub-issues rather than sibling tickets — `CLAUDE.md § "Issue scope"`.
-- **Partly done**: an issue whose scope you only partly delivered is NOT closed and NOT filed-around — split the delivered stage into a sub-issue under it. Closing it and opening a peer orphans the outcome.
-- **Deferred**: work parked mid-flight → issue keeps a `deferred` label + a reason comment (not closed).
-- **Stale**: `gh issue list --label in-progress --search "updated:<<14d-ago>"` — an `in-progress` issue gone quiet is either done (close it) or truly parked (→ `deferred`).
-- **No changes**: state explicitly.
-
-### Documentation updates (will land after Step 2 approval)
-- List target files and sections.
-- memory/YYYY-MM-DD.md: not shown to user at recap time.
-- memory/MEMORY.md: always — one index entry per session block.
+### Updates (land after approval)
+- <file § section>: <per item>
+- memory/<today>.md: in-progress block → narrative (not shown)
+- memory/MEMORY.md: one entry per block · publish
 ```
 
-### Step 2 — User reviews and confirms
+**Every New Understanding carries a destination**, `(already in X)` or `→ propose: write to X`. A bullet with neither has no forward value; omit it. No corrections → say so.
 
-Wait for sign-off. Don't update anything until confirmed.
+**Issue reconcile.** Closure is authoritative: a pushed `Closes #N` already closed it. Check `gh issue list --state closed --search "closed:>=<last-session-date>"` maps to shipped work; open new ones only per `CLAUDE.md` § "Issue scope" (an outcome, refined, and not a sweep finding you could fix); a partly delivered issue gets a sub-issue for the delivered stage, never a peer; parked work keeps `deferred` + a reason comment; an `in-progress` issue untouched for 14 days is either done or `deferred`.
 
-### Step 3 — Update files
+### Step 2 — Approval
 
-After approval, update only confirmed files. Each piece of information has ONE home.
+Wait for the author to correct or confirm. Change nothing before sign-off.
 
-**Mandatory dedup-by-re-read:** Re-read target file in full (not cached impression) → search overlapping entries → merge if overlap, write new if not. One extra read = trivial; duplicate drift = high cost.
+Exception: "wrap up" (or "auto wrapup", "self wrap up when done") approves the recap and the session's work. Present the report and land the updates in the same turn.
 
-**Domain doc edits:** Re-read `EDIT-CONTRACT` first. Confirm not on refuse list. Name section. Additions > ~10 lines → present diff to user. Use doc's voice per EDIT-CONTRACT § Voice.
+### Step 3 — Write the homes
 
-**Cross-layer alignment:** When codifying a pattern, ask "does it have smell shape (post-hoc) and per-diff shape (review-time)?" If yes, write at all three layers (authoring-time principle/convention, `/vibe-check` smell, `/review-dirty` lens) with cross-citation.
+Write only what was confirmed. **Dedup-by-re-read first:** read the target in full, not from the copy in context, merge into an overlapping entry if there is one, and add a new entry only if none overlaps. A domain doc's `EDIT-CONTRACT` is read before editing it; additions over ~10 lines are shown as a diff.
 
-**Daily log writes silently** — narrative + decisions + why-context. See Daily log format below.
+**Cross-layer alignment:** a pattern with a post-hoc smell shape and a per-diff shape gets written at all three layers (principle or convention, `/vibe-check` smell, `/review-dirty` lens) with cross-citation.
 
-**MEMORY.md always gets an entry** — one line per session block, written immediately after the daily log. Format at bottom of this file.
+### Step 4 — Compress the session block
 
-**Publish narrative** — after the daily log + MEMORY.md writes, run `uv run _harness/publish_memory.py`. It appends the new blocks/entries to the dedicated `private/memory` journal ref (works from any branch/folder; memory never rides code commits, master history stays pure code). Offline → it no-ops and the local files keep the queue; the next recap or session start publishes. Memory files are APPEND-ONLY — never reword an already-published block/entry (the publisher refuses edits with a warning).
+In `memory/<today>.md`, replace this session's in-progress block with:
 
----
+```markdown
+## Session: <one-line summary>
 
-## Where things live (single source of truth)
+<Prose: what was tried, decisions and why, dead ends, unresolved threads. Under ~15 lines.>
 
-Consult this before ANY doc write, not only at recap time.
+**Codifications:** principles.md § "X" — new entry; CLAUDE.md — Y (or: none)
+```
 
-| What | Where | NOT in |
-|------|-------|--------|
-| Project overview, file structure, mental model (project framing, train family, IRL scope, display conventions) | `CLAUDE.md` | rules files, domain docs |
-| Region-scoped code contracts (mode-cycler timing, countdown formula, clear-bg confinements, skip-animation) | inline `# CONTRACT:` at code site | rules files, domain docs |
-| Primitive-scoped rules (never SysFont, never `Path(__file__).parent`, path resolution via `app_paths`) | `conventions.md` AND inline `# CONTRACT:` at known call sites | rules files alone |
-| Mock route layout, test-station roles | `audio/_mock/main/README.md` | rules files |
-| Per-line IRL + sim quirks | `audio/README.md` | rules files, CLAUDE.md |
-| Game-vs-app route coverage, diagram gaps, what to build next | `docs/COVERAGE.md` | CLAUDE.md (mental model keeps only the scope fence + that coverage is dated), GitHub Issues |
-| Values that shape judgment, true in any domain | `.claude/rules/principles.md` | CLAUDE.md |
-| Style, naming, tooling, true in any domain | `.claude/rules/conventions.md` | CLAUDE.md |
-| Red lines | `.claude/rules/redlines.md` | CLAUDE.md |
-| Past-mistake lessons, true in any domain | `.claude/rules/critical_lessons.md` | anywhere else |
-| A rule (convention, principle or lesson) that only bites when working in one domain | the path-scoped `.claude/rules/<domain>.md`: `display` (LCD rendering, fonts, display modules) · `tims` (setup flow, band, chrome i18n, window) · `audio` · `ocr` · `data` (route.json, catalogues, loader) · `harness` (hooks, gates over the corpus, private remote) · `docs` (WIP docs, where a rule lives) · `gates` (tests, what a check can see) | the always-loaded files above. `check_rules_corpus.py` caps those at 148k chars, because Claude Code warns past ~150k at session start. A scoped file loads only when a file matching its `paths:` is read or edited. A new domain gets a new file with its own `paths:` |
-| Build/distribution | `.claude/skills/build/SKILL.md` | CLAUDE.md |
-| Auto-input / OCR domain | `auto_input/README.md` | CLAUDE.md |
-| JSON field definitions | `docs/DATA_FORMAT.md` | CLAUDE.md |
-| LCD cross-model infra | `docs/DISPLAY.md` | CLAUDE.md |
-| LCD per-sub-series | `docs/DISPLAY_E235.md` | docs/DISPLAY.md |
-| App-level runtime + setup/chrome flow | `docs/APP.md` | rules files, CLAUDE.md, docs/DISPLAY.md |
-| Test suite + tier hierarchy | `_tests/README.md` | rules files, CLAUDE.md |
-| Daily session logs | `memory/YYYY-MM-DD.md` | rules files |
-| Long-term memory index | `memory/MEMORY.md` | — |
-| Open work items | **GitHub Issues** (`gh issue`) | `TODO.md`, daily logs |
+The heading must be unique within the day, because the publisher keys on it. A block still headed `## Session: in progress` never publishes, so this step is what releases it. A session spanning midnight recaps into the day its block is in. Leave a parallel session's in-progress block alone. Never reword a published block; add a new one.
 
-**Region-scoped vs primitive-scoped test:** if the rule names a language/library primitive callable anywhere → primitive-scoped (needs `conventions.md` + inline CONTRACT). If precondition is "editing this code region" → region-scoped (inline-only sufficient).
+**Refuse:** blow-by-blow review cycles, "what got done" lists, design-discussion rehash, rules as standalone entries. **Keep:** why a decision was made, context with no other home, incident traces (the pathology, not the play-by-play), the codifications line.
 
----
+### Step 5 — Index and publish
+
+1. One entry per session block in `memory/MEMORY.md`, newest first: `- [YYYY-MM-DD label](YYYY-MM-DD.md) — headline`. Labels are unique; add a short tag when a day has more than one block. **150 chars is a hard cap**: the publisher refuses a longer entry and leaves it queued. The overflow belongs in the daily log. (Measured 2026-07-25: the cap sat stated and unread at 97–100% violation for three months, which is why the refusal lives at the publish boundary.)
+2. Run `uv run _harness/publish_memory.py` and report its output line. Offline, it no-ops and the local files keep the queue; the next session start publishes. Any `WARNING` line goes to the author.
+3. Stop there. The recap does not commit its rules or doc edits; committing stays a manual `/commit`. game-in-idea's recap commits and pushes, and the author kept this repo manual when the loop was ported (2026-11-09).
 
 ## Shape classification
 
-- **Rule-shaped** ("always / never / from now on") → `principles.md` / `conventions.md` / skill / `# CONTRACT:`
-- **Fact-shaped** (IRL convention, library quirk) → CLAUDE.md / domain doc / inline
-- **Both-shaped** (canonical content + behavioral binding) → domain doc AND conventions.md
-- **Passing remark** → OMIT
+- **Rule-shaped** ("always / never / from now on", an implicit pattern) → `principles.md` / `conventions.md` / a path-scoped domain rules file / skill / `# CONTRACT:`.
+- **Fact-shaped** (IRL convention, design decision, library quirk) → CLAUDE.md / domain doc / inline.
+- **Both-shaped** → content in the domain doc, binding in a rules file.
+- **Passing remark** → omit.
 
-When in doubt, classify rule-shaped. Cost asymmetry: over-promotion = bloat (auditable via `/distill-rules`); under-promotion = recurrence. User's Step 2 review = safety net.
+When in doubt, rule-shaped: over-promotion is bloat that `/distill-rules` can audit, under-promotion is recurrence the author pays for.
 
----
-
-## Daily log format (`memory/YYYY-MM-DD.md`)
-
-```markdown
-# 2026-04-28
-
-## Session: <one-line summary>
-
-[Prose — what was tried, decisions, dead ends, why-context.]
-
-## Codifications this session
-
-- principles.md § "X" — added entry from <topic>
-- (or: "no codifications this session")
-```
-
-**EDIT-CONTRACT — Refuse:** blow-by-blow review cycles, "what got done" bullet lists (git covers it), full design-discussion rehash, documentation enumerations, rules/preferences as standalone entries (those went to canonical homes).
-
-**Keep:** WHY decisions, non-obvious context with no other home, incident traces (pathology not play-by-play), codification pointers.
-
-**Size target:** <50 lines per session-block.
-
-**MEMORY.md format:** `- [YYYY-MM-DD time-block](file.md) — headline`. Multi-session days get one entry per block.
-
-**150 chars is a hard cap, enforced at publish.** `publish_memory.py` REFUSES an over-cap entry with a loud warning and leaves it queued — the entry does not reach `private/memory` until it fits. Count before writing; if the headline doesn't fit, the surplus is detail belonging in the daily log the entry links to, never a wider index line. This is the progressive-disclosure boundary: index = pointer, daily log = detail, canonical homes = rules.
-
-Enforced mechanically because stating it did not work. Measured 2026-07-25 across all 143 entries: 0% over cap in Mar–Apr, then 97% / 100% / 100% for May / Jun / Jul, median rising 135 → 313 → 783 → 1538 while the cap sat in this file unread. Published entries are append-only, so that history stands; the gate applies from here.
+**Region-scoped vs primitive-scoped:** a rule naming a primitive callable anywhere needs `conventions.md` plus an inline `# CONTRACT:` at known call sites; a rule whose precondition is "editing this region" needs only the inline one.

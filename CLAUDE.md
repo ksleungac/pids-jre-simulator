@@ -1,59 +1,79 @@
 # PA Simulator Project
 
-Japanese Train PA (Public Address) Simulator — pygame-based app simulating station announcements and arrival melodies with visual LCD display.
+Japanese Train PA (Public Address) Simulator — a pygame app simulating station announcements and departure melodies (STA) with a visual LCD display.
 
-## Session Startup
+The preloaded corpus is this file plus `.claude/rules/{principles,conventions,critical_lessons,redlines}.md`. Domain rules load with their files from the path-scoped `.claude/rules/<domain>.md`; domain docs are read on demand.
 
-Before doing anything else, every session:
+## Memory loop
 
-Run `uv run _harness/session_init.py` — dumps today's + yesterday's memory, MEMORY.md index, and the GitHub-Issues backlog summary (open by area · in-progress · recently closed · stale) in one shot. Read the output instead of opening files individually.
+Ported from game-in-idea on 2026-11-09; hooks in `.claude/settings.json`, code in `_harness/memory_loop.py`.
 
-`principles.md`, `conventions.md`, `critical_lessons.md`, `redlines.md` auto-load as memory files — already in context.
+**Session start.** The SessionStart hook runs `_harness/session_init.py`: it fast-forwards master, pulls and publishes `private/memory`, checks the harness and fonts, and prints the tool inventory, the GitHub-Issues backlog and the `TODO.md` Directions headings. It adds the loop's notes: days never recapped, a quiet session's unlogged edits, the corpus size. Act on the notes before new work. A git-sync failure means the checkout is not current; fix that before trusting anything read from it. The full output is saved in `.claude/state/session-start.txt`. With no hook output in context, run `uv run _harness/session_init.py` yourself.
 
-**Unconditional rules:**
+**During work.** Every turn that edits project files leaves one step line in today's `memory/YYYY-MM-DD.md`, under this session's own `## Session: in progress — <topic>` block: the step and why, written after the turn's last edit. Create the file with a `# YYYY-MM-DD` heading if missing. A turn that continues a logged step updates that line. The Stop hook blocks the end of a turn until this session has edited today's log. Edit with Edit/Write so the tracker sees it; for scratch-only edits run `uv run _harness/memory_loop.py skip <path>`. Another session's in-progress block is not yours to write into.
 
-- **Memory files are informational only.** Rules / learnings live in their canonical home (`principles.md` / `conventions.md` / a path-scoped `.claude/rules/<domain>.md` / `CLAUDE.md` / domain doc / inline `# CONTRACT:` / skill), written synchronously during `/session-recap`. Codify-or-omit; no log-only middle bucket.
-- **Before any doc edit, check the placement table** in [.claude/skills/session-recap/SKILL.md](.claude/skills/session-recap/SKILL.md) — pick the narrowest-domain home.
-- **Write it down.** "Mental notes" don't survive session restarts. Capture WHY, not just WHAT — git log has what changed. Use `/session-recap` at session end.
+**Session end.** `/session-recap`: codify learnings into their home (synchronously, dedup-by-re-read, author approves; "wrap up" pre-approves), compress the in-progress block into a narrative block ending in a `**Codifications:**` line, add the index entry, publish. An in-progress block never publishes, so a session ending without a recap keeps its narrative local and the next session start names the day.
+
+**Periodic.** `/distill-memory` (log → rules escapes) every ~15 sessions or when a correction repeats; `/distill-rules` for the rules corpus; `/distill-docs` for domain docs. `/third-man` for interpretation deadlocks and recap Step 0.
+
+**Memory stream.** `memory/` is gitignored. Its canonical store is the journal-only `private/memory` ref, written only by `_harness/publish_memory.py`: git plumbing with no branch switch, append-only, refusing to republish an edited block. Session start pulls blocks published from the other PC into the local files. `memory/MEMORY.md` is too large to preload, so session start prints its last ten entries.
+
+### Where things live
+
+One fact, one home. Consult this before any doc write and pick the narrowest home.
+
+| What | Home | NOT in |
+|---|---|---|
+| Project framing, scope, mental model, IRL conventions, the working loop | `CLAUDE.md` | rules files, domain docs |
+| Values that shape judgment, true in any domain | `.claude/rules/principles.md` | CLAUDE.md |
+| Style, naming, tooling, true in any domain | `.claude/rules/conventions.md` | CLAUDE.md |
+| Hard boundaries | `.claude/rules/redlines.md` | anywhere else |
+| Past-mistake lessons, true in any domain | `.claude/rules/critical_lessons.md` | anywhere else |
+| A rule that bites only in one domain | path-scoped `.claude/rules/<domain>.md`: `display` · `tims` · `audio` · `ocr` · `data` · `harness` · `docs` · `gates`. It loads when a file matching its `paths:` is read or edited; a new domain gets a new file | the always-loaded files |
+| Region-scoped code contract | inline `# CONTRACT:` at the code site | rules files, docs |
+| Primitive-scoped rule (never SysFont, never `Path(__file__).parent`) | `conventions.md` AND an inline `# CONTRACT:` at known call sites | rules files alone |
+| JSON field definitions | `docs/DATA_FORMAT.md` | CLAUDE.md |
+| LCD cross-model infra / per-sub-series | `docs/DISPLAY.md` / `docs/DISPLAY_E235.md` | CLAUDE.md |
+| App runtime and the setup/chrome flow | `docs/APP.md` | rules files, CLAUDE.md |
+| Auto-input / OCR | `auto_input/README.md` | CLAUDE.md |
+| Test suite and tiers | `_tests/README.md` | rules files, CLAUDE.md |
+| Per-line IRL and sim quirks | `audio/README.md` | rules files, CLAUDE.md |
+| Mock route layout, test-station roles | `audio/_mock/main/README.md` | rules files |
+| Route coverage, diagram gaps, what to build next | `docs/COVERAGE.md` | CLAUDE.md, issues |
+| Build and distribution | `/build` skill | CLAUDE.md |
+| Open work | GitHub Issues | `TODO.md`, daily logs |
+| Wanted but unscoped; decided never | `TODO.md` § Directions; its closed-off ledger | issues |
+| Session narrative: steps, decisions and why, dead ends | `memory/YYYY-MM-DD.md` | rules, preferences, learnings |
+| One pointer per session block, ≤150 chars | `memory/MEMORY.md` | — |
+
+**Editing rules.** Cross-reference, don't copy. Tighten before appending: merge into an overlapping entry rather than adding a second. Daily logs are informational only: a rule never waits in a log for later promotion, it is codified or omitted. The always-loaded corpus is capped at 100k chars by `check_rules_corpus.py` at pre-commit, with per-file ratchets, and session start reports when it is over. Over the cap, tighten, or move a domain rule to its path-scoped file.
 
 ## Working loop (GitHub Issues)
 
-Backlog = **GitHub Issues** ([repo issues](https://github.com/ksleungac/pids-jre-simulator/issues)) — **strictly defects and near-term implementation tasks, nothing else**. `TODO.md` holds the two things that are not issues: **§ Directions** (wanted, not yet scoped) and the **closed-off-paths ledger** (decided never). `_harness/session_init.py` prints the Directions headings at session start. Area labels: `auto-input` · `display` · `chrome-i18n` · `distribution` · `housekeeping` · `review-finding` · `build-incident`.
+Backlog = **GitHub Issues** ([repo issues](https://github.com/ksleungac/pids-jre-simulator/issues)): strictly defects and near-term implementation tasks. `TODO.md` holds the two things that are not issues, § Directions (wanted, not yet scoped) and the closed-off-paths ledger (decided never). Area labels: `auto-input` · `display` · `chrome-i18n` · `distribution` · `housekeeping` · `review-finding` · `build-incident`.
 
-- **Only act on issues opened by `ksleungac`. An outside contributor's ticket is READ-ONLY — no comment, no close, no label, nothing.** Their tickets are a conversation with a real person, and that conversation is the author's to have; a reply posted from their account speaks as them to someone who is owed a human answer. Read those issues freely — they are evidence, and a reporter is an instrument (`ocr.md §§ 7–8`) — then put what you found in chat and let the author carry it across. 2026-08-29: I posted a technically correct reply to an outside reporter explaining that their bug was already fixed and unreleased; author — *"you will only comment or handle the tickets created by ksleungac. leave the human part to me."* Supersedes the narrower 2026-08-18 form below, which barred only closing and so read as permitting everything else. Original: *"don't close other people's issue unless i say so."*
-- **Several sessions run against ONE working tree at once, so `git status` is not yours and a commit must be path-scoped.** The author runs parallel sessions on one checkout. 2026-08-30 had three — GitHub issues, reviewing+fixing E233-0, transfers — so `git status` listed a dozen files from work nobody in this session had touched, and `upper_lcd.py` was caught MID-WRITE by a render batch (`AttributeError: no attribute '_clock_key'`, from a half-saved file). Four consequences:
-  - Name the files you are claiming and stay off the rest.
-  - **Never `git commit -a` or `git add -A`.** Pass an explicit pathspec.
-  - A crash inside a file you did not edit is a concurrent write. Re-run once before debugging it. The same holds for a red gate: the test suite and the atlas bake run over the whole tree, so check whether the failing path is in your diff before believing it. A review agent once reported `test_playback.py` failing on a symbol that existed only in a sibling's uncommitted edit, and it passed minutes later untouched.
-  - Commit your own surface EARLY rather than late. The longer a shared file stays dirty, the likelier another session's half-finished edit lands inside it and you can no longer commit yours cleanly. When two sessions are ready at once, ask which base is green: the one whose change fixes a gate commits first, so the other lands on a passing tree.
-- **Pick up** an issue → `gh issue edit <N> --add-label in-progress` + a stamp comment (so a concurrent session/PC sees it's taken — don't double-pick).
-- **Park** it → swap `in-progress` for `deferred` + a one-line reason comment.
-- **Finish** → the commit carries `Closes #<N>` (progress commits: `Refs #<N>`); pushing to `master` auto-closes. See `/commit`.
-- **New work** surfaced mid-session → `gh issue create --label <area>`.
+- **Only act on issues opened by `ksleungac`. An outside contributor's ticket is READ-ONLY — no comment, no close, no label, nothing.** It is a conversation with a real person, and a reply from the author's account speaks as them. Read those issues freely as evidence (a reporter is an instrument, `ocr.md §§ 7–8`), put what you found in chat, and let the author carry it across. (2026-08-29: *"you will only comment or handle the tickets created by ksleungac. leave the human part to me."*)
+- **Several sessions run against ONE working tree at once, so `git status` is not yours and a commit must be path-scoped.** (2026-08-30: three sessions at once, and `upper_lcd.py` caught mid-write by a render batch.)
+  - Name the files you claim and stay off the rest. **Never `git commit -a` or `git add -A`**; pass an explicit pathspec.
+  - A crash inside a file you did not edit is a concurrent write: re-run once before debugging it. A red gate likewise: check whether the failing path is in your diff.
+  - Commit your own surface early, before another session's half-finished edit lands inside it. When two are ready, the one whose change makes a gate green goes first.
+- **Pick up** an issue → `gh issue edit <N> --add-label in-progress` + a stamp comment, so another session or PC sees it is taken. **Park** → swap `in-progress` for `deferred` + a one-line reason. **Finish** → the commit carries `Closes #<N>` (progress: `Refs #<N>`); pushing to `master` closes it. See `/commit`. **New work** → `gh issue create --label <area>`.
 
 ### Issue scope — an issue is an OUTCOME, not a unit of work
 
-Test: *if I finish this, does what the user can do change?* No → it's a commit, not an issue.
+Test: *if I finish this, does what the user can do change?* No → it is a commit, not an issue.
 
 | shape | when |
 |---|---|
 | **Plain issue** | one outcome, one sitting — most things |
-| **Parent + sub-issues** | outcome spans sessions/stages. `gh issue edit <parent> --add-sub-issue <N>` (gh ≥ 2.96). Parent tracks `completed/total` natively and closes when the outcome is real; each stage closes as it lands |
+| **Parent + sub-issues** | outcome spans sessions/stages. `gh issue edit <parent> --add-sub-issue <N>` (gh ≥ 2.96); the parent tracks `completed/total` and closes when the outcome is real |
 | **Not an issue** | no user-visible change |
 
-**Refined-ness is a SECOND gate, after outcome-ness.** A feature named in a mental-model conversation is not a ticket, even when it genuinely is an outcome the author wants — a want is not a scope. File it once there is a mechanism to build, not when it is first spoken. (2026-08-18: three issues opened off one such conversation; two closed within the hour. Author — *"unless it's really refined, don't open as an issue … don't want my gh to be flooded with issues."*) Closing one of these is **not** a closed-off path — it does not go in the `TODO.md` ledger, because the author does intend to return to it; it is unscoped, not abandoned. It goes to **`TODO.md` § Directions**, whose headings `session_init.py` prints at session start. That is the moment the author asks what to work on, and the moment a domain doc is NOT open. Each entry carries its own description, so picking one up later needs no re-explaining — that re-stating is the actual pain a ticket was standing in for. Promote = scope it, open an issue, delete the entry. Abandon = move it down into the closed-off ledger.
-
-**A finding from a review or audit sweep is FIXED in the session, not filed.** A sweep produces findings in bulk, and filing them converts a session's worth of cheap in-place fixes into a backlog the author has to read, prioritise and hand back — the flooding this gate exists to stop, arriving through a side door. 2026-09-12, mid-sweep, author: *"remember, inline fix only"*, then *"no, i don't mean that, i mean no new issues grown"*. What still earns a ticket is the finding you are not going to fix: one needing a direction only the author has, or one whose fix would move a signed-off element. Say which those are in the report and leave them unfiled unless the author asks. (2026-08-18, via `/third-man`: the question is not where the text lives, it is what PUSHES it at session start — `harness.md` § "Natural adoption gates tool value".)
-
-**`Closes #N` only when you did everything #N describes.** Doing less is a signal the scope was wrong — fix by splitting a stage out **under** the outcome, never by closing it and opening a peer. A peer orphans the outcome: the two tickets read as unrelated, so the feature has no single tracking home. (2026-07-20: closed #71 "window mirroring" after shipping only its display-only stage and filed stage 2 as a sibling; user — *"can you not closes the issue just for a new stage?"*. Restructured to #71 parent → #77 stage 1 / #76 stage 2.)
-
-A parent with sub-issues shows progress as a `completed/total` count; a long-lived `Refs`-only ticket keeps its state only in git log.
-
-**A "signal missed → action suppressed" bug must name a scenario where the signal is missed AND the action is still wanted.** Write the scenario before filing. If the same evidence gates both — if the read whose absence loses the signal is the read that made the action necessary — the two cannot come apart and there is no bug. Reasoning forward from "here is a signal that can be missed" produces a report with a real mechanism, a real consequence, and nothing joining them; it reads as rigorous and is empty. (2026-08-11: #84 claimed a missed `STOPPED→MOVING` suppresses the departure PA. But the `STOPPED` badge is what fires at-station and moves the app into STOPPING — no `STOPPED` read means the app never registered the arrival, so there is no departure to announce. Author's question, which is the test: *"under what case is this missed yet the departure PA still needs playing?"* — there is none.) Generalizes past OCR: any cache invalidation, dirty flag, or edge-triggered handler where the same observation both arms the state and justifies the action.
-
-**Always write an issue as `#N "title"` — never the bare number.** Applies to every prose surface: chat, commit bodies, issue comments, recaps. A bare `#105` forces the reader to go look it up before the sentence means anything, and a list of bare numbers is unreadable. Commit trailers (`Closes #N`) are exempt — that's a machine token. 2026-08-11: user — *"don't just name the numbers only, hard to relocate, mention the issue name and number."*
-
-Session start prints the open / in-progress / recently-closed / stale summary; `/session-recap` reconciles against `gh issue list` (closure is authoritative — no keyword guessing).
+- **Refined-ness is a SECOND gate, after outcome-ness.** A want named in a mental-model conversation is not a ticket until there is a mechanism to build. (2026-08-18: two of three such issues closed within the hour: *"unless it's really refined, don't open as an issue … don't want my gh to be flooded with issues."*) It goes to `TODO.md` § Directions, whose headings session start prints, with its own description so picking it up needs no re-explaining. Promote = scope it, open an issue, delete the entry. Abandon = move it to the closed-off ledger.
+- **A finding from a review or audit sweep is FIXED in the session, not filed.** Filing converts cheap in-place fixes into a backlog the author must triage. Only a finding you will not fix earns a ticket: one needing a direction only the author has, or one that would move a signed-off element. Name those in the report and leave them unfiled unless asked. (2026-09-12: *"no new issues grown"*.)
+- **`Closes #N` only when you did everything #N describes.** Doing less means the scope was wrong: split a stage out under the outcome, never close it and open a peer, which orphans the outcome. (2026-07-20: #71 "window mirroring" restructured as parent of #77 stage 1 / #76 stage 2.)
+- **A "signal missed → action suppressed" bug must name a scenario where the signal is missed AND the action is still wanted.** If the read whose absence loses the signal is the read that made the action necessary, they cannot come apart and there is no bug. (2026-08-11, #84: *"under what case is this missed yet the departure PA still needs playing?"*) Applies to any cache invalidation, dirty flag or edge-triggered handler.
+- **Always write an issue as `#N "title"`, never the bare number**, on every prose surface. Commit trailers are exempt. (2026-08-11)
 
 ## Run
 
@@ -61,9 +81,7 @@ Session start prints the open / in-progress / recently-closed / stale summary; `
 uv run main.py
 ```
 
-After a fresh clone: `uv sync` then `uv run pre-commit install`. See [conventions.md § Tooling](.claude/rules/conventions.md).
-
-**Then add the private remote**, which carries the narrative memory ref and the licensed Morisawa faces. Without it the session has no memory store and the LCD cannot render:
+After a fresh clone: `uv sync`, then `uv run pre-commit install`. Then add the private remote, which carries the narrative memory ref and the licensed Morisawa faces; without it there is no memory store and the LCD cannot render:
 
 ```bash
 git remote add private https://github.com/ksleungac/private-pids-jre-simulator.git
@@ -71,184 +89,122 @@ uv run _harness/sync_fonts.py          # pull the faces this machine lacks
 uv run _harness/sync_fonts.py --push   # publish any face only this machine has
 ```
 
-`session_init` fetches it and names a missing face; `publish_memory` refuses to publish without it rather than pushing anywhere public.
+Session start fetches it and names a missing face; `publish_memory` refuses to publish without it rather than pushing anywhere public.
 
 ## Mental Model
 
-What this project is modeling. Keep in head — shapes every design decision. Implementation details live in domain docs, read on demand.
+What this project models. It shapes every design decision; implementation details live in the domain docs.
 
 ### Project origin & scope
 
-**Companion app for JRE Train Sim Real** — JR East's own train simulator. The game lacks PA + departure melodies for older routes; this fills that gap. Started as audio-only; the LCD grew incrementally as a "where am I" navigation aid. **Audio is the foundation; the LCD is navigation.**
+**Companion app for JRE Train Sim Real**, JR East's own train simulator. The game lacks PA and departure melodies on older routes, and this fills the gap. It started audio-only; the LCD grew as a "where am I" aid. **Audio is the foundation; the LCD is navigation.** Scope: JR lines in the Tokyo capital region.
 
-**Scope: JR lines, Tokyo capital region.** Non-JR operators and out-of-region lines are out of scope.
+**Coverage is asymmetric by design** — full picture, dates and gaps in [COVERAGE.md](docs/COVERAGE.md):
+- **Lines**: exactly the JR Kantō routes the game shipped BEFORE in-game announcements became standard. **Gaps first is a PRIORITY rule, not a permission rule**; a voiced route is still worth building when wanted, and the gap list is nearly exhausted. **Coverage is a fact with a DATE on it**: the game has retro-fitted announcements onto shipped routes, so re-check before starting a build.
+- **Diagrams**: the full-line diagram is canonical per route. Another is worth building only for a **different stopping pattern**, and a diagram is the tuple *(pattern, destination, formation, day type)*, not the service label.
 
-**Coverage is asymmetric by design** — full picture, dates and per-line gaps in [COVERAGE.md](docs/COVERAGE.md):
-- **Lines** — the catalogue is exactly the JR Kantō routes the game shipped BEFORE in-game announcements became standard. **Gaps first is a PRIORITY rule, not a permission rule** — a route the game already voices is still worth building when you want it, and the gap list is nearly exhausted. **Coverage is a fact with a DATE on it, not a property of a route**: the game has retro-fitted announcements onto an already-shipped route, so re-check before starting a build, not after.
-- **Diagrams** — full-line diagram is canonical per route. Other diagrams only worth building for a **different stopping pattern** — and a diagram is the tuple *(pattern, destination, formation, day type)*, not the service label; the same label carries different patterns on Sat/Sun.
-
-**Distribution is lightly public** — GitHub + YouTube (~1800 plays). Some of those users are **active collaborators, not passive downloaders**: they trade IM / email with the author, know the data model and the OCR pipeline, and test on their own hardware — the re-entry departure-PA bug came from a viewer's testing. So a defect that will not reproduce here is not a dead end; the reporter is an instrument (`ocr.md §§7–8`). **Fidelity bar is high:** elements iterate against IRL reference photos until pixel-correct. "Good enough" is rejected.
+**Distribution is lightly public**: GitHub and YouTube (~1800 plays). Some users are **active collaborators**: they trade IM and email with the author, know the data model and the OCR pipeline, and test on their own hardware. A defect that will not reproduce here is not a dead end; the reporter is an instrument (`ocr.md §§7–8`). **The fidelity bar is high**: elements iterate against IRL reference photos until pixel-correct.
 
 ### Distribution & deployment artifact
 
-Ships as PyInstaller exe (Windows). **Silent breakage in a release build is the worst-case mode** — dev env has everything installed but the user's exe doesn't.
-
-- **Bundled:** all `dependencies` in `pyproject.toml`; code at project root + `displays/`; asset folders (`audio/`, `data/`, `fonts/`, `ocr_templates/`).
-- **Not bundled:** `dev` dep group; `_*` folders. Production code MUST NOT import from `_*/` paths — see [conventions.md § "_*" prefix](.claude/rules/conventions.md).
-- **Dep classification follows the call graph** — see [critical_lessons.md § 3](.claude/rules/critical_lessons.md).
-
-Build mechanics live in `/build` skill.
+Ships as a PyInstaller exe (Windows). **Silent breakage in a release build is the worst case**: the dev env has everything installed and the user's exe does not.
+- **Bundled:** all `dependencies` in `pyproject.toml`; code at project root and `displays/`; `audio/`, `data/`, `fonts/`, `ocr_templates/`.
+- **Not bundled:** the `dev` dep group; `_*` folders, which production code MUST NOT import from (`conventions.md` § Naming).
+- Dep classification follows the call graph (`critical_lessons.md` § 3). Build mechanics: `/build`.
 
 ### Direction of travel
 
-**Mature phase** — heavy architecture done, audio pipeline mature, visual fidelity high. Future work:
-
-- **Steady state**: new train models (**E233-0 next** — a re-skin, and its LCD is close to E233-1000's, so one skin serves both Chūō and Keihin-Tōhoku, whose audio already ships) + display fidelity polish.
-- **OCR auto-drive is the PRIMARY interface, not a side-quest.** Assume every user runs it — it was the most-requested feature and is how the app is actually used (author, 2026-08-18). Template-match the game HUD on window-bound capture, one sample every 3 s by default (1–10 s, user-set; `auto_input/README.md` § "Sample interval"). This line said "~5 Hz" until 2026-09-16, and a debounce was designed against that figure. **1080p is the canonical resolution and the absolute-stability target** — the multi-resolution path downscales every input to 1080p, so the crisp higher-native 1440p is not the bar; the real user's softened 1080p capture is (`auto_input/README.md`, `ocr.md §7`). The one remaining user-facing gap is **unusual aspect ratios**, which is what makes resolution support outrank the rest of this list.
-- **Distribution polish** — signed installer, first-run smoothness. Real, and secondary to the above.
-- **Closed-off** (don't re-propose): memory hooking `*saf.dll`, decrypting SimDATA, audio fingerprinting, full-desktop OCR, tesseract, scaling to lines the game already covers, Mac build.
+**Mature phase**: architecture done, audio pipeline mature, visual fidelity high.
+- **Steady state**: new train models and display fidelity polish. E233-0 is a re-skin close to E233-1000, so one skin serves Chūō and Keihin-Tōhoku, whose audio already ships.
+- **OCR auto-drive is the PRIMARY interface, not a side-quest.** Assume every user runs it (author, 2026-08-18). It template-matches the game HUD on window-bound capture, one sample every 3 s by default (1–10 s, user-set; `auto_input/README.md` § "Sample interval"). **1080p is the canonical resolution and the absolute-stability target**: every input is downscaled to 1080p, so the bar is the real user's softened 1080p capture (`ocr.md §7`). The remaining user-facing gap is **unusual aspect ratios**, which puts resolution support ahead of the rest of this list.
+- **Distribution polish**: signed installer, first-run smoothness. Real, and secondary.
+- **Closed-off** (don't re-propose): memory hooking `*saf.dll`, decrypting SimDATA, audio fingerprinting, full-desktop OCR, tesseract, lines the game already covers, Mac build.
 
 ### Train family
 
-JR East runs multiple train series: E233 (sub-series 0–8000), E235 (0 and 1000), etc. Each has its own LCD look — drawings differ, but the element set (clock, station name, route bar, mode cycling, badges, view alternation) is mostly shared. Adding a new model is re-skinning, not re-architecting.
-
-Each train model lives under `displays/train_models/{model}/`.
+JR East runs several series, E233 (sub-series 0–8000) and E235 (0 and 1000) among them. Each has its own LCD look over a mostly shared element set: clock, station name, route bar, mode cycling, badges, view alternation. A new model is a re-skin under `displays/train_models/{model}/`, not a re-architecture.
 
 ### Per-model IRL line scope (in-spec vs best-effort)
 
-Every train series runs on a fixed subset of JR East lines IRL. The exact mappings are NOT memorized; ask when scope matters.
-
-The simulator accepts **any** route into **any** train model. Reality only constrains the in-spec subset:
+Every series runs on a fixed subset of lines IRL. The mappings are not memorized; ask when scope matters. The simulator accepts any route into any model:
 
 | Route | Behavior |
 |---|---|
-| **In-spec** (model's IRL lines) | Match real PIDS |
-| **Out-of-spec** | Best-effort: no crashes, no missing-key errors, no broken layouts. Not obligated to IRL-accurate fidelity. |
-| **No IRL LCD** (line's stock has no LCD PIDS at all — E233-3000, E531, E217) | There is no real PIDS to match, so there is no spec to depart from: the bar is **plausibility**, not fidelity. A *fictional* render, and a legitimate one — prefer the nearest real relative (an E233 answers "what would the E233-3000's LCD look like") over an arbitrary borrow, and a linear-native model on a linear line needs no adaptation at all. Which lines → [COVERAGE.md](docs/COVERAGE.md). |
+| **In-spec** (model's IRL lines) | Match the real PIDS |
+| **Out-of-spec** | Best-effort: no crashes, no missing-key errors, no broken layouts. Not obligated to IRL fidelity |
+| **No IRL LCD** (E233-3000, E531, E217) | No real PIDS to match, so the bar is **plausibility**: a legitimate fictional render. Prefer the nearest real relative; a linear-native model on a linear line needs no adaptation. Lines: [COVERAGE.md](docs/COVERAGE.md) |
 
-**Best-effort = the model's OWN native norm applied to any route — never a borrowed behavior or bespoke feature propping up an out-of-spec route.** 
-- **Adapt the model's own look to the route's shape.** e235_0 opens its circular racetrack into a *horseshoe* for a non-loop line: native, adapted.
-- **Don't import another model's behavior.** e235_0 drops e235_1000's inherited end-of-route *lock*. That lock is a linear heuristic foreign to a loop; no-lock is e235_0's native norm.
-- **When a route shape the view wasn't built for needs a marker the view has no calibrated slot for, reuse an EXISTING calibrated primitive degenerately.** A passing station in the fixed-slot 5-station view renders the countdown ring *empty*, with no digit, rather than an invented chevron (#66; the proper chevron is deferred as ultra-low-priority #99). Never a new uncalibrated marker — that is the bespoke growth this section bars.
+**Best-effort = the model's OWN native norm applied to any route — never a borrowed behavior or bespoke feature propping up an out-of-spec route.**
+- **Adapt the model's own look to the route's shape**: e235_0 opens its circular racetrack into a horseshoe for a non-loop line.
+- **Don't import another model's behavior**: e235_0 drops e235_1000's end-of-route lock, a linear heuristic foreign to a loop.
+- **A route shape needing a marker the view has no calibrated slot for reuses an EXISTING calibrated primitive degenerately**: a passing station in the 5-station view renders the countdown ring empty, never an invented chevron (#66; the proper chevron is deferred, #99).
 
-*For the reviewer:* a cross-model divergence where each model expresses its own native norm is NOT sibling-drift, so verify against this section before flagging. A borrowed foreign feature IS the violation.
-
-Out-of-spec renders like the horseshoe are **transitional**. e235_1000 is the stable general model for all routes until per-line-native models land, and as those arrive, out-of-spec best-effort support is *removed* rather than grown. **The no-LCD row is the exception: those are permanent**, because no native model can ever land for a train that has no LCD.
+*For the reviewer:* a cross-model divergence where each model expresses its own native norm is not sibling drift; a borrowed foreign feature is the violation. Out-of-spec renders are **transitional**: e235_1000 is the general model until per-line native models land, and out-of-spec support is then removed rather than grown. **No-LCD renders are permanent**, because no native model can land for a train with no LCD.
 
 ### IRL display conventions
 
 Behaviors true on real trains, mirrored by the simulator:
-
-- **Destination stays kanji** even in furigana mode. English uses "Bound for" + English dest.
-- **Stop-level destination override.** Circular routes change destination mid-route.
-- **Station code badge** — 3-letter Roman for ~22 major interchange stations. Source: `data/stations.json`.
-- **Compound destinations** use `&` separator on real PIDS.
-- **English uses modified Hepburn with macrons** (Tōkyō, Chūō). Encoding details in [docs/DATA_FORMAT.md](docs/DATA_FORMAT.md).
-- **Through-service combined frame.** Modeled via `pre_stops` in route.json. See [docs/DATA_FORMAT.md § "pre_stops Array"](docs/DATA_FORMAT.md).
-- **PA and STA are independent audio sources** — overlap freely. PA on `mixer.music`, STA on dedicated `mixer.Channel`.
+- **Destination stays kanji** even in furigana mode. English uses "Bound for" + the English destination.
+- **Stop-level destination override**: circular routes change destination mid-route.
+- **Station code badge**: 3-letter Roman code for ~22 major interchanges, from `data/stations.json`.
+- **Compound destinations** use the `&` separator.
+- **English uses modified Hepburn with macrons** (Tōkyō, Chūō); encoding in [docs/DATA_FORMAT.md](docs/DATA_FORMAT.md).
+- **Through-service combined frame**, modeled via `pre_stops` in route.json ([DATA_FORMAT.md § "pre_stops Array"](docs/DATA_FORMAT.md)).
+- **PA and STA are independent audio sources** and overlap freely: PA on `mixer.music`, STA on a dedicated `mixer.Channel`.
 
 ### App state machine
 
-Each stop: **APPROACHING_EARLY** → **APPROACHING_FINAL** → **STOPPING** → next stop. PageDown drives transitions; `jump_to_stop` lands in STOPPING@target. Full spec in [docs/DISPLAY.md § Unified State Machine](docs/DISPLAY.md).
-
-**Auto-fire asymmetry:** APPROACHING auto-fires `pa[0]` (passive-listening window). STOPPING has no auto-fire — every `pa_at_station` entry plays only on user press.
+Each stop: **APPROACHING_EARLY** → **APPROACHING_FINAL** → **STOPPING** → next stop. PageDown drives transitions; `jump_to_stop` lands in STOPPING at the target. Spec: [docs/DISPLAY.md § Unified State Machine](docs/DISPLAY.md). **Auto-fire asymmetry:** APPROACHING auto-fires `pa[0]` (the passive-listening window); STOPPING never auto-fires, and every `pa_at_station` entry plays only on a press.
 
 ## Writing tone
 
-Factual and non-performative, the same voice the release notes use. Applies to every prose surface: chat, docs, memory, commits.
+Factual and non-performative, the voice of the release notes, on every prose surface: chat, docs, memory, commits. On top of the global preferences:
 
-Say it in the fewest words that carry the technical detail. Length is earned by content, never by framing. A sentence explaining why the previous sentence was the right move gets deleted.
-
-Reach for the plain word first. A longer word has to shorten the sentence to earn its place: "output", not "distillation deliverables"; "task", not "engagement". A manufactured compound usually means the plain word has not been found yet.
-
-What to cut:
-
-- Words that show you understood, signal diligence, or project a personality.
-- Scaffolding that argues your own point is correct.
-- Intensifiers (*exactly*, *the very*, *the tell is*) and hedges (*arguably*, *somewhat*, *tends to*).
-- "X, not Y" unless Y is a real wrong path worth flagging.
-- Obvious differences. The reader already sees that item N differs from items 1 to N-1.
-- Any mark of compliance. The instruction shapes the output and never appears in it.
-
-State what you know plainly, and state real uncertainty just as plainly (*unverified*, *haven't checked X*). Confidence tracks truth in both directions.
-
-**Sentence architecture is the half that word choice does not reach.** The bullets above police vocabulary and posturing, and this project scores near zero on both. What still reads as machine-written is the shape of the sentences:
-
-- **One sentence, one clause stack.** Past about 35 words, split it. A four-clause sentence is not denser than two two-clause ones; it is the same content with the joins hidden.
-- **Commit the clarification or drop it.** A parenthetical that carries a real qualification belongs in its own clause. One that carries an aside belongs nowhere. Nesting a caveat in parens says the thing while quietly footnoting the exception, which is the most recognisable tell of the lot.
-- **The em dash is not the default connector.** A comma, a colon or a full stop is almost always right. Reserve it for a genuine interruption of the sentence's own voice.
-- Splitting a sentence is not the same as cutting syntax. The rule above bars telegraphic notes, not full stops.
-
-Grammar stays ordinary and complete: full sentences, articles intact. What gets cut is the wrapper, not the words that carry meaning. No pleasantries, no restating the request back, no sign-offs. Technical terms stay verbatim; don't paraphrase jargon into plainer words.
-
-**Cut length by removing structure, never by removing facts.** Splitting a sentence and unnesting a parenthetical cost nothing. Deleting the consequence that motivates a rule, or the symptom that identifies it, makes the text shorter and the reader poorer. When a compression drops the *why* or the *how you spot it*, it has taken the wrong thing.
-
-When the user asks what something is, answer in short plain prose with no headers. They are missing context, not analysis. Answer their questions in the order asked and stop. Headers and bullets belong in a document; in a reply they read as scaffolding around a paragraph. (2026-08-30: four tries at explaining one issue, and the one that landed had no headers.)
-
-A file written to disk carries the same bar plus a structural one. Length matches what the task needs, with no filler sections and no summary restating the section above it. Where a doc states its own size cap, the cap is a gate rather than a target.
+- Use the fewest words that carry the technical detail. Length is earned by content; a sentence explaining why the previous one was right gets deleted.
+- Reach for the plain word first: "output", not "distillation deliverables". A manufactured compound means the plain word has not been found.
+- Cut words that show understanding or diligence, scaffolding that argues your own point, intensifiers (*exactly*, *the tell is*) and hedges (*arguably*, *tends to*), "X, not Y" unless Y is a real wrong path, differences the reader already sees, and any mark of compliance.
+- State what you know plainly, and real uncertainty just as plainly (*unverified*, *haven't checked X*).
+- **Sentence architecture.** One clause stack per sentence; past ~35 words, split it. A parenthetical carrying a real qualification becomes its own clause, and one carrying an aside goes. The em dash is not the default connector.
+- **Cut structure, never facts.** Splitting a sentence costs nothing; dropping the consequence that motivates a rule or the symptom that identifies it takes the wrong thing.
+- Asked what something is: short plain prose, no headers, in the order asked. (2026-08-30)
+- A file on disk has the length its task needs, with no filler section and no summary restating the one above. A doc's own size cap is a gate, not a target.
 
 ## Working narration
 
-One sentence before the first tool call, saying what you are about to do. It states the action and nothing about why the action is right: "let me check X", not "let me check X rather than assume". The trailing clause advertises that you know the failure mode, which is the diligence-signalling § Writing tone already bars. The habit recurs here because the sentence gets written at the moment of choosing an approach.
+One sentence before the first tool call, stating the action and nothing about why it is right. While working, surface only a finding that changes the picture or a change of direction; skip acknowledgment turns. (2026-05-02: *"wasted me 30 seconds to read while you DO NOT save for the next session."*) The closing message leads with the outcome; a file list is not a report.
 
-While working, surface an update only when you find something that changes the picture or you change direction. Not per step, not per file. Skip acknowledgment turns ("got it", "I have the picture", "now updating X") entirely; a turn has to carry new information, a question, or a finding. A purely conversational message with no tool call gets a short ordinary reply. (2026-05-02, on a status-only turn: *"wasted me 30 seconds to read while you DO NOT save for the next session."*)
-
-The closing message leads with the outcome: the first sentence answers what happened or what you found, with supporting detail after it. Work the diff already shows does not get narrated back. A file list is not a report.
-
-## File Structure
+## Code map
 
 ```
-pids_jre_simulator/
-├── main.py                            # Entry point, picker → setup orchestration
-├── app.py                             # PASimulator, AppState, translation loading, PA/STA handling
-├── audio.py                           # AudioPlayer: play_pa/sta, pause, is_playing
-├── constants.py                       # Cross-model only: TIME_SCALE=60, FRAME_RATE=15, audio, setup palette
-├── app_paths.py                       # Canonical project_root() — sole PyInstaller path resolver
-├── font_atlas.py                      # LCD font seam: live fonts (dev) or pre-rendered atlas
-│                                       #   (ship). lcd_font() + text_parts(). docs/wip/WIP_font_atlas.md
-├── i18n.py                            # App-chrome i18n: settings, locale detect, t(), font helper
-├── frame_stream.py                    # Window mirroring over HTTP + taps back (TIMS 設定 →
-│                                       #   off/local/lan). docs/APP.md § "Window mirroring"
-├── qr.py                              # Byte-mode EC-L QR encoder, versions 1-4 — the band's
-│                                       #   scannable mirror address. No dependency, by design
-├── route_loader.py                    # finalize_route: JSON → runtime closure with derived fields
-├── preview_display.py                 # Audio-free preview entry (PASimulator(preview=True))
-├── displays/
-│   ├── base.py                        # DisplayMode enum, ModeCycler, ChangeScheduler + beat schedule
-│   ├── lower_lcd.py                   # LowerDisplayBase: slot cycle, force-switch, frame swap
-│   ├── utils.py                       # ALL drawing primitives + display helpers
-│   └── train_models/e235_1000/
-│       ├── __init__.py                # Per-model dimensions/palette
-│       ├── upper_lcd.py               # Japanese + Furigana + English + UpperDisplay manager
-│       └── lower_lcd.py               # Japanese + 8-station + English renderers + LowerDisplay
-│                                       # concrete (slot cycle lives in displays/lower_lcd.py)
-├── data/
-│   ├── translations.json              # Station names (furigana, english)
-│   ├── train_types.json               # Train type English translations
-│   ├── translations_app.json          # App-chrome strings (en / zh_HK / zh_CN)
-│   └── stations.json                  # Station metadata (3-letter codes)
-├── auto_input/                        # OCR-driven auto-PA (driver + ocr + hud_layout)
-├── tims/                              # TIMS cab-console UI package (see docs/APP.md)
-│   ├── widgets.py                     # Draw primitives (bevel buttons, AA-off low-res text)
-│   ├── chrome.py                      # Shared vocabulary (PALETTE, button presets, role fonts)
-│   ├── band.py                        # Persistent status band (setup screens + live OCR panel)
-│   └── setup/                         # Setup/OOBE flow screens (tims.setup.run = entry)
-├── docs/                              # Domain docs — APP / DATA_FORMAT / DISPLAY / DISPLAY_E235
-│   └── wip/                           # In-flight design docs; each carries its own delete trigger
-├── memory/                            # Daily logs + MEMORY.md index (untracked; canonical =
-│                                       #   origin/memory ref via _harness/publish_memory.py)
-└── audio/
-    ├── [line]/[diagram]/route.json    # Real routes
-    └── _mock/main/route.json          # Edge-case catalog for preview (not shipped)
+main.py                 entry: picker → setup orchestration
+app.py                  PASimulator, AppState, PA/STA handling, input loop
+audio.py                AudioPlayer: play_pa / play_sta / pause / is_playing
+app_paths.py            project_root(): the only bundled-asset path resolver
+constants.py            cross-module values only (TIME_SCALE=60, FRAME_RATE=15, audio, setup palette)
+route_loader.py         finalize_route: route.json → runtime closure with derived fields
+font_atlas.py           LCD font seam: live fonts in dev, baked atlas in a shipped build
+i18n.py                 app-chrome strings, locale detection, chrome fonts
+frame_stream.py, qr.py  window mirroring over HTTP with taps back; its dependency-free QR encoder
+departure_bell.py, bell_window.py   the departure-bell box
+window_utils.py         always-on-top pinning, DPI awareness
+update_check.py, tutorial.py, plot_drive.py (Report button)
+displays/               base.py (DisplayMode, ModeCycler, ChangeScheduler) · lower_lcd.py (slot cycle,
+                        force-switch, frame swap) · transfer_info.py · utils.py (all drawing primitives) ·
+                        train_models/{e235_1000,e235_0,e233_0}/ (per-model upper and lower LCD)
+tims/                   TIMS cab-console UI: widgets.py, chrome.py (palette, presets), band.py, setup/
+auto_input/             OCR auto-drive: driver.py, ocr.py, hud_layout.py, sampling.py
+data/                   translations, train types, app-chrome strings, station metadata
+audio/<line>/<diagram>/route.json   real routes; audio/_mock/ holds preview fixtures
+preview_display.py, preview_transfers.py, validate_data.py   dev entry points
 ```
 
 ## Key Features
 
-1. **Display Cycling** (1 beat = 4s): KANJI → FURIGANA → ENGLISH. Destination always kanji.
-2. **Lower-LCD view alternation**: full-route ↔ 8-station zoomed (+ transfer when in window). One `ChangeScheduler` owns language + slot on a shared beat so no two changes collide — see [docs/DISPLAY.md § Change scheduler](docs/DISPLAY.md).
-3. **Real-Time Countdown**: `TIME_SCALE=60`, floor division, forces "1" on last PA.
-4. **Station Skip**: Time-based red arrow progression through passing stations.
-5. **Single train-position index**: `state.curr_stop` is stored; `state.cursor_pos` is derived (lags during skip animation).
+1. **Display cycling** (1 beat = 4 s): KANJI → FURIGANA → ENGLISH; the destination stays kanji.
+2. **Lower-LCD view alternation**: full-route ↔ 8-station zoomed, plus transfer when in window. One `ChangeScheduler` owns language and slot on a shared beat ([docs/DISPLAY.md § Change scheduler](docs/DISPLAY.md)).
+3. **Real-time countdown**: `TIME_SCALE=60`, floor division, forces "1" on the last PA.
+4. **Station skip**: time-based red-arrow progression through passing stations.
+5. **Single train-position index**: `state.curr_stop` is stored; `state.cursor_pos` is derived and lags during the skip animation.
 
 ## Controls
 
@@ -258,7 +214,7 @@ pids_jre_simulator/
 | Page Up | Play STA (jumps to sta_cut if playing) |
 | End | Pause |
 
-Yellow hint square = more presses yield more PA at this stop. Two branches, different thresholds: in transit it keys on `len(pa) > 1`, at the platform on `len(pa_at_station) > 0`, because `pa` is 2-by-default and `pa_at_station` empty-by-default.
+Yellow hint square = more presses yield more PA at this stop. In transit it keys on `len(pa) > 1`, at the platform on `len(pa_at_station) > 0`, because `pa` is 2-by-default and `pa_at_station` empty-by-default.
 
 ## When Working On...
 
@@ -267,12 +223,12 @@ Consult when needed, not upfront:
 - **App architecture / setup flow** → [docs/APP.md](docs/APP.md)
 - **Data/JSON** → [docs/DATA_FORMAT.md](docs/DATA_FORMAT.md)
 - **LCD displays** → [docs/DISPLAY.md](docs/DISPLAY.md) (cross-model); [docs/DISPLAY_E235.md](docs/DISPLAY_E235.md) (per-sub-series)
-- **Audio/Diagram** → `/pa-make` or `/sta-make` skill; per-line quirks in [audio/README.md](audio/README.md)
+- **Audio/Diagram** → `/pa-make` or `/sta-make`; per-line quirks in [audio/README.md](audio/README.md)
 - **Auto-input / OCR** → [auto_input/README.md](auto_input/README.md)
-- **Testing / test suite + hierarchy** → [_tests/README.md](_tests/README.md)
+- **Testing** → [_tests/README.md](_tests/README.md)
 - **Code contracts** → inline `# CONTRACT:` blocks at code sites
-- **Preview** → `uv run preview_display.py` (mock route) or a real route via `--route <line>/<diagram>` (e.g. `--route sobu/1217F --stop 9`). Flags: `--screenshot out.png` (static frame, headless), `--lower-view full|eight|transfer` (freeze a view), `--mode kanji|furigana|english`, `--model e235_1000|e235_0`. Controls: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. Full arg list in the `preview_display.py` docstring.
-- **Build/Release** → `/build` + `/release` skills
+- **Preview** → `uv run preview_display.py` (mock route) or a real route via `--route <line>/<diagram>` (e.g. `--route sobu/1217F --stop 9`). Flags: `--screenshot out.png` (headless still), `--lower-view <slot>` (freeze a view), `--mode kanji|furigana|english`, `--model e235_1000|e235_0|e233_0`. Controls: PageDown=PA, PageUp=STA, M=mode, ←/→=jump, ESC=quit. Full list in the `preview_display.py` docstring.
+- **Build/Release** → `/build` + `/release`
 - **Review** → `/review-dirty` (single) or `/review-plus-fix-relentlessly` (loop)
-- **Commit** → `/commit` skill
-- **Sweeps** → `/vibe-check` (codebase mess) or `/distill-docs` (doc bloat)
+- **Commit** → `/commit`
+- **Sweeps** → `/vibe-check` (code), `/distill-docs` (domain docs), `/distill-rules` (rules corpus), `/distill-memory` (logs → rules)

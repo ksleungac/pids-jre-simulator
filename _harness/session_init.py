@@ -138,15 +138,26 @@ def memory_text(rel_path):
     return merged_view(origin, local, rel_path)
 
 
-def print_memory(rel_path, label):
-    """Print the merged narrative view with a header, or a 'not found' note."""
+def print_memory(rel_path, label, brief=False):
+    """Print the merged narrative view with a header, or a 'not found' note.
+
+    `brief` prints only the block headings. The SessionStart hook uses it, because a
+    hook's injected context is capped and a full day's log can fill it alone; the
+    headings say whether the log is worth opening."""
     content = memory_text(rel_path)
-    if content and content.strip():
-        print(f"=== {label} ({Path(rel_path).name}) ===")
-        print(content.strip())
-        print()
-    else:
+    if not (content and content.strip()):
         print(f"=== {label} — not found ===\n")
+        return
+    if brief:
+        headings = [l for l in content.splitlines() if l.startswith("## ")]
+        print(f"=== {label} ({rel_path}) — {len(headings)} block(s); Read it for the narrative ===")
+        for h in headings:
+            print(f"  {h[3:]}")
+        print()
+        return
+    print(f"=== {label} ({Path(rel_path).name}) ===")
+    print(content.strip())
+    print()
 
 
 def _gh():
@@ -268,7 +279,7 @@ def _docline(path: Path) -> str:
     return ""
 
 
-def tools():
+def tools(doc_width=88):
     """Print the tool inventory — the redline's "discover before you write" as a PUSH.
 
     `redlines.md`: never write a new tool or instrument while one exists, and
@@ -302,13 +313,14 @@ def tools():
     print(f"=== Tools you already have ({len(rows)}) — expand one before writing a new one ===")
     width = max(len(n) for n, _ in rows)
     for name, doc in rows:
-        print(f"  {name:<{width}}  {doc[:88]}")
+        print(f"  {name:<{width}}  {doc[:doc_width]}")
     print("  A HIT is a tool that already holds your INPUTS, even if it does not do your JOB.")
     print('  redlines.md · principles.md § "Search before authoring"')
     print()
 
 
-def main():
+def main(brief=False):
+    """`brief` is the SessionStart hook's mode (`memory_loop.py session-start`)."""
     git_sync()
 
     # Publish any narrative queued in the checkout (fail-soft; fetch already done).
@@ -331,8 +343,8 @@ def main():
     today = date.today()
     yesterday = today - timedelta(days=1)
 
-    print_memory(f"memory/{today.isoformat()}.md", "Today's memory")
-    print_memory(f"memory/{yesterday.isoformat()}.md", "Yesterday's memory")
+    print_memory(f"memory/{today.isoformat()}.md", "Today's memory", brief)
+    print_memory(f"memory/{yesterday.isoformat()}.md", "Yesterday's memory", brief)
     # MEMORY.md — only last 10 entries (older rarely matters for session pickup)
     mem_text = memory_text("memory/MEMORY.md")
     if mem_text:
@@ -367,7 +379,7 @@ def main():
     except Exception as e:
         print(f"=== Harness integrity check failed: {e} ===\n")
 
-    tools()
+    tools(doc_width=56 if brief else 88)
     gh_backlog()
     directions()
 

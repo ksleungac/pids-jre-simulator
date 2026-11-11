@@ -30,14 +30,23 @@ Design (2026-07-23, third-man-adjusted; moved off master same day — commit-noi
   merge against the new tip, retry. Appends are position-independent, so the retry
   is purely mechanical.
 
+Memory loop (2026-11-09, ported from game-in-idea, which built on this script):
+- Step lines are written to today's log DURING work, under a block headed
+  `## Session: in progress — <topic>`. Such a block never publishes; /session-recap
+  replaces it with a narrative block, and only that one goes out.
+- `pull` writes the ref's blocks/entries into the local files, so a log recapped on
+  the other PC exists on disk here rather than only in session_init's merged view.
+- Network calls never open a credential prompt and time out, because a hook runs this.
+
 # CONTRACT: memory/*.md are append-only; every write to origin flows through this
 # script. /commit never stages memory/** (classify_commit.py buckets them out).
 
 Usage:
-    uv run _harness/publish_memory.py             # publish pending narrative
-    uv run _harness/publish_memory.py --dry-run   # show what would publish
+    uv run _harness/publish_memory.py             # pull, then publish pending narrative
+    uv run _harness/publish_memory.py --dry-run   # show what would pull / publish
 """
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -51,6 +60,11 @@ PUBLISH_REMOTE = "private"  # NOT origin — a recap is not a publishing surface
 PUBLISH_BRANCH = "memory"  # journal-only ref; master history stays pure code
 REMOTE_REF = f"{PUBLISH_REMOTE}/{PUBLISH_BRANCH}"
 MAX_PUSH_RETRIES = 3
+# A block under this heading is a session still being logged; it stays local.
+IN_PROGRESS_HEADING = "## Session: in progress"
+NET_TIMEOUT = 60
+# Runs inside the SessionStart hook: never open a credential prompt.
+GIT_ENV = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"}
 
 
 # ---------------------------------------------------------------- git helpers
@@ -58,12 +72,17 @@ MAX_PUSH_RETRIES = 3
 
 def _git(args, input_bytes=None):
     """Run git in the repo root. Returns (returncode, stdout_bytes, stderr_bytes)."""
-    r = subprocess.run(
-        ["git", *args],
-        cwd=REPO_ROOT,
-        input=input_bytes,
-        capture_output=True,
-    )
+    try:
+        r = subprocess.run(
+            ["git", *args],
+            cwd=REPO_ROOT,
+            input=input_bytes,
+            env=GIT_ENV,
+            capture_output=True,
+            timeout=NET_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 1, b"", str(e).encode()
     return r.returncode, r.stdout, r.stderr
 
 
@@ -104,21 +123,36 @@ def split_daily(text: str):
     return "".join(preamble_parts), blocks
 
 
-def merge_daily(origin_text, local_text):
+def is_recapped(block: str) -> bool:
+    """False for a block still being logged — it stays local until /session-recap."""
+    return not block.startswith(IN_PROGRESS_HEADING)
+
+
+def merge_daily(origin_text, local_text, keep=None):
     """Merge a daily log: origin + local blocks origin lacks.
 
     Returns (merged_text, new_blocks, warnings). origin_text None => file is new
     on origin, local publishes verbatim. A local block whose heading collides
     with an origin block but whose body differs is skipped with a warning
     (edited, not appended — manual case).
+
+    `keep` filters the local blocks (publish passes `is_recapped`). With a filter
+    and no origin copy, the new file is the preamble plus the kept blocks, or
+    None when nothing is kept. `pull` calls this with the arguments swapped.
     """
     warnings = []
+    preamble, local_blocks = split_daily(local_text)
+    if keep is not None:
+        local_blocks = [b for b in local_blocks if keep(b)]
     if origin_text is None:
-        _, local_blocks = split_daily(local_text)
-        return local_text, list(local_blocks), warnings
+        if keep is None:
+            return local_text, list(local_blocks), warnings
+        if not local_blocks:
+            return None, [], warnings
+        merged = preamble.rstrip("\n") + "\n\n" + "\n\n".join(b.strip("\n") for b in local_blocks) + "\n"
+        return merged.lstrip("\n"), list(local_blocks), warnings
 
     _, origin_blocks = split_daily(origin_text)
-    _, local_blocks = split_daily(local_text)
     origin_keys = {b.strip() for b in origin_blocks}
     origin_headings = {b.splitlines()[0].strip() for b in origin_blocks}
 
@@ -159,14 +193,16 @@ def _entry_label(line: str):
     return None
 
 
-def merge_index(origin_text, local_text):
+def merge_index(origin_text, local_text, cap=MAX_INDEX_ENTRY_CHARS):
     """Merge MEMORY.md: local entry lines origin lacks, inserted newest-first (top).
 
     Returns (merged_text, new_entries, warnings). Entries dedup on exact line;
     a local entry whose [label] exists on origin with different text is skipped
-    with a warning (edited, not appended). A new entry over MAX_INDEX_ENTRY_CHARS
-    is skipped the same way — the index is the pointer layer, so the overflow
-    belongs in the daily log the entry links to.
+    with a warning (edited, not appended). A new entry over `cap` is skipped the
+    same way — the index is the pointer layer, so the overflow belongs in the
+    daily log the entry links to. `pull` passes cap=None: entries already on the
+    ref were grandfathered when the cap arrived, and refusing them locally would
+    only hide published history.
     """
     warnings = []
     if origin_text is None:
@@ -187,9 +223,9 @@ def merge_index(origin_text, local_text):
         if label in origin_labels:
             warnings.append(f"edited index entry NOT published (label exists on origin with different text): [{label}]")
             continue
-        if len(line.rstrip()) > MAX_INDEX_ENTRY_CHARS:
+        if cap and len(line.rstrip()) > cap:
             warnings.append(
-                f"over-cap index entry NOT published ({len(line.rstrip())} chars > {MAX_INDEX_ENTRY_CHARS}): "
+                f"over-cap index entry NOT published ({len(line.rstrip())} chars > {cap}): "
                 f"[{label}] — the index is a pointer line; move the detail into the daily log it links to"
             )
             continue
@@ -228,6 +264,38 @@ def merged_view(origin_text, local_text, rel_path: str):
 # ---------------------------------------------------------------- transport
 
 
+def _remote_files():
+    """memory/*.md paths present on the ref."""
+    rc, out, _ = _git(["ls-tree", "-r", "--name-only", REMOTE_REF, "memory/"])
+    return [l for l in _norm(out).splitlines() if l.endswith(".md")] if rc == 0 else []
+
+
+def pull(dry_run: bool = False):
+    """Write the ref's blocks/entries that the local files lack. Returns (changed, warnings).
+
+    The checkout is the working copy a session reads and writes, so a log recapped on
+    the other PC has to land here as a file, not only in session_init's merged view.
+    """
+    changed, warnings = [], []
+    for rel in _remote_files():
+        origin_text = _origin_text(rel)
+        if origin_text is None:
+            continue
+        path = REPO_ROOT / rel
+        local_text = _norm(path.read_bytes()) if path.exists() else None
+        if path.name == "MEMORY.md":
+            merged, new, warns = merge_index(local_text, origin_text, cap=None)
+        else:
+            merged, new, warns = merge_daily(local_text, origin_text)
+        warnings.extend(f"{rel} (pull): {w}" for w in warns)
+        if new and merged is not None and merged != local_text:
+            if not dry_run:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(merged, encoding="utf-8", newline="\n")
+            changed.append(f"{rel} +{len(new)}")
+    return changed, warnings
+
+
 def _pending_changes():
     """Compute {rel_path: merged_text} for every memory file with unpublished
     content, plus a list of (rel_path, new_count) summaries and all warnings."""
@@ -236,10 +304,12 @@ def _pending_changes():
         rel = f"memory/{path.name}"
         local_text = _norm(path.read_bytes())
         origin_text = _origin_text(rel)
-        merge = merge_index if path.name == "MEMORY.md" else merge_daily
-        merged, new_items, warns = merge(origin_text, local_text)
+        if path.name == "MEMORY.md":
+            merged, new_items, warns = merge_index(origin_text, local_text)
+        else:
+            merged, new_items, warns = merge_daily(origin_text, local_text, keep=is_recapped)
         warnings.extend(f"{rel}: {w}" for w in warns)
-        if new_items and merged != origin_text:
+        if new_items and merged is not None and merged != origin_text:
             changes[rel] = merged
             summary.append((rel, len(new_items)))
     return changes, summary, warnings
@@ -326,6 +396,12 @@ def sync(fetch: bool = True, dry_run: bool = False) -> int:
         if rc != 0:
             print("[publish-memory] offline (fetch failed) — narrative not published; queue kept in checkout")
             return 0
+
+    pulled, pull_warnings = pull(dry_run)
+    for w in pull_warnings:
+        print(f"[publish-memory] WARNING: {w}")
+    if pulled:
+        print(f"[publish-memory] {'would pull' if dry_run else 'pulled'} {', '.join(pulled)} from {REMOTE_REF}")
 
     for attempt in range(MAX_PUSH_RETRIES):
         changes, summary, warnings = _pending_changes()
