@@ -161,6 +161,7 @@ so this table grows before building starts.
 | 3a | **優先席** | Priority-seat placard, static | **BUILT** 2026-08-29 · `priority_seat.py` · reference `priority-seats.png` |
 | 3b | **マナーモード** | Mobile-phone notice, static | **BUILT** 2026-08-29 · `manner_mode.py` · reference `manner-mode.png` |
 | 4 | **Patterns overview** | All six Chūō service patterns as parallel coloured lines with per-station stop markers | **BUILT** 2026-09-01, § 14 — Chūō only, in the rotation 2026-09-12 |
+| 5 | **運行情報 / Train Information** | A pink pill header, a bracketed headline, a wrapped message body | reference 2026-11-09, § 15 — measured, drill-down pending |
 | … | *further views* | author collecting references | pending |
 
 **Transfer info — deferred to its own session, and not an E233-0 distinctive.** In the
@@ -213,6 +214,13 @@ follows is three, on the existing beat schedule and the existing `at_station` fo
 only observable from motion and all three references are the same instant, so the real
 cadence is a tuneable to correct once a moving reference exists — not a guess to defend.
 
+**The real cadence, observed by the author on real trains (2026-11-12):** the UPPER screen beats
+every **3s** and the LOWER every **6s**, and the language is **decoupled** between the two
+(*"the beat on lower screen of e233-0 is 6 seconds, most of our current pages is worth of 2 beats.
+the top screen of e233-0 is 3 seconds beat"*; *"language is decoupled between upper and lower
+screen"*). E235's single 4s beat therefore does not carry over. NOT YET BUILT; § 15.3 holds the
+heartbeat redesign this lands with.
+
 **Out-of-spec routes.** E233-0 becomes the natural host for arbitrary linear routes, and
 that path gets specced deliberately rather than falling out of the Chūō work. The decisions
 it needs are per-view, so they belong to the drill-downs; the whole-display commitment is
@@ -234,6 +242,7 @@ borrowed E235 behaviour.
 | Priority seat | `priority-seats.png` | added 2026-08-29 |
 | Manner mode | `manner-mode.png` | added 2026-08-29 |
 | Patterns overview, next is the terminus | `overview-tokao-different-patterns-next-terminus-ja.png` (furigana) · `…-ja-1.png` (kanji) | added 2026-09-18. 次は終点 東京, 9:37: the terminus prefix, its two-line furigana form, and no train type or destination |
+| Train information | `train-information-ja.png` | 通勤特快 東京行, 次は 国分寺 JC16, 8:53, car 10 — added 2026-11-09. Carries a black surround; the screen is x 12–1349, y 0–1000 of the file |
 | 6-station, ENGLISH | `6stations-yotsuya-ja.png` | 四ツ谷 — added 2026-08-29. The first capture in a mode other than Japanese, and it confirms the **lower LCD stays kanji** in English mode (§ 4). It is also the only frame showing a **coded station behind the train** (新宿 JC-05, greyed), which is what settled § 10.3.2 |
 
 The first three are the same train at the same instant, which is what made the upper-LCD
@@ -1999,6 +2008,13 @@ reference catches it under `つぎは` — and the rising edge of `at_station` s
 bypassing the change floor. `docs/DISPLAY.md` § "Change scheduler" already classifies that
 force-switch as Preemptive.
 
+CLARIFIED 2026-11-12 — **"approach" is the whole run, not the まもなく phase** (author: *"on the
+e233, transfer info pages shows all along, no まもなく filter"*). The build took the base's
+`_in_transfer_window`, which admits the page only from まもなく to the stop, although this section's
+own reference catches the page under つぎは. NOT YET BUILT: it lands with the heartbeat redesign
+(§ 15.3). A real-scheduler run with the filter removed in memory gives the running lap exactly the
+まもなく lap of today, FULL → EIGHT → OVERVIEW → TRANSFER, 44s.
+
 **E235 does not change** (author, 2026-08-29). Its horizontal panel with the Rule 1–4 column
 cascade stays exactly as it is. This is the per-model native-norm rule doing its job in the
 opposite direction from usual: E235 packs horizontally because its lower region is wide and short,
@@ -2432,13 +2448,14 @@ itself.
   pleasant to write by hand, which is a real constraint on its shape.
 - SETTLED 2026-09-12 — **the slot's place in the rotation: a peer of FULL**, on the same 3-beat
   dwell, sitting straight after EIGHT (author: *"include it in the normal loop as other full route
-  loop pattern"*). Not rarer like the two standing notices. Two conditions gate membership, both in
-  `LowerDisplay._available_slots`. The route must carry a sheet, since a line with no `system.json`
+  loop pattern"*). Not rarer like the two standing notices. One condition gates membership, in
+  `LowerDisplay._available_slots`: the route must carry a sheet, since a line with no `system.json`
   draws a blank page and the renderer's refusal to invent one is right for the drawing and wrong for
-  the schedule. And the eight-lock must not have dropped FULL: both views answer "where does this
-  line go", so the lock that says a whole-line picture has stopped earning its turn near the terminus
-  says it about this one too, and the tail keeps its single-slot cycle unchanged. Out of the transfer
-  window the lap is now FULL → EIGHT → OVERVIEW, 9 beats.
+  the schedule. Out of the transfer window the lap is FULL → EIGHT → OVERVIEW, 9 beats.
+  CORRECTED 2026-11-12: this bullet also made the overview leave with FULL under the eight-lock near
+  the terminus. That was an inference written in at the same authority as the author's words; the
+  author never said it (*"there's no special treatment"*). Removed, so under the lock the lap is
+  EIGHT → OVERVIEW.
 - OPEN — **where the data house file sits.** A line folder serves while no live case shares one
   system across several folders. JT/JU/JS was that case and it is out on topology.
 - OPEN — **station-name black and grey.** Built as the § 9.1 rule, this train's own stopping pattern,
@@ -2457,3 +2474,225 @@ itself.
   (6,67,171), (234,88,15) — so two methods on one capture disagree and neither can be believed
   (`principles.md` § "Measuring off a capture"). `system.json` keeps the authored values and
   `validate_data.check_sheet_colors` pins them to the diagrams, so any change is deliberate.
+
+---
+
+## 15. Lower LCD, train-information view — PAGE BUILT, NOT YET IN THE ROTATION
+
+§ 15.1 is what the reference measures, § 15.2 is the data-source research, and § 15.3 is the
+drill-down, held 2026-11-09 and 2026-11-11.
+
+**Build state (2026-11-11).** Step 1 of § 15.3's order is built and accepted (*"Looks right"*):
+`train_info.py` draws the page, pinnable with `preview_display.py --model e233_0 --lower-view
+train_info [--train-info N]`. Step 2 is built PROVISIONALLY: the page shares the notices' rare turn
+(`_pick_rare_page`), which the heartbeat redesign below replaces. Steps 3–4 (the fetcher with its
+setup switch, the CP932 bake) are not started.
+- PENDING — **a verify+fix pass over the page's code** (`train_info.py` and its wiring), asked by the
+  author 2026-11-12 before more is built on it.
+
+- **Geometry follows the photo; colour follows the capture** (author: *"follow the IRL shot, span full
+  left right, do measurements yourself"*). § 15.1.1 has the photo's figures; § 15.1 keeps the
+  capture's, which still own the pill colours and the faces. A photograph shifts colour, and this
+  one reads the background at (180,198,223) against the panel's (213,223,239).
+- **The pool is real messages only:** the two from the references and eight from JR East's
+  traininfo page (2026-11-09 23:58, 2026-11-12 0:05 and 0:42), covering 遅延, 運転見合わせ and
+  一部運休. The two written for the first build are gone.
+- **Hardened:** a malformed pool entry raises at load naming it, an empty pool draws the pill alone,
+  and control or format characters (newline, tab, zero-width) are dropped before the grid, because
+  each would otherwise take a cell and be a character the shipped atlas never baked.
+
+The capture is `train-information-ja.png`: 通勤特快 東京行, 次は 国分寺, 8:53, with the normal upper
+band. The file is 1366 × 1011 with a black surround. The screen is x 12–1349, y 0–1000 (aspect
+1.3367, the same crop residual as § 2.1), and its divide measures 0.3107 against § 2.2's 0.3105, so
+the crop is aligned. Figures come from `_e233_lower_geometry.py --transfer / --columns / --ink /
+--profile` on that crop, in canvas units.
+
+### 15.1.1 The photo — the geometry `[measured]`
+
+`train-information-photo-ja.png`, 677 × 504, 快速 高尾行, 次は 神田, 17:55, car 6: a photograph of a
+real screen, pasted in chat and saved from the session transcript by `_dev_scripts/pasted_images.py`.
+`_e233_lower_geometry.py --rectify … 2 152,149,480,480` warps it onto 1280 × 960. Its four edges fit
+at 0.20–0.46px RMS over 323–434 points each. The edges place the screen, not the canvas, so the
+vertical axis is anchored on the divide (measured 152, true 149) and the bottom edge. The plate's
+left and right edges then land within 0.7px.
+
+| Element | canvas | note |
+|---|---|---|
+| Pill | x 169.0–481.0, y 159.3–185.0 | centre x 325.0, five right of the canvas centre |
+| `運行情報` | x 197–270, ink centre 233.5 | steps 19.0 a character, the capture's size |
+| `／` | ink centre 281.6 | full-width, between the two runs; the capture has none |
+| `Train Information` | x 303.5–444.5, centre 374.0 | 141 wide, the capture's 142 |
+| Label row | ink 165.0–183.0, centre 173.5 | |
+| Grid | cell 0 at x 8.8, pitch 28.14 | 22 cells end at 627.9: the screen edge to edge. Headline and body share the origin, their 相 centres within 0.15 |
+| Rows | ink tops 211.5 / 247.5 / 283.0 / 319.0 | one pitch, 36.0, headline included |
+| Page counter `1/2` | y 436.5–473.5, bottom right | dog-eared box. Pages Japanese and English, so not drawn while the page is Japanese only |
+
+Ours against it: rows within 1px, every cleanly resolved body glyph within 0.25px, the pill box
+within 1px on all four sides. Five body rows fit before the sixth would reach the counter's corner.
+
+### 15.1 The capture — geometry `[measured]`
+
+| Element | ink or box | note |
+|---|---|---|
+| Pill | x 134.4–504.6 (370.2 wide), y 163.1–191.8 (28.7 tall) | centre x 319.5: centred on the canvas |
+| `運行情報` | x 187.5–262.6, y 167.4–185.6 | centre x 225.0 |
+| `Train Information` | x 320.5–462.5, y 169.8–184.2 | centre x 391.5. A Latin face, not yet identified |
+| Headline `【中央本線　遅延】` | x 60.3–246.8, y 219.6–244.0 | |
+| Body line 1 | x 47.4–582.6, y 260.7–283.2 | 22 cells |
+| Body line 2 | x 46.9–544.8, y 289.9–312.8 | |
+
+- **The text sits on a monospaced full-width grid.** The cell pitch is 24.53, fitted on 中 and 間 at
+  the two ends of line 1, and every kanji between lands within a pixel of it. 、 and 。 each take a
+  full cell with no punctuation squeeze. The headline runs on the same grid (24.35, inside the
+  capture's error) and shares the body's left origin, cell 0 at about x 45.
+- **Line 1 wraps at 22 cells although a 23rd would fit.** It ends at 582.6 and a 23rd cell would end
+  near 607, inside the panel. So the wrap looks like a column count rather than the panel width.
+  One reference cannot confirm it.
+- **Line 2 leaves cell 19 empty before 。** (`います　。`). Whether the source text carries the space
+  or the IRL layout inserts it is unknown.
+- Body line pitch is 29.4. Headline to line 1 is 40.2, about 10.8 more than a body step. The panel
+  below line 2 is empty for about 164px, room for five more lines at that pitch.
+- **The pill is a vertical gradient, symmetric about its middle row**: deep pink (223,82,155) at the
+  top and bottom edges and pale pink (248,199,234) at the centre, the same at x 145 and x 300. The
+  ends are rounded `[observed]`. A pixel darker than the fill on each edge, and a pixel brighter than
+  the background just outside it, read as resampling until shown otherwise (`display.md` §
+  "Measuring off a capture").
+- All text is black (body core (3,3,8), pill text core (6,2,8)). The lower background is the
+  standard (213,223,239).
+
+### 15.2 Data source — researched 2026-11-09
+
+The question was whether real 運行情報 exists in a form the app could read.
+
+- **JR East's own page carries exactly this content.** `traininfo.jreast.co.jp/train_info/kanto.aspx`
+  lists every Kantō line with a status label (平常運転 / 遅延 / 運転見合わせ / 一部運休 / お知らせ)
+  and, when the status is not normal, one sentence in the reference body's template. Read on
+  2026-11-09: `中央線快速電車は、中央本線内でのシカと衝突の影響で、東京～豊田駅間の下り線の一部列車に遅れがでています。`
+  中央本線 has its own entry (`lineid=chuoline`), so the reference's headline reads as
+  `【{line name}　{status}】` over that line's sentence.
+  - The line blocks are server-rendered HTML (`traininfo-routes__name`, `traininfo-routes__status`
+    with a class such as `delay`, `traininfo-routes__note`). The one JSON the page loads,
+    `www.jreast.co.jp/traininfojp/kanto.json`, holds only the お知らせ box.
+  - `/train_info/e/kanto.aspx` is the English version, machine-translated by JR East's own
+    disclaimer.
+  - **Both pages forbid this use.** Their footer prohibits reproducing the information or processing
+    it into electronic media without permission, so a shipped app reading it would be scraping a page
+    that forbids exactly that.
+- **ODPT is not usable either.** All eight JR East datasets on ckan.odpt.org are marked "Challenge
+  2026 only" under the Public Transport Open Data Challenge Limited License. That includes `JR東日本
+  アイステイションズ 運行情報`, served as `odpt:TrainInformation` JSON. The licence's Article 4.1 lets
+  the Center terminate any use other than a Challenge entry and take legal action over it.
+- Third-party scrapers exist (an Apify actor, an MCP server). They inherit the same problem.
+
+So no source is both live and licensed for this project.
+
+### 15.3 Drill-down — started 2026-11-09
+
+- SETTLED 2026-11-09 — **the text is live when possible, from an authored pool when not.** Author:
+  *"live when possible, authored pool when not possible, forget about licensing issue"*. § 15.2's
+  licence findings stay as the record; they do not gate the build.
+- SETTLED 2026-11-09 — **no disruption, no page.** The real E233-0 does not show it then (author).
+- SETTLED 2026-11-09 — **it is rare, like the two notices** (§ 12), rather than a lap member.
+- SETTLED 2026-11-09 — **Japanese only for now** (author: *"do Japanese only for now"*). The English
+  beat draws the same Japanese page.
+- SETTLED 2026-11-09 — **the live source is JR East's traininfo pages, licence set aside.** Author:
+  *"forget about the licensing … it's not applicable for our hobby project, we are not taking any
+  traffic"*, and the site is permanent, so the ODPT Challenge window does not apply. Two pages:
+  `kanto.aspx` and `shinkansen.aspx`, which share the `traininfo-routes__*` markup. The fetch follows
+  `update_check.py`: a daemon thread, a short timeout, certifi SSL, fail-silent. That module's CONTRACT
+  calls itself the app's only outward network call, so it changes with this.
+- SETTLED 2026-11-09 — **fetched at boot and then about every 15 minutes, no more.** Author: *"i also
+  don't to make the whole fetch thing too bot like. so it's like very infrequent update like once every
+  15 minutes or so?, and on boot up"*. That is two requests per fetch, one per page.
+  DECIDED 2026-11-09 (mine, not the author's): a failed fetch is not retried before the next interval,
+  and the page uses the authored pool until a fetch succeeds, which is the "when not possible" case
+  above.
+- SETTLED 2026-11-09 — **every Kantō line plus the Shinkansen, one line per page, looping.** Author:
+  *"Every line, kanto yes, but shinkansen as well, if there are multiple lines, each time this page
+  has the chance to show it's a different line, loop"*. A line listed under two 方面 (武蔵野線,
+  京浜東北線) is one line.
+- DECIDED 2026-11-09, on the author's delegation (*"you have your own thinking, generally it's let the
+  information flow and maybe some randomness"*) — **while any line is disrupted, a rare turn goes to
+  運行情報 two times in three**, drawn at random when the rare lap begins so the slot list holds for
+  the whole lap. Otherwise it is the next notice, keeping their alternation. The cadence of rare turns
+  does not change. The two-in-three is a tuneable. **Built 2026-11-12** (`_pick_rare_page`); 30
+  simulated minutes on `chuo/1654T` gave 45 laps, 15 rare pages, 8 of them 運行情報, each the next
+  message in the loop.
+- REOPENED 2026-11-12 — **the rotation above is provisional.** Author, from real videos: the pages
+  *"come together (for different lines), like a batch"*, and *"when the train is running, this is
+  really the main content"*. So the share-the-rare-turn model under-weights the page; the heartbeat is
+  being redesigned around a batch. Inputs so far (author, 2026-11-12):
+  - 12s, 3 beats, stays the page unit, and **a Japanese 運行情報 page holds its 3 beats in Japanese
+    only**; English, when it comes, is its own page.
+  - The pages fall into three groups, shown in this order (author, 2026-11-12):
+    1. **Route**, ordered big to small: OVERVIEW → FULL → EIGHT (*"show in OF6 … big to small"*).
+    2. **Train information.** Not rare: it joins every cycle, or every other (*"sometimes each turn,
+       sometimes 2 turns"*). It always opens with the 運行情報 page(s), 2 lower beats (12s) each;
+       after them マナーモード and 優先席 come as a PAIR, about 0.75 of the time, each page ONE lower
+       beat (6s) (*"manner and yuusenseki always comes together, each page is 6 seconds"*, correcting
+       the same day's "sometimes only one of it"). Provisional, not the author's: a cycle skips the
+       group with probability 0.5 and never twice running, which is the reading of "each turn or 2
+       turns"; マナーモード before 優先席, the order the author named them; with nothing disrupted the
+       group is the pair alone.
+    3. **Arrival**: the transfer page, then door-opening side and platform facilities such as where
+       the stairs are, which are not modelled (`docs/DISPLAY.md` § "IRL divergences": no door-side
+       data). *"transfer is actually one page of the 3rd group … 3rd group appears later than train
+       info"*. So TRANSFER moves out of the route group.
+  - The transfer page shows all along on E233-0 (§ 11.1, clarified).
+  - The instrument is `_dev_scripts/_heartbeat_timeline.py`: the real scheduler and manager, one row
+    per train state, a proposal patched in memory per row, drawn to `screenshot_heartbeat.png`.
+    `docs/DISPLAY.md` § "IRL divergences" already records the imbalance it shows: real trains give
+    the route bar a minority of the time because the other content takes turns, and ours had no other
+    content to rotate against. 運行情報 is the first.
+- FIXED 2026-11-12 — **near the terminus the rare turn came once and never again.** Laps were counted
+  on entering FULL, and the eight-lock removes FULL, so once the overview stayed in the locked loop
+  (§ 14.4 corrected) the count froze after the first rare page. Laps now start on the rotation's first
+  slot, FULL or EIGHT (`_first_slot`).
+- SETTLED 2026-11-09 — **disruptions only; お知らせ entries never show.** Planned-works notices (烏山線,
+  成田線, 八高線 on 2026-11-09) are the longest entries, 成田線's about 150 characters or seven lines,
+  so leaving them out also makes overflow rare.
+- SETTLED 2026-11-09 — **live text is drawn in ShinGo from a baked full JIS X 0208 set** (about 6,900
+  characters) at the body size. The atlas stores rendered strings and raises `KeyError` in the shipped
+  build on anything unbaked (`font_atlas.py` `metrics`), so live text without this would crash the
+  release. The atlas grows by an unmeasured few MB and becomes in effect a one-size bitmap of ShinGo,
+  which `THIRD-PARTY.md` § Fonts should say once it lands. Rejected: drawing live text in the shipped
+  `NotoSansJP.otf` (wrong face), and showing only fully-baked messages (most would fall back).
+  DECIDED 2026-11-11 (mine, within that decision): **the set is CP932's, not strict JIS X 0208's.**
+  The site writes 〜 as U+FF5E FULLWIDTH TILDE in every section phrase (`～駅間`). Python's
+  `shift_jis` codec, the strict mapping, decodes 6,879 characters without U+FF5E; `cp932` decodes
+  9,206 including it and the NEC/IBM extensions (①, Ⅰ). Every character of the 2026-11-12 messages
+  is in CP932.
+- SETTLED 2026-11-09 — **the offline pool is drawn exactly like live text**, with nothing marking it
+  (author: *"it's a sim"*).
+- SETTLED 2026-11-09 — **on by default, with an off switch in the TIMS setup.** Switched off, the
+  page draws from the pool exactly as when offline (author, 2026-11-12: *"pool when switched off"*).
+- DECIDED 2026-11-09 (mine): a page's text is snapshotted when the page appears, so a refresh never
+  changes a page on screen. The loop follows the site's order with duplicates removed; a line with two
+  entries (小海線 on 2026-11-09) gets two pages, and a line that clears drops out. `preview_display`
+  draws from the pool and makes no network call.
+- DECIDED 2026-11-11 (mine; the author passed the question with *"anyways, continue"*) — **a message
+  past seven body lines keeps the whole sentences that fit and drops the rest.** A message is built of
+  sentences and the first carries the disruption. Rare: sampled 2026-11-12 0:05, the 遅延 and
+  運転見合わせ messages ran 44–70 characters (2–4 lines), and only the excluded お知らせ ran longer.
+- SETTLED 2026-11-11 — **the wrap is a strict 22-character count, and punctuation may open a line.**
+  From an author-supplied photo of a real E233-0 (快速 高尾行, 次は 神田, 17:55): all three full lines
+  of `相鉄線直通列車は、渋谷駅ホーム並列化工事のため、終日、新宿～大崎駅間で運転を見合わせます。大崎駅で
+  相鉄線方面に折返し運転を実施します。` hold 22 characters, and 。 opens both line 3 and line 4. Its
+  headline, 【相鉄線直通列車　運転見合わせ】, is the site's own name and status, which confirms the
+  verbatim headline below. The photo is not on disk.
+- SETTLED 2026-11-11 — **the photo's variant, measured** (author: *"follow the IRL shot, span full
+  left right"*), § 15.1.1. Its pill reads `運行情報 ／ Train Information`, and its 22 characters span
+  the screen edge to edge on 28.14px cells, where the capture's 24.53px cells stop about 56px short.
+  Both break at 22, so the count is the rule at either cell size.
+- OPEN — **the `1/2` page counter.** It pages Japanese and English (author), so it waits for English.
+  Measured in § 15.1.1; the body's five-row limit already keeps its corner clear.
+- DECIDED 2026-11-11 (mine): **the headline is `【{name}　{status}】`, both verbatim from the site**, as
+  the reference's 【中央本線　遅延】 is. It never runs past one line on the current names: the longest,
+  【中央・総武各駅停車　運転見合わせ】, is 18 cells of 22.
+- OPEN — the pill label's Latin face and both labels' weights. Fitted once the page is approved.
+- SETTLED 2026-11-11 — **build, in this order** (author: *"anyways, continue"*, answering the
+  go-ahead): the page drawn from the pool and previewable via `--lower-view`, then its share of the
+  rare turn, then the fetcher and the setup switch, then the CP932 bake.
+- Since the photo geometry (§ 15.1.1), the body holds FIVE rows, not seven, so the sentence-keeping
+  overflow rule above applies past 110 characters. The longest real disruption sampled so far, 川越線,
+  is 70.
