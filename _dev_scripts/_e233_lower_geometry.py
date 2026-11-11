@@ -16,6 +16,10 @@ reference's own size, so they survive the 1502 -> 640 canvas change.
 Takes an image argument so the SAME measurement runs over our own render — the
 reference and the renderer answer the identical question, and comparing two runs
 of one instrument is what makes the numbers comparable at all.
+
+Every mode scales by `W / 640`, so the image must be the screen and nothing else.
+Crop a capture that carries a surround first: `train-information-ja.png` has a
+black one, and its screen is x 12–1349, y 0–1000 of the file.
 """
 
 import math
@@ -1690,6 +1694,121 @@ def report_color_runs(path, cx, cy, cw, ch, r, g, b, tol=60, step=1.0):
         y += step
 
 
+def report_rectify(path, out, k=2.0, thr=None, margin=0.18, y_anchors=None):
+    """A photographed screen, warped flat onto the canvas, so the other modes can measure it.
+
+    Every other mode assumes the image IS the screen, square to the camera. A
+    photograph of a real display is neither: the screen sits inside a dark bezel
+    inside a lighter casing, and the camera is a little off-axis. So this finds
+    the screen's four edges, intersects them for the corners, and resamples the
+    quadrilateral onto `640k x 480k`, which is the 4:3 canvas (§ 2.1).
+
+    An edge is FITTED, not picked. Each row (or column) away from the corners is
+    scanned from the image border inward for the first point where the image
+    turns BLUE: blue minus red runs about -55 on a beige casing, 0..18 on a black
+    bezel and +35..+57 on this screen's two backgrounds, so `thr` +25 sits past
+    the bezel and inside the screen. Brightness cannot do it: the 2026-11-11
+    photo has a black bezel along the top only, and elsewhere the casing meets
+    the screen directly. Scanning from the centre outward would stop at the first
+    black glyph instead. The crossing is interpolated at `thr` for a sub-pixel
+    position, a straight line is fitted through all of them, points off it by
+    more than 1.5px are dropped once and the line refitted, and the RMS residual
+    is printed, because it is what says whether the edge was found. A photo's
+    edge is a few pixels of blur, so the threshold places it about a pixel
+    inside on every side alike. `margin` keeps the scans off the corners.
+
+    The edges place the SCREEN; they do not place the canvas, because the
+    captures that defined the canvas may crop a few rows off the physical panel.
+    On the 2026-11-11 photo the plate's left and right edges landed within 0.7px
+    of the canvas while its top and bottom sat 4.5px low and the divide 2.5px
+    low. `y_anchors` = `(m1, t1, m2, t2)` corrects that: two lines measured at
+    canvas y `m1` / `m2` on a first pass are moved to their known canvas y `t1` /
+    `t2` (the divide at 149, the bottom edge at 480), linearly between.
+    """
+    import numpy as np
+
+    pygame.init()
+    s = pygame.image.load(path)
+    rgb = pygame.surfarray.array3d(s).astype(np.float64)  # (W, H, 3)
+    lum = rgb[..., 2] - rgb[..., 0]  # "how blue" — see the docstring
+    W, H = lum.shape
+    if thr is None:
+        thr = 25.0
+
+    def crossing(profile):
+        """First upward crossing of `thr`, as a float index."""
+        for i in range(1, len(profile)):
+            if profile[i - 1] < thr <= profile[i]:
+                a, b = profile[i - 1], profile[i]
+                return i - 1 + (thr - a) / (b - a)
+        return None
+
+    def fit(points):
+        """`(slope, intercept, rms, n)` of `v = slope*u + intercept`, one outlier pass."""
+        pts = np.array(points)
+        for _ in range(2):
+            m, c = np.polyfit(pts[:, 0], pts[:, 1], 1)
+            res = pts[:, 1] - (m * pts[:, 0] + c)
+            keep = np.abs(res) <= 1.5
+            if keep.all():
+                break
+            pts = pts[keep]
+        m, c = np.polyfit(pts[:, 0], pts[:, 1], 1)
+        res = pts[:, 1] - (m * pts[:, 0] + c)
+        return m, c, float(np.sqrt((res**2).mean())), len(pts)
+
+    ys = range(int(H * margin), int(H * (1 - margin)))
+    xs = range(int(W * margin), int(W * (1 - margin)))
+    left = [(y, crossing(lum[:, y])) for y in ys]
+    right = [(y, W - 1 - crossing(lum[::-1, y])) for y in ys if crossing(lum[::-1, y]) is not None]
+    top = [(x, crossing(lum[x, :])) for x in xs]
+    bottom = [(x, H - 1 - crossing(lum[x, ::-1])) for x in xs if crossing(lum[x, ::-1]) is not None]
+    edges = {}
+    for name, pts in (("left", left), ("right", right), ("top", top), ("bottom", bottom)):
+        pts = [p for p in pts if p[1] is not None]
+        edges[name] = fit(pts)
+        m, c, rms, n = edges[name]
+        print(f"   {name:6s} n={n:3d}  slope {m:+.4f}  rms {rms:.2f}px")
+
+    def corner(v_edge, h_edge):
+        # x = mv*y + cv (vertical edge), y = mh*x + ch (horizontal edge).
+        mv, cv = edges[v_edge][:2]
+        mh, ch = edges[h_edge][:2]
+        y = (mh * cv + ch) / (1 - mh * mv)
+        return mv * y + cv, y
+
+    src = [corner("left", "top"), corner("right", "top"), corner("right", "bottom"), corner("left", "bottom")]
+    OW, OH = int(round(640 * k)), int(round(480 * k))
+    dst = [(0, 0), (OW, 0), (OW, OH), (0, OH)]
+    print("   corners " + "  ".join(f"({x:.1f},{y:.1f})" for x, y in src) + f"  -> {OW}x{OH}")
+
+    # The homography taking OUTPUT pixels to SOURCE pixels, solved directly.
+    A, bvec = [], []
+    for (u, v), (x, y) in zip(dst, src):
+        A.append([u, v, 1, 0, 0, 0, -u * x, -v * x])
+        A.append([0, 0, 0, u, v, 1, -u * y, -v * y])
+        bvec += [x, y]
+    hm = np.append(np.linalg.solve(np.array(A, float), np.array(bvec, float)), 1.0).reshape(3, 3)
+
+    uu, vv = np.meshgrid(np.arange(OW) + 0.5, np.arange(OH) + 0.5, indexing="ij")
+    if y_anchors:
+        m1, t1, m2, t2 = y_anchors
+        vv = (m1 + (vv / k - t1) * (m2 - m1) / (t2 - t1)) * k
+        print(f"   y anchors: canvas {m1} -> {t1}, {m2} -> {t2}")
+    den = hm[2, 0] * uu + hm[2, 1] * vv + hm[2, 2]
+    sx = (hm[0, 0] * uu + hm[0, 1] * vv + hm[0, 2]) / den - 0.5
+    sy = (hm[1, 0] * uu + hm[1, 1] * vv + hm[1, 2]) / den - 0.5
+    x0 = np.clip(np.floor(sx).astype(int), 0, W - 2)
+    y0 = np.clip(np.floor(sy).astype(int), 0, H - 2)
+    fx = np.clip(sx - x0, 0, 1)[..., None]
+    fy = np.clip(sy - y0, 0, 1)[..., None]
+    top_row = rgb[x0, y0] * (1 - fx) + rgb[x0 + 1, y0] * fx
+    bot_row = rgb[x0, y0 + 1] * (1 - fx) + rgb[x0 + 1, y0 + 1] * fx
+    flat = pygame.surfarray.make_surface(np.clip(top_row * (1 - fy) + bot_row * fy, 0, 255).astype(np.uint8))
+    pygame.image.save(flat, out)
+    print(f"   wrote {out}")
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--transfer":
         # `--transfer <image> [cy] [ch]` — the transfer view's banner + rows.
@@ -1824,6 +1943,15 @@ if __name__ == "__main__":
     elif len(sys.argv) > 2 and sys.argv[1] == "--legend":
         # `--legend <image> [x0/W x1/W y0/H y1/H]` — the legend chips and labels.
         report_legend(sys.argv[2], *[float(v) for v in sys.argv[3:7]])
+    elif len(sys.argv) > 3 and sys.argv[1] == "--rectify":
+        # `--rectify <photo> <out.png> [k] [m1,t1,m2,t2]` — a photographed screen
+        # warped flat onto the 640k x 480k canvas, for the other modes to measure.
+        report_rectify(
+            sys.argv[2],
+            sys.argv[3],
+            k=float(sys.argv[4]) if len(sys.argv) > 4 else 2.0,
+            y_anchors=tuple(float(v) for v in sys.argv[5].split(",")) if len(sys.argv) > 5 else None,
+        )
     elif len(sys.argv) > 2 and sys.argv[1] == "--columns":
         # `--columns <image> <y_lo/H> <y_hi/H> [thr]` — the name band of one row.
         report_columns(

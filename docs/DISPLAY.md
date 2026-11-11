@@ -420,6 +420,12 @@ inventoried in `THIRD-PARTY.md` § "Reference material", so a file placed there 
 an existing carve-out; a new folder elsewhere is an uninventoried asset class
 (`conventions.md` § Tooling).
 
+**A reference the author pastes into chat is claude's to save, unasked** (author, 2026-11-11:
+*"most time it's your decision on taking references and whether we should save it … automate"*).
+The desktop app writes no file for a pasted image, so `_dev_scripts/pasted_images.py` lists the
+session's pasted images and `--save N <path>` writes one out. A photograph of a real screen is then
+flattened onto the canvas with `_e233_lower_geometry.py --rectify` before anything is measured.
+
 **Note what the reference set cannot show you.** References captured at one instant share
 one state, one station name and one train type, so they can agree perfectly and still say
 nothing about what varies. Write that limit down next to the measurement rather than
