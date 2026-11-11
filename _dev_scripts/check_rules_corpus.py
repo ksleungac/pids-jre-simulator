@@ -33,9 +33,11 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 RULES = Path(__file__).resolve().parent.parent / ".claude" / "rules"
 
-# Recorded 2026-10-22, after domain rules moved into path-scoped files (principles.md
-# 49 -> 32 entries, conventions.md 108 -> 24 bullets, critical_lessons.md 11 -> 6).
-# Each value is a CEILING: equal is fine, greater fails. Tighten as passes land.
+# Recorded 2026-11-09, after the digest pass that halved the always-loaded files
+# (principles.md 13,200 -> 6,482 words, conventions.md 3,650 -> 1,793, critical_lessons.md
+# 1,550 -> 962) with every heading and cited bold lead kept. The 2026-10-22 pass before it
+# moved domain rules into path-scoped files. Each value is a CEILING: equal is fine,
+# greater fails. Tighten as passes land.
 #
 # `tails` is HARD at 0 — a sibling cross-ref tail is on both contracts' refuse-list,
 # so there is no legitimate first one. `entries` and `worst_entry_words` carry a few
@@ -45,19 +47,20 @@ RULES = Path(__file__).resolve().parent.parent / ".claude" / "rules"
 # it is the measure that catches a file getting fatter without gaining rules.
 # fmt: off
 BASELINE = {
-    "principles.md":       {"entries":  33, "words": 13200, "worst_entry_words": 1050, "tails": 0},
-    "conventions.md":      {"entries":  25, "words":  3650, "worst_entry_words":  320, "tails": 0},
-    "critical_lessons.md": {"entries":   7, "words":  1550, "worst_entry_words":  490, "tails": 0},
+    "principles.md":       {"entries":  32, "words":  6800, "worst_entry_words":  480, "tails": 0},
+    "conventions.md":      {"entries":  22, "words":  1880, "worst_entry_words":  185, "tails": 0},
+    "critical_lessons.md": {"entries":   7, "words":  1010, "worst_entry_words":  210, "tails": 0},
 }
 # fmt: on
 
 # The ALWAYS-LOADED budget, in characters: `CLAUDE.md` plus every rules file with no
-# `paths:` frontmatter. Claude Code warns once the instruction files loaded at session
-# start add up past ~150k; the author's global `~/.claude/CLAUDE.md` takes ~1.6k of that,
-# so the repo's share is capped below it. A path-scoped file loads only when a matching
-# file is read or edited, so it is not counted. Over budget means a domain rule is sitting
-# in an always-loaded file: move it to the path-scoped file for its domain (2026-10-22).
-ALWAYS_LOADED_CHARS = 148_000
+# `paths:` frontmatter. A path-scoped file loads only when a matching file is read or
+# edited, so it is not counted. Claude Code itself warns near 150k, but that warning is a
+# ceiling on tokens, and the real cost is attention: every preloaded rule competes with
+# its siblings on every turn. The cap is the 2026-11-09 digest's 84k plus ~7%, room for a
+# few genuine new rules but not for regrowth. Over budget: tighten an entry, or move a
+# domain rule to the path-scoped file for its domain.
+ALWAYS_LOADED_CHARS = 90_000
 REPO = RULES.parent.parent
 PATHS_RE = re.compile(r"\A---\n(?:.*\n)*?paths:", re.M)
 
@@ -111,6 +114,17 @@ def measure(path: Path) -> dict[str, int]:
     }
 
 
+def always_loaded_files() -> list[Path]:
+    """`CLAUDE.md` plus every rules file with no `paths:` frontmatter."""
+    unscoped = [p for p in sorted(RULES.glob("*.md")) if not PATHS_RE.match(p.read_text(encoding="utf-8").replace("\r\n", "\n"))]
+    return [REPO / "CLAUDE.md"] + unscoped
+
+
+def always_loaded_chars() -> int:
+    """The corpus size the budget caps. `_harness/memory_loop.py` reports it at session start."""
+    return sum(len(p.read_text(encoding="utf-8")) for p in always_loaded_files())
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--report", action="store_true", help="print measures, never fail")
@@ -146,8 +160,8 @@ def main() -> int:
             if n and not args.report:
                 failures.append(f"{path.name}: tails {n} exceeds baseline 0")
 
-    loaded = [REPO / "CLAUDE.md"] + [p for p in sorted(RULES.glob("*.md")) if not PATHS_RE.match(p.read_text(encoding="utf-8").replace("\r\n", "\n"))]
-    total = sum(len(p.read_text(encoding="utf-8")) for p in loaded)
+    loaded = always_loaded_files()
+    total = always_loaded_chars()
     if args.report:
         names = ", ".join(p.name for p in loaded)
         print(f"always-loaded       {total:6} chars   budget {ALWAYS_LOADED_CHARS}   ({names})")

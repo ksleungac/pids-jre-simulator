@@ -21,7 +21,7 @@ Runs every 1-2 months. NOT for one-off tidying — just edit in place. NOT for "
 ## Scope
 
 In scope:
-- `.claude/rules/principles.md` — EDIT-CONTRACT at top; entries are rule + why + how-to-apply
+- `.claude/rules/principles.md` — entries are rule + why + how-to-apply. The edit contracts for all three files live in `docs.md` § "Edit contracts", which loads when a rules file is read
 - `.claude/rules/conventions.md` — reference-shaped entries (naming, style, tooling)
 - `.claude/rules/critical_lessons.md` — incident entries: rule + pattern + scope
 - The path-scoped `.claude/rules/<domain>.md` files (`display`, `tims`, `audio`, `ocr`, `data`, `harness`, `docs`, `gates`). They hold the same three entry shapes under `## Conventions` / `## Principles` / `## Critical lessons`, and each shape keeps its home file's contract. A scoped file also has a placement question: an entry that bites outside its `paths:` belongs back in the always-loaded file, which then has to stay under the `check_rules_corpus.py` budget.
@@ -56,7 +56,7 @@ Record the baseline at the top of the proposal so before/after deltas are concre
 
 ### Step 2 — Scan for bloat shapes
 
-Per the EDIT-CONTRACT refuse-list at the top of `principles.md`:
+Per the refuse-list in `docs.md` § "Edit contracts":
 
 1. **Recurrence lists.** "Recurred 2026-X-Y across N substrates..." → each recurrence becomes an additional one-line example in the Why list.
 2. **Sibling cross-reference tails.** "Sibling to X: that polices Y, this polices Z." Reader gets the difference from context.
@@ -151,9 +151,9 @@ Skip third-man for trivial trims (cutting connective tissue, dropping a sibling 
 
 EDIT-CONTRACT-first sequencing if the contract is missing or stale:
 
-1. **If no `EDIT-CONTRACT` exists in `principles.md`**, draft it first based on the bloat patterns observed in this pass. Get user sign-off, write the contract, THEN apply trims under the contract.
-2. **If the `EDIT-CONTRACT` exists but is missing patterns this pass surfaced**, propose extending the contract first. Get user sign-off, update the contract, THEN apply.
-3. **If the `EDIT-CONTRACT` is current**, apply trims directly.
+1. **If `docs.md` § "Edit contracts" has no entry for the file**, draft one first from the bloat patterns observed in this pass. Get user sign-off, write it, THEN apply trims under it.
+2. **If the contract is missing patterns this pass surfaced**, propose extending it first. Get user sign-off, update it, THEN apply.
+3. **If the contract is current**, apply trims directly. Afterwards lower the `check_rules_corpus.py` baselines to the new measures.
 
 For each approved change:
 

@@ -1,93 +1,63 @@
 # Critical Lessons — DO NOT REPEAT
 
-Eleven incidents; the six that apply everywhere are here. The domain ones load with their files: §§7–8 in `ocr.md`, §§9–10 in `gates.md`, §11 in `audio.md`. Each locally defensible; each broke something real, or was caught only at the last gate before it. The shared root: **claude reasons from its own frame — code as text, the dev machine, its own measurement — rather than from the artifact as the user meets it.**
+Eleven incidents; the six that apply everywhere are here. The domain ones load with their files: §§7–8 in `ocr.md`, §§9–10 in `gates.md`, §11 in `audio.md`. Each was locally defensible and each broke something real. The shared root: **claude reasons from its own frame — code as text, the dev machine, its own measurement — rather than from the artifact as the user meets it.**
 
 ---
 
 ## 1. Verify files BEFORE destructive operations (2026-03-19)
 
-Renamed STA files + updated route.json without verifying MP3s existed → missing file, broken config.
+Renamed STA files and updated route.json without checking every MP3 existed; one was missing and the config broke.
 
-**Rule:** never rename/delete/overwrite without first listing what's on disk.
+**Rule:** never rename, move, delete or overwrite without first listing what is on disk. Glob the target → cross-reference whatever points at it → report gaps → wait for the go-ahead → act.
 
-**Pattern:** Glob target dir → cross-reference config → report gaps → wait for confirmation → then act.
+**Then back up.** Before a tool that re-encodes, overwrites or deletes in place, snapshot the target and name the rollback in the pre-flight. Delete the snapshot only after the by-ear or smoke-test gate passes. A pure relocation (`mv` to `_archive/`) needs none.
 
-**Scope:** any file rename, move, delete, overwrite, or batch operation — including **non-file bulk mutations** (bulk `gh issue close`/`delete`, API sweeps). 2026-07-20: a PowerShell `Where-Object` filter silently matched all 34 `review-finding` issues and a `foreach { gh issue close }` mass-closed them when only #47 was intended (caught + reopened). Print the *resolved* target list and eyeball it BEFORE the destructive loop — never drive a bulk close/delete straight off an unverified filter.
-
-**In-place audio edits count, and a skill's own gate is not advisory.** 2026-07-26 (keihin STA): spliced 29 files, then 40, then 30, with no proposal table — against a skill step reading "Surface to user before splicing… Wait for OK" verbatim, and against a sentence claude had itself added to that skill an hour earlier. A batch you cannot show as a table is a batch you have not verified. And report "applied" only for files re-measured AFTER the write — that pass was later found wrong on 20 of 45 files while already reported done, which is worse than the unshown batch.
+**Scope:**
+- **Non-file bulk mutations count.** Print the *resolved* target list before the loop. (2026-07-20: a `Where-Object` filter matched all 34 `review-finding` issues and a `foreach { gh issue close }` closed them when only #47 was meant.)
+- **In-place audio edits count, and a skill's own gate is not advisory.** A batch you cannot show as a table is a batch you have not verified, and "applied" is reported only for files re-measured after the write. (2026-07-26: 99 keihin splices with no proposal table, against the skill's "Wait for OK"; 20 of 45 were later found wrong while reported done.)
 
 ---
 
 ## 2. Runtime-required materials must be committed (2026-04-27)
 
-OCR templates in `game_references/` never committed. User deleted them as dev cruft → silent OCR failure on live drive.
+OCR templates in `game_references/` were never committed; the author deleted them as dev cruft and live OCR failed silently.
 
-**Rule:** if code reads a file at runtime, that file must be (a) committed, or (b) deterministically regenerable from committed sources. Never both "required at runtime" AND "named like dev material" AND "uncommitted."
+**Rule:** a file the code reads at runtime is committed, or deterministically regenerable from committed sources. Never "required at runtime" AND "named like dev material" AND "uncommitted".
 
-**Pattern:**
-- Small artifacts → commit under a runtime-named path (`ocr_templates/`, not `references/`)
-- Large artifacts → commit derived small artifact, gitignore source, add extraction script
-- **Fail loudly** when missing — never `path.exists() else continue`
-
-**Scope:** templates, calibration data, fixtures, anything with silent-skip-on-missing patterns.
+**Pattern:** small artifacts are committed under a runtime-named path (`ocr_templates/`, not `references/`); large ones commit a derived small artifact plus an extraction script; a missing file **fails loudly**, never `path.exists() else continue`.
 
 ---
 
 ## 3. Lazy import ≠ optional dep (2026-04-30)
 
-`plot_drive.py` in dev-only `data_tools/`, lazy-imported from production Report button, `plotly` in dev deps → Report button silently broken in every release exe.
+`plot_drive.py` lived in dev-only `data_tools/`, was lazy-imported by the production Report button, and `plotly` sat in dev deps, so the button was broken in every release exe.
 
-**Rule:** dep classification follows call-graph reachability, not file location or import timing. Production-reachable code path imports a library → that library is a runtime dep. "Lazy" = when it loads (perf); "optional" = whether it must exist (contract). Not interchangeable.
+**Rule:** dep classification follows call-graph reachability, not file location or import timing. "Lazy" is when it loads; "optional" is whether it must exist.
 
-**Corollary (2026-07-27) — a lazy import also defers the library's SIDE EFFECTS, so process-global
-state becomes feature-flag-dependent.** `dxcam` calls `SetProcessDpiAwareness(2)` at import time
-(`dxcam/__init__` builds a `DXFactory()` at module scope → `dxcam/core/output.py`), and
-`auto_input` is imported lazily — only with OCR enabled, or on the Report button. So the app ran
-DPI-unaware through setup and became aware on entering an OCR drive, and awareness is one-way, so
-it never reverted: same build, same machine, two different window scalings decided by which
-features the user turned on. Nothing errors; it just looks different. Fixed by declaring the state
-deliberately at entry (`window_utils.declare_dpi_awareness`) instead of inheriting it by accident.
+**Corollary (2026-07-27) — a lazy import also defers the library's SIDE EFFECTS.** `dxcam` calls `SetProcessDpiAwareness(2)` at import, and `auto_input` loads only with OCR or the Report button, so the same build scaled windows differently depending on which features the user turned on. Fixed by declaring the state at entry (`window_utils.declare_dpi_awareness`).
 
 **Pattern:**
-- Trace call graph from the import site to entry points. Any production path reaches it → `dependencies`.
-- `try: import X except ImportError` is NEVER a substitute for correct classification.
-- File under `_*/` that production code imports → promote out of `_*/`.
-- A library that mutates PROCESS-global state at import (DPI awareness, locale, signal handlers,
-  COM apartment) must be imported at a deterministic point, or that state silently tracks whichever
-  optional feature pulled it in. Hook the setter and print the stack when you need to find one.
-
-**Scope:** all `pyproject.toml` deps, all `_*/` file placements, all defensive imports.
+- Trace from the import site to entry points; any production path reaches it → `dependencies`. `try: import X except ImportError` never substitutes for classification. A `_*/` file production imports gets promoted out.
+- A library that mutates process-global state at import (DPI awareness, locale, signal handlers, COM apartment) is imported at a deterministic point. To find one, hook the setter and print the stack.
 
 ---
 
 ## 4. PyInstaller deployment-frame divergence (2026-05-05)
 
-4 release-build crashes in 1 hour — 5 broken path resolvers across 6 files, 2 missing asset classes in build script.
+Four release-build crashes in one hour: five broken path resolvers across six files, two asset classes missing from the build script.
 
-**Rule (two interlocking parts):**
-- **(a)** Single canonical path resolver: `app_paths.project_root()`. No local helpers, no `Path(__file__).parent`, no `sys._MEIPASS` for project assets.
-- **(b)** Build script tracks program asset reads. Drift between "program reads X" and "build copies X" is silent in dev, explodes in release exe.
+**Rule:** (a) one canonical resolver, `app_paths.project_root()`, with no local helpers, no `Path(__file__).parent`, no `sys._MEIPASS` for project assets. (b) The build script tracks what the program reads; drift is silent in dev and explodes in the exe.
 
-**PyInstaller mechanism distinction:**
-- `sys._MEIPASS` — temp dir for files bundled INTO exe via `--add-data` / `--collect-data`. This codebase uses it ONLY for plotly's library bundle, never project assets.
-- `Path(sys.executable).parent` — dir containing the exe. Where `/build` Step 4 copies `data/`, `fonts/`, `audio/`, `ocr_templates/` alongside the exe.
-
-**Pattern:**
-- `from app_paths import project_root` → `project_root() / "dir" / "file"`. No alternatives.
-- Fail loud if missing. Silent no-ops are the worst-case mode.
-- New asset dirs ship automatically (Step 4 uses exclude-list, not include-list).
-
-**Scope:** all modules loading JSON, fonts, images, audio at runtime; `/build` skill Step 4.
+**Mechanism:** `sys._MEIPASS` is the temp dir for files bundled INTO the exe, used here only for plotly's bundle. `Path(sys.executable).parent` is where `/build` copies `data/`, `fonts/`, `audio/`, `ocr_templates/` alongside the exe. New asset dirs ship automatically because staging uses an exclude list. Fail loud when an asset is missing.
 
 ---
 
 ## 5. Single-shot signal flags: consume AFTER successful action (2026-05-09)
 
-`pending_next_pa` reset before audio-busy check → at-station press silently dropped → LCD stuck on まもなく.
+`pending_next_pa` was reset before the audio-busy check, so an at-station press was dropped and the LCD stuck on まもなく.
 
-**Rule:** a single-shot flag must be consumed only when the action's preconditions are met. Reset-before-gate = signal lost on no-op.
+**Rule:** consume a single-shot flag only once the action's preconditions are met.
 
-**Pattern:**
 ```python
 # Wrong — signal lost if action no-ops:
 if pending_X or held_input:
@@ -100,23 +70,18 @@ if (pending_X or held_input) and preconditions_met():
     do_action()
 ```
 
-Held-key inputs self-retry (standard reset-and-call is fine). The pathology only fires for single-shot flags from sources that won't re-emit.
-
-**Scope:** any background-thread → main-thread signal where the action might decline (audio busy, mutex held, mid-animation).
+Held-key inputs self-retry, so reset-and-call is fine there. **Scope:** any background-thread → main-thread signal whose action might decline (audio busy, mutex held, mid-animation).
 
 ---
 
 ## 6. Clean-state first-run paths are invisible in dev (2026-07-15)
 
-TIMS became the default setup flow, but the pre-TIMS `LanguagePicker` (old grey palette) still fired on genuine first-run — the `if lang not in SUPPORTED_LANGS` branch in `main.py`, reached only when `settings.json` has no `language`. Never caught for the whole TIMS-graduation arc because every dev/test machine already has a populated `settings.json` (`language` + `oobe_completed`), so that branch never executes locally. Surfaced only when a clean v0.6.0 release build was smoke-tested from a fresh staged folder — the first screen a real new user sees was stale and half-redundant (TIMS home already has language knobs).
+The pre-TIMS `LanguagePicker` still fired on a genuine first run (`main.py`, reached only when `settings.json` has no `language`), and no dev machine ever executed it, because every one already had that file. A clean v0.6.0 staged build showed it.
 
-**Rule:** any code path gated on the ABSENCE of persisted local state (`settings.json`, caches, first-run/OOBE flags, `path.exists()`-else defaults) is structurally invisible in a dev environment that already holds that state. "The exe launched" verifies the *running* frame — not the *clean-install* frame a real new user hits. Persisted state masks first-run just as surely as `sys._MEIPASS` masks the deployment frame (lessons 3–4); same root — reasoning from the developer's environment, not the user's.
+**Rule:** any path gated on the ABSENCE of persisted state (`settings.json`, caches, first-run flags, `path.exists()`-else defaults) is invisible in a dev environment that holds the state. "The exe launched" verifies the running frame, not the clean-install frame.
 
 **Pattern:**
-- After any change to setup / onboarding / first-run / defaults, test from a DELETED-state baseline: move `settings.json` (and any first-run flag files) aside, launch, walk the flow. Or exercise the fresh staged build folder BEFORE the smoke-test launch self-pollutes it with a `settings.json`.
-- Enumerate every state-gated branch (`if not settings.get(...)`, `if lang not in ...`, `if not X.exists()`) as its own test case — each is a distinct first-run screen a dev never sees.
-- When a flow is redesigned (classic → TIMS), re-walk EVERY first-run screen for staleness/redundancy, not only the screens the change touched.
-- **Axis-blindness — the cognitive mechanism (why the re-walk gets skipped).** A refactor reviewed along ITS OWN axis (the flag it flips, the strings it sweeps) goes blind to a redundancy sitting on an ORTHOGONAL axis. The flip-TIMS-to-default commit even applied the identical redundancy logic to the OOBE gate ONE line below the picker (gated it on `args.classic` because "TIMS does its own OOBE") — and missed the picker (gated on absent persisted state, no `args`, so the flip never forced it into view). Same logic, adjacent screens, decided purely by which axis each gate's condition sat on. A "hardcoded-language *sweep*" in the same commit was content-scoped (find language strings) and never saw the picker (a whole screen, off that axis). → **guarded now:** `review-dirty` § "Scope mode" INTEGRATION scope auto-escalates on a flow-routing change and runs the state-gated-branch re-walk; the T1/T4 tests (`test_startup.py` / `test_clean_frame_startup.py`) lock the language path.
-- `/build` smoke test is not "does it launch" — it is "does a brand-new user's first five minutes work." Delete-state first-run is a mandatory item on that checklist.
-
-**Scope:** first-run pickers, OOBE tutorials, settings-absent defaults, cache-miss paths, license/EULA gates, anything reached only when persisted state is missing.
+- After any change to setup, onboarding, first-run or defaults, test from a deleted-state baseline: move `settings.json` aside, or walk the fresh staged build before a smoke launch pollutes it.
+- Enumerate every state-gated branch as its own case. When a flow is redesigned, re-walk EVERY first-run screen, not only the touched ones.
+- **Axis-blindness.** A refactor reviewed along its own axis misses a redundancy on an orthogonal one: the flip-TIMS-to-default commit gated the OOBE one line below the picker on `args.classic` and never saw the picker, which was gated on absent state. Guarded now by `review-dirty`'s INTEGRATION re-walk and `test_startup.py` / `test_clean_frame_startup.py`.
+- `/build`'s smoke test is "does a brand-new user's first five minutes work", with delete-state first-run on the checklist.

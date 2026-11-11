@@ -143,7 +143,7 @@ Cite specific rules from the pre-read. When a finding violates:
 - A rule in `conventions.md` (e.g. `_*` prefix hard rule, .otf-only, contract pointers convention, dormant-scaffolding marker convention)
 - A lesson in `critical_lessons.md` (e.g. 'runtime-required materials must be committed', 'lazy import != optional dep')
 - A judgment principle in `principles.md` (e.g. discussion-first, verify before claiming, causal depth, tighten before appending)
-- The doc-placement table in `CLAUDE.md` mental-model section or `session-recap` SKILL.md
+- The doc-placement table in `CLAUDE.md` § "Memory loop"
 - A domain doc's EDIT-CONTRACT block (refuse-list violations: history notes / code illustrations / speculative future / design-rationale prose / cross-doc duplication)
 
 ...cite the rule by name. Generic findings without rule citations are weaker than rule-grounded ones; the citation forces you to consult the rules instead of pattern-matching from training.

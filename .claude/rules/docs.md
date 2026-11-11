@@ -12,6 +12,18 @@ paths:
 
 Path-scoped: Claude Code loads this file when a file matching `paths:` is read or edited, not at session start. These rules moved here from `conventions.md`, `principles.md` and `critical_lessons.md` on 2026-10-22, to keep the always-loaded corpus under the combined-size limit. Same rules, narrower trigger.
 
+## Edit contracts
+
+The shape rules for the always-loaded rules files. They lived inside each file until 2026-11-09, which loaded them every turn for the rare turn that edits one; here they load exactly when a rules file is read or edited. `check_rules_corpus.py` ratchets the measurable half at pre-commit.
+
+**Every rules file.** Keep each heading and bold lead stable: about 170 places cite them as `file.md § "exact title"`, and nothing checks a citation. Refuse sibling cross-ref tails (a closing clause pointing at a neighbouring rule; the phrases are `check_rules_corpus.TAIL_RE`, gated at zero), connective tissue ("the tell is", "which is what makes it"), multi-paragraph incident traces (the daily log holds the trace), and a second quote once one carries the rule. A rule with a narrower home links to it rather than restating it. Plain register: a comma, colon or full stop over the em dash, and bold for the lead rather than SHOUTING CAPS. The file is preloaded, so its prose is the style the model imitates.
+
+**`principles.md`, per entry:** a rule statement of one or two sentences; **Why:** one framing line leading into one-line dated examples, 1–4 of them, each showing the failure shape (claim vs reality, or the author's pushback); **How to apply:** terse bullets, each one for THIS rule, without anecdotes. Each entry stays within ~12 lines. A rule that is a scope variant of an existing one (same trigger, another domain) folds in as a bullet rather than a new entry. Scope fidelity when codifying feedback: "don't use X for Y" stays scoped to Y; if unsure, ask. Adding a fifth example drops the weakest.
+
+**`conventions.md`, per bullet:** a bold lead that is the rule itself and readable alone; a body giving the mechanism in ordinary sentences, keeping every identifier, path, constant and API name; the incident as a date and one clause. Within ~180 words; past that it is two rules or a retold trace. Sub-bullets are facets of one rule, and three or more means it was two rules.
+
+**`critical_lessons.md`, per lesson:** incident in one or two sentences, **Rule**, **Pattern**, **Scope**. A corollary carries its own date.
+
 ## Conventions
 
 ### Display module structure
@@ -37,7 +49,7 @@ Before adopting a new presentation convention, validate via blind A/B: parallel 
 #### No central kitchen-sink rules file
 Each rule has exactly one home. Don't create aggregator files.
 
-**How to apply:** Consult the placement table in `/session-recap`. Pick the narrowest-domain home.
+**How to apply:** Consult the placement table in `CLAUDE.md` § "Memory loop". Pick the narrowest-domain home.
 
 #### Preloaded mental model vs progressive implementation detail
 Mental model (what it models, scope, IRL framing) → pre-loaded files. Implementation details (draw-method gotchas, JSON-field minutiae) → domain docs, read on demand.
